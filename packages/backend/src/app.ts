@@ -13,6 +13,9 @@ import {
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
 import { DummyScanner } from './scanners/dummy-scanner.js';
+import { type Database } from './db/connection.js';
+import { storeEvent } from './db/event-store.js';
+import { registerEventRoutes } from './routes/events.js';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -39,11 +42,13 @@ function buildAlertRouter(): AlertRouterType {
 export function buildApp(options?: {
   logger?: boolean;
   alertRouter?: AlertRouterType;
+  db?: Database;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const eventBus = new InMemoryEventBus();
   const registry = new ScannerRegistry();
   const alertRouter = options?.alertRouter ?? buildAlertRouter();
+  const db = options?.db;
 
   registry.register(new DummyScanner(eventBus));
 
@@ -57,6 +62,14 @@ export function buildApp(options?: {
           : undefined;
 
       await alertRouter.route({ event, severity, ticker });
+    });
+  }
+
+  // Wire EventBus → database storage
+  if (db) {
+    eventBus.subscribe(async (event) => {
+      const severity = classifySeverity(event);
+      await storeEvent(db, { event, severity });
     });
   }
 
@@ -81,6 +94,11 @@ export function buildApp(options?: {
 
     return reply.status(201).send({ accepted: true, id: parsed.data.id });
   });
+
+  // Register event query routes if db is available
+  if (db) {
+    registerEventRoutes(server, db);
+  }
 
   return { server, eventBus, registry, alertRouter };
 }
