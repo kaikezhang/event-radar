@@ -4,24 +4,27 @@ import {
   ScannerRegistry,
   RawEventSchema,
   type EventBus,
+  type Rule,
 } from '@event-radar/shared';
 import {
   AlertRouter,
   BarkPusher,
   DiscordWebhook,
-  classifySeverity,
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
 import { DummyScanner } from './scanners/dummy-scanner.js';
 import { type Database } from './db/connection.js';
 import { storeEvent } from './db/event-store.js';
 import { registerEventRoutes } from './routes/events.js';
+import { RuleEngine } from './pipeline/rule-engine.js';
+import { DEFAULT_RULES } from './pipeline/default-rules.js';
 
 export interface AppContext {
   server: FastifyInstance;
   eventBus: EventBus;
   registry: ScannerRegistry;
   alertRouter: AlertRouterType;
+  ruleEngine: RuleEngine;
 }
 
 function buildAlertRouter(): AlertRouterType {
@@ -43,33 +46,36 @@ export function buildApp(options?: {
   logger?: boolean;
   alertRouter?: AlertRouterType;
   db?: Database;
+  rules?: Rule[];
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const eventBus = new InMemoryEventBus();
   const registry = new ScannerRegistry();
   const alertRouter = options?.alertRouter ?? buildAlertRouter();
+  const ruleEngine = new RuleEngine();
   const db = options?.db;
 
+  ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));
 
-  // Wire EventBus → severity classification → AlertRouter
+  // Wire EventBus → RuleEngine classification → AlertRouter
   if (alertRouter.enabled) {
     eventBus.subscribe(async (event) => {
-      const severity = classifySeverity(event);
+      const result = ruleEngine.classify(event);
       const ticker =
         event.metadata && typeof event.metadata['ticker'] === 'string'
           ? (event.metadata['ticker'] as string)
           : undefined;
 
-      await alertRouter.route({ event, severity, ticker });
+      await alertRouter.route({ event, severity: result.severity, ticker });
     });
   }
 
   // Wire EventBus → database storage
   if (db) {
     eventBus.subscribe(async (event) => {
-      const severity = classifySeverity(event);
-      await storeEvent(db, { event, severity });
+      const result = ruleEngine.classify(event);
+      await storeEvent(db, { event, severity: result.severity });
     });
   }
 
@@ -100,5 +106,5 @@ export function buildApp(options?: {
     registerEventRoutes(server, db);
   }
 
-  return { server, eventBus, registry, alertRouter };
+  return { server, eventBus, registry, alertRouter, ruleEngine };
 }
