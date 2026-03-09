@@ -5,31 +5,19 @@
 ---
 
 ## 当前任务
-**Phase 1A.4 — Observability（Prometheus + Grafana）**
+**Phase 1A.5 — 集成测试**
 
-目标：为 Event Radar 添加监控和可观测性。
+目标：端到端集成测试，验证完整 pipeline。
 
 具体要求：
-1. 在 backend 添加 Prometheus metrics endpoint (`/metrics`)
-2. 关键指标：
-   - scanner_events_total（按 scanner 和 event type 分）
-   - events_classified_total（按 severity 分）
-   - delivery_attempts_total（按 delivery type 和 status 分）
-   - processing_duration_seconds（histogram）
-3. 添加 Grafana dashboard JSON（可选）
+1. 集成测试：scanner → ingest → rule engine classify → delivery 全链路
+2. 测试 8-K scanner 和 Form 4 scanner 的事件流入 → 分类 → 投递
+3. Mock 外部依赖（SEC EDGAR API、Bark/Discord delivery）
+4. 测试 Prometheus metrics 在 pipeline 运行后正确递增
+5. 测试错误场景：scanner 失败、delivery 失败时的 metrics 和错误处理
+6. 如果有 DB 依赖的测试，用 SQLite in-memory 或 test container
 
-完成标准：`turbo build && turbo test && turbo lint` 全绿。
-   - 添加 Form 4 相关的默认规则
-   - insider purchase > $1M → CRITICAL
-   - insider purchase > $100k → HIGH  
-   - insider sale → MEDIUM
-   - routine/10b5-1 plan sale → LOW
-
-3. 测试：
-   - Mock Form 4 XML 解析
-   - 新规则的分类测试
-
-完成标准：`turbo build && turbo test && turbo lint` 全绿，pytest 通过。
+完成标准：`turbo build && turbo test && turbo lint` 全绿。新增 ≥10 个集成测试。
 
 ---
 
@@ -48,7 +36,7 @@
 - [x] **P1A.1** PostgreSQL schema + query API ✅
 - [x] **P1A.2** 规则引擎分类 ✅
 - [x] **P1A.3** Form 4 Scanner ✅ (turbo build/test/lint 通过)
-- [ ] **P1A.4** Observability（Prometheus + Grafana）
+- [x] **P1A.4** Observability（Prometheus /metrics）✅
 - [ ] **P1A.5** 集成测试
 
 ### Phase 1B

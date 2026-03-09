@@ -38,29 +38,34 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1A.4 Observability
+## Current Task: P1A.5 Integration Tests
 
-**Goal**: Add Prometheus metrics endpoint and key metrics to Event Radar.
+**Goal**: End-to-end integration tests verifying the complete pipeline.
 
 ### Requirements
 
-1. **Prometheus metrics endpoint** in backend (`/metrics`)
-   - Use `prom-client` library
-   - Fastify plugin format
+1. **Full pipeline tests**: scanner → ingest → rule engine classify → delivery
+   - Test with 8-K scanner events flowing through classify → delivery
+   - Test with Form 4 scanner events flowing through classify → delivery
+   - Mock external dependencies (SEC EDGAR API, Bark/Discord HTTP calls)
 
-2. **Key metrics to implement**:
-   - `scanner_events_total` — Counter with labels: scanner, event_type
-   - `events_classified_total` — Counter with labels: severity, rule_id
-   - `delivery_attempts_total` — Counter with labels: delivery_type, status
-   - `processing_duration_seconds` — Histogram with label: operation
+2. **Metrics integration**: Verify Prometheus counters increment correctly after pipeline runs
+   - scanner_events_total increments after scan
+   - events_classified_total increments after classification
+   - delivery_attempts_total increments after delivery
 
-3. **Integration points**:
-   - Increment counters in scanner, classifier, and delivery modules
-   - Use histogram for timing in pipeline processing
+3. **Error scenarios**:
+   - Scanner failure → metrics still recorded, no crash
+   - Delivery failure → retry logic, error metrics incremented
+   - Invalid event data → rejected gracefully with error metrics
 
-4. **Testing**:
-   - Add unit tests for metrics
-   - Verify endpoint returns valid Prometheus format
+4. **Test infrastructure**:
+   - Use Vitest for all tests
+   - Mock HTTP calls with msw or manual mocks (no real network)
+   - If DB needed, mock the query layer (don't require running Postgres)
+   - Place integration tests in `src/__tests__/integration/` directory
+
+5. **Target**: ≥10 new integration tests
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
