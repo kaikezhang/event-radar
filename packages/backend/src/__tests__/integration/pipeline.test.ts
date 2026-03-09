@@ -79,6 +79,7 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
     bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
+    ctx.deduplicator.reset();
   });
 
   afterAll(async () => {
@@ -182,6 +183,7 @@ describe('Integration: Form 4 → classify → delivery', () => {
     bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
+    ctx.deduplicator.reset();
   });
 
   afterAll(async () => {
@@ -266,6 +268,7 @@ describe('Integration: metrics counters after pipeline', () => {
     bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
+    ctx.deduplicator.reset();
   });
 
   afterAll(async () => {

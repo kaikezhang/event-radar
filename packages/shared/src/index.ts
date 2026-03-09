@@ -22,6 +22,12 @@ export {
   type Direction,
   type ClassificationSource,
 } from './schemas/llm-classification.js';
+export {
+  DedupResultSchema,
+  DedupMatchTypeSchema,
+  type DedupResult,
+  type DedupMatchType,
+} from './schemas/dedup.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
