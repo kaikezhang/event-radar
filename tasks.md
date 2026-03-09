@@ -5,7 +5,10 @@
 ---
 
 ## 当前任务
-**Phase 1A.3 — Form 4 Insider Trading Scanner**
+**Phase 1A.3 — Form 4 Insider Trading Scanner** ⚠️ FAILED
+
+> 状态：任务失败（exit 1），部分实现已合并到 main
+> 待办：需要重新启动 CC 完成剩余工作
 
 目标：添加 SEC Form 4（insider trading）scanner，检测内部人交易信号。
 
@@ -46,7 +49,7 @@
 
 - [x] **P1A.1** PostgreSQL schema + query API ✅
 - [x] **P1A.2** 规则引擎分类 ✅
-- [ ] **P1A.3** 更多 Tier 1 scanner（Form 4, Fed, BLS）
+- [ ] **P1A.3** Form 4 Scanner — ⚠️ FAILED (exit 1), partial work merged to main
 - [ ] **P1A.4** Observability（Prometheus + Grafana）
 - [ ] **P1A.5** 集成测试
 
