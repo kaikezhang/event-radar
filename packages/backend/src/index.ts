@@ -1,19 +1,6 @@
-import Fastify from 'fastify';
-import { InMemoryEventBus, ScannerRegistry } from '@event-radar/shared';
-import { DummyScanner } from './scanners/dummy-scanner.js';
+import { buildApp } from './app.js';
 
-const server = Fastify({ logger: true });
-const eventBus = new InMemoryEventBus();
-const registry = new ScannerRegistry();
-
-registry.register(new DummyScanner(eventBus));
-
-server.get('/health', async () => {
-  return {
-    status: 'ok',
-    scanners: registry.healthAll(),
-  };
-});
+const { server, registry } = buildApp();
 
 const start = async () => {
   registry.startAll();

@@ -10,6 +10,17 @@ services:
       postgres:
         condition: service_healthy
 
+  sec-scanner:
+    build: services/sec-scanner
+    ports:
+      - "3002:3002"
+    environment:
+      - BACKEND_URL=http://app:3001
+      - SEC_POLL_INTERVAL=30
+      - SEC_USER_AGENT=EventRadar/0.1 (event-radar@example.com)
+    depends_on:
+      - app
+
   postgres:
     image: postgres:17-alpine
     ports:
