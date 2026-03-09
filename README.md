@@ -38,6 +38,7 @@ When Block filed its 8-K restructuring announcement at 4:05 PM, CNBC didn't repo
 | [**Sources**](docs/SOURCES.md) | Complete data source catalog (6 tiers, 30+ sources) |
 | [**Architecture**](docs/ARCHITECTURE.md) | System design, data flow, component overview |
 | [**Frontend**](docs/FRONTEND.md) | Dashboard UI design, panels, interactions |
+| [**Delivery**](docs/DELIVERY.md) | Alert channels (Bark, ntfy, Discord, push strategy) |
 | [**References**](docs/REFERENCES.md) | Open-source projects we build on |
 | [**Roadmap**](docs/ROADMAP.md) | Phased development plan with milestones |
 
