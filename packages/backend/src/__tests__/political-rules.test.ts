@@ -1,0 +1,171 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { RuleEngine } from '../pipeline/rule-engine.js';
+import { POLITICAL_RULES } from '../pipeline/political-rules.js';
+import type { RawEvent } from '@event-radar/shared';
+
+function makePoliticalEvent(overrides: Partial<RawEvent> = {}): RawEvent {
+  return {
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    source: 'truth-social',
+    type: 'political-post',
+    title: 'Test political post',
+    body: 'Test body',
+    timestamp: new Date('2025-06-15T14:00:00Z'),
+    metadata: { author: 'trump' },
+    ...overrides,
+  };
+}
+
+describe('Political Classification Rules', () => {
+  let engine: RuleEngine;
+
+  beforeEach(() => {
+    engine = new RuleEngine();
+    engine.loadRules(POLITICAL_RULES);
+  });
+
+  describe('Trump — Truth Social rules', () => {
+    it('should classify tariff posts as CRITICAL', () => {
+      const event = makePoliticalEvent({
+        title: 'TARIFFS on China are going UP!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('CRITICAL');
+      expect(result.tags).toContain('trump');
+      expect(result.tags).toContain('tariff');
+      expect(result.matchedRules).toContain('trump-tariff');
+    });
+
+    it('should classify trade posts as CRITICAL', () => {
+      const event = makePoliticalEvent({
+        title: 'New trade deal with EU is massive!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('CRITICAL');
+      expect(result.tags).toContain('trade-policy');
+      expect(result.matchedRules).toContain('trump-trade');
+    });
+
+    it('should classify crypto posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        title: 'Crypto is the future of America!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('crypto');
+      expect(result.matchedRules).toContain('trump-crypto');
+    });
+
+    it('should classify bitcoin posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        title: 'Bitcoin strategic reserve is happening!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('bitcoin');
+    });
+
+    it('should classify company mention posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        title: 'This company is doing great things for America!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('company-mention');
+    });
+  });
+
+  describe('Elon — X rules', () => {
+    it('should classify DOGE posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        source: 'x',
+        title: 'DOGE has saved taxpayers $100 billion',
+        metadata: { author: 'elonmusk' },
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('elon');
+      expect(result.tags).toContain('doge');
+      expect(result.matchedRules).toContain('elon-doge-govt');
+    });
+
+    it('should classify government posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        source: 'x',
+        title: 'Government efficiency is the key to prosperity',
+        metadata: { author: 'elonmusk' },
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('government');
+    });
+
+    it('should classify Tesla posts as MEDIUM', () => {
+      const event = makePoliticalEvent({
+        source: 'x',
+        title: 'Tesla Model Y is now the best-selling car!',
+        metadata: { author: 'elonmusk' },
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('tesla');
+      expect(result.matchedRules).toContain('elon-tesla');
+    });
+
+    it('should classify SpaceX posts as MEDIUM', () => {
+      const event = makePoliticalEvent({
+        source: 'x',
+        title: 'SpaceX Starship launch was incredible!',
+        metadata: { author: 'elonmusk' },
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('spacex');
+    });
+
+    it('should classify Elon crypto posts as HIGH', () => {
+      const event = makePoliticalEvent({
+        source: 'x',
+        title: 'Crypto adoption is accelerating',
+        metadata: { author: 'elonmusk' },
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('crypto');
+    });
+  });
+
+  describe('non-matching events', () => {
+    it('should return default MEDIUM for unmatched truth-social posts', () => {
+      const event = makePoliticalEvent({
+        title: 'Happy Fourth of July!',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.matchedRules).toEqual([]);
+    });
+
+    it('should not match political rules for SEC events', () => {
+      const event = makePoliticalEvent({
+        source: 'sec-edgar',
+        type: '8-K',
+        title: 'Trade agreement filing',
+      });
+      const result = engine.classify(event);
+
+      // source doesn't match any political rule
+      expect(result.matchedRules).toEqual([]);
+    });
+  });
+});

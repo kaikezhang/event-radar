@@ -38,82 +38,91 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1B.1 LLM Classification Engine
+## Current Task: P1B.2 Tier 2 Political Figure Scanners
 
-**Goal**: Add an AI-powered classifier that supplements the existing rule engine with LLM reasoning.
+**Goal**: Add Trump Truth Social + Elon Musk X scanners as Tier 2 sources.
 
 ### Architecture
 
-The LLM classifier runs **after** the rule engine as a second classification stage. The rule engine provides instant results; the LLM enriches with reasoning, refined severity, direction signal, and event type.
+Each scanner is a standalone class extending `BaseScanner`. They emit `RawEvent` via the event bus. The existing rule engine + LLM classifier handle classification.
+
+Since Truth Social and X have no official API suitable for free real-time polling, we use **web scraping via Crawlee** (Playwright-based) with anti-detection. Both scanners poll on tight intervals (Trump 15s, Elon 30s) and emit new posts as events.
 
 ### Requirements
 
-1. **`LlmClassifier` class** in `src/pipeline/llm-classifier.ts`
-   - Input: `RawEvent` + optional `ClassificationResult` from rule engine
-   - Output: `LlmClassificationResult` (extends ClassificationResult with `reasoning`, `direction`, `eventType`, `confidence`)
-   - Uses structured prompt with event context → asks LLM to classify
+1. **Crawlee integration** — shared browser scraping utility
+   - Add `crawlee` + `playwright` as backend dependencies
+   - Create `src/scanners/scraping/browser-pool.ts` — shared Playwright browser pool
+     - Singleton pattern, lazy init, graceful shutdown
+     - Headless Chromium, stealth mode (Crawlee handles most fingerprinting)
+   - Create `src/scanners/scraping/scrape-utils.ts` — common scraping helpers
+     - `extractTextContent(page, selector)`, `waitForContent(page, selector, timeout)`
+     - Rate limit tracking, retry with backoff
 
-2. **New shared types** in `packages/shared/src/schemas/llm-classification.ts`
-   ```typescript
-   LlmClassificationResult {
-     severity: Severity
-     direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'MIXED'
-     eventType: string  // e.g. 'insider_purchase', 'restructuring', 'executive_change'
-     confidence: number // 0-1
-     reasoning: string  // LLM's explanation
-     tags: string[]
-     priority: number
-     matchedRules: string[]  // from rule engine (passthrough)
-   }
-   ```
+2. **Trump Truth Social Scanner** — `src/scanners/truth-social-scanner.ts`
+   - Poll `https://truthsocial.com/@realDonaldTrump` every 15s
+   - Extract: post text, timestamp, media URLs, repost indicator
+   - Dedup by post ID (track last N seen IDs)
+   - Emit `RawEvent` with:
+     - `source: 'truth-social'`
+     - `type: 'political-post'`
+     - `metadata: { author: 'trump', postId, isRepost, hasMedia }`
+   - **Fallback**: If direct scraping fails 3x consecutively, log warning + emit scanner health degraded
+   - Handle: page load failures, rate limits, DOM structure changes (use resilient selectors)
 
-3. **LLM provider abstraction** in `src/pipeline/llm-provider.ts`
-   - Interface: `LlmProvider { complete(prompt: string): Promise<Result<string, Error>> }`
-   - Implement `AnthropicProvider` (Claude API via `@anthropic-ai/sdk`)
-   - Implement `OpenAIProvider` (GPT API via `openai` SDK)
-   - Provider selected via env var `LLM_PROVIDER=anthropic|openai`
-   - Model selected via env var `LLM_MODEL` (default: `claude-sonnet-4-20250514`)
+3. **Elon Musk X Scanner** — `src/scanners/x-scanner.ts`
+   - Poll `https://x.com/elonmusk` every 30s
+   - Extract: tweet text, timestamp, media, retweet/quote indicator, reply indicator
+   - Filter: only original tweets + quotes (skip replies unless they contain $TICKER or market keywords)
+   - Dedup by tweet ID
+   - Emit `RawEvent` with:
+     - `source: 'x'`
+     - `type: 'political-post'`
+     - `metadata: { author: 'elonmusk', tweetId, isRetweet, isQuote, hasMedia }`
+   - **Anti-detection**: X is aggressive — use Crawlee's SessionPool, rotate user agents, respect rate limits
+   - **Fallback**: same as Trump scanner — 3 consecutive failures → health degraded
 
-4. **Structured prompt** in `src/pipeline/classification-prompt.ts`
-   - System prompt: "You are a financial event classifier..."
-   - Include event source, title, body, metadata, URL
-   - Ask for JSON output: severity, direction, eventType, confidence, reasoning
-   - Parse response with zod validation
+4. **Political post classification rules** — `src/pipeline/political-rules.ts`
+   - Add new rules to the rule engine for political posts:
+     - Trump + tariff/trade keywords → CRITICAL severity
+     - Trump + company name mention → HIGH severity  
+     - Trump + crypto keywords → HIGH severity
+     - Elon + DOGE/government keywords → HIGH severity
+     - Elon + Tesla/SpaceX keywords → MEDIUM severity (often already public)
+     - Elon + crypto keywords → HIGH severity
+   - Export and register in `default-rules.ts`
 
-5. **Backpressure & concurrency** in `src/pipeline/llm-queue.ts`
-   - Max concurrent LLM requests: configurable (default 3)
-   - Priority queue: Tier 1 sources before Tier 4
-   - Timeout per request: 30s
-   - Fallback: if LLM fails/times out, use rule engine result only
+5. **Scanner registration**
+   - Register both scanners in the scanner registry
+   - Add env vars: `TRUTH_SOCIAL_ENABLED=true/false`, `X_SCANNER_ENABLED=true/false`
+   - Both disabled by default (require explicit opt-in since they need a browser)
 
-6. **Pipeline integration**
-   - Update the pipeline to run: rule engine → LLM classifier (async)
-   - Rule engine result is returned immediately for fast delivery
-   - LLM result updates the event classification asynchronously
-   - Add `classification_source` field: 'rule' | 'llm' | 'both'
+6. **Tests** (≥10 new tests)
+   - Unit tests for post text extraction/parsing (mock HTML fixtures)
+   - Unit tests for dedup logic (seen IDs ring buffer)
+   - Unit tests for political classification rules
+   - Test scanner health degradation after consecutive failures
+   - Test fallback behavior
+   - DO NOT test with real network calls — use mock HTML pages
 
-7. **Tests** (≥8 new tests)
-   - Unit tests for prompt construction
-   - Unit tests for response parsing (valid JSON, malformed, timeout)
-   - Integration test: mock LLM provider → full pipeline
-   - Test backpressure: queue fills up, oldest low-priority dropped
-   - Test fallback: LLM timeout → rule engine result used
+### Dependencies to add (packages/backend)
+- `crawlee` (Playwright crawler)
+- `playwright` (browser automation)
 
-### Dependencies to add
-- `@anthropic-ai/sdk` in packages/backend
-- `openai` in packages/backend
-
-### Files to create/modify
-- `packages/shared/src/schemas/llm-classification.ts` (new)
-- `packages/shared/src/index.ts` (export new types)
-- `packages/backend/src/pipeline/llm-provider.ts` (new)
-- `packages/backend/src/pipeline/llm-classifier.ts` (new)
-- `packages/backend/src/pipeline/classification-prompt.ts` (new)
-- `packages/backend/src/pipeline/llm-queue.ts` (new)
-- `packages/backend/src/__tests__/llm-classifier.test.ts` (new)
+### Files to create
+- `packages/backend/src/scanners/scraping/browser-pool.ts`
+- `packages/backend/src/scanners/scraping/scrape-utils.ts`
+- `packages/backend/src/scanners/truth-social-scanner.ts`
+- `packages/backend/src/scanners/x-scanner.ts`
+- `packages/backend/src/pipeline/political-rules.ts`
+- `packages/backend/src/__tests__/truth-social-scanner.test.ts`
+- `packages/backend/src/__tests__/x-scanner.test.ts`
+- `packages/backend/src/__tests__/political-rules.test.ts`
+- `packages/backend/src/__tests__/fixtures/truth-social-post.html`
+- `packages/backend/src/__tests__/fixtures/x-tweet.html`
 
 ### Verification
-`turbo build && turbo test && turbo lint` must pass.
+`turbo build && turbo test && turbo lint` must pass. Browser/Playwright NOT required for tests (all mocked).
 
 ## Reference Docs
 
