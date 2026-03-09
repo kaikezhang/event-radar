@@ -31,7 +31,10 @@ import {
   deliveriesByChannel,
   processingDurationSeconds,
   llmClassificationsTotal,
+  eventsDeduplicatedTotal,
+  activeStories,
 } from './metrics.js';
+import { EventDeduplicator } from './pipeline/deduplicator.js';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -40,6 +43,7 @@ export interface AppContext {
   alertRouter: AlertRouterType;
   ruleEngine: RuleEngine;
   llmClassifier?: LlmClassifier;
+  deduplicator: EventDeduplicator;
 }
 
 function buildAlertRouter(): AlertRouterType {
@@ -73,6 +77,7 @@ export function buildApp(options?: {
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
+  const deduplicator = new EventDeduplicator();
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));
@@ -95,10 +100,33 @@ export function buildApp(options?: {
     eventsBySeverity.inc({ severity: result.severity });
   });
 
-  // Wire EventBus → RuleEngine classification → AlertRouter
+  // Wire EventBus → RuleEngine classification → Dedup → AlertRouter
   if (alertRouter.enabled) {
     eventBus.subscribe(async (event) => {
       const result = ruleEngine.classify(event);
+      const dedupResult = deduplicator.check(event);
+
+      // Update story metrics
+      activeStories.set(deduplicator.activeStoryCount);
+
+      if (dedupResult.isDuplicate) {
+        eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
+        return; // Skip delivery for duplicates
+      }
+
+      // Enrich event metadata with story info if part of a developing story
+      if (dedupResult.storyId) {
+        const storyInfo = deduplicator.getStory(event.id);
+        if (storyInfo) {
+          event.metadata = {
+            ...event.metadata,
+            storyId: storyInfo.storyId,
+            storyEventCount: storyInfo.eventCount,
+          };
+          event.title = `Developing: ${event.title}`;
+        }
+      }
+
       const ticker =
         event.metadata && typeof event.metadata['ticker'] === 'string'
           ? (event.metadata['ticker'] as string)
@@ -178,5 +206,5 @@ export function buildApp(options?: {
     registerEventRoutes(server, db);
   }
 
-  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier };
+  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator };
 }

@@ -77,6 +77,21 @@ export const processingDurationSeconds = new Histogram({
   registers: [registry],
 });
 
+/** Counter: events deduplicated, by match type */
+export const eventsDeduplicatedTotal = new Counter({
+  name: 'events_deduplicated_total',
+  help: 'Total number of events identified as duplicates',
+  labelNames: ['match_type'] as const,
+  registers: [registry],
+});
+
+/** Gauge: number of active developing stories */
+export const activeStories = new Gauge({
+  name: 'active_stories',
+  help: 'Number of currently active developing stories',
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -86,4 +101,6 @@ export function resetMetrics(): void {
   deliveriesByChannel.reset();
   llmClassificationsTotal.reset();
   processingDurationSeconds.reset();
+  eventsDeduplicatedTotal.reset();
+  activeStories.reset();
 }
