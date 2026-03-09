@@ -38,9 +38,57 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1C.2 Classification Refinement + Confidence UX
+## Current Task: P1C.3 REST API v1
 
-**Goal**: Improve classification accuracy based on real data, add confidence scoring UX.
+**Goal**: Expose events and health via REST API with API key authentication.
+
+### Requirements
+
+1. **GET /events endpoint** — List events with filters
+   - Query params: `ticker`, `type`, `severity`, `dateFrom`, `dateTo`, `limit` (default 50, max 200), `offset`
+   - Return: array of event summaries (not full details)
+   - Sort: by `publishedAt` descending (newest first)
+
+2. **GET /events/:id endpoint** — Full event detail
+   - Return complete event including classification reasoning
+   - 404 if not found
+
+3. **GET /health endpoint** — System status
+   - Return: DB connection status, scanner statuses, uptime, version
+   - Already exists (P1A.4) - verify and extend if needed
+
+4. **API Key Authentication**
+   - Header: `X-API-Key: <key>`
+   - Env var: `API_KEY` (generate random string if not set)
+   - Return 401 if missing/invalid
+   - Apply to /events and /events/:id endpoints
+   - /health can be public (no auth)
+
+5. **Request Validation**
+   - Use fastify's schema validation for all query params
+   - Validate ticker format (1-5 uppercase letters)
+   - Validate severity enum
+   - Validate date format (ISO 8601)
+
+6. **Tests** (≥10 new tests)
+   - GET /events without auth → 401
+   - GET /events with valid API key → 200
+   - GET /events filter by ticker
+   - GET /events filter by severity
+   - GET /events filter by date range
+   - GET /events/:id not found → 404
+   - GET /events/:id success
+   - GET /health public (no auth required)
+   - Invalid query params → 400
+
+### Files to create/modify
+- `packages/backend/src/routes/events.ts` — add events endpoints
+- `packages/backend/src/plugins/auth.ts` — API key plugin
+- Update `packages/backend/src/app.ts` to register routes and auth plugin
+- `packages/backend/src/__tests__/events-api.test.ts` — extend existing tests
+
+### Verification
+`turbo build && turbo test && turbo lint` must pass.
 
 ### Requirements
 
