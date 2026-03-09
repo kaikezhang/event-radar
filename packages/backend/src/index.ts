@@ -1,6 +1,12 @@
 import { buildApp } from './app.js';
+import { createDb } from './db/connection.js';
 
-const { server, registry } = buildApp();
+const databaseUrl = process.env.DATABASE_URL;
+const dbCtx = databaseUrl ? createDb(databaseUrl) : undefined;
+
+const { server, registry } = buildApp({
+  db: dbCtx?.db,
+});
 
 const start = async () => {
   registry.startAll();
@@ -11,6 +17,7 @@ const start = async () => {
   const shutdown = async () => {
     registry.stopAll();
     await server.close();
+    await dbCtx?.pool.end();
   };
 
   process.on('SIGTERM', () => void shutdown());
