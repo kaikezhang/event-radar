@@ -38,71 +38,78 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1B.3 Event Deduplication
+## Current Task: P1C.1 Tier 3 Corporate Newswire Scanners
 
-**Goal**: Cross-source event deduplication — same event from multiple sources should be merged, not duplicated.
+**Goal**: Add RSS-based scanners for the 3 major corporate newswires: PR Newswire, BusinessWire, GlobeNewswire.
 
 ### Architecture
 
-Dedup runs as a pipeline stage between classification and delivery. When a new event arrives, it checks against recent events (sliding window) for duplicates. If a match is found, the new event is merged into the existing one (boosting confidence, adding source) rather than creating a separate alert.
+Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — much simpler and more reliable. Each scanner polls an RSS feed, parses entries, extracts ticker/company info, and emits `RawEvent`.
 
 ### Requirements
 
-1. **`EventDeduplicator` class** in `src/pipeline/deduplicator.ts`
-   - Maintains a sliding window of recent events (configurable, default 30 minutes)
-   - For each incoming classified event, checks for duplicates
-   - Returns: `{ isDuplicate: boolean, mergedEvent?: ClassifiedEvent, originalEventId?: string }`
+1. **RSS parser utility** — `src/scanners/rss/rss-parser.ts`
+   - Wrap `rss-parser` npm package
+   - Generic RSS/Atom feed fetcher with timeout (10s) and retry (3x with backoff)
+   - Returns parsed items with: title, link, pubDate, content/description, guid
+   - Handle malformed feeds gracefully (Result pattern)
 
-2. **Dedup strategies** (all in `src/pipeline/dedup-strategies.ts`)
-   - **Exact ID match**: same `metadata.filingId`, `metadata.postId`, `metadata.tweetId` etc.
-   - **Ticker + time window**: same ticker within 5 minutes + similar event type
-   - **Content similarity**: title/body similarity score > 0.8 (use simple Jaccard similarity on word tokens — no ML needed)
-   - **Developing story grouping**: related events within 30min window get grouped under a "story" ID
-   - Each strategy returns a confidence score (0-1), highest wins
+2. **PR Newswire Scanner** — `src/scanners/pr-newswire-scanner.ts`
+   - Feed URL: `https://www.prnewswire.com/rss/all-news-releases.rss`
+   - Poll interval: 60s
+   - Extract: headline, company name, ticker (from title/body patterns like `(NASDAQ: AAPL)`)
+   - Emit `RawEvent` with `source: 'pr-newswire'`, `type: 'press-release'`
+   - Dedup by guid
 
-3. **Shared types** in `packages/shared/src/schemas/dedup.ts`
-   ```typescript
-   DedupResult {
-     isDuplicate: boolean
-     matchType: 'exact-id' | 'ticker-window' | 'content-similarity' | 'none'
-     matchConfidence: number  // 0-1
-     originalEventId?: string
-     storyId?: string  // for developing story grouping
-   }
-   ```
+3. **BusinessWire Scanner** — `src/scanners/businesswire-scanner.ts`
+   - Feed URL: `https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpRWg==`
+   - Poll interval: 60s
+   - Same extraction logic as PR Newswire
+   - Emit `RawEvent` with `source: 'businesswire'`, `type: 'press-release'`
 
-4. **Story grouping** in `src/pipeline/story-tracker.ts`
-   - Groups related events into "stories" (e.g., multiple 8-Ks about same merger)
-   - Story = first event's ID, subsequent events reference it
-   - Story expires after 30 minutes of no new related events
-   - Metadata enrichment: `event.metadata.storyId`, `event.metadata.storyEventCount`
+4. **GlobeNewswire Scanner** — `src/scanners/globenewswire-scanner.ts`
+   - Feed URL: `https://www.globenewswire.com/RSSFeed/country/United%20States/feedTitle/GlobeNewswire%20-%20News%20Releases%20for%20USA`
+   - Poll interval: 60s
+   - Emit `RawEvent` with `source: 'globenewswire'`, `type: 'press-release'`
 
-5. **Pipeline integration**
-   - Insert dedup stage: scanner → classify → **dedup** → delivery
-   - If duplicate: skip delivery, update existing event's metadata (add source, bump confidence)
-   - If new story event: deliver with "Developing: ..." prefix in title
-   - Add Prometheus metrics: `events_deduplicated_total` (counter), `active_stories` (gauge)
+5. **Ticker extraction utility** — `src/scanners/rss/ticker-extractor.ts`
+   - Regex patterns to extract stock tickers from press release text
+   - Match patterns: `(NYSE: XYZ)`, `(NASDAQ: XYZ)`, `(TSX: XYZ)`, `$XYZ`
+   - Return array of found tickers
+   - Handle edge cases: multiple tickers, false positives (common words like $USD)
 
-6. **Tests** (≥10 new tests)
-   - Exact ID dedup (same filing from RSS + API)
-   - Ticker + time window dedup (Trump tariff post + news article about it)
-   - Content similarity (similar headlines from different newswires)
-   - Story grouping (3 related events → 1 story)
-   - Story expiry (old story not matched)
-   - Non-duplicate events pass through
-   - Sliding window cleanup (old events removed)
-   - Metrics increment correctly
+6. **Press release classification rules** — add to `src/pipeline/default-rules.ts`
+   - Press release + merger/acquisition keywords → HIGH
+   - Press release + earnings/guidance keywords → HIGH
+   - Press release + FDA/drug approval keywords → HIGH
+   - Press release + executive change keywords → MEDIUM
+   - Press release + partnership keywords → MEDIUM
+   - Default press release → LOW
 
-### Files to create/modify
-- `packages/shared/src/schemas/dedup.ts` (new)
-- `packages/shared/src/index.ts` (export new types)
-- `packages/backend/src/pipeline/deduplicator.ts` (new)
-- `packages/backend/src/pipeline/dedup-strategies.ts` (new)
-- `packages/backend/src/pipeline/story-tracker.ts` (new)
-- `packages/backend/src/app.ts` (integrate dedup stage)
-- `packages/backend/src/metrics.ts` (add dedup metrics)
-- `packages/backend/src/__tests__/deduplicator.test.ts` (new)
-- `packages/backend/src/__tests__/story-tracker.test.ts` (new)
+7. **Scanner registration**
+   - Register all 3 in scanner registry
+   - Env vars: `PR_NEWSWIRE_ENABLED`, `BUSINESSWIRE_ENABLED`, `GLOBENEWSWIRE_ENABLED` (all default true)
+
+8. **Tests** (≥12 new tests)
+   - RSS parser: valid feed, malformed feed, timeout, empty feed
+   - Ticker extractor: NYSE pattern, NASDAQ pattern, $TICKER pattern, multiple tickers, no tickers, false positives
+   - Each scanner: parse mock RSS XML → emit correct RawEvents
+   - Press release classification rules
+   - DO NOT make real network calls — use mock RSS XML fixtures
+
+### Dependencies to add (packages/backend)
+- `rss-parser`
+
+### Files to create
+- `packages/backend/src/scanners/rss/rss-parser.ts`
+- `packages/backend/src/scanners/rss/ticker-extractor.ts`
+- `packages/backend/src/scanners/pr-newswire-scanner.ts`
+- `packages/backend/src/scanners/businesswire-scanner.ts`
+- `packages/backend/src/scanners/globenewswire-scanner.ts`
+- `packages/backend/src/__tests__/rss-parser.test.ts`
+- `packages/backend/src/__tests__/ticker-extractor.test.ts`
+- `packages/backend/src/__tests__/newswire-scanners.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-rss-feed.xml`
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
