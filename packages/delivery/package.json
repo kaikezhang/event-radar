@@ -1,26 +1,29 @@
 {
-  "name": "@event-radar/backend",
+  "name": "@event-radar/delivery",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@event-radar/delivery": "workspace:*",
     "@event-radar/shared": "workspace:*",
-    "fastify": "^5.2.0"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.0.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^3.0.0"
