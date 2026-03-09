@@ -43,7 +43,7 @@
 ### Phase 0
 
 - [x] **P0.1** 项目 scaffold ✅
-- [ ] **P0.2** Scanner 插件框架（base Scanner class, registry, in-memory EventBus）
+- [x] **P0.2** Scanner 插件框架 ✅
 - [ ] **P0.3** SEC EDGAR 8-K scanner（Python FastAPI 微服务 + edgartools）
 - [ ] **P0.4** Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）
 - [ ] **P0.5** 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）
