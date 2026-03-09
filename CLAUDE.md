@@ -22,11 +22,11 @@ packages/sec-service/— Python FastAPI microservice
 - `turbo lint` — ESLint check
 - `docker compose up` — start all services locally
 
-## Git Workflow (长期规矩)
+## Git Workflow
 
-- **CC 完成任务后**：产分支 + commit + push → 创建 PR → 由晚晚(master/owner)来 merge 到 main
-- **禁止直接 push 到 main**
-- 晚晚自己修改 md/docs 时可以直接 commit push 到 main
+- 完成任务后：创建新分支 → commit → push → 创建 PR → 由 master/owner merge 到 main
+- 禁止直接 push 到 main
+- 修改 md/docs 可直接 commit 到 main
 
 ## Key Constraints
 
