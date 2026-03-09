@@ -1,34 +1,97 @@
 # CLAUDE.md — Event Radar
 
-## Your Task
+## 项目概述
+Event Radar 是一个全栈、多源、实时事件驱动交易情报平台。监控 SEC 文件、政治人物社交媒体、宏观经济数据等 30+ 信源，AI 分类后推送到 iOS/Telegram/Discord/Dashboard。
 
-Review ALL docs in this project (README.md + docs/*.md). 
+## 技术栈（已定，不可更改）
+- **Runtime**: Node.js + TypeScript (strict mode)
+- **Backend**: Fastify
+- **Frontend**: Next.js 15 (App Router) + shadcn/ui + Tailwind CSS
+- **Database**: PostgreSQL (JSONB for event metadata)
+- **Event Bus**: EventEmitter (Phase 0) → Redis Streams (Phase 1+)
+- **Monorepo**: Turborepo
+- **SEC Parsing**: Python microservice (FastAPI + edgartools)
+- **Financial NLP**: FinBERT / SEC-BERT
+- **Scraping**: Crawlee (Playwright-based)
+- **Charts**: TradingView Lightweight Charts
+- **Virtual List**: @tanstack/virtual (NOT AG Grid)
+- **Layout**: react-grid-layout
+- **State**: Zustand
+- **Testing**: Vitest + Playwright (E2E)
+- **Observability**: Prometheus + Grafana
+- **Push**: Bark (iOS critical) + Telegram + Discord webhook
 
-The goal: this project should become **the industry-leading open-source event-driven trading intelligence platform**. Think Bloomberg Terminal meets modern web, but focused on real-time event detection.
+## 文件结构约定
+```
+packages/
+  shared/          — Event schema, Scanner interface, types
+  backend/         — Fastify server, pipeline, delivery
+    src/
+      scanners/    — 每个 scanner 一个文件
+      pipeline/    — classification, dedup, correlation
+      delivery/    — bark, telegram, discord, webhook
+      api/         — REST API routes
+  frontend/        — Next.js dashboard
+  sec-service/     — Python FastAPI (edgartools + FinBERT)
+docker-compose.yml
+```
 
-## What to Review
+## 代码风格
+- 用 zod 做所有 schema validation（输入输出都要）
+- 错误处理用 Result<T, E> 模式，不要 throw（除非真的不可恢复）
+- 每个 export 函数都要 JSDoc
+- 用 `const` 优先，避免 `let`
+- 异步函数都要有 timeout
+- 所有环境变量通过 `@t3-oss/env-core` 类型安全加载
 
-1. **Product Vision** — Is the problem statement compelling? Is the value prop clear and differentiated?
-2. **Source Coverage** — Are we missing any important data sources? Is the tier system logical?
-3. **Architecture** — Is the system design sound? Any scalability concerns? Any over-engineering?
-4. **Frontend/UX** — Would this dashboard compete with paid products (LevelFields, SentryDock, Benzinga Pro)? What's missing?
-5. **Delivery/Alerts** — Is the push notification strategy optimal for traders?
-6. **References** — Are we leveraging the right open-source projects? Missing any?
-7. **Roadmap** — Is the phasing realistic? Dependencies correct? Missing milestones?
-8. **Overall** — What would make this project truly world-class vs just another side project?
+## 测试约定
+- 用 Vitest
+- 测试文件和源文件同目录：`scanner.ts` → `scanner.test.ts`
+- Mock 所有外部 API（SEC、Bark、Discord），不要真打
+- Scanner 测试用 fixture 数据（`__fixtures__/` 目录）
+- 目标覆盖率：scanner + classification > 80%
 
-## Output
+## Scanner 插件约定
+每个 scanner 必须实现 `Scanner` interface：
+```typescript
+interface Scanner {
+  id: string;           // e.g. "sec-edgar-8k"
+  tier: 1 | 2 | 3 | 4 | 5 | 6;
+  pollIntervalMs: number;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  health(): ScannerHealth;
+}
+```
+- 每个 scanner 独立、crash-isolated
+- 所有 scanner 通过 EventBus.publish() 发送事件
+- 不要在 scanner 里做分类，只做数据抽取
 
-Write your complete review to `docs/REVIEW.md`. Be brutally honest. Organize by section. For each issue:
-- What's wrong or missing
-- Why it matters
-- Specific suggestion to fix it
+## Event Schema（统一事件格式）
+```typescript
+interface RawEvent {
+  id: string;            // UUID
+  scannerId: string;
+  tier: number;
+  source: string;        // "sec-edgar", "truth-social", etc.
+  detectedAt: Date;
+  rawContent: string;
+  tickers: string[];     // extracted ticker symbols
+  url?: string;          // source URL
+  metadata: Record<string, unknown>;  // source-specific data
+}
+```
 
-Focus on substance, not formatting nitpicks. Think like a senior product architect who has built trading platforms.
+## 关键架构决策
+1. **Event Bus 接口化**：Phase 0 用 EventEmitter，Phase 1 换 Redis Streams，接口不变
+2. **Python/TS 边界**：SEC parsing 走 HTTP/JSON 微服务，不要 child_process
+3. **AI 分类两阶段**：规则引擎（免费、instant）→ LLM（付费、async）
+4. **Backpressure**：Tier 1 优先级 > Tier 4，AI 并发限制 5，delivery 限流
+5. **PostgreSQL 直接用**：不要 SQLite，Docker Compose 一个容器零额外复杂度
 
-## Context
-
-- This is documentation-only phase (no code yet)
-- Target user: event-driven swing traders
-- We want this to be a serious open-source project, not a toy
-- iOS push via Bark is already decided for primary mobile alerts
+## 不要做的事
+- ❌ 不要引入 AG Grid
+- ❌ 不要用 SQLite
+- ❌ 不要在 scanner 里 throw error（return Result）
+- ❌ 不要硬编码 API key（全部走环境变量）
+- ❌ 不要一次实现多个 scanner（一次一个，测完再下一个）
