@@ -38,6 +38,15 @@ export function registerEventRoutes(
     return { data, total };
   });
 
+  server.get('/api/events/sources', async () => {
+    const rows = await db
+      .selectDistinct({ source: events.source })
+      .from(events)
+      .orderBy(events.source);
+
+    return { sources: rows.map((r) => r.source) };
+  });
+
   server.get('/api/events/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 

@@ -221,6 +221,61 @@ describe('GET /api/events/:id', () => {
   });
 });
 
+describe('GET /api/events/sources', () => {
+  let ctx: AppContext;
+  let db: Database;
+  let client: PGlite;
+
+  beforeAll(async () => {
+    ({ db, client } = await createTestDb());
+
+    const sources = ['sec-edgar', 'fed', 'sec-edgar', 'bls'];
+    for (const source of sources) {
+      await storeEvent(db, {
+        event: makeEvent({ source }),
+        severity: 'MEDIUM',
+      });
+    }
+
+    ctx = buildApp({ logger: false, db });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await ctx.server.close();
+    await client.close();
+  });
+
+  it('should return unique sources sorted alphabetically', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/sources',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.sources).toEqual(['bls', 'fed', 'sec-edgar']);
+  });
+
+  it('should return empty array when no events exist', async () => {
+    const { db: emptyDb, client: emptyClient } = await createTestDb();
+    const emptyCtx = buildApp({ logger: false, db: emptyDb });
+    await emptyCtx.server.ready();
+
+    const response = await emptyCtx.server.inject({
+      method: 'GET',
+      url: '/api/events/sources',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.sources).toEqual([]);
+
+    await emptyCtx.server.close();
+    await emptyClient.close();
+  });
+});
+
 describe('GET /api/stats', () => {
   let ctx: AppContext;
   let db: Database;
