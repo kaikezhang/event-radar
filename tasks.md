@@ -5,31 +5,36 @@
 ---
 
 ## 当前任务
-**Phase 0.1 — 项目 scaffold**
+**Phase 0.2 — Scanner 插件框架**
 
-目标：搭建 Turborepo monorepo 骨架，所有包能 build + lint + test。
+目标：实现 Scanner base class、scanner registry、in-memory EventBus，让后续 scanner 开发只需要继承 base class。
 
 具体要求：
-1. 初始化 Turborepo monorepo
-2. 创建 3 个 packages：
-   - `packages/shared` — 共享 types（Event schema, Scanner interface, Result type）
-   - `packages/backend` — Fastify server（空壳，能启动即可）
-   - `packages/frontend` — Next.js 15 App Router（空壳，能启动即可）
-3. 配置：
-   - TypeScript strict mode（所有 packages 共享 tsconfig.base.json）
-   - ESLint + Prettier
-   - Vitest（shared + backend）
-   - Docker Compose（app + PostgreSQL）
-   - GitHub Actions CI（lint + test + build）
-4. shared package 里定义：
-   - `RawEvent` interface
-   - `Scanner` interface
-   - `ScannerHealth` type
-   - `Result<T, E>` type
-   - `EventBus` interface
-5. 写一个 smoke test 验证 shared types 能被 backend import
+1. 在 `packages/shared/src/` 中实现：
+   - `BaseScanner` abstract class — 实现 Scanner interface，提供：
+     - polling loop（start/stop 控制，interval 可配）
+     - health tracking（lastPollAt, errorCount, status）
+     - 错误处理（单次 poll 失败不崩溃，记录 error，继续下次）
+     - abstract `poll()` 方法，子类只需实现这个
+   - `InMemoryEventBus` — 实现 EventBus interface，用 Node.js EventEmitter
+     - publish(event) / subscribe(handler) / unsubscribe(handler)
+     - 事件计数 metrics（published count, handler count）
+   - `ScannerRegistry` — 管理所有 scanner 实例
+     - register(scanner) / unregister(id)
+     - startAll() / stopAll()
+     - healthAll() — 返回所有 scanner 的 health 状态
+     - getById(id)
+2. 在 `packages/backend/src/` 中：
+   - 创建一个 `DummyScanner`（用于测试）— 每次 poll 生成一个假事件
+   - 在 Fastify server 启动时注册 DummyScanner，启动 polling
+   - 添加 `GET /health` endpoint — 返回所有 scanner health 状态
+3. 测试：
+   - BaseScanner 测试：start/stop lifecycle、error handling、health tracking
+   - InMemoryEventBus 测试：publish/subscribe、多 handler、unsubscribe
+   - ScannerRegistry 测试：register/unregister、startAll/stopAll、healthAll
+   - 目标覆盖率 >80%
 
-完成标准：`turbo build` + `turbo test` + `turbo lint` 全绿。
+完成标准：`turbo build && turbo test && turbo lint` 全绿，DummyScanner 能跑起来生成事件。
 
 ---
 
