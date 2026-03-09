@@ -9,6 +9,7 @@ Event Radar supports multiple alert delivery channels. The key requirement: **CR
 | **Bark** ⭐ | iOS only | <1s | ✅ YES | ✅ | Free | Primary iOS push |
 | **ntfy** | iOS + Android + Desktop | <2s | ❌ No | ✅ | Free | Cross-platform |
 | **Pushover** | iOS + Android | <1s | ✅ YES | ❌ (SaaS) | $5 one-time | Reliable fallback |
+| **Telegram** | All platforms | <1s | ❌ No | ✅ Bot API | Free | Rich formatting, largest trading communities |
 | **Discord** | All platforms | 1-3s | ❌ No | N/A | Free | Rich embeds, history |
 | **WebSocket** | Browser | <0.5s | ❌ No | ✅ | Free | Dashboard live feed |
 | **Email** | All | Minutes | ❌ No | ✅ | Free | Daily digest |
@@ -17,14 +18,15 @@ Event Radar supports multiple alert delivery channels. The key requirement: **CR
 
 ```
 CRITICAL events  → Bark (iOS critical alert, bypasses silent mode)
+                 + Telegram (instant delivery, large trading community)
                  + Discord (rich embed for review)
                  + WebSocket (dashboard live feed)
 
 HIGH events      → Bark (normal push)
-                 + Discord
+                 + Telegram + Discord
                  + WebSocket
 
-MEDIUM events    → Discord + WebSocket
+MEDIUM events    → Telegram + Discord + WebSocket
 
 LOW events       → WebSocket only (dashboard)
 
@@ -86,6 +88,30 @@ bark-server:
     - ./bark-data:/data
   restart: unless-stopped
 ```
+
+---
+
+## Telegram (Cross-Platform — Priority Above Discord)
+
+- **API**: [t.me/BotAPI](https://core.telegram.org/bots/api)
+- **Why**: Largest active trading communities outside of Discord. Free, easy to implement, supports rich formatting with Markdown and inline buttons.
+- **Perfect for**: Active trading communities, quick mobile access.
+
+### API Usage
+
+```bash
+# Send message
+curl -X POST "https://api.telegram.org/bot<TOKEN>/sendMessage" \
+  -d "chat_id=<CHAT_ID>" \
+  -d "text=🔴 CRITICAL: Trump posted about tariffs" \
+  -d "parse_mode=Markdown" \
+  -d "reply_markup={\"inline_keyboard\":[[{\"text\":\"View SEC Filing\",\"url\":\"https://sec.gov/...\"}]]}"
+```
+
+### When to use Telegram
+- Primary channel for active retail trading communities
+- Above Discord in priority for communities that live in Telegram
+- Below Bark for iOS users who need critical alerts
 
 ---
 
@@ -155,6 +181,18 @@ Daily summary email at market close:
 - Upcoming catalysts (earnings, PDUFA dates)
 
 Low priority — implement in Phase 5.
+
+---
+
+## Delivery Reliability
+
+What happens when a delivery channel fails:
+
+1. **Retry with exponential backoff**: 3 attempts (1s → 5s → 30s)
+2. **Fallback chain**: If Bark fails → try Pushover → try ntfy
+3. **Dead letter queue**: Failed deliveries are logged and viewable in dashboard
+4. **Cross-channel deduplication**: One event = max one notification per channel
+5. **Event grouping**: Related events within 30min window → single "developing story" notification with count badge
 
 ---
 

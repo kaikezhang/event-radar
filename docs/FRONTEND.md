@@ -59,10 +59,16 @@ The heartbeat of the dashboard. New events slide in from the top with a subtle a
 - By event type (dropdown: restructuring, insider, tariff, FDA, ...)
 - By ticker (search box)
 - By direction (bullish / bearish / all)
+- **Saved filter presets**: "My Watchlist" (filtered by your tickers), "High Conviction" (CRITICAL + HIGH, Tier 1-2 only), "Full Firehose" (no filters)
+- Presets stored in localStorage or user profile
 
 **Behavior:**
 - Auto-scrolls when new events arrive (unless user is scrolling up)
-- Sound alert on CRITICAL events (configurable)
+- Sound alert on CRITICAL events (configurable):
+  - Sound selection per severity (different sounds for CRITICAL vs HIGH)
+  - Volume slider
+  - Test button
+  - Quiet hours schedule
 - Desktop notification on HIGH+ events
 
 ### 2. Event Detail Panel
@@ -80,6 +86,8 @@ Expands when clicking an event in the feed.
   - 📊 Full Analysis (triggers stock-analyst integration, if configured)
   - 🔔 Watch Ticker (add to alert list)
   - 📌 Pin Event (stays at top of feed)
+  - 📋 Copy Event JSON
+  - 📥 Export CSV (filtered results)
 
 ### 3. Chart Panel
 
@@ -138,6 +146,7 @@ Always visible at the bottom. At-a-glance system status.
 ### Theme
 
 - **Default**: Dark mode (pure black background, #0a0a0a)
+- **Option**: Light theme for bright offices or visual accessibility
 - Green for bullish, red for bearish, amber for alerts, blue for neutral
 - Monospace font for numbers/prices
 - System font for text
@@ -156,7 +165,7 @@ Installable as a Progressive Web App:
 | Framework | Next.js 15 (App Router) | RSC + API routes |
 | Styling | Tailwind CSS | Utility-first, dark theme |
 | Components | shadcn/ui | Accessible, customizable |
-| Data Grid | AG Grid (Community or Enterprise) | Virtual scrolling, streaming updates |
+| Data Grid | @tanstack/virtual | Lightweight virtual scrolling for event feed (AG Grid is overkill) |
 | Charts | TradingView Lightweight Charts | OHLC + markers |
 | Analytics Charts | Recharts or AG Charts | Pie, bar, sparkline |
 | Layout | react-grid-layout | Draggable, resizable panels |

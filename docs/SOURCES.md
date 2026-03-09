@@ -28,7 +28,10 @@ The most reliable sources. Legally mandated disclosures with structured formats.
 | **FDA** | PDUFA drug approvals/rejections, AdComm votes, warning letters | FDA.gov RSS + calendar | 5min | 🟡 High |
 | **WARN Act** | Mass layoff notices (50+ employees, 60-day advance) | State labor department sites (scrape) | 6hr | 🟢 Medium |
 | **DOJ / FTC** | Antitrust lawsuits, merger approvals/blocks, consent decrees | RSS + press releases | 15min | 🟡 High |
+| **FDIC** | Bank closures, enforcement actions (SVB-style events) | FDIC RSS + API | 1hr | 🟡 High |
 | **USPTO** | Major patent grants, patent litigation filings | Patent API | 1hr | 🟢 Medium |
+| **PACER** | Bankruptcy filings (Chapter 11, major corporate bankruptcies) | PACER API | 1hr | 🟡 High |
+| **Crypto Reg** | SEC crypto enforcement, executive orders on digital assets | Federal Register API + RSS | 15min | 🟡 High |
 | **CFTC** | Commitments of Traders (COT) reports | Weekly data release | Weekly | 🟢 Medium |
 
 ### Key 8-K Items (SEC)
@@ -84,6 +87,7 @@ Traditional newswire sources for official company announcements.
 | **GlobeNewswire** | Same (more mid/small-cap) | RSS | 60s | 🟡 High |
 | **Analyst Ratings** | Upgrades, downgrades, PT changes, initiations | Scrape (TipRanks, MarketBeat) | 15min | 🟡 High |
 | **Earnings Calendar** | Earnings dates, whisper numbers, pre-announcements | Earnings Whispers, Yahoo Finance | 1hr | 🟢 Medium |
+| **Earnings Transcripts** | Real-time call transcription, Q&A surprises | Rev.com, AssemblyAI | Real-time | 🟡 High |
 
 ---
 
@@ -157,6 +161,20 @@ Detect institutional activity before it becomes public knowledge.
 
 **Top-left quadrant** (fast + high impact) = highest priority for real-time alerting.
 **Bottom-right quadrant** (slow + low impact) = batch processing, background enrichment.
+
+---
+
+## Scraping Risk Assessment
+
+Some sources (Truth Social, WARN Act, analyst ratings) require web scraping. This carries risks:
+
+| Source | Risk | Mitigation |
+|--------|------|------------|
+| **Truth Social** | No API, ToS may prohibit scraping | Primary: 3rd-party aggregator. Fallback: Crawlee-based scraping with rate limiting |
+| **WARN Act** | State sites vary, no standard format | Normalize across ~50 state sites, cache locally |
+| **Analyst ratings** | TipRanks/MarketBeat may block | Proxy rotation, user-agent rotation |
+
+All scraped sources are flagged with a **reliability indicator** in the UI: 🟢 API / 🟡 Scraped / 🔴 Unstable.
 
 ---
 

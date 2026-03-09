@@ -95,11 +95,42 @@ Scanner {
 }
 ```
 
-Scanners emit events into a shared event bus. They are:
+Scanners emit events into the event bus. They are:
 - **Independent** — each runs its own polling loop, crash-isolated
 - **Configurable** — enable/disable per source, adjust intervals via config
 - **Observable** — each scanner exposes health + metrics
-- **Pluggable** — community can contribute new scanners
+- **Pluggable** — community can contribute new scanners via the Scanner Plugin SDK
+
+### 2. Event Bus
+
+The event bus is the central nervous system connecting scanners to the processing pipeline.
+
+**Phase 0**: In-memory `EventEmitter` behind a `EventBus` interface. Simple, zero dependencies, fine for single-process.
+
+**Phase 1+**: Swap to **Redis Streams** when durability matters:
+- Persistent — events survive process crashes
+- Consumer groups — multiple pipeline stages can read independently
+- Replay — re-process historical events for debugging or backfill
+- Backpressure — bounded streams with `MAXLEN` prevent memory exhaustion
+
+The interface stays the same:
+```
+EventBus {
+  publish(event: RawEvent): Promise<void>
+  subscribe(handler: (event: RawEvent) => Promise<void>): void
+  replay(from: string, handler: ...): Promise<void>  // Redis Streams only
+}
+```
+
+### 3. Backpressure & Rate Limiting
+
+What happens during a market crash when all 30+ sources fire simultaneously:
+
+- **Priority queue**: Tier 1 events are processed before Tier 4, always
+- **Bounded event bus**: Redis `MAXLEN` or in-memory ring buffer prevents OOM
+- **AI concurrency limit**: Max 5 concurrent LLM classification requests
+- **Delivery rate limiting**: Per-channel rate limits (Discord: 5/s, Bark: 10/s)
+- **Alert budgeting**: Max N push notifications per hour per user to prevent fatigue
 
 ### 2. Unified Event Schema
 
@@ -167,18 +198,52 @@ Correlation uses:
 - Time window (configurable, default 30 min)
 - Source diversity bonus (3 different tiers > 3 same-tier)
 
-### 5. Storage
+### 5. Python/TypeScript Boundary
 
-**Primary**: SQLite (single-node simplicity) or PostgreSQL (if scaling needed)
+The SEC parsing library (edgartools) is Python. The backend is TypeScript. This is resolved via a **clean microservice boundary**:
+
+```
+┌─────────────────────┐     HTTP/JSON     ┌─────────────────────┐
+│  Node.js Backend    │ ←──────────────── │  Python SEC Service │
+│  (scanners, pipeline│                   │  (FastAPI + edgartools│
+│   delivery, API)    │                   │   + FinBERT)         │
+└─────────────────────┘                   └─────────────────────┘
+```
+
+- Python microservice handles: SEC filing parsing, financial NLP (FinBERT/SEC-BERT)
+- Node.js handles: polling loops, event bus, pipeline orchestration, WebSocket, API
+- Communication: simple HTTP/JSON between services
+- If the language boundary creates too much friction, the fallback plan is migrating the entire backend to Python (FastAPI + asyncio handles polling workloads well)
+
+### 6. Storage
+
+**Primary**: PostgreSQL (via Docker Compose — one container, zero extra complexity)
 - All events with full classification
+- JSONB columns for flexible event metadata
+- Full-text search for event content
+- Real concurrency (unlike SQLite)
 - Query by ticker, type, severity, date range
 - Outcome tracking (price at T+1h, T+1d, T+1w for backtesting)
 
-**Time Series** (optional): For high-frequency metrics
-- Scanner poll counts, latencies
-- Event volume over time
+**Time Series**: Prometheus for operational metrics (scanner polls, latencies, event volume)
 
-### 6. Observability
+### 7. Authentication & Security
+
+Even for single-user self-hosted deployments, auth is required — the dashboard exposes market intelligence and config contains API keys.
+
+**Phase 0-2**: API key authentication (header-based)
+**Phase 4+**: OAuth2/OIDC if multi-user support is added
+
+**Security measures**:
+- Secrets in environment variables, never in config files
+- HTTPS everywhere (Cloudflare Tunnel provides this)
+- CSP headers on dashboard
+- Rate limiting on REST API
+- Input sanitization for user-provided filter values
+
+**Threat model**: Unauthorized access could expose: trading signals (competitive advantage leak), API keys (financial cost), and system config (infrastructure mapping)
+
+### 8. Observability
 
 Not an afterthought. Baked in from day one.
 
@@ -213,10 +278,14 @@ Not an afterthought. Baked in from day one.
 | Backend runtime | Node.js (TypeScript) | Async I/O, good for polling workloads |
 | Frontend | Next.js 15 + React | SSR + API routes + WebSocket |
 | UI components | shadcn/ui + Tailwind | Dark theme, financial aesthetic |
-| Data grid | AG Grid | Industry standard for financial data |
+| Virtual list | @tanstack/virtual or react-virtuoso | Lightweight virtual scrolling for event feed |
 | Charts | TradingView Lightweight Charts | Professional K-line + event markers |
 | Real-time | WebSocket (Socket.io) | Backend → Frontend live push |
-| Database | SQLite → PostgreSQL | Start simple, scale when needed |
+| Database | PostgreSQL | JSONB, full-text search, real concurrency |
+| Event bus | EventEmitter → Redis Streams | Durable, replayable event pipeline |
+| SEC parsing | Python (FastAPI + edgartools) | Best-in-class SEC library |
+| Financial NLP | FinBERT / SEC-BERT | Fast, domain-specific sentiment analysis |
+| Scraping | Crawlee (Playwright-based) | Anti-detection, proxy rotation, queue management |
 | Metrics | Prometheus | Industry standard observability |
 | Dashboards | Grafana | Visualization + alerting |
 | Containerization | Docker Compose | One-command deployment |
