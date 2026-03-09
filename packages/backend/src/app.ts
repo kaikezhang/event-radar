@@ -86,6 +86,10 @@ export function buildApp(options?: {
     };
   });
 
+  server.get('/api/health/ping', async () => {
+    return { pong: true, timestamp: Date.now() };
+  });
+
   server.post('/api/events/ingest', async (request, reply) => {
     const parsed = RawEventSchema.safeParse(request.body);
 
