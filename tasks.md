@@ -5,19 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 1A.5 — 集成测试**
+**Phase 1B.1 — LLM 分类引擎** (待启动)
 
-目标：端到端集成测试，验证完整 pipeline。
-
-具体要求：
-1. 集成测试：scanner → ingest → rule engine classify → delivery 全链路
-2. 测试 8-K scanner 和 Form 4 scanner 的事件流入 → 分类 → 投递
-3. Mock 外部依赖（SEC EDGAR API、Bark/Discord delivery）
-4. 测试 Prometheus metrics 在 pipeline 运行后正确递增
-5. 测试错误场景：scanner 失败、delivery 失败时的 metrics 和错误处理
-6. 如果有 DB 依赖的测试，用 SQLite in-memory 或 test container
-
-完成标准：`turbo build && turbo test && turbo lint` 全绿。新增 ≥10 个集成测试。
+Phase 1A 全部完成 ✅ 等主人确认后启动 Phase 1B。
 
 ---
 
@@ -37,7 +27,7 @@
 - [x] **P1A.2** 规则引擎分类 ✅
 - [x] **P1A.3** Form 4 Scanner ✅ (turbo build/test/lint 通过)
 - [x] **P1A.4** Observability（Prometheus /metrics）✅
-- [ ] **P1A.5** 集成测试
+- [x] **P1A.5** 集成测试 ✅ (16 integration tests, pipeline e2e)
 
 ### Phase 1B
 
