@@ -18,6 +18,8 @@ import { storeEvent } from './db/event-store.js';
 import { registerEventRoutes } from './routes/events.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
+import { LlmClassifier } from './pipeline/llm-classifier.js';
+import type { LlmProvider } from './pipeline/llm-provider.js';
 import {
   registry as metricsRegistry,
   eventsProcessedTotal,
@@ -26,6 +28,7 @@ import {
   deliveriesSentTotal,
   deliveriesByChannel,
   processingDurationSeconds,
+  llmClassificationsTotal,
 } from './metrics.js';
 
 export interface AppContext {
@@ -34,6 +37,7 @@ export interface AppContext {
   registry: ScannerRegistry;
   alertRouter: AlertRouterType;
   ruleEngine: RuleEngine;
+  llmClassifier?: LlmClassifier;
 }
 
 function buildAlertRouter(): AlertRouterType {
@@ -56,6 +60,7 @@ export function buildApp(options?: {
   alertRouter?: AlertRouterType;
   db?: Database;
   rules?: Rule[];
+  llmProvider?: LlmProvider;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const eventBus = new InMemoryEventBus();
@@ -63,6 +68,9 @@ export function buildApp(options?: {
   const alertRouter = options?.alertRouter ?? buildAlertRouter();
   const ruleEngine = new RuleEngine();
   const db = options?.db;
+  const llmClassifier = options?.llmProvider
+    ? new LlmClassifier({ provider: options.llmProvider })
+    : undefined;
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));
@@ -97,6 +105,20 @@ export function buildApp(options?: {
         const status = r.ok ? 'success' : 'failure';
         deliveriesSentTotal.inc({ channel: r.channel, status });
         deliveriesByChannel.inc({ channel: r.channel });
+      }
+    });
+  }
+
+  // Wire EventBus → LLM classifier (async enrichment, fire-and-forget)
+  if (llmClassifier) {
+    eventBus.subscribe(async (event) => {
+      const ruleResult = ruleEngine.classify(event);
+      const llmResult = await llmClassifier.classify(event, ruleResult);
+
+      if (llmResult.ok) {
+        llmClassificationsTotal.inc({ status: 'success' });
+      } else {
+        llmClassificationsTotal.inc({ status: 'failure' });
       }
     });
   }
@@ -147,5 +169,5 @@ export function buildApp(options?: {
     registerEventRoutes(server, db);
   }
 
-  return { server, eventBus, registry, alertRouter, ruleEngine };
+  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier };
 }

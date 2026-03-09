@@ -14,6 +14,14 @@ export {
   type Action,
   type ClassificationResult,
 } from './schemas/rule.js';
+export {
+  LlmClassificationResultSchema,
+  DirectionSchema,
+  ClassificationSourceSchema,
+  type LlmClassificationResult,
+  type Direction,
+  type ClassificationSource,
+} from './schemas/llm-classification.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
