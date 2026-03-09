@@ -60,6 +60,14 @@ export const uptimeSeconds = new Gauge({
   },
 });
 
+/** Counter: LLM classification attempts */
+export const llmClassificationsTotal = new Counter({
+  name: 'llm_classifications_total',
+  help: 'Total LLM classification attempts',
+  labelNames: ['status'] as const,
+  registers: [registry],
+});
+
 /** Histogram: processing duration for pipeline operations */
 export const processingDurationSeconds = new Histogram({
   name: 'processing_duration_seconds',
@@ -76,5 +84,6 @@ export function resetMetrics(): void {
   eventsBySeverity.reset();
   deliveriesSentTotal.reset();
   deliveriesByChannel.reset();
+  llmClassificationsTotal.reset();
   processingDurationSeconds.reset();
 }
