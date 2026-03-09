@@ -1,7 +1,7 @@
 import type { Rule } from '@event-radar/shared';
 
 /**
- * Default classification rules based on SEC 8-K item type mappings.
+ * Default classification rules for SEC filings (8-K items + Form 4 insider trading).
  * Lower priority number = applied first. Severity uses "highest wins" logic in RuleEngine.
  */
 export const DEFAULT_RULES: Rule[] = [
@@ -248,6 +248,55 @@ export const DEFAULT_RULES: Rule[] = [
       { type: 'addTags', values: ['8-K', 'exhibits'] },
     ],
     priority: 40,
+    enabled: true,
+  },
+
+  // ── Form 4 — Insider Trading ────────────────────────────────────────
+
+  {
+    id: 'form4-insider-purchase',
+    name: 'Form 4 — Insider Purchase (>$100k)',
+    conditions: [
+      { type: 'sourceEquals', value: 'sec-edgar' },
+      { type: 'titleContains', value: 'Form 4' },
+      { type: 'titleContains', value: 'Purchase' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'addTags', values: ['Form-4', 'insider-purchase'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'form4-insider-sale',
+    name: 'Form 4 — Insider Sale',
+    conditions: [
+      { type: 'sourceEquals', value: 'sec-edgar' },
+      { type: 'titleContains', value: 'Form 4' },
+      { type: 'titleContains', value: 'Sale' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'addTags', values: ['Form-4', 'insider-sale'] },
+    ],
+    priority: 25,
+    enabled: true,
+  },
+  {
+    id: 'form4-routine-10b5-1',
+    name: 'Form 4 — Routine 10b5-1 Plan Sale',
+    conditions: [
+      { type: 'sourceEquals', value: 'sec-edgar' },
+      { type: 'titleContains', value: 'Form 4' },
+      { type: 'titleContains', value: 'Sale' },
+      { type: 'titleContains', value: '10b5-1' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'LOW' },
+      { type: 'addTags', values: ['Form-4', 'insider-sale', '10b5-1-plan'] },
+    ],
+    priority: 35,
     enabled: true,
   },
 ];

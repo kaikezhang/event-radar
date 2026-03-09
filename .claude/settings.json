@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"CC_DONE:$(date +%s):$TITLE\" >> /tmp/cc-notifications.log"
+          }
+        ]
+      }
+    ]
+  }
+}

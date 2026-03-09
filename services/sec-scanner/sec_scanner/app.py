@@ -1,4 +1,4 @@
-"""FastAPI application for SEC 8-K scanner microservice."""
+"""FastAPI application for SEC scanner microservice (8-K + Form 4)."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await scanner.stop()
 
 
-app = FastAPI(title="SEC 8-K Scanner", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="SEC Scanner", version="0.2.0", lifespan=lifespan)
 
 
 @app.get("/health")
