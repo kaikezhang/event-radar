@@ -44,9 +44,53 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.2 Live Event Feed
+## Current Task: P2.3 Event Detail panel
 
-**Goal**: Real-time event list with WebSocket, virtual scrolling, filtering.
+**Goal**: Full event detail panel with classification reasoning, source link, similar events.
+
+### Requirements
+
+1. **Detail Panel Component**
+   - Slide-out panel (right side) when event clicked
+   - Close button and ESC key to close
+   - Responsive: full screen on mobile, 600px wide on desktop
+
+2. **Event Information**
+   - Severity badge (with confidence score)
+   - Source icon + name
+   - Ticker(s) displayed prominently
+   - Published timestamp (relative time, e.g., "5 min ago")
+   - Full headline
+   - Summary if available
+
+3. **Classification Section**
+   - Show classification result (severity + tags)
+   - AI reasoning (if LLM classified)
+   - Confidence score bar (0-100%)
+   - Rule matches list (if rule-based)
+
+4. **Source Link**
+   - "View Original" button linking to source
+   - Open in new tab
+   - Source icon as favicon
+
+5. **Similar Events**
+   - Query backend for similar events (same ticker, similar tags)
+   - Show up to 10 similar events
+   - Limit to last 7 days
+
+6. **Actions**
+   - "Copy Event JSON" button
+   - "Share" button (copy URL)
+   - Star/Mark as Important (localStorage)
+
+### Files to create/modify
+- `packages/frontend/src/components/event-detail-panel.tsx` - main panel
+- `packages/backend/src/routes/events.ts` - add GET /events/:id/similar endpoint
+- `packages/frontend/src/hooks/use-event-detail.ts` - fetch hook
+
+### Verification
+`turbo build && turbo test && turbo lint` must pass.
 
 ### Requirements
 

@@ -45,7 +45,8 @@ Phase 1A 全部完成 ✅ 等主人确认后启动 Phase 1B。
 ### Phase 2
 
 - [x] **P2.1** Frontend scaffold（Next.js + shadcn/ui + dark theme）✅
-- [~] **P2.2** Live Event Feed（WebSocket + virtual list）
+- [x] **P2.2** Live Event Feed（WebSocket + virtual list）✅
+- [ ] **P2.3** Event Detail panel
 - [ ] **P2.2** Live Event Feed（WebSocket + virtual list）
 - [ ] **P2.3** Event Detail panel
 - [ ] **P2.4** Chart panel（TradingView Lightweight Charts）
