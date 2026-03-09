@@ -6,7 +6,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['src/__tests__/*.test.ts', 'src/__tests__/helpers/test-db.ts'],
+          allowDefaultProject: ['src/__tests__/*.test.ts', 'src/__tests__/helpers/test-db.ts', 'src/__tests__/integration/*.test.ts'],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 16,
         },
         tsconfigRootDir: import.meta.dirname,
       },
