@@ -5,33 +5,33 @@
 ---
 
 ## 当前任务
-**Phase 0.3 — SEC EDGAR 8-K Scanner（Python FastAPI 微服务 + edgartools）**
+**Phase 0.4 — Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）**
 
-目标：创建 Python 微服务，轮询 SEC EDGAR EFTS API 获取最新 8-K filing，解析关键 item，通过 HTTP 推送 RawEvent 到 Node.js backend。
+目标：实现推送通道，Bark（iOS Critical Alerts）+ Discord webhook，让 8-K 事件能在 60 秒内推送到手机。
 
 具体要求：
-1. 在 `services/sec-scanner/` 中创建 Python FastAPI 微服务：
-   - 使用 `edgartools` 库解析 8-K filing
-   - 轮询 SEC EDGAR EFTS API（`https://efts.sec.gov/LATEST/search-index?q=%228-K%22&dateRange=custom&startdt=TODAY&enddt=TODAY`）
-   - 解析 8-K item types（1.01 Entry into Material Agreement, 1.02 Bankruptcy, 2.01 Acquisition, 5.02 CEO Change, 7.01 Regulation FD, 8.01 Other Events 等）
-   - 提取：公司名、CIK、ticker（通过 SEC company tickers API）、filing date、item types、filing URL
-   - 生成 RawEvent 并 POST 到 Node.js backend（`POST /api/events/ingest`）
-2. 在 Node.js backend 添加：
-   - `POST /api/events/ingest` endpoint — 接收 RawEvent，发布到 EventBus
-   - 验证 RawEvent schema（用 zod）
-3. Python 微服务配置：
-   - `SEC_POLL_INTERVAL` 环境变量（默认 30s）
-   - `BACKEND_URL` 环境变量（默认 `http://localhost:3001`）
-   - SEC User-Agent header（SEC 要求提供联系邮箱）
-   - Rate limiting（SEC 限制 10 requests/sec）
-4. Docker:
-   - `services/sec-scanner/Dockerfile`
-   - `docker-compose.yml`（sec-scanner + backend）
-5. 测试：
-   - Python: pytest，mock SEC API response，验证 8-K 解析
-   - Node.js: 测试 ingest endpoint
+1. 在 `packages/delivery/` 创建 TypeScript delivery 包：
+   - `BarkPusher` — Bark API 调用（POST https://api.day.app/push）
+     - 支持 Critical Alerts（`isArchive=0`, `sound=` 自定义）
+     - 配置：BARK_API_KEY, BARK_SOUND (默认 "alarm")
+   - `DiscordWebhook` — Discord webhook 调用（POST webhook URL）
+     - 支持 embed 格式显示事件摘要
+     - 配置：DISCORD_WEBHOOK_URL
+   - `AlertRouter` — 根据 severity 路由到对应通道：
+     - CRITICAL → Bark + Discord
+     - HIGH → Bark
+     - MEDIUM/LOW → Discord only
+2. Node.js backend 集成：
+   - 在 `app.ts` 中订阅 EventBus，将 RawEvent 转发给 AlertRouter
+   - 配置通过环境变量（用 pydantic-settings 或类似方案）
+3. Docker：
+   - 更新 `docker-compose.yml` 添加 bark-server 服务（已有 `finab/bark-server`）
+   - Bark server 配置：环境变量 `BARK_KEY` 用于认证
+4. 测试：
+   - Mock Bark API，验证请求格式
+   - Mock Discord webhook，验证 embed 格式
 
-完成标准：`docker compose up` 启动后，sec-scanner 自动轮询 SEC，解析 8-K，推送到 backend，`GET /health` 显示 sec-scanner 状态。
+完成标准：`docker compose up` 启动后，sec-scanner 收到 8-K → backend → delivery → Discord webhook + Bark push <60s。
 
 ---
 
@@ -41,7 +41,7 @@
 
 - [x] **P0.1** 项目 scaffold ✅
 - [x] **P0.2** Scanner 插件框架 ✅
-- [ ] **P0.3** SEC EDGAR 8-K scanner（Python FastAPI 微服务 + edgartools）
+- [x] **P0.3** SEC EDGAR 8-K scanner（Python FastAPI 微服务 + edgartools）✅
 - [ ] **P0.4** Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）
 - [ ] **P0.5** 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）
 
