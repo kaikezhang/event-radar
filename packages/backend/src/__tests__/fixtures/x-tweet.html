@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <div class="timeline">
+    <!-- Regular tweet -->
+    <article role="article">
+      <div data-testid="tweetText">DOGE has saved taxpayers $100 billion so far. Government efficiency is working!</div>
+      <a href="/elonmusk/status/1800000000000000001">
+        <time datetime="2025-06-15T16:00:00Z">1 hour ago</time>
+      </a>
+    </article>
+
+    <!-- Retweet -->
+    <article role="article">
+      <div data-testid="socialContext">Elon Musk reposted</div>
+      <div data-testid="tweetText">Tesla Q3 deliveries exceed expectations!</div>
+      <a href="/elonmusk/status/1800000000000000002">
+        <time datetime="2025-06-15T15:00:00Z">2 hours ago</time>
+      </a>
+    </article>
+
+    <!-- Quote tweet -->
+    <article role="article">
+      <div data-testid="tweetText">Absolutely. SpaceX Starship is the future of space travel.</div>
+      <a href="/elonmusk/status/1800000000000000003">
+        <time datetime="2025-06-15T14:00:00Z">3 hours ago</time>
+      </a>
+      <div data-testid="quoteTweet">
+        <div data-testid="tweetText">When is the next Starship launch?</div>
+      </div>
+    </article>
+
+    <!-- Reply (should be filtered out - not market relevant) -->
+    <article role="article">
+      <div data-testid="reply-indicator">Replying to @someuser</div>
+      <div data-testid="tweetText">Thanks! Appreciate the kind words.</div>
+      <a href="/elonmusk/status/1800000000000000004">
+        <time datetime="2025-06-15T13:00:00Z">4 hours ago</time>
+      </a>
+    </article>
+
+    <!-- Reply with market keyword (should NOT be filtered) -->
+    <article role="article">
+      <div data-testid="reply-indicator">Replying to @cryptofan</div>
+      <div data-testid="tweetText">Bitcoin is fundamentally sound. The market will recover.</div>
+      <a href="/elonmusk/status/1800000000000000005">
+        <time datetime="2025-06-15T12:00:00Z">5 hours ago</time>
+      </a>
+    </article>
+
+    <!-- Tweet with media -->
+    <article role="article">
+      <div data-testid="tweetText">Tesla Model Y is now the best-selling car globally!</div>
+      <a href="/elonmusk/status/1800000000000000006">
+        <time datetime="2025-06-15T11:00:00Z">6 hours ago</time>
+      </a>
+      <div data-testid="tweetPhoto">
+        <img src="model-y.jpg" alt="Tesla Model Y" />
+      </div>
+    </article>
+  </div>
+</body>
+</html>

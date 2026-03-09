@@ -13,6 +13,8 @@ import {
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
 import { DummyScanner } from './scanners/dummy-scanner.js';
+import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
+import { XScanner } from './scanners/x-scanner.js';
 import { type Database } from './db/connection.js';
 import { storeEvent } from './db/event-store.js';
 import { registerEventRoutes } from './routes/events.js';
@@ -74,6 +76,13 @@ export function buildApp(options?: {
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));
+
+  if (process.env.TRUTH_SOCIAL_ENABLED === 'true') {
+    registry.register(new TruthSocialScanner(eventBus));
+  }
+  if (process.env.X_SCANNER_ENABLED === 'true') {
+    registry.register(new XScanner(eventBus));
+  }
 
   // Wire EventBus → metrics tracking
   eventBus.subscribe(async (event) => {
