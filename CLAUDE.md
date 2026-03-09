@@ -38,6 +38,33 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
+## Current Task: P1A.4 Observability
+
+**Goal**: Add Prometheus metrics endpoint and key metrics to Event Radar.
+
+### Requirements
+
+1. **Prometheus metrics endpoint** in backend (`/metrics`)
+   - Use `prom-client` library
+   - Fastify plugin format
+
+2. **Key metrics to implement**:
+   - `scanner_events_total` — Counter with labels: scanner, event_type
+   - `events_classified_total` — Counter with labels: severity, rule_id
+   - `delivery_attempts_total` — Counter with labels: delivery_type, status
+   - `processing_duration_seconds` — Histogram with label: operation
+
+3. **Integration points**:
+   - Increment counters in scanner, classifier, and delivery modules
+   - Use histogram for timing in pipeline processing
+
+4. **Testing**:
+   - Add unit tests for metrics
+   - Verify endpoint returns valid Prometheus format
+
+### Verification
+`turbo build && turbo test && turbo lint` must pass.
+
 ## Reference Docs
 
 Read these when working on the relevant area:
