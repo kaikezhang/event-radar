@@ -22,13 +22,18 @@ packages/sec-service/— Python FastAPI microservice
 - `turbo lint` — ESLint check
 - `docker compose up` — start all services locally
 
+## Git Workflow (长期规矩)
+
+- **CC 完成任务后**：产分支 + commit + push → 创建 PR → 由晚晚(master/owner)来 merge 到 main
+- **禁止直接 push 到 main**
+- 晚晚自己修改 md/docs 时可以直接 commit push 到 main
+
 ## Key Constraints
 
 - Use zod for all validation. Result<T,E> pattern for errors, don't throw.
 - Env vars via `@t3-oss/env-core`. Never hardcode secrets.
 - One scanner per file. Scanners only extract data — no classification logic.
 - Virtual list: @tanstack/virtual (NOT AG Grid). DB: PostgreSQL (NOT SQLite).
-- **Git Workflow**: CC完成任务后 → 产分支 + commit + push → 创建PR → 由晚晚(master/owner)来merge到main。**禁止直接push到main**。晚晚自己修改md/docs时可以直commit push到main。
 - Event bus interface: EventEmitter now, Redis Streams later. Don't couple to implementation.
 
 ## Verification
