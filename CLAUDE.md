@@ -38,91 +38,74 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1B.2 Tier 2 Political Figure Scanners
+## Current Task: P1B.3 Event Deduplication
 
-**Goal**: Add Trump Truth Social + Elon Musk X scanners as Tier 2 sources.
+**Goal**: Cross-source event deduplication — same event from multiple sources should be merged, not duplicated.
 
 ### Architecture
 
-Each scanner is a standalone class extending `BaseScanner`. They emit `RawEvent` via the event bus. The existing rule engine + LLM classifier handle classification.
-
-Since Truth Social and X have no official API suitable for free real-time polling, we use **web scraping via Crawlee** (Playwright-based) with anti-detection. Both scanners poll on tight intervals (Trump 15s, Elon 30s) and emit new posts as events.
+Dedup runs as a pipeline stage between classification and delivery. When a new event arrives, it checks against recent events (sliding window) for duplicates. If a match is found, the new event is merged into the existing one (boosting confidence, adding source) rather than creating a separate alert.
 
 ### Requirements
 
-1. **Crawlee integration** — shared browser scraping utility
-   - Add `crawlee` + `playwright` as backend dependencies
-   - Create `src/scanners/scraping/browser-pool.ts` — shared Playwright browser pool
-     - Singleton pattern, lazy init, graceful shutdown
-     - Headless Chromium, stealth mode (Crawlee handles most fingerprinting)
-   - Create `src/scanners/scraping/scrape-utils.ts` — common scraping helpers
-     - `extractTextContent(page, selector)`, `waitForContent(page, selector, timeout)`
-     - Rate limit tracking, retry with backoff
+1. **`EventDeduplicator` class** in `src/pipeline/deduplicator.ts`
+   - Maintains a sliding window of recent events (configurable, default 30 minutes)
+   - For each incoming classified event, checks for duplicates
+   - Returns: `{ isDuplicate: boolean, mergedEvent?: ClassifiedEvent, originalEventId?: string }`
 
-2. **Trump Truth Social Scanner** — `src/scanners/truth-social-scanner.ts`
-   - Poll `https://truthsocial.com/@realDonaldTrump` every 15s
-   - Extract: post text, timestamp, media URLs, repost indicator
-   - Dedup by post ID (track last N seen IDs)
-   - Emit `RawEvent` with:
-     - `source: 'truth-social'`
-     - `type: 'political-post'`
-     - `metadata: { author: 'trump', postId, isRepost, hasMedia }`
-   - **Fallback**: If direct scraping fails 3x consecutively, log warning + emit scanner health degraded
-   - Handle: page load failures, rate limits, DOM structure changes (use resilient selectors)
+2. **Dedup strategies** (all in `src/pipeline/dedup-strategies.ts`)
+   - **Exact ID match**: same `metadata.filingId`, `metadata.postId`, `metadata.tweetId` etc.
+   - **Ticker + time window**: same ticker within 5 minutes + similar event type
+   - **Content similarity**: title/body similarity score > 0.8 (use simple Jaccard similarity on word tokens — no ML needed)
+   - **Developing story grouping**: related events within 30min window get grouped under a "story" ID
+   - Each strategy returns a confidence score (0-1), highest wins
 
-3. **Elon Musk X Scanner** — `src/scanners/x-scanner.ts`
-   - Poll `https://x.com/elonmusk` every 30s
-   - Extract: tweet text, timestamp, media, retweet/quote indicator, reply indicator
-   - Filter: only original tweets + quotes (skip replies unless they contain $TICKER or market keywords)
-   - Dedup by tweet ID
-   - Emit `RawEvent` with:
-     - `source: 'x'`
-     - `type: 'political-post'`
-     - `metadata: { author: 'elonmusk', tweetId, isRetweet, isQuote, hasMedia }`
-   - **Anti-detection**: X is aggressive — use Crawlee's SessionPool, rotate user agents, respect rate limits
-   - **Fallback**: same as Trump scanner — 3 consecutive failures → health degraded
+3. **Shared types** in `packages/shared/src/schemas/dedup.ts`
+   ```typescript
+   DedupResult {
+     isDuplicate: boolean
+     matchType: 'exact-id' | 'ticker-window' | 'content-similarity' | 'none'
+     matchConfidence: number  // 0-1
+     originalEventId?: string
+     storyId?: string  // for developing story grouping
+   }
+   ```
 
-4. **Political post classification rules** — `src/pipeline/political-rules.ts`
-   - Add new rules to the rule engine for political posts:
-     - Trump + tariff/trade keywords → CRITICAL severity
-     - Trump + company name mention → HIGH severity  
-     - Trump + crypto keywords → HIGH severity
-     - Elon + DOGE/government keywords → HIGH severity
-     - Elon + Tesla/SpaceX keywords → MEDIUM severity (often already public)
-     - Elon + crypto keywords → HIGH severity
-   - Export and register in `default-rules.ts`
+4. **Story grouping** in `src/pipeline/story-tracker.ts`
+   - Groups related events into "stories" (e.g., multiple 8-Ks about same merger)
+   - Story = first event's ID, subsequent events reference it
+   - Story expires after 30 minutes of no new related events
+   - Metadata enrichment: `event.metadata.storyId`, `event.metadata.storyEventCount`
 
-5. **Scanner registration**
-   - Register both scanners in the scanner registry
-   - Add env vars: `TRUTH_SOCIAL_ENABLED=true/false`, `X_SCANNER_ENABLED=true/false`
-   - Both disabled by default (require explicit opt-in since they need a browser)
+5. **Pipeline integration**
+   - Insert dedup stage: scanner → classify → **dedup** → delivery
+   - If duplicate: skip delivery, update existing event's metadata (add source, bump confidence)
+   - If new story event: deliver with "Developing: ..." prefix in title
+   - Add Prometheus metrics: `events_deduplicated_total` (counter), `active_stories` (gauge)
 
 6. **Tests** (≥10 new tests)
-   - Unit tests for post text extraction/parsing (mock HTML fixtures)
-   - Unit tests for dedup logic (seen IDs ring buffer)
-   - Unit tests for political classification rules
-   - Test scanner health degradation after consecutive failures
-   - Test fallback behavior
-   - DO NOT test with real network calls — use mock HTML pages
+   - Exact ID dedup (same filing from RSS + API)
+   - Ticker + time window dedup (Trump tariff post + news article about it)
+   - Content similarity (similar headlines from different newswires)
+   - Story grouping (3 related events → 1 story)
+   - Story expiry (old story not matched)
+   - Non-duplicate events pass through
+   - Sliding window cleanup (old events removed)
+   - Metrics increment correctly
 
-### Dependencies to add (packages/backend)
-- `crawlee` (Playwright crawler)
-- `playwright` (browser automation)
-
-### Files to create
-- `packages/backend/src/scanners/scraping/browser-pool.ts`
-- `packages/backend/src/scanners/scraping/scrape-utils.ts`
-- `packages/backend/src/scanners/truth-social-scanner.ts`
-- `packages/backend/src/scanners/x-scanner.ts`
-- `packages/backend/src/pipeline/political-rules.ts`
-- `packages/backend/src/__tests__/truth-social-scanner.test.ts`
-- `packages/backend/src/__tests__/x-scanner.test.ts`
-- `packages/backend/src/__tests__/political-rules.test.ts`
-- `packages/backend/src/__tests__/fixtures/truth-social-post.html`
-- `packages/backend/src/__tests__/fixtures/x-tweet.html`
+### Files to create/modify
+- `packages/shared/src/schemas/dedup.ts` (new)
+- `packages/shared/src/index.ts` (export new types)
+- `packages/backend/src/pipeline/deduplicator.ts` (new)
+- `packages/backend/src/pipeline/dedup-strategies.ts` (new)
+- `packages/backend/src/pipeline/story-tracker.ts` (new)
+- `packages/backend/src/app.ts` (integrate dedup stage)
+- `packages/backend/src/metrics.ts` (add dedup metrics)
+- `packages/backend/src/__tests__/deduplicator.test.ts` (new)
+- `packages/backend/src/__tests__/story-tracker.test.ts` (new)
 
 ### Verification
-`turbo build && turbo test && turbo lint` must pass. Browser/Playwright NOT required for tests (all mocked).
+`turbo build && turbo test && turbo lint` must pass.
 
 ## Reference Docs
 
