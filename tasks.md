@@ -5,39 +5,30 @@
 ---
 
 ## 当前任务
-**Phase 1A.2 — 规则引擎分类（Stage 1: keyword matching, 8-K item mapping）**
+**Phase 1A.3 — Form 4 Insider Trading Scanner**
 
-目标：实现基于规则的分类引擎，根据 8-K item type、source、keyword 进行初步分类。
+目标：添加 SEC Form 4（insider trading）scanner，检测内部人交易信号。
 
 具体要求：
-1. 在 `packages/shared/` 中：
-   - 定义 `Rule` interface（id, name, condition, action）
-   - 定义 `Condition` types：
-     - `sourceEquals` — source == 'sec-8k'
-     - `itemTypeContains` — 8-K item type 包含关键词
-     - `titleContains` — title 包含关键词（如 "acquisition", "bankruptcy"）
-     - `tickerInList` — ticker 在预设列表中
-   - 定义 `Action` types：
-     - `setSeverity` — 设定 severity
-     - `addTags` — 添加 tags
-     - `setPriority` — 设定优先级
+1. 在 `services/sec-scanner/` 中扩展 Python 微服务：
+   - 新增 Form 4 polling（SEC EDGAR EFTS API, formType=4）
+   - 解析 Form 4 XML：reporting owner, issuer, transaction type (P=Purchase, S=Sale), shares, price
+   - 重点检测：CEO/CFO/Director 大额买入（>$100k）= HIGH severity
+   - 集群买入（多个 insider 同时买）= CRITICAL
+   - 生成 RawEvent POST 到 backend
 
-2. 在 `packages/backend/` 中：
-   - 实现 `RuleEngine` class
-     - `loadRules(rules: Rule[])` — 加载规则
-     - `classify(event: RawEvent): ClassificationResult` — 执行分类
-   - 预置默认规则（按 8-K item mapping）：
-     - 1.02 (Bankruptcy) → CRITICAL
-     - 5.02 (CEO Change) → HIGH
-     - 2.01 (Acquisition) → HIGH
-     - 1.01 (Material Agreement) → MEDIUM
-     - 7.01 (Regulation FD) → LOW
-   - 在 EventBus handler 中调用 RuleEngine
+2. 规则引擎扩展：
+   - 添加 Form 4 相关的默认规则
+   - insider purchase > $1M → CRITICAL
+   - insider purchase > $100k → HIGH  
+   - insider sale → MEDIUM
+   - routine/10b5-1 plan sale → LOW
 
 3. 测试：
-   - RuleEngine 测试：规则匹配、优先级、多个规则组合
+   - Mock Form 4 XML 解析
+   - 新规则的分类测试
 
-完成标准：`turbo build && turbo test && turbo lint` 全绿。
+完成标准：`turbo build && turbo test && turbo lint` 全绿，pytest 通过。
 
 ---
 
@@ -54,7 +45,7 @@
 ### Phase 1A
 
 - [x] **P1A.1** PostgreSQL schema + query API ✅
-- [ ] **P1A.2** 规则引擎分类（Stage 1: keyword matching, 8-K item mapping）
+- [x] **P1A.2** 规则引擎分类 ✅
 - [ ] **P1A.3** 更多 Tier 1 scanner（Form 4, Fed, BLS）
 - [ ] **P1A.4** Observability（Prometheus + Grafana）
 - [ ] **P1A.5** 集成测试
