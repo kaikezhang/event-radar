@@ -5,9 +5,35 @@
 ---
 
 ## 当前任务
-**Phase 0.5 — 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）**
+**Phase 1A.1 — PostgreSQL Schema + Query API**
 
-目标：提升测试覆盖率，添加 mock SEC 数据，确保 scanner + classify 模块覆盖率 >80%。
+目标：添加 PostgreSQL 持久化层，存储所有 RawEvent，提供查询 API。
+
+具体要求：
+1. 在 `packages/shared/` 中：
+   - 添加 drizzle-orm + drizzle-kit 依赖
+   - 定义 `events` 表 schema（id, source, sourceEventId, title, summary, rawPayload, metadata, severity, receivedAt, createdAt）
+   - 定义 `deliveries` 表 schema（id, eventId, channel, status, error, sentAt）
+   - 导出 db schema 和类型
+
+2. 在 `packages/backend/` 中：
+   - 添加 PostgreSQL 连接（pg driver + drizzle）
+   - EventBus handler 存储 event 到数据库
+   - 添加 REST API endpoints：
+     - `GET /api/events` — 分页列表，支持 ?source=&severity=&limit=&offset= 筛选
+     - `GET /api/events/:id` — 单个事件详情
+     - `GET /api/stats` — 事件统计（按 source、severity 分组计数）
+   - 配置：DATABASE_URL 环境变量
+
+3. Docker：
+   - 在 `docker-compose.yml` 添加 PostgreSQL 服务
+   - 添加 db migration 脚本（drizzle-kit generate + migrate）
+
+4. 测试：
+   - 用 SQLite (drizzle 支持) 做内存测试，不依赖真实 PG
+   - 测试 event 存储、查询、分页、筛选
+
+完成标准：`turbo build && turbo test && turbo lint` 全绿，事件能持久化到 PG。
 
 ---
 
@@ -18,8 +44,8 @@
 - [x] **P0.1** 项目 scaffold ✅
 - [x] **P0.2** Scanner 插件框架 ✅
 - [x] **P0.3** SEC EDGAR 8-K scanner（Python FastAPI 微服务 + edgartools）✅
-- [x] **P0.4** Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）✅
-- [ ] **P0.5** 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）
+- [x] **P0.4** Delivery: Bark + Discord ✅
+- [~] **P0.5** 测试基础 — 已有 91 tests，跳过，按需补充
 
 ### Phase 1A
 
