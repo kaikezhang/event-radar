@@ -5,19 +5,20 @@
 ---
 
 ## 当前任务
-**Phase 1A.3 — Form 4 Insider Trading Scanner**
+**Phase 1A.4 — Observability（Prometheus + Grafana）**
 
-目标：添加 SEC Form 4（insider trading）scanner，检测内部人交易信号。
+目标：为 Event Radar 添加监控和可观测性。
 
 具体要求：
-1. 在 `services/sec-scanner/` 中扩展 Python 微服务：
-   - 新增 Form 4 polling（SEC EDGAR EFTS API, formType=4）
-   - 解析 Form 4 XML：reporting owner, issuer, transaction type (P=Purchase, S=Sale), shares, price
-   - 重点检测：CEO/CFO/Director 大额买入（>$100k）= HIGH severity
-   - 集群买入（多个 insider 同时买）= CRITICAL
-   - 生成 RawEvent POST 到 backend
+1. 在 backend 添加 Prometheus metrics endpoint (`/metrics`)
+2. 关键指标：
+   - scanner_events_total（按 scanner 和 event type 分）
+   - events_classified_total（按 severity 分）
+   - delivery_attempts_total（按 delivery type 和 status 分）
+   - processing_duration_seconds（histogram）
+3. 添加 Grafana dashboard JSON（可选）
 
-2. 规则引擎扩展：
+完成标准：`turbo build && turbo test && turbo lint` 全绿。
    - 添加 Form 4 相关的默认规则
    - insider purchase > $1M → CRITICAL
    - insider purchase > $100k → HIGH  
@@ -46,7 +47,7 @@
 
 - [x] **P1A.1** PostgreSQL schema + query API ✅
 - [x] **P1A.2** 规则引擎分类 ✅
-- [ ] **P1A.3** 更多 Tier 1 scanner（Form 4, Fed, BLS）
+- [x] **P1A.3** Form 4 Scanner ✅ (turbo build/test/lint 通过)
 - [ ] **P1A.4** Observability（Prometheus + Grafana）
 - [ ] **P1A.5** 集成测试
 
