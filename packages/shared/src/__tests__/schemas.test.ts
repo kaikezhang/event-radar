@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { RawEventSchema, ScannerHealthSchema, ok, err } from '../index.js';
+import {
+  RawEventSchema,
+  ScannerHealthSchema,
+  RuleSchema,
+  ConditionSchema,
+  ActionSchema,
+  ok,
+  err,
+} from '../index.js';
 
 describe('RawEventSchema', () => {
   it('should parse a valid raw event', () => {
@@ -33,6 +41,142 @@ describe('ScannerHealthSchema', () => {
     };
     const result = ScannerHealthSchema.safeParse(health);
     expect(result.success).toBe(true);
+  });
+});
+
+describe('RuleSchema', () => {
+  it('should parse a valid rule', () => {
+    const rule = {
+      id: 'test-rule',
+      name: 'Test Rule',
+      conditions: [{ type: 'sourceEquals', value: 'sec-edgar' }],
+      actions: [{ type: 'setSeverity', value: 'HIGH' }],
+      priority: 10,
+      enabled: true,
+    };
+    const result = RuleSchema.safeParse(rule);
+    expect(result.success).toBe(true);
+  });
+
+  it('should apply defaults for priority and enabled', () => {
+    const rule = {
+      id: 'test-rule',
+      name: 'Test Rule',
+      conditions: [{ type: 'sourceEquals', value: 'sec-edgar' }],
+      actions: [{ type: 'setSeverity', value: 'HIGH' }],
+    };
+    const result = RuleSchema.safeParse(rule);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBe(50);
+      expect(result.data.enabled).toBe(true);
+    }
+  });
+
+  it('should reject a rule with no conditions', () => {
+    const rule = {
+      id: 'test-rule',
+      name: 'Test Rule',
+      conditions: [],
+      actions: [{ type: 'setSeverity', value: 'HIGH' }],
+    };
+    const result = RuleSchema.safeParse(rule);
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject a rule with no actions', () => {
+    const rule = {
+      id: 'test-rule',
+      name: 'Test Rule',
+      conditions: [{ type: 'sourceEquals', value: 'sec-edgar' }],
+      actions: [],
+    };
+    const result = RuleSchema.safeParse(rule);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ConditionSchema', () => {
+  it('should parse sourceEquals condition', () => {
+    const result = ConditionSchema.safeParse({
+      type: 'sourceEquals',
+      value: 'sec-edgar',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse itemTypeContains condition', () => {
+    const result = ConditionSchema.safeParse({
+      type: 'itemTypeContains',
+      value: '1.03',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse titleContains condition', () => {
+    const result = ConditionSchema.safeParse({
+      type: 'titleContains',
+      value: 'bankruptcy',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse tickerInList condition', () => {
+    const result = ConditionSchema.safeParse({
+      type: 'tickerInList',
+      values: ['AAPL', 'TSLA'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject unknown condition type', () => {
+    const result = ConditionSchema.safeParse({
+      type: 'unknownType',
+      value: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ActionSchema', () => {
+  it('should parse setSeverity action', () => {
+    const result = ActionSchema.safeParse({
+      type: 'setSeverity',
+      value: 'CRITICAL',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse addTags action', () => {
+    const result = ActionSchema.safeParse({
+      type: 'addTags',
+      values: ['tag1', 'tag2'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse setPriority action', () => {
+    const result = ActionSchema.safeParse({
+      type: 'setPriority',
+      value: 25,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid severity value', () => {
+    const result = ActionSchema.safeParse({
+      type: 'setSeverity',
+      value: 'INVALID',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject priority out of range', () => {
+    const result = ActionSchema.safeParse({
+      type: 'setPriority',
+      value: 200,
+    });
+    expect(result.success).toBe(false);
   });
 });
 

@@ -4,6 +4,16 @@ export { ScannerHealthSchema, type ScannerHealth } from './schemas/scanner-healt
 export { type Result, ok, err } from './schemas/result.js';
 export { type EventBus } from './schemas/event-bus.js';
 export { SeveritySchema, type Severity } from './schemas/severity.js';
+export {
+  RuleSchema,
+  ConditionSchema,
+  ActionSchema,
+  ClassificationResultSchema,
+  type Rule,
+  type Condition,
+  type Action,
+  type ClassificationResult,
+} from './schemas/rule.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
