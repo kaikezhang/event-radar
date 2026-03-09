@@ -28,6 +28,18 @@ export {
   type DedupResult,
   type DedupMatchType,
 } from './schemas/dedup.js';
+export {
+  DeliveryChannelSchema,
+  DeliveryResultSchema,
+  TelegramConfigSchema,
+  WebhookConfigSchema,
+  DeliveryConfigSchema,
+  type DeliveryChannel,
+  type DeliveryResult,
+  type TelegramConfig,
+  type WebhookConfig,
+  type DeliveryConfig,
+} from './schemas/delivery.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';

@@ -50,6 +50,15 @@ export const deliveriesByChannel = new Counter({
   registers: [registry],
 });
 
+/** Histogram: delivery latency by channel */
+export const deliveryLatencySeconds = new Histogram({
+  name: 'delivery_latency_seconds',
+  help: 'Delivery latency in seconds by channel',
+  labelNames: ['channel'] as const,
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [registry],
+});
+
 /** Gauge: server uptime in seconds */
 export const uptimeSeconds = new Gauge({
   name: 'uptime_seconds',
@@ -99,6 +108,7 @@ export function resetMetrics(): void {
   eventsBySeverity.reset();
   deliveriesSentTotal.reset();
   deliveriesByChannel.reset();
+  deliveryLatencySeconds.reset();
   llmClassificationsTotal.reset();
   processingDurationSeconds.reset();
   eventsDeduplicatedTotal.reset();

@@ -10,6 +10,8 @@ import {
   AlertRouter,
   BarkPusher,
   DiscordWebhook,
+  TelegramDelivery,
+  WebhookDelivery,
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
 import { DummyScanner } from './scanners/dummy-scanner.js';
@@ -29,6 +31,7 @@ import {
   eventsBySeverity,
   deliveriesSentTotal,
   deliveriesByChannel,
+  deliveryLatencySeconds,
   processingDurationSeconds,
   llmClassificationsTotal,
   eventsDeduplicatedTotal,
@@ -50,6 +53,10 @@ function buildAlertRouter(): AlertRouterType {
   const barkKey = process.env.BARK_KEY;
   const barkServerUrl = process.env.BARK_SERVER_URL;
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+  const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+  const webhookUrl = process.env.WEBHOOK_URL;
+  const webhookSecret = process.env.WEBHOOK_SECRET;
 
   return new AlertRouter({
     bark: barkKey
@@ -58,6 +65,24 @@ function buildAlertRouter(): AlertRouterType {
     discord: discordWebhookUrl
       ? new DiscordWebhook({ webhookUrl: discordWebhookUrl })
       : undefined,
+    telegram:
+      telegramBotToken && telegramChatId
+        ? new TelegramDelivery({
+            botToken: telegramBotToken,
+            chatId: telegramChatId,
+            minSeverity: 'LOW',
+            enabled: true,
+          })
+        : undefined,
+    webhook:
+      webhookUrl && webhookSecret
+        ? new WebhookDelivery({
+            url: webhookUrl,
+            secret: webhookSecret,
+            minSeverity: 'LOW',
+            enabled: true,
+          })
+        : undefined,
   });
 }
 
@@ -132,16 +157,22 @@ export function buildApp(options?: {
           ? (event.metadata['ticker'] as string)
           : undefined;
 
+      const deliveryStart = Date.now();
       const results = await alertRouter.route({
         event,
         severity: result.severity,
         ticker,
       });
+      const deliveryMs = Date.now() - deliveryStart;
 
       for (const r of results) {
         const status = r.ok ? 'success' : 'failure';
         deliveriesSentTotal.inc({ channel: r.channel, status });
         deliveriesByChannel.inc({ channel: r.channel });
+        deliveryLatencySeconds.observe(
+          { channel: r.channel },
+          deliveryMs / 1000,
+        );
       }
     });
   }
