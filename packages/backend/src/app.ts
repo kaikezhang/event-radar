@@ -39,6 +39,7 @@ import {
   activeStories,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
+import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -93,6 +94,7 @@ export function buildApp(options?: {
   db?: Database;
   rules?: Rule[];
   llmProvider?: LlmProvider;
+  apiKey?: string;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const eventBus = new InMemoryEventBus();
@@ -104,6 +106,22 @@ export function buildApp(options?: {
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
   const deduplicator = new EventDeduplicator();
+
+  // Register API key auth plugin
+  const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
+  server.register(async () => {
+    await registerAuthPlugin(server, {
+      apiKey,
+      publicRoutes: [
+        '/health',
+        '/api/health/ping',
+        '/metrics',
+        '/api/events/ingest',
+      ],
+    });
+  });
+
+  console.log(`API Key: ${apiKey}`); // Log the API key for development
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));

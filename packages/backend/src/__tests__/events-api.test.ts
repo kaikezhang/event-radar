@@ -6,6 +6,8 @@ import type { Database } from '../db/connection.js';
 import type { RawEvent } from '@event-radar/shared';
 import type { PGlite } from '@electric-sql/pglite';
 
+const TEST_API_KEY = 'test-api-key-12345';
+
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
     id: crypto.randomUUID(),
@@ -95,7 +97,7 @@ describe('GET /api/events', () => {
       });
     }
 
-    ctx = buildApp({ logger: false, db });
+    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
@@ -104,10 +106,24 @@ describe('GET /api/events', () => {
     await client.close();
   });
 
-  it('should return paginated events', async () => {
+  it('should return 401 without API key', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = response.json();
+    expect(body.error).toBe('Unauthorized');
+  });
+
+  it('should return paginated events with valid API key', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -120,6 +136,9 @@ describe('GET /api/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?source=sec-edgar',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();
@@ -132,6 +151,9 @@ describe('GET /api/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?severity=MEDIUM',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();
@@ -143,6 +165,9 @@ describe('GET /api/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?limit=2&offset=0',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();
@@ -154,6 +179,9 @@ describe('GET /api/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?source=sec-edgar&severity=CRITICAL',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();
@@ -165,11 +193,38 @@ describe('GET /api/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?source=nonexistent',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();
     expect(body.data).toHaveLength(0);
     expect(body.total).toBe(0);
+  });
+
+  it('should return 400 for invalid ticker format', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?ticker=INVALID123',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('should return 400 for invalid severity enum', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?severity=INVALID',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 });
 
@@ -187,7 +242,7 @@ describe('GET /api/events/:id', () => {
       severity: 'HIGH',
     });
 
-    ctx = buildApp({ logger: false, db });
+    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
@@ -196,10 +251,22 @@ describe('GET /api/events/:id', () => {
     await client.close();
   });
 
-  it('should return a single event by id', async () => {
+  it('should return 401 without API key', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: `/api/events/${storedEventId}`,
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('should return a single event by id with valid API key', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${storedEventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -213,6 +280,9 @@ describe('GET /api/events/:id', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events/00000000-0000-0000-0000-000000000000',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(404);
@@ -237,7 +307,7 @@ describe('GET /api/events/sources', () => {
       });
     }
 
-    ctx = buildApp({ logger: false, db });
+    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
@@ -250,6 +320,9 @@ describe('GET /api/events/sources', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events/sources',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -259,12 +332,15 @@ describe('GET /api/events/sources', () => {
 
   it('should return empty array when no events exist', async () => {
     const { db: emptyDb, client: emptyClient } = await createTestDb();
-    const emptyCtx = buildApp({ logger: false, db: emptyDb });
+    const emptyCtx = buildApp({ logger: false, db: emptyDb, apiKey: TEST_API_KEY });
     await emptyCtx.server.ready();
 
     const response = await emptyCtx.server.inject({
       method: 'GET',
       url: '/api/events/sources',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -297,7 +373,7 @@ describe('GET /api/stats', () => {
       severity: 'HIGH',
     });
 
-    ctx = buildApp({ logger: false, db });
+    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
@@ -310,6 +386,9 @@ describe('GET /api/stats', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/stats',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -331,6 +410,30 @@ describe('GET /api/stats', () => {
   });
 });
 
+describe('GET /health', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await ctx.server.close();
+  });
+
+  it('should return 200 without API key (public endpoint)', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.status).toBe('ok');
+  });
+});
+
 describe('EventBus → DB storage integration', () => {
   let ctx: AppContext;
   let db: Database;
@@ -338,7 +441,7 @@ describe('EventBus → DB storage integration', () => {
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
-    ctx = buildApp({ logger: false, db });
+    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
@@ -370,6 +473,9 @@ describe('EventBus → DB storage integration', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?source=sec-edgar',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     const body = response.json();

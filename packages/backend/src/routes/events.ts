@@ -1,26 +1,136 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count } from 'drizzle-orm';
+import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+
+// Query params schema for GET /api/events
+const ListEventsQuerySchema = {
+  type: 'object',
+  properties: {
+    ticker: {
+      type: 'string',
+      pattern: '^[A-Z]{1,5}$',
+      description: 'Filter by ticker symbol (1-5 uppercase letters)',
+    },
+    type: {
+      type: 'string',
+      description: 'Filter by event type',
+    },
+    severity: {
+      type: 'string',
+      enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
+      description: 'Filter by severity level',
+    },
+    source: {
+      type: 'string',
+      description: 'Filter by event source',
+    },
+    dateFrom: {
+      type: 'string',
+      format: 'date-time',
+      description: 'Filter events from this date (ISO 8601)',
+    },
+    dateTo: {
+      type: 'string',
+      format: 'date-time',
+      description: 'Filter events until this date (ISO 8601)',
+    },
+    limit: {
+      type: 'integer',
+      minimum: 1,
+      maximum: 200,
+      default: 50,
+      description: 'Maximum number of events to return',
+    },
+    offset: {
+      type: 'integer',
+      minimum: 0,
+      default: 0,
+      description: 'Number of events to skip',
+    },
+  },
+} as const;
+
+// Query params schema for GET /api/events/:id
+const EventIdParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+      description: 'Event UUID',
+    },
+  },
+} as const;
+
+export interface ListEventsQuery {
+  ticker?: string;
+  type?: string;
+  severity?: string;
+  source?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface EventParams {
+  id: string;
+}
 
 export function registerEventRoutes(
   server: FastifyInstance,
   db: Database,
 ): void {
-  server.get('/api/events', async (request) => {
-    const { source, severity, limit, offset } = request.query as {
-      source?: string;
-      severity?: string;
-      limit?: string;
-      offset?: string;
-    };
+  /**
+   * GET /api/events
+   * List events with filters
+   * Requires API key authentication
+   */
+  server.get('/api/events', {
+    schema: {
+      querystring: ListEventsQuerySchema,
+    },
+  }, async (request) => {
+    const query = request.query as ListEventsQuery;
 
-    const pageLimit = Math.min(Number(limit) || 50, 200);
-    const pageOffset = Number(offset) || 0;
+    const pageLimit = Math.min(query.limit || 50, 200);
+    const pageOffset = query.offset || 0;
 
     const conditions = [];
-    if (source) conditions.push(eq(events.source, source));
-    if (severity) conditions.push(eq(events.severity, severity));
+
+    // Filter by ticker (search in metadata->>'ticker')
+    if (query.ticker) {
+      conditions.push(eq(events.metadata, JSON.stringify({ ticker: query.ticker })) as ReturnType<typeof eq>);
+    }
+
+    // Filter by type (stored in source field for 8-K, etc.)
+    if (query.type) {
+      conditions.push(eq(events.sourceEventId, query.type));
+    }
+
+    // Filter by severity
+    if (query.severity) {
+      conditions.push(eq(events.severity, query.severity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'));
+    }
+
+    // Filter by source
+    if (query.source) {
+      conditions.push(eq(events.source, query.source));
+    }
+
+    // Filter by dateFrom (receivedAt >= dateFrom)
+    if (query.dateFrom) {
+      const fromDate = new Date(query.dateFrom);
+      conditions.push(gte(events.receivedAt, fromDate));
+    }
+
+    // Filter by dateTo (receivedAt <= dateTo)
+    if (query.dateTo) {
+      const toDate = new Date(query.dateTo);
+      conditions.push(lte(events.receivedAt, toDate));
+    }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -38,6 +148,10 @@ export function registerEventRoutes(
     return { data, total };
   });
 
+  /**
+   * GET /api/events/sources
+   * Returns unique event sources
+   */
   server.get('/api/events/sources', async () => {
     const rows = await db
       .selectDistinct({ source: events.source })
@@ -47,8 +161,17 @@ export function registerEventRoutes(
     return { sources: rows.map((r) => r.source) };
   });
 
-  server.get('/api/events/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+  /**
+   * GET /api/events/:id
+   * Get full event detail by ID
+   * Requires API key authentication
+   */
+  server.get('/api/events/:id', {
+    schema: {
+      params: EventIdParamsSchema,
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as EventParams;
 
     const [event] = await db
       .select()
@@ -63,6 +186,10 @@ export function registerEventRoutes(
     return event;
   });
 
+  /**
+   * GET /api/stats
+   * Returns event statistics
+   */
   server.get('/api/stats', async () => {
     const [bySource, bySeverity, [{ total }]] = await Promise.all([
       db

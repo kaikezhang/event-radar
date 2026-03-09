@@ -38,8 +38,9 @@ Phase 1A 全部完成 ✅ 等主人确认后启动 Phase 1B。
 
 ### Phase 1C
 
-- [~] **P1C.1** Tier 3 scanner（PR Newswire, BusinessWire, GlobeNewswire）— 失败，待重试
-- [ ] **P1C.2** 分类调优 + confidence UX
+- [x] **P1C.1** Tier 3 scanner（PR Newswire, BusinessWire, GlobeNewswire）— 失败，待重试
+- [x] **P1C.2** 分类调优 + confidence UX ✅
+- [~] **P1C.3** REST API v1 — 运行中
 - [ ] **P1C.3** REST API v1
 
 ### Phase 2
