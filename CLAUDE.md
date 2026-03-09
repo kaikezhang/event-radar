@@ -28,6 +28,7 @@ packages/sec-service/— Python FastAPI microservice
 - Env vars via `@t3-oss/env-core`. Never hardcode secrets.
 - One scanner per file. Scanners only extract data — no classification logic.
 - Virtual list: @tanstack/virtual (NOT AG Grid). DB: PostgreSQL (NOT SQLite).
+- **Git Workflow**: CC完成任务后 → 产分支 + commit + push → 创建PR → 由晚晚(master/owner)来merge到main。**禁止直接push到main**。晚晚自己修改md/docs时可以直commit push到main。
 - Event bus interface: EventEmitter now, Redis Streams later. Don't couple to implementation.
 
 ## Verification
