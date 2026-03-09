@@ -93,6 +93,78 @@ interface RawEvent {
 - 当前任务和开发计划见 `tasks.md`
 - 每次启动时先读 `tasks.md` 了解当前要做什么
 
+## Git 开发规范
+
+### 分支策略
+- `main` — 始终可部署，所有 CI 必须通过
+- `feat/<name>` — 功能分支，从 main 拉，完成后 PR 回 main
+- `fix/<name>` — bug 修复
+- `docs/<name>` — 纯文档修改
+- **不要直接 push main**（除非是 trivial 的文档/配置改动）
+
+### Commit 规范（Conventional Commits）
+格式：`<type>(<scope>): <description>`
+
+```
+feat(scanner): add SEC 8-K polling
+fix(delivery): handle Bark timeout retry
+test(scanner): add Form 4 parser unit tests
+refactor(pipeline): extract classification into separate module
+docs(roadmap): update Phase 1 timeline
+chore(deps): bump fastify to 5.x
+ci: add PostgreSQL service to test workflow
+```
+
+类型：
+- `feat` — 新功能
+- `fix` — bug 修复
+- `test` — 测试相关
+- `refactor` — 重构（不改功能）
+- `docs` — 文档
+- `chore` — 构建/工具/依赖
+- `ci` — CI/CD 配置
+- `perf` — 性能优化
+
+scope 用模块名：`scanner`, `delivery`, `pipeline`, `frontend`, `api`, `shared`, `docker`
+
+### Commit 粒度
+- **一个 commit = 一个逻辑改动**，不要把 3 个不相关的改动塞一个 commit
+- 可以编译通过、测试通过的状态才 commit
+- 写有意义的 commit message，未来能搜到
+
+### PR 工作流
+1. 从 main 创建功能分支：`git checkout -b feat/sec-scanner`
+2. 开发 + commit（可以多次 commit）
+3. push 分支：`git push -u origin feat/sec-scanner`
+4. 创建 PR，标题用 Conventional Commits 格式
+5. CI 通过 + review 后 merge
+6. merge 用 **Squash and Merge**（保持 main 历史干净）
+7. merge 后删除远程分支
+
+### Git Worktree 并行开发
+独立 scanner 可以并行开发：
+```bash
+git worktree add ../er-sec feat/sec-scanner
+git worktree add ../er-bark feat/bark-delivery
+# 各自独立开发，完成后 PR merge
+```
+- worktree 之间不要有代码依赖
+- 共享的 types 修改要先 merge 到 main，其他 worktree 再 rebase
+
+### .gitignore 规则
+- `node_modules/`, `dist/`, `.env`, `.env.local`
+- `*.log`, `coverage/`, `.turbo/`
+- 不要提交 secrets、API keys、生成的文件
+- Docker volumes 和数据库文件不提交
+
+### Release & Tagging
+- 用语义化版本：`v0.1.0`, `v0.2.0`, `v1.0.0`
+- Phase 0 完成 = `v0.1.0`
+- Phase 1 完成 = `v0.2.0`
+- Dashboard MVP (Phase 2) = `v0.5.0`
+- Production-ready = `v1.0.0`
+- 每个 tag 附带 GitHub Release + changelog
+
 ## 不要做的事
 - ❌ 不要引入 AG Grid
 - ❌ 不要用 SQLite
