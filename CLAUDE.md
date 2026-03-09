@@ -89,6 +89,10 @@ interface RawEvent {
 4. **Backpressure**：Tier 1 优先级 > Tier 4，AI 并发限制 5，delivery 限流
 5. **PostgreSQL 直接用**：不要 SQLite，Docker Compose 一个容器零额外复杂度
 
+## 任务管理
+- 当前任务和开发计划见 `tasks.md`
+- 每次启动时先读 `tasks.md` 了解当前要做什么
+
 ## 不要做的事
 - ❌ 不要引入 AG Grid
 - ❌ 不要用 SQLite
