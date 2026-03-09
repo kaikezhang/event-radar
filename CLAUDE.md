@@ -38,7 +38,63 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1C.1 Tier 3 Corporate Newswire Scanners
+## Current Task: P1C.2 Classification Refinement + Confidence UX
+
+**Goal**: Improve classification accuracy based on real data, add confidence scoring UX.
+
+### Requirements
+
+1. **Confidence Score System** — Add confidence to classification output
+   - Add `confidence: number (0-1)` field to `Event` type
+   - Add `confidenceLevel: 'high' | 'medium' | 'low' | 'unconfirmed'` derived field
+   - Rules-based classification: default 0.8, adjust based on rule strength
+   - LLM classification: use model's confidence if available, else default 0.7
+
+2. **Unconfirmed Badge UI** — Frontend component for low-confidence events
+   - Add `src/frontend/components/confidence-badge.tsx`
+   - Show "🔍 Unconfirmed" for confidence < 0.5
+   - Show "⚠️ Medium" for confidence 0.5-0.7
+   - Show "✅ Confirmed" for confidence >= 0.7
+   - Tooltip showing confidence score and factors
+
+3. **Classification Metrics Tracking** — Log classification decisions for analysis
+   - Add `src/pipeline/classification-metrics.ts`
+   - Track: total classified, by severity, by source, average confidence
+   - Emit metrics to logs every 100 events
+
+4. **Rule Refinement** — Improve existing classification rules
+   - Review `src/pipeline/default-rules.ts`
+   - Add more specific patterns for HIGH severity:
+     - M&A: "acquire", "acquisition", "merge", "merger", "buyout"
+     - Earnings: "Q1/Q2/Q3/Q4 earnings", "EPS", "revenue beat", "guidance raise"
+     - FDA: "FDA approval", "clinical trial", "Phase 1/2/3", "NDA"
+   - Add MEDIUM patterns:
+     - Executive: "appoint", "resign", "promote", "CEO", "CFO"
+     - Partnership: "partner with", "strategic alliance", "joint venture"
+
+5. **Scanner Health Monitoring** — Track scanner uptime and error rates
+   - Add scanner heartbeat tracking in database
+   - Add `GET /api/scanners/status` endpoint
+   - Return: scanner name, last success, error count, status (healthy/degraded/down)
+   - Alert if scanner hasn't succeeded in 5 minutes
+
+6. **Tests** (≥8 new tests)
+   - Confidence score calculation from rules
+   - Confidence score from LLM response
+   - Confidence badge component rendering
+   - Classification metrics logging
+   - Scanner health endpoint
+
+### Files to create/modify
+- `packages/shared/src/types/event.ts` — add confidence fields
+- `packages/backend/src/pipeline/classifier.ts` — add confidence scoring
+- `packages/backend/src/pipeline/classification-metrics.ts` — new
+- `packages/backend/src/routes/scanners.ts` — add health endpoint
+- `packages/frontend/src/components/confidence-badge.tsx` — new
+- `packages/backend/src/__tests__/confidence.test.ts` — new
+
+### Verification
+`turbo build && turbo test && turbo lint` must pass.
 
 **Goal**: Add RSS-based scanners for the 3 major corporate newswires: PR Newswire, BusinessWire, GlobeNewswire.
 

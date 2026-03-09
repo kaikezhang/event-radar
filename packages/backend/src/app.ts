@@ -20,6 +20,7 @@ import { XScanner } from './scanners/x-scanner.js';
 import { type Database } from './db/connection.js';
 import { storeEvent } from './db/event-store.js';
 import { registerEventRoutes } from './routes/events.js';
+import { registerScannerRoutes } from './routes/scanners.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -236,6 +237,9 @@ export function buildApp(options?: {
   if (db) {
     registerEventRoutes(server, db);
   }
+
+  // Register scanner health routes
+  registerScannerRoutes(server, registry);
 
   return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator };
 }

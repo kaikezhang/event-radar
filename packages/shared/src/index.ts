@@ -9,10 +9,13 @@ export {
   ConditionSchema,
   ActionSchema,
   ClassificationResultSchema,
+  ConfidenceLevelSchema,
+  deriveConfidenceLevel,
   type Rule,
   type Condition,
   type Action,
   type ClassificationResult,
+  type ConfidenceLevel,
 } from './schemas/rule.js';
 export {
   LlmClassificationResultSchema,

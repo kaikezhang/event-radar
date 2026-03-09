@@ -1,6 +1,18 @@
 import { z } from 'zod';
 import { SeveritySchema } from './severity.js';
 
+// ── Confidence Level ───────────────────────────────────────────────────
+
+export const ConfidenceLevelSchema = z.enum(['high', 'medium', 'low', 'unconfirmed']);
+export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
+
+export function deriveConfidenceLevel(confidence: number): ConfidenceLevel {
+  if (confidence >= 0.7) return 'high';
+  if (confidence >= 0.5) return 'medium';
+  if (confidence >= 0.3) return 'low';
+  return 'unconfirmed';
+}
+
 // ── Condition Types ──────────────────────────────────────────────────
 
 export const SourceEqualsConditionSchema = z.object({
@@ -49,10 +61,16 @@ export const SetPriorityActionSchema = z.object({
   value: z.number().int().min(0).max(100),
 });
 
+export const SetConfidenceActionSchema = z.object({
+  type: z.literal('setConfidence'),
+  value: z.number().min(0).max(1),
+});
+
 export const ActionSchema = z.discriminatedUnion('type', [
   SetSeverityActionSchema,
   AddTagsActionSchema,
   SetPriorityActionSchema,
+  SetConfidenceActionSchema,
 ]);
 
 export type Action = z.infer<typeof ActionSchema>;
@@ -78,6 +96,8 @@ export const ClassificationResultSchema = z.object({
   tags: z.array(z.string()),
   priority: z.number().int().min(0).max(100),
   matchedRules: z.array(z.string()),
+  confidence: z.number().min(0).max(1).default(0.8),
+  confidenceLevel: ConfidenceLevelSchema.optional(),
 });
 
 export type ClassificationResult = z.infer<typeof ClassificationResultSchema>;

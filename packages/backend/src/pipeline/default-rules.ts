@@ -302,4 +302,378 @@ export const DEFAULT_RULES: Rule[] = [
     priority: 35,
     enabled: true,
   },
+
+  // ── M&A / Merger Keywords (HIGH) ─────────────────────────────────────
+  {
+    id: 'ma-acquire',
+    name: 'M&A — Acquisition',
+    conditions: [
+      { type: 'titleContains', value: 'acquire' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['ma', 'acquisition'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'ma-acquisition',
+    name: 'M&A — Acquisition (full word)',
+    conditions: [
+      { type: 'titleContains', value: 'acquisition' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['ma', 'acquisition'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'ma-merge',
+    name: 'M&A — Merger',
+    conditions: [
+      { type: 'titleContains', value: 'merger' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['ma', 'merger'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'ma-merge-verb',
+    name: 'M&A — Merge (verb)',
+    conditions: [
+      { type: 'titleContains', value: 'merge' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['ma', 'merger'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'ma-buyout',
+    name: 'M&A — Buyout',
+    conditions: [
+      { type: 'titleContains', value: 'buyout' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['ma', 'buyout'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+
+  // ── Earnings Keywords (HIGH) ────────────────────────────────────────
+  {
+    id: 'earnings-q1',
+    name: 'Earnings — Q1 Results',
+    conditions: [
+      { type: 'titleContains', value: 'Q1 earnings' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'quarterly-results'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-q2',
+    name: 'Earnings — Q2 Results',
+    conditions: [
+      { type: 'titleContains', value: 'Q2 earnings' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'quarterly-results'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-q3',
+    name: 'Earnings — Q3 Results',
+    conditions: [
+      { type: 'titleContains', value: 'Q3 earnings' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'quarterly-results'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-q4',
+    name: 'Earnings — Q4 Results',
+    conditions: [
+      { type: 'titleContains', value: 'Q4 earnings' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'quarterly-results'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-eps',
+    name: 'Earnings — EPS',
+    conditions: [
+      { type: 'titleContains', value: 'EPS' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['earnings', 'eps'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-revenue-beat',
+    name: 'Earnings — Revenue Beat',
+    conditions: [
+      { type: 'titleContains', value: 'revenue beat' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'revenue-beat'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'earnings-guidance-raise',
+    name: 'Earnings — Guidance Raise',
+    conditions: [
+      { type: 'titleContains', value: 'guidance raise' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['earnings', 'guidance'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+
+  // ── FDA Keywords (HIGH) ────────────────────────────────────────────
+  {
+    id: 'fda-approval',
+    name: 'FDA — Approval',
+    conditions: [
+      { type: 'titleContains', value: 'FDA approval' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['fda', 'approval'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'fda-clinical-trial',
+    name: 'FDA — Clinical Trial',
+    conditions: [
+      { type: 'titleContains', value: 'clinical trial' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['fda', 'clinical-trial'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'fda-phase-1',
+    name: 'FDA — Phase 1 Trial',
+    conditions: [
+      { type: 'titleContains', value: 'Phase 1' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['fda', 'phase-1'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'fda-phase-2',
+    name: 'FDA — Phase 2 Trial',
+    conditions: [
+      { type: 'titleContains', value: 'Phase 2' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['fda', 'phase-2'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'fda-phase-3',
+    name: 'FDA — Phase 3 Trial',
+    conditions: [
+      { type: 'titleContains', value: 'Phase 3' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['fda', 'phase-3'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+  {
+    id: 'fda-nda',
+    name: 'FDA — NDA',
+    conditions: [
+      { type: 'titleContains', value: 'NDA' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['fda', 'nda'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
+
+  // ── Executive Changes (MEDIUM) ─────────────────────────────────────
+  {
+    id: 'exec-appoint',
+    name: 'Executive — Appointment',
+    conditions: [
+      { type: 'titleContains', value: 'appoint' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['executive', 'appointment'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'exec-resign',
+    name: 'Executive — Resignation',
+    conditions: [
+      { type: 'titleContains', value: 'resign' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['executive', 'resignation'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'exec-promote',
+    name: 'Executive — Promotion',
+    conditions: [
+      { type: 'titleContains', value: 'promote' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['executive', 'promotion'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'exec-ceo',
+    name: 'Executive — CEO Change',
+    conditions: [
+      { type: 'titleContains', value: 'CEO' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['executive', 'ceo'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'exec-cfo',
+    name: 'Executive — CFO Change',
+    conditions: [
+      { type: 'titleContains', value: 'CFO' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['executive', 'cfo'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+
+  // ── Partnerships (MEDIUM) ───────────────────────────────────────────
+  {
+    id: 'partner-with',
+    name: 'Partnership — Partner With',
+    conditions: [
+      { type: 'titleContains', value: 'partner with' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['partnership', 'strategic'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'strategic-alliance',
+    name: 'Partnership — Strategic Alliance',
+    conditions: [
+      { type: 'titleContains', value: 'strategic alliance' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['partnership', 'strategic-alliance'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
+  {
+    id: 'joint-venture',
+    name: 'Partnership — Joint Venture',
+    conditions: [
+      { type: 'titleContains', value: 'joint venture' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['partnership', 'joint-venture'] },
+    ],
+    priority: 30,
+    enabled: true,
+  },
 ];

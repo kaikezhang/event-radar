@@ -5,10 +5,13 @@ import type {
   RawEvent,
   Severity,
 } from '@event-radar/shared';
+import { deriveConfidenceLevel } from '@event-radar/shared';
 
 const SEVERITY_ORDER: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 const DEFAULT_SEVERITY: Severity = 'MEDIUM';
 const DEFAULT_PRIORITY = 50;
+const DEFAULT_CONFIDENCE = 0.8;
+const MAX_CONFIDENCE = 1.0;
 
 export class RuleEngine {
   private rules: Rule[] = [];
@@ -24,6 +27,8 @@ export class RuleEngine {
     const tags: string[] = [];
     let priority = DEFAULT_PRIORITY;
     const matchedRules: string[] = [];
+    let confidence = MAX_CONFIDENCE; // Start at max, take min from matched rules
+    let hasConfidenceFromRule = false;
 
     for (const rule of this.rules) {
       if (this.matchesAllConditions(rule.conditions, event)) {
@@ -52,12 +57,31 @@ export class RuleEngine {
                 priority = action.value;
               }
               break;
+            case 'setConfidence':
+              // Use the lowest confidence from matched rules (most conservative)
+              confidence = Math.min(confidence, action.value);
+              hasConfidenceFromRule = true;
+              break;
           }
         }
       }
     }
 
-    return { severity: severity ?? DEFAULT_SEVERITY, tags, priority, matchedRules };
+    // If no rule set confidence, use default
+    if (!hasConfidenceFromRule) {
+      confidence = DEFAULT_CONFIDENCE;
+    }
+
+    const confidenceLevel = deriveConfidenceLevel(confidence);
+
+    return {
+      severity: severity ?? DEFAULT_SEVERITY,
+      tags,
+      priority,
+      matchedRules,
+      confidence,
+      confidenceLevel,
+    };
   }
 
   private matchesAllConditions(
