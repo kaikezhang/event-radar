@@ -6,6 +6,9 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
+      - BARK_KEY=${BARK_KEY:-}
+      - BARK_SERVER_URL=http://bark-server:8080
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,5 +40,14 @@ services:
       timeout: 5s
       retries: 5
 
+  bark-server:
+    image: finab/bark-server
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - bark-data:/data
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  bark-data:

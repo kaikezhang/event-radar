@@ -5,33 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 0.4 — Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）**
+**Phase 0.5 — 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）**
 
-目标：实现推送通道，Bark（iOS Critical Alerts）+ Discord webhook，让 8-K 事件能在 60 秒内推送到手机。
-
-具体要求：
-1. 在 `packages/delivery/` 创建 TypeScript delivery 包：
-   - `BarkPusher` — Bark API 调用（POST https://api.day.app/push）
-     - 支持 Critical Alerts（`isArchive=0`, `sound=` 自定义）
-     - 配置：BARK_API_KEY, BARK_SOUND (默认 "alarm")
-   - `DiscordWebhook` — Discord webhook 调用（POST webhook URL）
-     - 支持 embed 格式显示事件摘要
-     - 配置：DISCORD_WEBHOOK_URL
-   - `AlertRouter` — 根据 severity 路由到对应通道：
-     - CRITICAL → Bark + Discord
-     - HIGH → Bark
-     - MEDIUM/LOW → Discord only
-2. Node.js backend 集成：
-   - 在 `app.ts` 中订阅 EventBus，将 RawEvent 转发给 AlertRouter
-   - 配置通过环境变量（用 pydantic-settings 或类似方案）
-3. Docker：
-   - 更新 `docker-compose.yml` 添加 bark-server 服务（已有 `finab/bark-server`）
-   - Bark server 配置：环境变量 `BARK_KEY` 用于认证
-4. 测试：
-   - Mock Bark API，验证请求格式
-   - Mock Discord webhook，验证 embed 格式
-
-完成标准：`docker compose up` 启动后，sec-scanner 收到 8-K → backend → delivery → Discord webhook + Bark push <60s。
+目标：提升测试覆盖率，添加 mock SEC 数据，确保 scanner + classify 模块覆盖率 >80%。
 
 ---
 
@@ -42,7 +18,7 @@
 - [x] **P0.1** 项目 scaffold ✅
 - [x] **P0.2** Scanner 插件框架 ✅
 - [x] **P0.3** SEC EDGAR 8-K scanner（Python FastAPI 微服务 + edgartools）✅
-- [ ] **P0.4** Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）
+- [x] **P0.4** Delivery: Bark + Discord（end-to-end proof: SEC 8-K → Bark push <60s）✅
 - [ ] **P0.5** 测试基础（unit tests, mock SEC data, >80% coverage on scanner + classify）
 
 ### Phase 1A
