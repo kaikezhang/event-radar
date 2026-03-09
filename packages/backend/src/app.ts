@@ -40,6 +40,7 @@ import {
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
+import { registerWebSocketPlugin } from './plugins/websocket.js';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -119,6 +120,15 @@ export function buildApp(options?: {
         '/api/events/ingest',
       ],
     });
+  });
+
+  // Register WebSocket plugin for real-time events
+  registerWebSocketPlugin(server, {
+    eventBus,
+    db,
+    getApiKey: () => apiKey,
+  }).catch((err) => {
+    console.error('Failed to register WebSocket plugin:', err);
   });
 
   console.log(`API Key: ${apiKey}`); // Log the API key for development
