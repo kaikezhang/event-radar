@@ -18,6 +18,15 @@ import { storeEvent } from './db/event-store.js';
 import { registerEventRoutes } from './routes/events.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
+import {
+  registry as metricsRegistry,
+  eventsProcessedTotal,
+  eventsBySource,
+  eventsBySeverity,
+  deliveriesSentTotal,
+  deliveriesByChannel,
+  processingDurationSeconds,
+} from './metrics.js';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -58,6 +67,17 @@ export function buildApp(options?: {
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
   registry.register(new DummyScanner(eventBus));
 
+  // Wire EventBus → metrics tracking
+  eventBus.subscribe(async (event) => {
+    const end = processingDurationSeconds.startTimer({ operation: 'classify' });
+    const result = ruleEngine.classify(event);
+    end();
+
+    eventsProcessedTotal.inc({ source: event.source, event_type: event.type });
+    eventsBySource.inc({ source: event.source });
+    eventsBySeverity.inc({ severity: result.severity });
+  });
+
   // Wire EventBus → RuleEngine classification → AlertRouter
   if (alertRouter.enabled) {
     eventBus.subscribe(async (event) => {
@@ -67,7 +87,17 @@ export function buildApp(options?: {
           ? (event.metadata['ticker'] as string)
           : undefined;
 
-      await alertRouter.route({ event, severity: result.severity, ticker });
+      const results = await alertRouter.route({
+        event,
+        severity: result.severity,
+        ticker,
+      });
+
+      for (const r of results) {
+        const status = r.ok ? 'success' : 'failure';
+        deliveriesSentTotal.inc({ channel: r.channel, status });
+        deliveriesByChannel.inc({ channel: r.channel });
+      }
     });
   }
 
@@ -78,6 +108,13 @@ export function buildApp(options?: {
       await storeEvent(db, { event, severity: result.severity });
     });
   }
+
+  server.get('/metrics', async (_request, reply) => {
+    const metrics = await metricsRegistry.metrics();
+    return reply
+      .header('Content-Type', metricsRegistry.contentType)
+      .send(metrics);
+  });
 
   server.get('/health', async () => {
     return {
