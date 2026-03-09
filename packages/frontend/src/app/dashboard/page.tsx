@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useEventsWebSocket, type EventItem, type EventFilters } from '@/hooks/use-events-websocket';
 import { FilterBar } from '@/components/filter-bar';
 import { EventList } from '@/components/event-list';
+import { EventDetailPanel } from '@/components/event-detail-panel';
 
 // Mock API URL and key for development
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -109,20 +110,15 @@ export default function DashboardPage() {
     setPresets(loadPresets());
   }, [deletePreset, loadPresets]);
 
-  const getSeverityColor = (severity: string | null) => {
-    switch (severity) {
-      case 'CRITICAL':
-        return 'bg-red-500 text-white';
-      case 'HIGH':
-        return 'bg-orange-500 text-white';
-      case 'MEDIUM':
-        return 'bg-yellow-500 text-black';
-      case 'LOW':
-        return 'bg-green-500 text-white';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+  // Handle event click
+  const handleEventClick = useCallback((event: EventItem) => {
+    setSelectedEvent(event);
+  }, []);
+
+  // Handle close panel
+  const handleClosePanel = useCallback(() => {
+    setSelectedEvent(null);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -224,81 +220,18 @@ export default function DashboardPage() {
           )}
           <EventList
             events={filteredEvents}
-            onEventClick={setSelectedEvent}
+            onEventClick={handleEventClick}
             soundEnabled={soundEnabled}
             onSoundToggle={() => setSoundEnabled(!soundEnabled)}
           />
         </CardContent>
       </Card>
 
-      {/* Event Detail Panel */}
-      {selectedEvent && (
-        <Card className="fixed bottom-4 right-4 w-96 shadow-lg">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Event Details</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedEvent(null)}>
-                ×
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                {selectedEvent.ticker && (
-                  <span className="font-mono font-bold">${selectedEvent.ticker}</span>
-                )}
-                <Badge className={getSeverityColor(selectedEvent.severity)}>
-                  {selectedEvent.severity}
-                </Badge>
-              </div>
-              <p className="font-medium">{selectedEvent.title}</p>
-              {selectedEvent.summary && (
-                <p className="text-sm text-muted-foreground">{selectedEvent.summary}</p>
-              )}
-              <div className="text-xs text-muted-foreground">
-                <p>Source: {selectedEvent.source}</p>
-                <p>Received: {new Date(selectedEvent.receivedAt).toLocaleString()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Event Detail Panel - Slide-out */}
+      <EventDetailPanel
+        event={selectedEvent}
+        onClose={handleClosePanel}
+      />
     </div>
-  );
-}
-
-function Button({ 
-  variant = 'default', 
-  size = 'default', 
-  onClick, 
-  children,
-  className 
-}: { 
-  variant?: 'default' | 'ghost' | 'outline';
-  size?: 'default' | 'sm' | 'icon';
-  onClick?: () => void;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const baseStyles = 'inline-flex items-center justify-center rounded-md font-medium transition-colors';
-  const variantStyles = {
-    default: 'bg-primary text-primary-foreground hover:bg-primary/80',
-    ghost: 'hover:bg-muted hover:text-foreground',
-    outline: 'border border-input bg-background hover:bg-muted',
-  };
-  const sizeStyles = {
-    default: 'h-8 px-4 py-2',
-    sm: 'h-7 px-3 text-sm',
-    icon: 'h-8 w-8',
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className || ''}`}
-    >
-      {children}
-    </button>
   );
 }

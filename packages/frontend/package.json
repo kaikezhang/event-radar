@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-virtual": "^3.13.21",
     "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",

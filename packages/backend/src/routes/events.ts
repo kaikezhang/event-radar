@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
+import { eq, sql, and, count, gte, lte, or, ilike, inArray } from 'drizzle-orm';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 
@@ -60,6 +60,20 @@ const EventIdParamsSchema = {
       type: 'string',
       format: 'uuid',
       description: 'Event UUID',
+    },
+  },
+} as const;
+
+// Similar events query params
+const SimilarEventsQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: {
+      type: 'integer',
+      minimum: 1,
+      maximum: 20,
+      default: 10,
+      description: 'Maximum similar events to return',
     },
   },
 } as const;
@@ -184,6 +198,89 @@ export function registerEventRoutes(
     }
 
     return event;
+  });
+
+  /**
+   * GET /api/events/:id/similar
+   * Get similar events based on ticker, tags, or source
+   * Returns up to 10 similar events from the last 7 days
+   */
+  server.get('/api/events/:id/similar', {
+    schema: {
+      params: EventIdParamsSchema,
+      querystring: SimilarEventsQuerySchema,
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as EventParams;
+    const query = request.query as { limit?: number };
+
+    // Get the source event
+    const [sourceEvent] = await db
+      .select()
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1);
+
+    if (!sourceEvent) {
+      return reply.status(404).send({ error: 'Event not found' });
+    }
+
+    const limit = Math.min(query.limit || 10, 10);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Build similarity conditions
+    const similarityConditions = [];
+
+    // 1. Same source
+    similarityConditions.push(eq(events.source, sourceEvent.source));
+
+    // 2. Same severity if available
+    if (sourceEvent.severity) {
+      similarityConditions.push(eq(events.severity, sourceEvent.severity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'));
+    }
+
+    // 3. Title contains similar keywords (extract key terms from title)
+    if (sourceEvent.title) {
+      // Extract significant words from title (longer than 4 chars)
+      const words = sourceEvent.title
+        .split(/\s+/)
+        .filter((w) => w.length > 4)
+        .slice(0, 3);
+      
+      if (words.length > 0) {
+        // Create OR conditions for title search
+        const titleConditions = words.map((word) => 
+          ilike(events.title, `%${word}%`)
+        );
+        if (titleConditions.length > 0) {
+          similarityConditions.push(or(...titleConditions));
+        }
+      }
+    }
+
+    // Exclude the source event itself
+    const excludeCondition = sql`${events.id} != ${id}`;
+
+    // Date filter (last 7 days)
+    const dateCondition = gte(events.receivedAt, sevenDaysAgo);
+
+    // Combine all conditions
+    const where = and(
+      excludeCondition,
+      dateCondition,
+      similarityConditions.length > 0 ? or(...similarityConditions) : undefined
+    );
+
+    // Fetch similar events
+    const similarEvents = await db
+      .select()
+      .from(events)
+      .where(where)
+      .orderBy(sql`${events.receivedAt} desc`)
+      .limit(limit);
+
+    return { data: similarEvents };
   });
 
   /**
