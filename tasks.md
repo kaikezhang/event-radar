@@ -5,35 +5,39 @@
 ---
 
 ## 当前任务
-**Phase 1A.1 — PostgreSQL Schema + Query API**
+**Phase 1A.2 — 规则引擎分类（Stage 1: keyword matching, 8-K item mapping）**
 
-目标：添加 PostgreSQL 持久化层，存储所有 RawEvent，提供查询 API。
+目标：实现基于规则的分类引擎，根据 8-K item type、source、keyword 进行初步分类。
 
 具体要求：
 1. 在 `packages/shared/` 中：
-   - 添加 drizzle-orm + drizzle-kit 依赖
-   - 定义 `events` 表 schema（id, source, sourceEventId, title, summary, rawPayload, metadata, severity, receivedAt, createdAt）
-   - 定义 `deliveries` 表 schema（id, eventId, channel, status, error, sentAt）
-   - 导出 db schema 和类型
+   - 定义 `Rule` interface（id, name, condition, action）
+   - 定义 `Condition` types：
+     - `sourceEquals` — source == 'sec-8k'
+     - `itemTypeContains` — 8-K item type 包含关键词
+     - `titleContains` — title 包含关键词（如 "acquisition", "bankruptcy"）
+     - `tickerInList` — ticker 在预设列表中
+   - 定义 `Action` types：
+     - `setSeverity` — 设定 severity
+     - `addTags` — 添加 tags
+     - `setPriority` — 设定优先级
 
 2. 在 `packages/backend/` 中：
-   - 添加 PostgreSQL 连接（pg driver + drizzle）
-   - EventBus handler 存储 event 到数据库
-   - 添加 REST API endpoints：
-     - `GET /api/events` — 分页列表，支持 ?source=&severity=&limit=&offset= 筛选
-     - `GET /api/events/:id` — 单个事件详情
-     - `GET /api/stats` — 事件统计（按 source、severity 分组计数）
-   - 配置：DATABASE_URL 环境变量
+   - 实现 `RuleEngine` class
+     - `loadRules(rules: Rule[])` — 加载规则
+     - `classify(event: RawEvent): ClassificationResult` — 执行分类
+   - 预置默认规则（按 8-K item mapping）：
+     - 1.02 (Bankruptcy) → CRITICAL
+     - 5.02 (CEO Change) → HIGH
+     - 2.01 (Acquisition) → HIGH
+     - 1.01 (Material Agreement) → MEDIUM
+     - 7.01 (Regulation FD) → LOW
+   - 在 EventBus handler 中调用 RuleEngine
 
-3. Docker：
-   - 在 `docker-compose.yml` 添加 PostgreSQL 服务
-   - 添加 db migration 脚本（drizzle-kit generate + migrate）
+3. 测试：
+   - RuleEngine 测试：规则匹配、优先级、多个规则组合
 
-4. 测试：
-   - 用 SQLite (drizzle 支持) 做内存测试，不依赖真实 PG
-   - 测试 event 存储、查询、分页、筛选
-
-完成标准：`turbo build && turbo test && turbo lint` 全绿，事件能持久化到 PG。
+完成标准：`turbo build && turbo test && turbo lint` 全绿。
 
 ---
 
@@ -49,7 +53,7 @@
 
 ### Phase 1A
 
-- [ ] **P1A.1** PostgreSQL schema + query API
+- [x] **P1A.1** PostgreSQL schema + query API ✅
 - [ ] **P1A.2** 规则引擎分类（Stage 1: keyword matching, 8-K item mapping）
 - [ ] **P1A.3** 更多 Tier 1 scanner（Form 4, Fed, BLS）
 - [ ] **P1A.4** Observability（Prometheus + Grafana）
