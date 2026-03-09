@@ -5,36 +5,33 @@
 ---
 
 ## 当前任务
-**Phase 0.2 — Scanner 插件框架**
+**Phase 0.3 — SEC EDGAR 8-K Scanner（Python FastAPI 微服务 + edgartools）**
 
-目标：实现 Scanner base class、scanner registry、in-memory EventBus，让后续 scanner 开发只需要继承 base class。
+目标：创建 Python 微服务，轮询 SEC EDGAR EFTS API 获取最新 8-K filing，解析关键 item，通过 HTTP 推送 RawEvent 到 Node.js backend。
 
 具体要求：
-1. 在 `packages/shared/src/` 中实现：
-   - `BaseScanner` abstract class — 实现 Scanner interface，提供：
-     - polling loop（start/stop 控制，interval 可配）
-     - health tracking（lastPollAt, errorCount, status）
-     - 错误处理（单次 poll 失败不崩溃，记录 error，继续下次）
-     - abstract `poll()` 方法，子类只需实现这个
-   - `InMemoryEventBus` — 实现 EventBus interface，用 Node.js EventEmitter
-     - publish(event) / subscribe(handler) / unsubscribe(handler)
-     - 事件计数 metrics（published count, handler count）
-   - `ScannerRegistry` — 管理所有 scanner 实例
-     - register(scanner) / unregister(id)
-     - startAll() / stopAll()
-     - healthAll() — 返回所有 scanner 的 health 状态
-     - getById(id)
-2. 在 `packages/backend/src/` 中：
-   - 创建一个 `DummyScanner`（用于测试）— 每次 poll 生成一个假事件
-   - 在 Fastify server 启动时注册 DummyScanner，启动 polling
-   - 添加 `GET /health` endpoint — 返回所有 scanner health 状态
-3. 测试：
-   - BaseScanner 测试：start/stop lifecycle、error handling、health tracking
-   - InMemoryEventBus 测试：publish/subscribe、多 handler、unsubscribe
-   - ScannerRegistry 测试：register/unregister、startAll/stopAll、healthAll
-   - 目标覆盖率 >80%
+1. 在 `services/sec-scanner/` 中创建 Python FastAPI 微服务：
+   - 使用 `edgartools` 库解析 8-K filing
+   - 轮询 SEC EDGAR EFTS API（`https://efts.sec.gov/LATEST/search-index?q=%228-K%22&dateRange=custom&startdt=TODAY&enddt=TODAY`）
+   - 解析 8-K item types（1.01 Entry into Material Agreement, 1.02 Bankruptcy, 2.01 Acquisition, 5.02 CEO Change, 7.01 Regulation FD, 8.01 Other Events 等）
+   - 提取：公司名、CIK、ticker（通过 SEC company tickers API）、filing date、item types、filing URL
+   - 生成 RawEvent 并 POST 到 Node.js backend（`POST /api/events/ingest`）
+2. 在 Node.js backend 添加：
+   - `POST /api/events/ingest` endpoint — 接收 RawEvent，发布到 EventBus
+   - 验证 RawEvent schema（用 zod）
+3. Python 微服务配置：
+   - `SEC_POLL_INTERVAL` 环境变量（默认 30s）
+   - `BACKEND_URL` 环境变量（默认 `http://localhost:3001`）
+   - SEC User-Agent header（SEC 要求提供联系邮箱）
+   - Rate limiting（SEC 限制 10 requests/sec）
+4. Docker:
+   - `services/sec-scanner/Dockerfile`
+   - `docker-compose.yml`（sec-scanner + backend）
+5. 测试：
+   - Python: pytest，mock SEC API response，验证 8-K 解析
+   - Node.js: 测试 ingest endpoint
 
-完成标准：`turbo build && turbo test && turbo lint` 全绿，DummyScanner 能跑起来生成事件。
+完成标准：`docker compose up` 启动后，sec-scanner 自动轮询 SEC，解析 8-K，推送到 backend，`GET /health` 显示 sec-scanner 状态。
 
 ---
 
