@@ -44,20 +44,44 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.3 Event Detail panel
+## Current Task: P2.4 Chart Panel
 
-**Goal**: Full event detail panel with classification reasoning, source link, similar events.
+**Goal**: TradingView chart with event markers overlay.
 
 ### Requirements
 
-1. **Detail Panel Component**
-   - Slide-out panel (right side) when event clicked
-   - Close button and ESC key to close
-   - Responsive: full screen on mobile, 600px wide on desktop
+1. **Chart Component**
+   - Use `@tradingview/lightweight-charts` npm package
+   - Candlestick chart for selected ticker
+   - Default timeframe: 1 day (D)
+   - Time range: last 30 days
+   - Dark theme (matching dashboard)
 
-2. **Event Information**
-   - Severity badge (with confidence score)
-   - Source icon + name
+2. **Ticker Selection**
+   - Dropdown or input to select ticker
+   - Auto-populate from recent events
+   - Default: AAPL
+
+3. **Price Data**
+   - Fetch from Yahoo Finance API
+   - Cache for 5 minutes
+   - Fallback: "No data available"
+
+4. **Event Markers**
+   - Overlay markers: green up = positive, red down = negative
+   - Click marker → show event tooltip
+   - Click event → open detail panel
+
+5. **Layout**
+   - Place chart below event list
+   - Minimum height: 400px
+
+### Files to create
+- `packages/frontend/src/components/price-chart.tsx`
+- `packages/frontend/src/hooks/use-price-data.ts`
+
+### Verification
+`turbo build` must pass.
    - Ticker(s) displayed prominently
    - Published timestamp (relative time, e.g., "5 min ago")
    - Full headline

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count, gte, lte, or, ilike, inArray } from 'drizzle-orm';
+import { eq, sql, and, count, gte, lte, or, ilike } from 'drizzle-orm';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 
