@@ -38,9 +38,50 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.1 Frontend Scaffold
+## Current Task: P2.2 Live Event Feed
 
-**Goal**: Set up Next.js 15 project with App Router, shadcn/ui, Tailwind, authentication.
+**Goal**: Real-time event list with WebSocket, virtual scrolling, filtering.
+
+### Requirements
+
+1. **WebSocket Connection**
+   - Backend: Add `/ws/events` endpoint in Fastify
+   - Frontend: Connect to WebSocket, handle reconnect on disconnect
+   - Protocol: JSON messages with event data
+   - Auth: Pass API key in WebSocket handshake query param
+
+2. **Event List Component**
+   - Use `@tanstack/react-virtual` for virtual scrolling
+   - Show: severity badge, source icon, ticker, headline, direction, timestamp
+   - Click event → open detail panel (P2.3)
+   - Max 500 events in memory (LRU eviction)
+
+3. **Filter Bar**
+   - Filter by tier (Tier 1/2/3)
+   - Filter by severity (CRITICAL/HIGH/MEDIUM/LOW)
+   - Filter by source (SEC, Political, Newswire)
+   - Filter by ticker (text input with autocomplete)
+   - Saved filter presets (localStorage)
+
+4. **Real-time Updates**
+   - New events appear at top with highlight animation
+   - Sound alerts for CRITICAL/HIGH severity (configurable)
+   - Browser notifications if tab not focused (with permission)
+
+5. **Backend WebSocket Server**
+   - Add `packages/backend/src/plugins/websocket.ts`
+   - Broadcast new events to all connected clients
+   - Heartbeat every 30s to detect stale connections
+
+### Files to create/modify
+- `packages/backend/src/plugins/websocket.ts` - WebSocket server
+- `packages/backend/src/app.ts` - register WS plugin
+- `packages/frontend/src/components/event-list.tsx` - virtual list
+- `packages/frontend/src/components/filter-bar.tsx` - filters
+- `packages/frontend/src/hooks/use-events-websocket.ts` - WS client hook
+
+### Verification
+`turbo build && turbo test && turbo lint` must pass.
 
 ### Requirements
 
