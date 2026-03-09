@@ -38,9 +38,47 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P1C.3 REST API v1
+## Current Task: P2.1 Frontend Scaffold
 
-**Goal**: Expose events and health via REST API with API key authentication.
+**Goal**: Set up Next.js 15 project with App Router, shadcn/ui, Tailwind, authentication.
+
+### Requirements
+
+1. **Next.js 15 Setup** — Already exists in packages/frontend
+   - Verify it's using App Router (not Pages Router)
+   - Add shadcn/ui (follow shadcn CLI init)
+   - Add Tailwind CSS (should already be configured)
+
+2. **Theme Configuration**
+   - Dark theme as default (next-themes)
+   - Custom colors for severity: CRITICAL=red, HIGH=orange, MEDIUM=yellow, LOW=green
+   - Font: Inter + JetBrains Mono for code
+
+3. **Layout Components**
+   - Sidebar navigation (collapsible)
+   - Header with search, filters, user menu
+   - Main content area with panels
+
+4. **Authentication**
+   - Simple API key auth (enter key in UI to access dashboard)
+   - Store API key in localStorage
+   - Show login screen if no valid key
+
+5. **Environment Setup**
+   - Add `NEXT_PUBLIC_API_URL` env var
+   - Add `NEXT_PUBLIC_API_KEY` (optional, or prompt user)
+
+6. **Initial Pages**
+   - `/` - Login/landing page
+   - `/dashboard` - Main dashboard (placeholder for now)
+
+### Files to modify
+- `packages/frontend/` - configure shadcn, theme
+- `packages/frontend/src/app/page.tsx` - landing/login page
+- `packages/frontend/src/app/dashboard/page.tsx` - placeholder dashboard
+
+### Verification
+`turbo build` must pass. Frontend dev server should start without errors.
 
 ### Requirements
 
