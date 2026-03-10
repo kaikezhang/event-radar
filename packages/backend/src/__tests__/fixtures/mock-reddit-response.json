@@ -1,0 +1,98 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_abc123",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "post001",
+          "title": "TSLA just broke $300! 🚀 $TSLA to the moon",
+          "selftext": "Tesla just smashed through resistance at $300. This is insane. I've been holding since $180 and not selling. $TSLA (NASDAQ: TSLA) is going to $500 by end of year.",
+          "author": "diamond_hands_42",
+          "subreddit": "wallstreetbets",
+          "score": 1500,
+          "num_comments": 350,
+          "created_utc": 1709900000,
+          "permalink": "/r/wallstreetbets/comments/post001/tsla_just_broke_300/",
+          "url": "https://www.reddit.com/r/wallstreetbets/comments/post001/tsla_just_broke_300/",
+          "is_self": true,
+          "stickied": false,
+          "total_awards_received": 12
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "post002",
+          "title": "GME short interest just spiked to 45%",
+          "selftext": "GameStop (NYSE: GME) short interest data just came in. 45% SI. This is the highest since Jan 2021. Something big is brewing. $GME",
+          "author": "ape_together_strong",
+          "subreddit": "wallstreetbets",
+          "score": 2500,
+          "num_comments": 800,
+          "created_utc": 1709896400,
+          "permalink": "/r/wallstreetbets/comments/post002/gme_short_interest_spiked/",
+          "url": "https://www.reddit.com/r/wallstreetbets/comments/post002/gme_short_interest_spiked/",
+          "is_self": true,
+          "stickied": false,
+          "total_awards_received": 25
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "post003",
+          "title": "Daily Discussion Thread for March 8, 2024",
+          "selftext": "Your daily discussion thread. Please keep the shitposting to a minimum.",
+          "author": "AutoModerator",
+          "subreddit": "wallstreetbets",
+          "score": 150,
+          "num_comments": 3000,
+          "created_utc": 1709870000,
+          "permalink": "/r/wallstreetbets/comments/post003/daily_discussion/",
+          "url": "https://www.reddit.com/r/wallstreetbets/comments/post003/daily_discussion/",
+          "is_self": true,
+          "stickied": true,
+          "total_awards_received": 2
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "post004",
+          "title": "NVDA earnings play - bought 50 calls",
+          "selftext": "NVIDIA (NASDAQ: NVDA) reports next week. Bought 50 contracts of $800 calls expiring Friday. Either I'm eating lobster or ramen. YOLO $NVDA",
+          "author": "options_yolo",
+          "subreddit": "wallstreetbets",
+          "score": 600,
+          "num_comments": 180,
+          "created_utc": 1709893000,
+          "permalink": "/r/wallstreetbets/comments/post004/nvda_earnings_play/",
+          "url": "https://www.reddit.com/r/wallstreetbets/comments/post004/nvda_earnings_play/",
+          "is_self": true,
+          "stickied": false,
+          "total_awards_received": 5
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "post005",
+          "title": "My cat sat on my keyboard and accidentally bought AAPL",
+          "selftext": "Not even joking. My cat walked across my laptop and somehow placed a market order for 100 shares of Apple (NASDAQ: AAPL). Best financial advisor I've ever had.",
+          "author": "cat_investor",
+          "subreddit": "wallstreetbets",
+          "score": 45,
+          "num_comments": 20,
+          "created_utc": 1709880000,
+          "permalink": "/r/wallstreetbets/comments/post005/cat_bought_aapl/",
+          "url": "https://www.reddit.com/r/wallstreetbets/comments/post005/cat_bought_aapl/",
+          "is_self": true,
+          "stickied": false,
+          "total_awards_received": 0
+        }
+      }
+    ]
+  }
+}

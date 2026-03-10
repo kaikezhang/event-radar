@@ -17,6 +17,8 @@ import {
 import { DummyScanner } from './scanners/dummy-scanner.js';
 import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { XScanner } from './scanners/x-scanner.js';
+import { RedditScanner } from './scanners/reddit-scanner.js';
+import { StockTwitsScanner } from './scanners/stocktwits-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -143,6 +145,12 @@ export function buildApp(options?: {
   }
   if (process.env.X_SCANNER_ENABLED === 'true') {
     registry.register(new XScanner(eventBus));
+  }
+  if (process.env.REDDIT_ENABLED !== 'false') {
+    registry.register(new RedditScanner(eventBus));
+  }
+  if (process.env.STOCKTWITS_ENABLED !== 'false') {
+    registry.register(new StockTwitsScanner(eventBus));
   }
 
   // Wire EventBus → metrics tracking
