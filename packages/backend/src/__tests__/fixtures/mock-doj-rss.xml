@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Department of Justice - Antitrust Division Press Releases</title>
+    <link>https://www.justice.gov/atr</link>
+    <description>Press releases from the DOJ Antitrust Division</description>
+    <item>
+      <title>Justice Department Sues Google for Monopolizing Digital Advertising Technologies</title>
+      <link>https://www.justice.gov/opa/pr/justice-department-sues-google-monopolizing-digital-advertising</link>
+      <pubDate>Mon, 10 Mar 2026 15:00:00 GMT</pubDate>
+      <description>The Justice Department filed an antitrust lawsuit against Google (NASDAQ: GOOGL), alleging the company monopolized key digital advertising technologies through anticompetitive acquisitions.</description>
+      <guid>doj-google-adtech-001</guid>
+    </item>
+    <item>
+      <title>Justice Department Blocks Merger of Kroger and Albertsons</title>
+      <link>https://www.justice.gov/opa/pr/doj-blocks-kroger-albertsons-merger</link>
+      <pubDate>Mon, 10 Mar 2026 13:00:00 GMT</pubDate>
+      <description>The Antitrust Division moved to block the proposed $24.6 billion merger of Kroger (NYSE: KR) and Albertsons, citing harm to consumers through reduced competition in the grocery industry.</description>
+      <guid>doj-kroger-albertsons-002</guid>
+    </item>
+    <item>
+      <title>Major Technology Company Settles Antitrust Investigation for $2.3 Billion</title>
+      <link>https://www.justice.gov/opa/pr/tech-company-antitrust-settlement</link>
+      <pubDate>Sun, 09 Mar 2026 16:00:00 GMT</pubDate>
+      <description>A major technology company has agreed to pay $2.3 billion to settle antitrust claims, the largest such settlement in the division's history.</description>
+      <guid>doj-tech-settlement-003</guid>
+    </item>
+    <item>
+      <title>Justice Department Opens Investigation into Airline Industry Pricing Practices</title>
+      <link>https://www.justice.gov/opa/pr/doj-airline-pricing-investigation</link>
+      <pubDate>Sun, 09 Mar 2026 14:00:00 GMT</pubDate>
+      <description>The Antitrust Division announced it has opened a probe into potential price-fixing among major US airlines, including Delta (NYSE: DAL) and United Airlines (NASDAQ: UAL).</description>
+      <guid>doj-airline-probe-004</guid>
+    </item>
+    <item>
+      <title><![CDATA[Consent Decree Approved in Hospital Merger Case]]></title>
+      <link>https://www.justice.gov/opa/pr/consent-decree-hospital-merger</link>
+      <pubDate>Sat, 08 Mar 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[A federal court approved a consent decree requiring divestitures in the merger of two regional hospital systems, addressing competition concerns in three metropolitan areas.]]></description>
+      <guid>doj-hospital-consent-005</guid>
+    </item>
+  </channel>
+</rss>

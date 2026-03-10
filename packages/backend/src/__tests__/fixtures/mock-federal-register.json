@@ -1,0 +1,77 @@
+{
+  "count": 6,
+  "results": [
+    {
+      "document_number": "2026-05001",
+      "title": "Imposing Additional Tariffs on Semiconductor Imports from China",
+      "type": "Presidential Document",
+      "abstract": "Executive order imposing 25% tariff on semiconductor and technology imports from China, effective immediately. This action targets the semiconductor industry and trade relationship with China.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/10/2026-05001",
+      "pdf_url": "https://www.federalregister.gov/documents/2026/03/10/2026-05001.pdf",
+      "publication_date": "2026-03-10",
+      "signing_date": "2026-03-09",
+      "executive_order_number": "14250",
+      "subtype": "Executive Order"
+    },
+    {
+      "document_number": "2026-05002",
+      "title": "Strengthening Sanctions Against Russian Energy Exports",
+      "type": "Presidential Document",
+      "abstract": "Presidential memorandum expanding sanctions on Russian oil and gas exports, prohibiting new energy contracts with Russian state-owned companies.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/09/2026-05002",
+      "pdf_url": null,
+      "publication_date": "2026-03-09",
+      "signing_date": "2026-03-08",
+      "executive_order_number": null,
+      "subtype": "Memorandum"
+    },
+    {
+      "document_number": "2026-05003",
+      "title": "Promoting American Infrastructure Investment",
+      "type": "Presidential Document",
+      "abstract": "Executive order directing federal agencies to prioritize infrastructure projects and streamline regulation of construction and energy development.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/08/2026-05003",
+      "pdf_url": null,
+      "publication_date": "2026-03-08",
+      "signing_date": "2026-03-07",
+      "executive_order_number": "14249",
+      "subtype": "Executive Order"
+    },
+    {
+      "document_number": "2026-05004",
+      "title": "Proclamation on National Agriculture Day",
+      "type": "Presidential Document",
+      "abstract": "Proclamation honoring American farmers and agricultural workers on National Agriculture Day.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/07/2026-05004",
+      "pdf_url": null,
+      "publication_date": "2026-03-07",
+      "signing_date": "2026-03-06",
+      "executive_order_number": null,
+      "subtype": "Proclamation"
+    },
+    {
+      "document_number": "2026-05005",
+      "title": "Strengthening the Defense Industrial Base",
+      "type": "Presidential Document",
+      "abstract": "Executive order directing the Department of Defense to review and strengthen the defense industrial base, with focus on critical supply chains.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/06/2026-05005",
+      "pdf_url": null,
+      "publication_date": "2026-03-06",
+      "signing_date": "2026-03-05",
+      "executive_order_number": "14248",
+      "subtype": "Executive Order"
+    },
+    {
+      "document_number": "2026-05006",
+      "title": "Reducing Healthcare Regulation for Pharmaceutical Innovation",
+      "type": "Presidential Document",
+      "abstract": "Presidential memorandum aimed at reducing regulatory barriers for pharmaceutical companies developing novel therapies and healthcare technologies.",
+      "html_url": "https://www.federalregister.gov/documents/2026/03/05/2026-05006",
+      "pdf_url": null,
+      "publication_date": "2026-03-05",
+      "signing_date": "2026-03-04",
+      "executive_order_number": null,
+      "subtype": "Memorandum"
+    }
+  ]
+}
