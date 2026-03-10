@@ -377,55 +377,60 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.5 — Analyst Ratings + Earnings Scanner
+## Current Task: P3.6 — Scanner Plugin SDK
 
 ### Goal
-Build analyst ratings tracker and earnings monitor scanners.
+Build a Scanner Plugin SDK that allows third-party scanners to be loaded dynamically at runtime. This is the extensibility layer for event-radar.
 
-### Analyst Ratings Scanner (`analyst-scanner.ts`)
-- Data source: Benzinga RSS or MarketBeat free tier
-- Alternative: scrape finviz.com analyst ratings page
-- Track: upgrades, downgrades, price target changes, initiations, reiterations
-- Emit events for: any rating change (upgrade/downgrade/initiation)
-- Severity: upgrade from Sell→Buy = HIGH, minor PT change = LOW
-- Metadata: `{ ticker, analyst_firm, analyst_name, old_rating, new_rating, old_pt, new_pt, action_type }`
-- Poll interval: every 10 min
+### Scanner Plugin Interface (`scanner-plugin.ts`)
+- Define a `ScannerPlugin` interface that external plugins must implement
+- Interface: `{ id, name, version, description, configSchema?, create(config, deps): BaseScanner }`
+- `deps` provides: logger, eventBus, httpClient (fetch wrapper with rate limiting)
+- Config schema uses zod for validation
+- Plugin metadata: author, license, homepage, tags
 
-### Earnings Scanner (`earnings-scanner.ts`)
-- Data source: Alpha Vantage earnings calendar (free tier, needs API key but make optional)
-- Alternative: scrape earnings whispers or use Yahoo Finance earnings calendar
-- Track: upcoming earnings dates (pre-market/after-hours), EPS estimates
-- Pre-event: alert 1 day before earnings
-- Post-event: actual EPS vs estimate, beat/miss/inline, revenue surprise
-- Metadata: `{ ticker, report_date, fiscal_quarter, eps_estimate, eps_actual, revenue_estimate, revenue_actual, surprise_pct, guidance }`
-- Poll interval: every 30 min
+### Plugin Loader (`plugin-loader.ts`)
+- Load plugins from a configurable directory (`SCANNER_PLUGINS_DIR` env var, default `./plugins/`)
+- Each plugin is a directory with `package.json` + `index.ts` (or compiled `index.js`)
+- Dynamic import: `await import(pluginPath)` → validate exports → register scanner
+- Hot-reload support: watch plugin directory for changes (optional, behind flag)
+- Error isolation: plugin crashes don't take down the main process (try/catch around poll)
 
-### WARN Act Scanner (`warn-scanner.ts`)
-- Data source: US DOL WARN Act notices (state-level RSS/pages)
-- Track: mass layoff notices (>100 employees)
-- Extract company name and match to ticker
-- Metadata: `{ company, state, employees_affected, layoff_date, notice_date, reason }`
-- Poll interval: hourly
+### Plugin Registry (`plugin-registry.ts`)
+- Extends existing scanner registry to support dynamic plugins
+- Methods: `registerPlugin(plugin)`, `unregisterPlugin(id)`, `listPlugins()`, `getPlugin(id)`
+- Plugin lifecycle: `init()` → `start()` → `poll()` → `stop()` → `destroy()`
+- Health tracking per plugin (last poll time, error count, status)
+
+### Plugin Config (`plugin-config.ts`)
+- Per-plugin configuration stored in `config/plugins.json` or env vars
+- Schema validation on load
+- Support for secrets (API keys) via env var interpolation: `${ENV_VAR_NAME}`
+
+### Example Plugin (`example-plugin/`)
+- Create a minimal example scanner plugin as reference implementation
+- Monitors a simple RSS feed
+- Shows how to implement the interface, handle config, emit events
 
 ### Files to create
-- `packages/backend/src/scanners/analyst-scanner.ts`
-- `packages/backend/src/scanners/earnings-scanner.ts`
-- `packages/backend/src/scanners/warn-scanner.ts`
-- `packages/backend/src/__tests__/analyst-scanner.test.ts`
-- `packages/backend/src/__tests__/earnings-scanner.test.ts`
-- `packages/backend/src/__tests__/warn-scanner.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-analyst-ratings.json`
-- `packages/backend/src/__tests__/fixtures/mock-earnings-calendar.json`
-- `packages/backend/src/__tests__/fixtures/mock-warn-notices.json`
+- `packages/backend/src/plugins/scanner-plugin.ts` — interface + types
+- `packages/backend/src/plugins/plugin-loader.ts` — dynamic loader
+- `packages/backend/src/plugins/plugin-registry.ts` — registry
+- `packages/backend/src/plugins/plugin-config.ts` — config management
+- `packages/backend/src/plugins/index.ts` — barrel export
+- `packages/backend/src/__tests__/plugin-loader.test.ts`
+- `packages/backend/src/__tests__/plugin-registry.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-plugin/index.ts`
+- `packages/backend/src/__tests__/fixtures/mock-plugin/package.json`
 
 ### Requirements
-- Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
-- Register all scanners in app.ts
-- IMPORTANT: After adding new test files, update `packages/backend/eslint.config.js` and increase `maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING` if needed (currently 64)
-- Tests must use mock data (no real API calls in tests)
-- Tests must NOT use PGlite — use simple mocks for the event bus
+- Follow existing patterns in the codebase
+- IMPORTANT: Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing
+- If eslint fails with `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js` (currently 64)
+- Tests must use mock data, no real filesystem operations
+- Tests must NOT use PGlite
 - All tests must complete in <10s
-- Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing to verify
+- Create branch `feat/scanner-plugin-sdk`, commit, push, create PR to main
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
