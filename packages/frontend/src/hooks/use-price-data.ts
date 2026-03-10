@@ -130,7 +130,7 @@ export function usePriceData(options: UsePriceDataOptions): UsePriceDataReturn {
     setError(null);
 
     try {
-      const data = await fetchYahooPriceData(ticker, interval, range);
+      const data = await fetchYahooPriceData(ticker, interval);
       
       // Update cache
       priceCache.set(cacheKey, {
