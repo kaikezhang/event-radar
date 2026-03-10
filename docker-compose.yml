@@ -1,29 +1,5 @@
 services:
-  app:
-    build: .
-    ports:
-      - "3001:3001"
-    environment:
-      - PORT=3001
-      - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
-      - BARK_KEY=${BARK_KEY:-}
-      - BARK_SERVER_URL=http://bark-server:8080
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  sec-scanner:
-    build: services/sec-scanner
-    ports:
-      - "3002:3002"
-    environment:
-      - BACKEND_URL=http://app:3001
-      - SEC_POLL_INTERVAL=30
-      - SEC_USER_AGENT=EventRadar/0.1 (event-radar@example.com)
-    depends_on:
-      - app
-
+  # PostgreSQL Database
   postgres:
     image: postgres:17-alpine
     ports:
@@ -39,7 +15,77 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - event-radar-network
 
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
+      - BARK_KEY=${BARK_KEY:-}
+      - BARK_SERVER_URL=http://bark-server:8080
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - API_KEY=${API_KEY:-dev-api-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - event-radar-network
+
+  # SEC Scanner Python Service
+  sec-scanner:
+    build:
+      context: ./services/sec-scanner
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - BACKEND_URL=http://backend:3001
+      - SEC_POLL_INTERVAL=30
+      - SEC_USER_AGENT=EventRadar/0.1 (event-radar@example.com)
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - event-radar-network
+
+  # Frontend Next.js Application
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      - NEXT_PUBLIC_API_KEY=${API_KEY:-dev-api-key-change-in-production}
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - event-radar-network
+
+  # Bark Server (iOS Push Notifications)
   bark-server:
     image: finab/bark-server
     ports:
@@ -47,6 +93,12 @@ services:
     volumes:
       - bark-data:/data
     restart: unless-stopped
+    networks:
+      - event-radar-network
+
+networks:
+  event-radar-network:
+    driver: bridge
 
 volumes:
   pgdata:
