@@ -26,11 +26,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm build
+
       - name: Lint
         run: pnpm lint
 
       - name: Unit Tests
         run: pnpm --filter @event-radar/backend test && pnpm --filter @event-radar/shared test && pnpm --filter @event-radar/frontend test
-
-      - name: Build
-        run: pnpm build
