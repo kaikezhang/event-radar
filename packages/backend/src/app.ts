@@ -22,6 +22,9 @@ import { StockTwitsScanner } from './scanners/stocktwits-scanner.js';
 import { EconCalendarScanner } from './scanners/econ-calendar-scanner.js';
 import { FedWatchScanner } from './scanners/fedwatch-scanner.js';
 import { BreakingNewsScanner } from './scanners/breaking-news-scanner.js';
+import { CongressScanner } from './scanners/congress-scanner.js';
+import { UnusualOptionsScanner } from './scanners/options-scanner.js';
+import { ShortInterestScanner } from './scanners/short-interest-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -163,6 +166,15 @@ export function buildApp(options?: {
   }
   if (process.env.BREAKING_NEWS_ENABLED !== 'false') {
     registry.register(new BreakingNewsScanner(eventBus));
+  }
+  if (process.env.CONGRESS_ENABLED !== 'false') {
+    registry.register(new CongressScanner(eventBus));
+  }
+  if (process.env.UNUSUAL_OPTIONS_ENABLED !== 'false') {
+    registry.register(new UnusualOptionsScanner(eventBus));
+  }
+  if (process.env.SHORT_INTEREST_ENABLED !== 'false') {
+    registry.register(new ShortInterestScanner(eventBus));
   }
 
   // Wire EventBus → metrics tracking

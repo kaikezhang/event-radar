@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "ticker": "GME",
+      "short_interest": 45000000,
+      "short_pct_float": 25.3,
+      "days_to_cover": 3.2,
+      "previous_short_interest": 38000000
+    },
+    {
+      "ticker": "AMC",
+      "short_interest": 120000000,
+      "short_pct_float": 22.1,
+      "days_to_cover": 2.8,
+      "previous_short_interest": 115000000
+    },
+    {
+      "ticker": "BBBY",
+      "short_interest": 30000000,
+      "short_pct_float": 35.7,
+      "days_to_cover": 4.5,
+      "previous_short_interest": 25000000
+    },
+    {
+      "ticker": "TSLA",
+      "short_interest": 25000000,
+      "short_pct_float": 3.2,
+      "days_to_cover": 1.1,
+      "previous_short_interest": 24500000
+    },
+    {
+      "ticker": "CVNA",
+      "short_interest": 18000000,
+      "short_pct_float": 15.0,
+      "days_to_cover": 2.5,
+      "previous_short_interest": 12000000
+    }
+  ]
+}
