@@ -4,6 +4,14 @@ import { sql } from 'drizzle-orm';
 import * as schema from '../../db/schema.js';
 import type { Database } from '../../db/connection.js';
 
+/** Close PGlite with a timeout to prevent hanging in CI */
+export async function safeClose(client: PGlite, timeoutMs = 5000): Promise<void> {
+  await Promise.race([
+    client.close(),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 export async function createTestDb(): Promise<{
   db: Database;
   client: PGlite;

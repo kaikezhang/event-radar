@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
-import { createTestDb } from './helpers/test-db.js';
+import { createTestDb, safeClose } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { RawEvent } from '@event-radar/shared';
 import type { PGlite } from '@electric-sql/pglite';
@@ -30,7 +30,7 @@ describe('Event Store', () => {
   });
 
   afterAll(async () => {
-    await client.close();
+    await safeClose(client);
   });
 
   it('should store an event and return the DB id', async () => {
@@ -103,7 +103,7 @@ describe('GET /api/events', () => {
 
   afterAll(async () => {
     await ctx.server.close();
-    await client.close();
+    await safeClose(client);
   });
 
   it('should return 401 without API key', async () => {
@@ -248,7 +248,7 @@ describe('GET /api/events/:id', () => {
 
   afterAll(async () => {
     await ctx.server.close();
-    await client.close();
+    await safeClose(client);
   });
 
   it('should return 401 without API key', async () => {
@@ -313,7 +313,7 @@ describe('GET /api/events/sources', () => {
 
   afterAll(async () => {
     await ctx.server.close();
-    await client.close();
+    await safeClose(client);
   });
 
   it('should return unique sources sorted alphabetically', async () => {
@@ -379,7 +379,7 @@ describe('GET /api/stats', () => {
 
   afterAll(async () => {
     await ctx.server.close();
-    await client.close();
+    await safeClose(client);
   });
 
   it('should return event stats', async () => {
@@ -447,7 +447,7 @@ describe('EventBus → DB storage integration', () => {
 
   afterAll(async () => {
     await ctx.server.close();
-    await client.close();
+    await safeClose(client);
   });
 
   it('should persist events published via ingest endpoint', async () => {
