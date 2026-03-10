@@ -43,6 +43,16 @@ export {
   type WebhookConfig,
   type DeliveryConfig,
 } from './schemas/delivery.js';
+export {
+  PriceDataSchema,
+  PriceChangeSchema,
+  PriceIntervalSchema,
+  PriceAfterEventSchema,
+  type PriceData,
+  type PriceChange,
+  type PriceInterval,
+  type PriceAfterEvent,
+} from './schemas/price-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
