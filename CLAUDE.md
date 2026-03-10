@@ -377,10 +377,112 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.6 — Scanner Plugin SDK
+## Current Task: P4.2.1 — Historical Price Data Fetching
 
 ### Goal
-Build a Scanner Plugin SDK that allows third-party scanners to be loaded dynamically at runtime. This is the extensibility layer for event-radar.
+Build historical price data fetching for backtesting framework. This is the foundation for outcome tracking and accuracy analysis.
+
+### Price Service (`price-service.ts`)
+- Create `packages/backend/src/services/price-service.ts`
+- Use `yfinance` library to fetch historical price data
+- Methods:
+  - `getPriceAt(ticker: string, date: Date): Promise<number | null>` — get closing price at specific date
+  - `getPriceChange(ticker: string, fromDate: Date, toDate: Date): Promise<{ percent: number; absolute: number }>`
+  - `getHistoricalPrices(ticker: string, startDate: Date, endDate: Date): Promise<PriceData[]>`
+  - `getPriceAfterEvent(ticker: string, eventTime: Date, intervals: number[]): Promise<PriceAfterEvent>` where intervals = [1h, 1d, 1w, 1m] in hours
+- Handle market holidays (return previous trading day's close)
+- Cache prices in memory (TTL 1 hour) to avoid repeated API calls
+- Error handling: return null for invalid tickers or API failures
+
+### Price Types (`price-types.ts`)
+- Create `packages/shared/src/price-types.ts`
+```typescript
+export interface PriceData {
+  ticker: string;
+  date: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface PriceChange {
+  ticker: string;
+  fromDate: Date;
+  toDate: Date;
+  fromPrice: number;
+  toPrice: number;
+  absolute: number;
+  percent: number;
+}
+
+export interface PriceAfterEvent {
+  ticker: string;
+  eventTime: Date;
+  prices: {
+    interval: number;        // hours: 1, 24, 168, 720
+    label: string;          // "T+1h", "T+1d", "T+1w", "T+1m"
+    price: number | null;
+    change: number | null;  // percent change from event price
+    absolute: number | null;
+  }[];
+}
+```
+
+### Database Schema Update
+- Add to `packages/backend/src/db/schema.sql`:
+```sql
+-- Price cache table (for efficient lookups)
+CREATE TABLE IF NOT EXISTS price_cache (
+  ticker VARCHAR(10) NOT NULL,
+  date DATE NOT NULL,
+  close_price DECIMAL(10, 2),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (ticker, date)
+);
+
+-- Event outcomes table (tracks price after events)
+CREATE TABLE IF NOT EXISTS event_outcomes (
+  id SERIAL PRIMARY KEY,
+  event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  ticker VARCHAR(10) NOT NULL,
+  event_time TIMESTAMP NOT NULL,
+  event_price DECIMAL(10, 2),
+  price_1h DECIMAL(10, 2),
+  price_1d DECIMAL(10, 2),
+  price_1w DECIMAL(10, 2),
+  price_1m DECIMAL(10, 2),
+  change_1h DECIMAL(10, 4),
+  change_1d DECIMAL(10, 4),
+  change_1w DECIMAL(10, 4),
+  change_1m DECIMAL(10, 4),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(event_id)
+);
+
+-- Index for efficient queries
+CREATE INDEX idx_event_outcomes_ticker ON event_outcomes(ticker);
+CREATE INDEX idx_event_outcomes_event_time ON event_outcomes(event_time);
+```
+
+### Unit Tests
+- Create `packages/backend/src/__tests__/price-service.test.ts`
+- Mock yfinance to test price calculation logic
+- Test: price change calculation (correct percent/absolute)
+- Test: T+1h/d/w/m intervals (24h = 1 trading day)
+- Test: market holiday handling
+- Test: cache behavior
+- Test: error handling for invalid tickers
+
+### Requirements
+- Use yfinance for price data (already in project deps)
+- Follow existing service patterns in codebase
+- Register new tables in schema.ts if using ORM
+- Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing
+- If eslint fails with `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js` (currently 64)
+- Create branch `feat/price-service`, commit, push, create PR to main
 
 ### Scanner Plugin Interface (`scanner-plugin.ts`)
 - Define a `ScannerPlugin` interface that external plugins must implement
