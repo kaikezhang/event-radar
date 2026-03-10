@@ -377,40 +377,52 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.1 — Reddit & StockTwits Social Scanners
+## Current Task: P3.2 — Macro & Geopolitical Scanners
 
 ### Goal
-Build Tier 4 social media scanners: Reddit (WSB + stocks subreddits) and StockTwits sentiment tracker.
+Build Tier 5 macro/geopolitical scanners: Economic calendar, FedWatch rate tracker, and breaking news RSS.
 
-### Reddit Scanner (`reddit-scanner.ts`)
-- Poll Reddit JSON API (no auth needed): `https://www.reddit.com/r/wallstreetbets/hot.json?limit=25`
-- Also scan: r/stocks, r/investing, r/options
-- Extract: tickers from title/body (use existing ticker-extractor), upvote count, comment count, awards
-- Anomaly detection: flag posts with unusually high engagement (>500 upvotes in <2h, or >200 comments)
-- Emit events with metadata: `{ subreddit, upvotes, comments, post_url, sentiment_keywords }`
-- Rate limit: 1 request per subreddit per 60s (Reddit rate limits unauthenticated at 10/min)
-- Dedup by post ID
+### Economic Calendar Scanner (`econ-calendar-scanner.ts`)
+- Data source: BLS API v2 (free, no auth for <25 req/day) + FRED API (free with key, but make key optional)
+- Track upcoming releases: CPI, NFP (Non-Farm Payrolls), PPI, GDP, Retail Sales, Jobless Claims
+- Pre-event alert: emit event 15 min before scheduled release
+- Post-event alert: emit event when actual data released with actual vs consensus comparison
+- Use a static calendar of known release dates (JSON config file)
+- Metadata: `{ indicator, scheduled_time, actual, consensus, previous, surprise_pct }`
 
-### StockTwits Scanner (`stocktwits-scanner.ts`)  
-- Poll StockTwits trending: `https://api.stocktwits.com/api/2/trending/symbols.json` (no auth)
-- Poll symbol stream: `https://api.stocktwits.com/api/2/streams/symbol/{SYMBOL}.json`
-- Track: trending symbols, message volume spikes, bullish/bearish sentiment ratio
-- Emit events when: new symbol enters trending, sentiment flips, volume spike >2x average
-- Rate limit: respect 200 requests/hour limit
+### FedWatch Scanner (`fedwatch-scanner.ts`)
+- Scrape CME FedWatch implied probabilities from public endpoint
+- URL: `https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html` (parse JSON API behind it)
+- Track: rate cut/hike probabilities for next 3 FOMC meetings
+- Emit event when probability shifts >10% in 24h
+- Metadata: `{ meeting_date, rate_target, probability_pct, previous_probability_pct, shift_pct }`
+
+### Breaking News RSS Scanner (`breaking-news-scanner.ts`)
+- Poll RSS feeds from Reuters, AP News, BBC Business
+- Reuters: `https://www.reutersagency.com/feed/` (or available RSS)
+- AP: `https://rsshub.app/apnews/topics/business` (via RSSHub proxy)
+- Filter for market-moving keywords: tariff, sanction, war, embargo, OPEC, Fed, rate, inflation, recession, default, bailout
+- Emit events only for keyword-matched articles
+- Dedup by article URL
+- Metadata: `{ source_feed, headline, url, matched_keywords }`
 
 ### Files to create
-- `packages/backend/src/scanners/reddit-scanner.ts`
-- `packages/backend/src/scanners/stocktwits-scanner.ts`
-- `packages/backend/src/__tests__/reddit-scanner.test.ts`
-- `packages/backend/src/__tests__/stocktwits-scanner.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-reddit-response.json`
-- `packages/backend/src/__tests__/fixtures/mock-stocktwits-response.json`
+- `packages/backend/src/scanners/econ-calendar-scanner.ts`
+- `packages/backend/src/scanners/fedwatch-scanner.ts`
+- `packages/backend/src/scanners/breaking-news-scanner.ts`
+- `packages/backend/src/config/econ-calendar.json` (static release schedule)
+- `packages/backend/src/__tests__/econ-calendar-scanner.test.ts`
+- `packages/backend/src/__tests__/fedwatch-scanner.test.ts`
+- `packages/backend/src/__tests__/breaking-news-scanner.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-fedwatch-response.json`
+- `packages/backend/src/__tests__/fixtures/mock-rss-breaking-news.xml`
 
 ### Requirements
 - Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
 - Tests must use mock data (no real API calls in tests)
 - Tests must NOT use PGlite — use simple mocks for the event bus
 - All tests must complete in <10s
+- Use existing RSS parser from `src/scanners/rss/` for breaking news scanner
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
