@@ -18,7 +18,9 @@ import { DummyScanner } from './scanners/dummy-scanner.js';
 import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { XScanner } from './scanners/x-scanner.js';
 import { type Database } from './db/connection.js';
+import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
+import { sql } from 'drizzle-orm';
 import { registerEventRoutes } from './routes/events.js';
 import { registerScannerRoutes } from './routes/scanners.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
@@ -235,11 +237,42 @@ export function buildApp(options?: {
       .send(metrics);
   });
 
-  server.get('/health', async () => {
-    return {
-      status: 'ok',
-      scanners: registry.healthAll(),
-    };
+  server.get('/health', async (request, reply) => {
+    const scanners = registry.healthAll();
+    
+    // Check DB connection if available
+    let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+    let lastEventTime: string | null = null;
+    
+    if (db) {
+      try {
+        await db.select().from(schema.events).limit(1);
+        dbStatus = 'connected';
+        
+        // Get the most recent event time
+        const [latestEvent] = await db
+          .select({ receivedAt: schema.events.receivedAt })
+          .from(schema.events)
+          .orderBy(sql`${schema.events.receivedAt} DESC`)
+          .limit(1);
+        
+        if (latestEvent?.receivedAt) {
+          lastEventTime = latestEvent.receivedAt.toISOString();
+        }
+      } catch {
+        dbStatus = 'disconnected';
+      }
+    }
+
+    return reply.send({
+      status: dbStatus === 'connected' ? 'ok' : 'degraded',
+      scanners,
+      db: {
+        status: dbStatus,
+      },
+      lastEventTime,
+      uptime: process.uptime(),
+    });
   });
 
   server.get('/api/health/ping', async () => {
