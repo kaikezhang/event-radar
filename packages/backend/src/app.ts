@@ -19,6 +19,9 @@ import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { XScanner } from './scanners/x-scanner.js';
 import { RedditScanner } from './scanners/reddit-scanner.js';
 import { StockTwitsScanner } from './scanners/stocktwits-scanner.js';
+import { EconCalendarScanner } from './scanners/econ-calendar-scanner.js';
+import { FedWatchScanner } from './scanners/fedwatch-scanner.js';
+import { BreakingNewsScanner } from './scanners/breaking-news-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -151,6 +154,15 @@ export function buildApp(options?: {
   }
   if (process.env.STOCKTWITS_ENABLED !== 'false') {
     registry.register(new StockTwitsScanner(eventBus));
+  }
+  if (process.env.ECON_CALENDAR_ENABLED !== 'false') {
+    registry.register(new EconCalendarScanner(eventBus));
+  }
+  if (process.env.FEDWATCH_ENABLED !== 'false') {
+    registry.register(new FedWatchScanner(eventBus));
+  }
+  if (process.env.BREAKING_NEWS_ENABLED !== 'false') {
+    registry.register(new BreakingNewsScanner(eventBus));
   }
 
   // Wire EventBus → metrics tracking
