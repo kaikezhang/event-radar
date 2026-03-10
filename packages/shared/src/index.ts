@@ -59,6 +59,17 @@ export {
   type TypeStats,
   type OutcomeStats,
 } from './schemas/price-types.js';
+export {
+  WinRateBreakdownSchema,
+  DirectionAccuracySchema,
+  DirectionAccuracyBucketSchema,
+  SignalPerformanceSchema,
+  PerformanceTrendSchema,
+  type WinRateBreakdown,
+  type DirectionAccuracy,
+  type SignalPerformance,
+  type PerformanceTrend,
+} from './schemas/win-rate-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
