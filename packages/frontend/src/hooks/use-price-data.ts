@@ -78,8 +78,7 @@ function parseYahooCSV(csv: string): PriceData[] {
 // Fetch price data from Yahoo Finance
 async function fetchYahooPriceData(
   ticker: string,
-  interval: string = '1d',
-  _range: string = '1mo'
+  interval: string = '1d'
 ): Promise<PriceData[]> {
   const url = `https://query1.finance.yahoo.com/v7/finance/download/${encodeURIComponent(
     ticker
