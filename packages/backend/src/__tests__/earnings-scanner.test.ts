@@ -132,7 +132,7 @@ describe('EarningsScanner', () => {
       vi.spyOn(globalThis, 'Date').mockImplementation(
         (...args: unknown[]) => {
           if (args.length === 0) return mockNow;
-          , @typescript-eslint/no-explicit-any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           return new origDate(...(args as [any]));
         },
       );
