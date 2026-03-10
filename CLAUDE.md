@@ -377,52 +377,51 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.2 — Macro & Geopolitical Scanners
+## Current Task: P3.3 — Smart Money Scanners
 
 ### Goal
-Build Tier 5 macro/geopolitical scanners: Economic calendar, FedWatch rate tracker, and breaking news RSS.
+Build Tier 6 smart money scanners: Congress trades, unusual options activity, and short interest.
 
-### Economic Calendar Scanner (`econ-calendar-scanner.ts`)
-- Data source: BLS API v2 (free, no auth for <25 req/day) + FRED API (free with key, but make key optional)
-- Track upcoming releases: CPI, NFP (Non-Farm Payrolls), PPI, GDP, Retail Sales, Jobless Claims
-- Pre-event alert: emit event 15 min before scheduled release
-- Post-event alert: emit event when actual data released with actual vs consensus comparison
-- Use a static calendar of known release dates (JSON config file)
-- Metadata: `{ indicator, scheduled_time, actual, consensus, previous, surprise_pct }`
+### Congress Trades Scanner (`congress-scanner.ts`)
+- Data source: Capitol Trades API `https://www.capitoltrades.com/` (scrape public data)
+- Alternative: Quiver Quant API or House/Senate STOCK Act disclosures
+- Track: new trades by members of Congress (buys/sells)
+- Emit events for trades >$50k, especially committee-relevant trades
+- Metadata: `{ politician, party, chamber, ticker, trade_type, amount_range, filing_date, committee_relevance }`
+- Poll interval: every 30 min
 
-### FedWatch Scanner (`fedwatch-scanner.ts`)
-- Scrape CME FedWatch implied probabilities from public endpoint
-- URL: `https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html` (parse JSON API behind it)
-- Track: rate cut/hike probabilities for next 3 FOMC meetings
-- Emit event when probability shifts >10% in 24h
-- Metadata: `{ meeting_date, rate_target, probability_pct, previous_probability_pct, shift_pct }`
+### Unusual Options Scanner (`options-scanner.ts`)
+- Data source: Unusual Whales free tier or CBOE open data
+- Alternative: scrape public unusual options activity feeds
+- Track: large option trades (>$100k premium), unusual volume (>5x average OI)
+- Detect: sweeps vs blocks, bullish/bearish signal based on trade direction
+- Metadata: `{ ticker, strike, expiry, type, premium, volume, open_interest, vol_oi_ratio, trade_type }`
+- Emit events for significant unusual activity
 
-### Breaking News RSS Scanner (`breaking-news-scanner.ts`)
-- Poll RSS feeds from Reuters, AP News, BBC Business
-- Reuters: `https://www.reutersagency.com/feed/` (or available RSS)
-- AP: `https://rsshub.app/apnews/topics/business` (via RSSHub proxy)
-- Filter for market-moving keywords: tariff, sanction, war, embargo, OPEC, Fed, rate, inflation, recession, default, bailout
-- Emit events only for keyword-matched articles
-- Dedup by article URL
-- Metadata: `{ source_feed, headline, url, matched_keywords }`
+### Short Interest Scanner (`short-interest-scanner.ts`)
+- Data source: FINRA short interest reports (bi-monthly, free)
+- Alternative: Finviz screener RSS for high short interest
+- Track: short interest changes >5% for any symbol
+- Track: new entries to most-shorted list
+- Metadata: `{ ticker, short_interest, short_pct_float, days_to_cover, change_pct, previous_si }`
 
 ### Files to create
-- `packages/backend/src/scanners/econ-calendar-scanner.ts`
-- `packages/backend/src/scanners/fedwatch-scanner.ts`
-- `packages/backend/src/scanners/breaking-news-scanner.ts`
-- `packages/backend/src/config/econ-calendar.json` (static release schedule)
-- `packages/backend/src/__tests__/econ-calendar-scanner.test.ts`
-- `packages/backend/src/__tests__/fedwatch-scanner.test.ts`
-- `packages/backend/src/__tests__/breaking-news-scanner.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-fedwatch-response.json`
-- `packages/backend/src/__tests__/fixtures/mock-rss-breaking-news.xml`
+- `packages/backend/src/scanners/congress-scanner.ts`
+- `packages/backend/src/scanners/options-scanner.ts`
+- `packages/backend/src/scanners/short-interest-scanner.ts`
+- `packages/backend/src/__tests__/congress-scanner.test.ts`
+- `packages/backend/src/__tests__/options-scanner.test.ts`
+- `packages/backend/src/__tests__/short-interest-scanner.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-congress-trades.json`
+- `packages/backend/src/__tests__/fixtures/mock-unusual-options.json`
+- `packages/backend/src/__tests__/fixtures/mock-short-interest.json`
 
 ### Requirements
 - Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
+- Register all scanners in app.ts
 - Tests must use mock data (no real API calls in tests)
 - Tests must NOT use PGlite — use simple mocks for the event bus
 - All tests must complete in <10s
-- Use existing RSS parser from `src/scanners/rss/` for breaking news scanner
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
