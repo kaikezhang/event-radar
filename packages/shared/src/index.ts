@@ -48,10 +48,16 @@ export {
   PriceChangeSchema,
   PriceIntervalSchema,
   PriceAfterEventSchema,
+  IntervalStatsSchema,
+  TypeStatsSchema,
+  OutcomeStatsSchema,
   type PriceData,
   type PriceChange,
   type PriceInterval,
   type PriceAfterEvent,
+  type IntervalStats,
+  type TypeStats,
+  type OutcomeStats,
 } from './schemas/price-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
