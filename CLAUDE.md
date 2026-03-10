@@ -377,44 +377,46 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.3 — Smart Money Scanners
+## Current Task: P3.4 — Additional Tier 1 Scanners (FDA + White House + DOJ)
 
 ### Goal
-Build Tier 6 smart money scanners: Congress trades, unusual options activity, and short interest.
+Build additional Tier 1 government/regulatory scanners: FDA approvals, White House executive orders, and DOJ antitrust actions.
 
-### Congress Trades Scanner (`congress-scanner.ts`)
-- Data source: Capitol Trades API `https://www.capitoltrades.com/` (scrape public data)
-- Alternative: Quiver Quant API or House/Senate STOCK Act disclosures
-- Track: new trades by members of Congress (buys/sells)
-- Emit events for trades >$50k, especially committee-relevant trades
-- Metadata: `{ politician, party, chamber, ticker, trade_type, amount_range, filing_date, committee_relevance }`
-- Poll interval: every 30 min
+### FDA Scanner (`fda-scanner.ts`)
+- Data source: FDA openFDA API `https://api.fda.gov/drug/event.json` (free, no auth)
+- Also: FDA press releases RSS `https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds`
+- Track: drug approvals, PDUFA date decisions, safety alerts, warning letters
+- Emit events for: new drug approvals (NDA/BLA), Complete Response Letters (CRL), safety warnings
+- Extract ticker from company name when possible
+- Metadata: `{ drug_name, company, application_type, decision, pdufa_date, therapeutic_area }`
+- Poll interval: every 5 min for RSS, hourly for API
 
-### Unusual Options Scanner (`options-scanner.ts`)
-- Data source: Unusual Whales free tier or CBOE open data
-- Alternative: scrape public unusual options activity feeds
-- Track: large option trades (>$100k premium), unusual volume (>5x average OI)
-- Detect: sweeps vs blocks, bullish/bearish signal based on trade direction
-- Metadata: `{ ticker, strike, expiry, type, premium, volume, open_interest, vol_oi_ratio, trade_type }`
-- Emit events for significant unusual activity
+### White House Scanner (`whitehouse-scanner.ts`)
+- Data source: Federal Register API `https://www.federalregister.gov/api/v1/documents` (free, no auth)
+- Filter: presidential documents (executive orders, proclamations, memoranda)
+- Track: new executive orders, especially trade/tariff/industry-related
+- Keyword filter: tariff, trade, sanction, regulation, industry, energy, technology, defense
+- Metadata: `{ document_type, title, executive_order_number, signing_date, topics, federal_register_url }`
+- Poll interval: every 15 min
 
-### Short Interest Scanner (`short-interest-scanner.ts`)
-- Data source: FINRA short interest reports (bi-monthly, free)
-- Alternative: Finviz screener RSS for high short interest
-- Track: short interest changes >5% for any symbol
-- Track: new entries to most-shorted list
-- Metadata: `{ ticker, short_interest, short_pct_float, days_to_cover, change_pct, previous_si }`
+### DOJ Antitrust Scanner (`doj-scanner.ts`)
+- Data source: DOJ press releases RSS `https://www.justice.gov/atr/press-releases/feed`
+- Track: merger challenges, antitrust lawsuits, consent decrees, investigations
+- Extract company names and tickers from press release titles
+- Emit events for: new antitrust actions, merger blocks, settlement announcements
+- Metadata: `{ action_type, companies, case_type, title, url, date }`
+- Poll interval: every 15 min
 
 ### Files to create
-- `packages/backend/src/scanners/congress-scanner.ts`
-- `packages/backend/src/scanners/options-scanner.ts`
-- `packages/backend/src/scanners/short-interest-scanner.ts`
-- `packages/backend/src/__tests__/congress-scanner.test.ts`
-- `packages/backend/src/__tests__/options-scanner.test.ts`
-- `packages/backend/src/__tests__/short-interest-scanner.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-congress-trades.json`
-- `packages/backend/src/__tests__/fixtures/mock-unusual-options.json`
-- `packages/backend/src/__tests__/fixtures/mock-short-interest.json`
+- `packages/backend/src/scanners/fda-scanner.ts`
+- `packages/backend/src/scanners/whitehouse-scanner.ts`
+- `packages/backend/src/scanners/doj-scanner.ts`
+- `packages/backend/src/__tests__/fda-scanner.test.ts`
+- `packages/backend/src/__tests__/whitehouse-scanner.test.ts`
+- `packages/backend/src/__tests__/doj-scanner.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-fda-response.json`
+- `packages/backend/src/__tests__/fixtures/mock-federal-register.json`
+- `packages/backend/src/__tests__/fixtures/mock-doj-rss.xml`
 
 ### Requirements
 - Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
