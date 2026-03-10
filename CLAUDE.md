@@ -44,7 +44,27 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.4 Chart Panel
+## Current Task: P2.5 System Health Bar + Auth
+
+### Requirements
+
+1. **System Health Bar**
+   - Scanner status indicators (green/yellow/red)
+   - Show last event time
+   - Database connection status
+   - Memory/CPU usage (optional)
+
+2. **Authentication Improvements**
+   - Add user session management
+   - Store API key securely
+   - Logout functionality
+
+### Files to modify
+- `packages/frontend/src/components/health-bar.tsx` - health status
+- Update auth context
+
+### Verification
+`turbo build` must pass.
 
 **Goal**: TradingView chart with event markers overlay.
 
