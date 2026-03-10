@@ -79,7 +79,7 @@ function parseYahooCSV(csv: string): PriceData[] {
 async function fetchYahooPriceData(
   ticker: string,
   interval: string = '1d',
-  range: string = '1mo'
+  _range: string = '1mo'
 ): Promise<PriceData[]> {
   const url = `https://query1.finance.yahoo.com/v7/finance/download/${encodeURIComponent(
     ticker
