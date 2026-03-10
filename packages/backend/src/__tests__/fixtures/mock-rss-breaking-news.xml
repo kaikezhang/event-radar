@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Reuters - Business News</title>
+    <link>https://www.reuters.com</link>
+    <description>Latest business news from Reuters</description>
+    <item>
+      <title>US imposes new tariff on Chinese semiconductor imports</title>
+      <link>https://www.reuters.com/business/tariff-china-semiconductors-2026</link>
+      <pubDate>Mon, 10 Mar 2026 14:30:00 GMT</pubDate>
+      <description>The Biden administration announced a 25% tariff on Chinese semiconductor imports, escalating trade tensions between the two nations.</description>
+      <guid>reuters-tariff-china-2026-001</guid>
+    </item>
+    <item>
+      <title>Fed signals potential rate cut amid slowing growth</title>
+      <link>https://www.reuters.com/business/fed-rate-cut-signal-2026</link>
+      <pubDate>Mon, 10 Mar 2026 12:00:00 GMT</pubDate>
+      <description>Federal Reserve officials indicated they may consider a rate cut at the next FOMC meeting as inflation shows signs of easing.</description>
+      <guid>reuters-fed-rate-2026-002</guid>
+    </item>
+    <item>
+      <title>Tech startup raises $50M in Series B funding</title>
+      <link>https://www.reuters.com/business/tech-startup-funding-2026</link>
+      <pubDate>Mon, 10 Mar 2026 10:00:00 GMT</pubDate>
+      <description>AI startup TechCo raised $50 million in Series B funding led by Sequoia Capital.</description>
+      <guid>reuters-tech-funding-2026-003</guid>
+    </item>
+    <item>
+      <title>OPEC announces surprise production cut of 1M barrels per day</title>
+      <link>https://www.reuters.com/business/opec-production-cut-2026</link>
+      <pubDate>Mon, 10 Mar 2026 08:00:00 GMT</pubDate>
+      <description>OPEC members agreed to an unexpected production cut, sending oil prices sharply higher amid recession fears.</description>
+      <guid>reuters-opec-cut-2026-004</guid>
+    </item>
+    <item>
+      <title><![CDATA[EU sanctions on Russian energy exports expanded]]></title>
+      <link>https://www.reuters.com/business/eu-sanctions-russia-2026</link>
+      <pubDate>Sun, 09 Mar 2026 16:00:00 GMT</pubDate>
+      <description><![CDATA[The European Union expanded its sanction regime on Russian energy exports, targeting additional oil and gas companies.]]></description>
+      <guid>reuters-eu-sanctions-2026-005</guid>
+    </item>
+    <item>
+      <title>Apple reports record quarterly revenue</title>
+      <link>https://www.reuters.com/business/apple-earnings-2026</link>
+      <pubDate>Sun, 09 Mar 2026 14:00:00 GMT</pubDate>
+      <description>Apple Inc reported record quarterly revenue of $130 billion, beating analyst expectations.</description>
+      <guid>reuters-apple-earnings-2026-006</guid>
+    </item>
+  </channel>
+</rss>

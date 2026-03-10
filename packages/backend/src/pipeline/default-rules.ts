@@ -1,13 +1,15 @@
 import type { Rule } from '@event-radar/shared';
 import { POLITICAL_RULES } from './political-rules.js';
+import { MACRO_RULES } from './macro-rules.js';
 
 /**
- * Default classification rules for SEC filings (8-K items + Form 4 insider trading)
- * and political post classification (Truth Social + X).
+ * Default classification rules for SEC filings (8-K items + Form 4 insider trading),
+ * political post classification (Truth Social + X), and macro/geopolitical scanners.
  * Lower priority number = applied first. Severity uses "highest wins" logic in RuleEngine.
  */
 export const DEFAULT_RULES: Rule[] = [
   ...POLITICAL_RULES,
+  ...MACRO_RULES,
   // ── CRITICAL ───────────────────────────────────────────────────────
   {
     id: '8k-1.02-bankruptcy',
