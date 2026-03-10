@@ -44,20 +44,41 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.6 Deployment + E2E Tests
+## Current Task: P4.1.1 Event Similarity Matching
 
 ### Requirements
 
-1. **Docker Compose**
-   - All services containerized
-   - PostgreSQL, Backend, Frontend, SEC service
-   - Health checks for all services
+**目标**: 实现事件相似度匹配算法，找出相似事件
 
-2. **E2E Tests with Playwright**
-   - Test login flow
-   - Test event list loads
-   - Test event detail panel
-   - Test chart renders
+1. **Similarity Service** (`packages/backend/src/services/similarity.ts`)
+   - `calculateSimilarity(event1, event2): number` — 返回 0-1 相似度分数
+   - 算法:
+     - Ticker match: +0.3 (同一股票)
+     - Time window: 30天内 +0.2, 7天内 +0.3
+     - Content similarity: 关键词重叠度 (Jaccard) 或 embedding cosine similarity
+     - Source correlation: 同一行业/板块 +0.1
+   - 返回 `{ score: number, factors: { ticker: number, time: number, content: number, source: number } }`
+
+2. **Similar Events API** (`GET /events/:id/similar?limit=10`)
+   - 查询同 ticker 事件
+   - 计算相似度分数
+   - 返回 top N 最相似事件
+
+3. **Database** (`event_similarities` table)
+   - `event_id_1`, `event_id_2`, `similarity_score`, `factors`, `created_at`
+   - Index on (event_id_1, similarity_score DESC)
+   - 定期批量计算并存储
+
+4. **Tests** 
+   - Unit tests for similarity algorithm
+   - Mock events with known similarity
+
+### Files to create/modify
+- `packages/shared/src/schemas/similarity-types.ts` — Zod schemas
+- `packages/backend/src/services/similarity.ts` — Core similarity logic
+- `packages/backend/src/routes/similarity.ts` — REST endpoints
+- `packages/backend/src/app.ts` — Register routes
+- `packages/backend/src/__tests__/similarity.test.ts`
 
 3. **CI/CD** (GitHub Actions)
    - Auto build + test on PR
