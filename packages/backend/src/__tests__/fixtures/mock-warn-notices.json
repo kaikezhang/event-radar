@@ -1,0 +1,54 @@
+{
+  "notices": [
+    {
+      "id": "warn-001",
+      "company": "Meta Platforms Inc",
+      "ticker": "META",
+      "state": "California",
+      "employees_affected": 1200,
+      "layoff_date": "2026-04-01",
+      "notice_date": "2026-03-08",
+      "reason": "Restructuring"
+    },
+    {
+      "id": "warn-002",
+      "company": "General Motors",
+      "ticker": "GM",
+      "state": "Michigan",
+      "employees_affected": 800,
+      "layoff_date": "2026-05-01",
+      "notice_date": "2026-03-07",
+      "reason": "Plant closure"
+    },
+    {
+      "id": "warn-003",
+      "company": "Acme Manufacturing",
+      "ticker": null,
+      "state": "Ohio",
+      "employees_affected": 150,
+      "layoff_date": "2026-04-15",
+      "notice_date": "2026-03-06",
+      "reason": "Business downturn"
+    },
+    {
+      "id": "warn-004",
+      "company": "Small Shop LLC",
+      "ticker": null,
+      "state": "Texas",
+      "employees_affected": 50,
+      "layoff_date": "2026-04-20",
+      "notice_date": "2026-03-05",
+      "reason": "Closure"
+    },
+    {
+      "id": "warn-005",
+      "company": "Amazon.com Inc",
+      "ticker": "AMZN",
+      "state": "Washington",
+      "employees_affected": 2500,
+      "layoff_date": "2026-04-30",
+      "notice_date": "2026-03-09",
+      "reason": "Operational restructuring"
+    }
+  ]
+}
