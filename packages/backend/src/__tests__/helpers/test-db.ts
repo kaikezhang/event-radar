@@ -5,11 +5,28 @@ import * as schema from '../../db/schema.js';
 import type { Database } from '../../db/connection.js';
 
 /** Close PGlite with a timeout to prevent hanging in CI */
-export async function safeClose(client: PGlite, timeoutMs = 5000): Promise<void> {
+export async function safeClose(client: PGlite, timeoutMs = 3000): Promise<void> {
   await Promise.race([
     client.close(),
     new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
+}
+
+/** Close a Fastify server with a timeout to prevent hanging in CI */
+export async function safeCloseServer(
+  server: { close(): Promise<void> },
+  timeoutMs = 3000,
+): Promise<void> {
+  await Promise.race([
+    server.close(),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+/** Truncate all tables to clean data between tests (keeps the schema) */
+export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM deliveries`);
+  await db.execute(sql`DELETE FROM events`);
 }
 
 export async function createTestDb(): Promise<{

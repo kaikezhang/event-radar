@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { AlertRouter } from '@event-radar/delivery';
 import type { DeliveryService, AlertEvent } from '@event-radar/delivery';
+import { safeCloseServer } from './helpers/test-db.js';
 
 function mockService(name: string): DeliveryService & { send: ReturnType<typeof vi.fn> } {
   return { name, send: vi.fn().mockResolvedValue(undefined) };
@@ -22,7 +23,7 @@ describe('EventBus → delivery integration', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   const criticalEvent = {
@@ -107,6 +108,6 @@ describe('EventBus → delivery integration', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    await noDeliveryCtx.server.close();
+    await safeCloseServer(noDeliveryCtx.server);
   });
 });

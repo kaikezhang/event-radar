@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { resetMetrics, registry } from '../metrics.js';
+import { safeCloseServer } from './helpers/test-db.js';
 
 describe('GET /metrics', () => {
   let ctx: AppContext;
@@ -16,7 +17,7 @@ describe('GET /metrics', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('should return 200 with Prometheus text format', async () => {
@@ -79,7 +80,7 @@ describe('metrics tracking via event bus', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('should increment event counters when an event is published', async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
+import { safeCloseServer } from './helpers/test-db.js';
 
 describe('GET /api/health/ping', () => {
   let ctx: AppContext;
@@ -10,7 +11,7 @@ describe('GET /api/health/ping', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('should return pong with timestamp', async () => {

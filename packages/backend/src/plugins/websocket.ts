@@ -228,6 +228,8 @@ export async function registerWebSocketPlugin(
   // Start heartbeat interval
   if (!heartbeatInterval) {
     heartbeatInterval = setInterval(broadcastHeartbeat, HEARTBEAT_INTERVAL_MS);
+    // unref() so the interval doesn't prevent process/test runner exit
+    heartbeatInterval.unref();
   }
 
   server.get('/ws/events', { websocket: true }, async (socket, request) => {

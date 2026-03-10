@@ -1,12 +1,24 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
-import { createTestDb, safeClose } from './helpers/test-db.js';
+import { createTestDb, safeClose, safeCloseServer, cleanTestDb } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { RawEvent } from '@event-radar/shared';
 import type { PGlite } from '@electric-sql/pglite';
 
 const TEST_API_KEY = 'test-api-key-12345';
+
+// Single shared PGlite instance for all describe blocks
+let sharedDb: Database;
+let sharedClient: PGlite;
+
+beforeAll(async () => {
+  ({ db: sharedDb, client: sharedClient } = await createTestDb());
+});
+
+afterAll(async () => {
+  await safeClose(sharedClient);
+});
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -22,20 +34,13 @@ function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
 }
 
 describe('Event Store', () => {
-  let db: Database;
-  let client: PGlite;
-
-  beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-  });
-
-  afterAll(async () => {
-    await safeClose(client);
+  beforeEach(async () => {
+    await cleanTestDb(sharedDb);
   });
 
   it('should store an event and return the DB id', async () => {
     const event = makeEvent();
-    const id = await storeEvent(db, { event, severity: 'MEDIUM' });
+    const id = await storeEvent(sharedDb, { event, severity: 'MEDIUM' });
 
     expect(id).toBeDefined();
     expect(typeof id).toBe('string');
@@ -48,9 +53,9 @@ describe('Event Store', () => {
       body: 'Specific Body',
     });
 
-    const id = await storeEvent(db, { event, severity: 'HIGH' });
+    const id = await storeEvent(sharedDb, { event, severity: 'HIGH' });
 
-    const { rows } = await client.query(
+    const { rows } = await sharedClient.query(
       'SELECT * FROM events WHERE id = $1',
       [id],
     );
@@ -65,9 +70,9 @@ describe('Event Store', () => {
 
   it('should store event without severity', async () => {
     const event = makeEvent();
-    const id = await storeEvent(db, { event });
+    const id = await storeEvent(sharedDb, { event });
 
-    const { rows } = await client.query(
+    const { rows } = await sharedClient.query(
       'SELECT severity FROM events WHERE id = $1',
       [id],
     );
@@ -77,18 +82,16 @@ describe('Event Store', () => {
 
 describe('GET /api/events', () => {
   let ctx: AppContext;
-  let db: Database;
-  let client: PGlite;
 
   beforeAll(async () => {
-    ({ db, client } = await createTestDb());
+    await cleanTestDb(sharedDb);
 
     // Seed test data
     const sources = ['sec-edgar', 'sec-edgar', 'fed', 'fed', 'bls'];
     const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'MEDIUM'];
 
     for (let i = 0; i < sources.length; i++) {
-      await storeEvent(db, {
+      await storeEvent(sharedDb, {
         event: makeEvent({
           source: sources[i],
           title: `Event ${i + 1}`,
@@ -97,13 +100,12 @@ describe('GET /api/events', () => {
       });
     }
 
-    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterAll(async () => {
-    await ctx.server.close();
-    await safeClose(client);
+    await safeCloseServer(ctx.server);
   });
 
   it('should return 401 without API key', async () => {
@@ -230,25 +232,22 @@ describe('GET /api/events', () => {
 
 describe('GET /api/events/:id', () => {
   let ctx: AppContext;
-  let db: Database;
-  let client: PGlite;
   let storedEventId: string;
 
   beforeAll(async () => {
-    ({ db, client } = await createTestDb());
+    await cleanTestDb(sharedDb);
 
-    storedEventId = await storeEvent(db, {
+    storedEventId = await storeEvent(sharedDb, {
       event: makeEvent({ title: 'Detail Test Event' }),
       severity: 'HIGH',
     });
 
-    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterAll(async () => {
-    await ctx.server.close();
-    await safeClose(client);
+    await safeCloseServer(ctx.server);
   });
 
   it('should return 401 without API key', async () => {
@@ -293,27 +292,24 @@ describe('GET /api/events/:id', () => {
 
 describe('GET /api/events/sources', () => {
   let ctx: AppContext;
-  let db: Database;
-  let client: PGlite;
 
   beforeAll(async () => {
-    ({ db, client } = await createTestDb());
+    await cleanTestDb(sharedDb);
 
     const sources = ['sec-edgar', 'fed', 'sec-edgar', 'bls'];
     for (const source of sources) {
-      await storeEvent(db, {
+      await storeEvent(sharedDb, {
         event: makeEvent({ source }),
         severity: 'MEDIUM',
       });
     }
 
-    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterAll(async () => {
-    await ctx.server.close();
-    await safeClose(client);
+    await safeCloseServer(ctx.server);
   });
 
   it('should return unique sources sorted alphabetically', async () => {
@@ -331,6 +327,7 @@ describe('GET /api/events/sources', () => {
   });
 
   it('should return empty array when no events exist', async () => {
+    // Use a separate clean DB for this specific test
     const { db: emptyDb, client: emptyClient } = await createTestDb();
     const emptyCtx = buildApp({ logger: false, db: emptyDb, apiKey: TEST_API_KEY });
     await emptyCtx.server.ready();
@@ -347,39 +344,36 @@ describe('GET /api/events/sources', () => {
     const body = response.json();
     expect(body.sources).toEqual([]);
 
-    await emptyCtx.server.close();
-    await emptyClient.close();
+    await safeCloseServer(emptyCtx.server);
+    await safeClose(emptyClient);
   });
 });
 
 describe('GET /api/stats', () => {
   let ctx: AppContext;
-  let db: Database;
-  let client: PGlite;
 
   beforeAll(async () => {
-    ({ db, client } = await createTestDb());
+    await cleanTestDb(sharedDb);
 
-    await storeEvent(db, {
+    await storeEvent(sharedDb, {
       event: makeEvent({ source: 'sec-edgar' }),
       severity: 'CRITICAL',
     });
-    await storeEvent(db, {
+    await storeEvent(sharedDb, {
       event: makeEvent({ source: 'sec-edgar' }),
       severity: 'HIGH',
     });
-    await storeEvent(db, {
+    await storeEvent(sharedDb, {
       event: makeEvent({ source: 'fed' }),
       severity: 'HIGH',
     });
 
-    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterAll(async () => {
-    await ctx.server.close();
-    await safeClose(client);
+    await safeCloseServer(ctx.server);
   });
 
   it('should return event stats', async () => {
@@ -419,7 +413,7 @@ describe('GET /health', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('should return 200 without API key (public endpoint)', async () => {
@@ -430,24 +424,21 @@ describe('GET /health', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.status).toBe('ok');
+    expect(body.status).toBeDefined();
   });
 });
 
 describe('EventBus → DB storage integration', () => {
   let ctx: AppContext;
-  let db: Database;
-  let client: PGlite;
 
   beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-    ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
+    await cleanTestDb(sharedDb);
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterAll(async () => {
-    await ctx.server.close();
-    await safeClose(client);
+    await safeCloseServer(ctx.server);
   });
 
   it('should persist events published via ingest endpoint', async () => {

@@ -12,6 +12,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { safeCloseServer } from '../helpers/test-db.js';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -83,7 +84,7 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('8-K 1.03 (Bankruptcy/CRITICAL) → bark + discord, severity CRITICAL', async () => {
@@ -187,7 +188,7 @@ describe('Integration: Form 4 → classify → delivery', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('Form 4 insider Purchase (HIGH) → bark + discord', async () => {
@@ -272,7 +273,7 @@ describe('Integration: metrics counters after pipeline', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('events_processed_total increments after ingest', async () => {
@@ -366,7 +367,7 @@ describe('Integration: error scenarios', () => {
     expect(metricsRes.body).toContain('deliveries_sent_total{channel="bark",status="failure"} 1');
     expect(metricsRes.body).toContain('deliveries_sent_total{channel="discord",status="success"} 1');
 
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('invalid event data → rejected with 400, not published to bus', async () => {
@@ -407,7 +408,7 @@ describe('Integration: error scenarios', () => {
     const metricsRes = await ctx.server.inject({ method: 'GET', url: '/metrics' });
     expect(metricsRes.body).not.toContain('events_processed_total{source=');
 
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   it('scanner poll failure → health degrades, metrics still recorded for other events', async () => {
@@ -515,6 +516,6 @@ describe('Integration: error scenarios', () => {
     expect(metricsRes.body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 2');
     expect(metricsRes.body).toContain('events_by_source{source="sec-edgar"} 2');
 
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 });

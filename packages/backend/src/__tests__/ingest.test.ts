@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
+import { safeCloseServer } from './helpers/test-db.js';
 
 describe('POST /api/events/ingest', () => {
   let ctx: AppContext;
@@ -10,7 +11,7 @@ describe('POST /api/events/ingest', () => {
   });
 
   afterAll(async () => {
-    await ctx.server.close();
+    await safeCloseServer(ctx.server);
   });
 
   const validEvent = {
