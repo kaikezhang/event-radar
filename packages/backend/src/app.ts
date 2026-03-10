@@ -34,6 +34,7 @@ import { storeEvent } from './db/event-store.js';
 import { sql } from 'drizzle-orm';
 import { registerEventRoutes } from './routes/events.js';
 import { registerScannerRoutes } from './routes/scanners.js';
+import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -341,6 +342,7 @@ export function buildApp(options?: {
   // Register event query routes if db is available
   if (db) {
     registerEventRoutes(server, db);
+    registerOutcomeRoutes(server, db);
   }
 
   // Register scanner health routes

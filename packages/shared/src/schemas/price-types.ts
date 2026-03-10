@@ -41,3 +41,31 @@ export const PriceAfterEventSchema = z.object({
 });
 
 export type PriceAfterEvent = z.infer<typeof PriceAfterEventSchema>;
+
+export const IntervalStatsSchema = z.object({
+  label: z.string(),
+  avgChange: z.number(),
+  medianChange: z.number(),
+  winRate: z.number(),
+  sampleSize: z.number(),
+});
+
+export type IntervalStats = z.infer<typeof IntervalStatsSchema>;
+
+export const TypeStatsSchema = z.object({
+  count: z.number(),
+  avgChange1d: z.number(),
+  winRate1d: z.number(),
+});
+
+export type TypeStats = z.infer<typeof TypeStatsSchema>;
+
+export const OutcomeStatsSchema = z.object({
+  totalEvents: z.number(),
+  trackedEvents: z.number(),
+  byInterval: z.array(IntervalStatsSchema),
+  byEventType: z.record(z.string(), TypeStatsSchema),
+  bySource: z.record(z.string(), TypeStatsSchema),
+});
+
+export type OutcomeStats = z.infer<typeof OutcomeStatsSchema>;

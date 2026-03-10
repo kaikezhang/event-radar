@@ -1,0 +1,331 @@
+import { eq, count, sql } from 'drizzle-orm';
+import type { Result, OutcomeStats, RawEvent } from '@event-radar/shared';
+import { ok, err } from '@event-radar/shared';
+import { PriceService } from './price-service.js';
+import { eventOutcomes } from '../db/schema.js';
+import { events } from '../db/schema.js';
+import type { Database } from '../db/connection.js';
+
+/** Intervals in hours: 1h, 1d, 1w, 1m */
+const TRACKING_INTERVALS = [
+  { hours: 1, column: 'price_1h', changeCol: 'change_1h', label: 'T+1h' },
+  { hours: 24, column: 'price_1d', changeCol: 'change_1d', label: 'T+1d' },
+  { hours: 168, column: 'price_1w', changeCol: 'change_1w', label: 'T+1w' },
+  { hours: 720, column: 'price_1m', changeCol: 'change_1m', label: 'T+1m' },
+] as const;
+
+export interface OutcomeRecord {
+  id: number;
+  eventId: string;
+  ticker: string;
+  eventTime: Date;
+  eventPrice: string | null;
+  price1h: string | null;
+  price1d: string | null;
+  price1w: string | null;
+  price1m: string | null;
+  change1h: string | null;
+  change1d: string | null;
+  change1w: string | null;
+  change1m: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class OutcomeTracker {
+  private readonly db: Database;
+  private readonly priceService: PriceService;
+
+  constructor(db: Database, priceService?: PriceService) {
+    this.db = db;
+    this.priceService = priceService ?? new PriceService();
+  }
+
+  /**
+   * Schedule outcome tracking for a new event.
+   * Creates a row in event_outcomes with the event price and null interval prices.
+   */
+  async scheduleOutcomeTracking(event: RawEvent): Promise<Result<void, Error>> {
+    const ticker = this.extractTicker(event);
+    if (!ticker) {
+      return err(new Error(`No ticker found for event ${event.id}`));
+    }
+
+    const eventTime = event.timestamp ?? new Date();
+    const priceResult = await this.priceService.getPriceAt(ticker, eventTime);
+    const eventPrice = priceResult.ok ? priceResult.value : null;
+
+    try {
+      await this.db
+        .insert(eventOutcomes)
+        .values({
+          eventId: event.id,
+          ticker,
+          eventTime,
+          eventPrice: eventPrice != null ? String(eventPrice) : null,
+        })
+        .onConflictDoNothing();
+
+      return ok(undefined);
+    } catch (e) {
+      return err(e instanceof Error ? e : new Error(String(e)));
+    }
+  }
+
+  /**
+   * Process all pending outcomes whose interval is now due.
+   * Checks each interval (1h, 1d, 1w, 1m) and fills in prices that are due.
+   */
+  async processOutcomes(): Promise<void> {
+    const now = new Date();
+
+    for (const interval of TRACKING_INTERVALS) {
+      const cutoff = new Date(now.getTime() - interval.hours * 3_600_000);
+
+      // Find outcomes where this interval is null and the event is old enough
+      const pendingRows = await this.db
+        .select()
+        .from(eventOutcomes)
+        .where(
+          sql`${eventOutcomes.eventTime} <= ${cutoff} AND ${eventOutcomes[this.priceColumnKey(interval.column)]} IS NULL`,
+        )
+        .limit(50);
+
+      for (const row of pendingRows) {
+        await this.fillInterval(row, interval);
+      }
+    }
+  }
+
+  /**
+   * Get outcome data for a specific event.
+   */
+  async getOutcome(eventId: string): Promise<OutcomeRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.eventId, eventId))
+      .limit(1);
+
+    return (row as OutcomeRecord | undefined) ?? null;
+  }
+
+  /**
+   * Get outcomes for a specific ticker.
+   */
+  async getOutcomesByTicker(
+    ticker: string,
+    limit = 50,
+  ): Promise<OutcomeRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.ticker, ticker))
+      .orderBy(sql`${eventOutcomes.eventTime} DESC`)
+      .limit(limit);
+
+    return rows as OutcomeRecord[];
+  }
+
+  /**
+   * Compute aggregate outcome statistics with optional filters.
+   */
+  async getOutcomeStats(filters?: {
+    eventType?: string;
+    severity?: string;
+    source?: string;
+  }): Promise<OutcomeStats> {
+    // Total events
+    const [{ total: totalEvents }] = await this.db
+      .select({ total: count() })
+      .from(events);
+
+    // Tracked events
+    const [{ total: trackedEvents }] = await this.db
+      .select({ total: count() })
+      .from(eventOutcomes);
+
+    // Build filter conditions by joining events
+    const filterConditions: ReturnType<typeof sql>[] = [];
+    if (filters?.source) {
+      filterConditions.push(sql`${events.source} = ${filters.source}`);
+    }
+    if (filters?.severity) {
+      filterConditions.push(sql`${events.severity} = ${filters.severity}`);
+    }
+
+    const whereClause =
+      filterConditions.length > 0
+        ? sql`WHERE ${sql.join(filterConditions, sql` AND `)}`
+        : sql``;
+
+    // By interval stats
+    const byInterval = await this.computeIntervalStats(whereClause);
+
+    // By event type (source as proxy)
+    const byEventType = await this.computeGroupStats('source', whereClause);
+
+    // By source
+    const bySource = await this.computeGroupStats('source', whereClause);
+
+    return {
+      totalEvents,
+      trackedEvents,
+      byInterval,
+      byEventType,
+      bySource,
+    };
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────
+
+  private extractTicker(event: RawEvent): string | null {
+    if (event.metadata && typeof event.metadata === 'object') {
+      const meta = event.metadata as Record<string, unknown>;
+      if (typeof meta['ticker'] === 'string') return meta['ticker'];
+      if (Array.isArray(meta['tickers']) && typeof meta['tickers'][0] === 'string') {
+        return meta['tickers'][0];
+      }
+    }
+    return null;
+  }
+
+  private priceColumnKey(col: string): keyof typeof eventOutcomes.$inferSelect {
+    const map: Record<string, keyof typeof eventOutcomes.$inferSelect> = {
+      price_1h: 'price1h',
+      price_1d: 'price1d',
+      price_1w: 'price1w',
+      price_1m: 'price1m',
+    };
+    return map[col]!;
+  }
+
+  private async fillInterval(
+    row: typeof eventOutcomes.$inferSelect,
+    interval: (typeof TRACKING_INTERVALS)[number],
+  ): Promise<void> {
+    const targetTime = new Date(
+      row.eventTime.getTime() + interval.hours * 3_600_000,
+    );
+
+    const priceResult = await this.priceService.getPriceAt(
+      row.ticker,
+      targetTime,
+    );
+
+    if (!priceResult.ok || priceResult.value == null) return;
+
+    const price = priceResult.value;
+    const eventPrice = row.eventPrice ? Number(row.eventPrice) : null;
+    const change =
+      eventPrice != null && eventPrice !== 0
+        ? Math.round(((price - eventPrice) / eventPrice) * 100 * 10000) / 10000
+        : null;
+
+    const updates: Record<string, string | Date> = {
+      updatedAt: new Date(),
+    };
+    updates[this.priceColumnKey(interval.column)] = String(price);
+    if (change != null) {
+      updates[this.changeColumnKey(interval.changeCol)] = String(change);
+    }
+
+    await this.db
+      .update(eventOutcomes)
+      .set(updates)
+      .where(eq(eventOutcomes.id, row.id));
+  }
+
+  private changeColumnKey(col: string): keyof typeof eventOutcomes.$inferSelect {
+    const map: Record<string, keyof typeof eventOutcomes.$inferSelect> = {
+      change_1h: 'change1h',
+      change_1d: 'change1d',
+      change_1w: 'change1w',
+      change_1m: 'change1m',
+    };
+    return map[col]!;
+  }
+
+  private async computeIntervalStats(
+    _whereClause: ReturnType<typeof sql>, // eslint-disable-line @typescript-eslint/no-unused-vars
+  ): Promise<OutcomeStats['byInterval']> {
+    const intervals = [
+      { label: 'T+1h', col: 'change_1h' },
+      { label: 'T+1d', col: 'change_1d' },
+      { label: 'T+1w', col: 'change_1w' },
+      { label: 'T+1m', col: 'change_1m' },
+    ];
+
+    const results: OutcomeStats['byInterval'] = [];
+
+    for (const { label, col } of intervals) {
+      const rows = await this.db.execute(
+        sql.raw(
+          `SELECT
+            COUNT(*)::int AS sample_size,
+            COALESCE(AVG(eo.${col}::float), 0) AS avg_change,
+            COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY eo.${col}::float), 0) AS median_change,
+            COALESCE(
+              COUNT(CASE WHEN eo.${col}::float > 0 THEN 1 END)::float /
+              NULLIF(COUNT(eo.${col}), 0) * 100,
+              0
+            ) AS win_rate
+          FROM event_outcomes eo
+          JOIN events e ON e.id = eo.event_id
+          WHERE eo.${col} IS NOT NULL`,
+        ),
+      );
+
+      const rowsResult = rows as unknown as { rows?: Record<string, unknown>[] };
+      const rowArr = rowsResult.rows ?? (Array.isArray(rows) ? rows : []);
+      const r = (rowArr[0] ?? {}) as Record<string, unknown>;
+
+      results.push({
+        label,
+        avgChange: Number(r['avg_change'] ?? 0),
+        medianChange: Number(r['median_change'] ?? 0),
+        winRate: Number(r['win_rate'] ?? 0),
+        sampleSize: Number(r['sample_size'] ?? 0),
+      });
+    }
+
+    return results;
+  }
+
+    private async computeGroupStats(
+    groupBy: 'source',
+    _whereClause: ReturnType<typeof sql>, // eslint-disable-line @typescript-eslint/no-unused-vars
+  ): Promise<Record<string, { count: number; avgChange1d: number; winRate1d: number }>> {
+    const rows = await this.db.execute(
+      sql.raw(
+        `SELECT
+          e.${groupBy} AS group_key,
+          COUNT(*)::int AS cnt,
+          COALESCE(AVG(eo.change_1d::float), 0) AS avg_change_1d,
+          COALESCE(
+            COUNT(CASE WHEN eo.change_1d::float > 0 THEN 1 END)::float /
+            NULLIF(COUNT(eo.change_1d), 0) * 100,
+            0
+          ) AS win_rate_1d
+        FROM event_outcomes eo
+        JOIN events e ON e.id = eo.event_id
+        WHERE eo.change_1d IS NOT NULL
+        GROUP BY e.${groupBy}`,
+      ),
+    );
+
+    const result: Record<string, { count: number; avgChange1d: number; winRate1d: number }> = {};
+    const rowsResult = rows as unknown as { rows?: Record<string, unknown>[] };
+    const rowArr = rowsResult.rows ?? (Array.isArray(rows) ? rows : []);
+    for (const r of rowArr as Record<string, unknown>[]) {
+      const key = String(r['group_key'] ?? 'unknown');
+      result[key] = {
+        count: Number(r['cnt'] ?? 0),
+        avgChange1d: Number(r['avg_change_1d'] ?? 0),
+        winRate1d: Number(r['win_rate_1d'] ?? 0),
+      };
+    }
+
+    return result;
+  }
+}
