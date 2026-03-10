@@ -377,53 +377,55 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P3.4 — Additional Tier 1 Scanners (FDA + White House + DOJ)
+## Current Task: P3.5 — Analyst Ratings + Earnings Scanner
 
 ### Goal
-Build additional Tier 1 government/regulatory scanners: FDA approvals, White House executive orders, and DOJ antitrust actions.
+Build analyst ratings tracker and earnings monitor scanners.
 
-### FDA Scanner (`fda-scanner.ts`)
-- Data source: FDA openFDA API `https://api.fda.gov/drug/event.json` (free, no auth)
-- Also: FDA press releases RSS `https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds`
-- Track: drug approvals, PDUFA date decisions, safety alerts, warning letters
-- Emit events for: new drug approvals (NDA/BLA), Complete Response Letters (CRL), safety warnings
-- Extract ticker from company name when possible
-- Metadata: `{ drug_name, company, application_type, decision, pdufa_date, therapeutic_area }`
-- Poll interval: every 5 min for RSS, hourly for API
+### Analyst Ratings Scanner (`analyst-scanner.ts`)
+- Data source: Benzinga RSS or MarketBeat free tier
+- Alternative: scrape finviz.com analyst ratings page
+- Track: upgrades, downgrades, price target changes, initiations, reiterations
+- Emit events for: any rating change (upgrade/downgrade/initiation)
+- Severity: upgrade from Sell→Buy = HIGH, minor PT change = LOW
+- Metadata: `{ ticker, analyst_firm, analyst_name, old_rating, new_rating, old_pt, new_pt, action_type }`
+- Poll interval: every 10 min
 
-### White House Scanner (`whitehouse-scanner.ts`)
-- Data source: Federal Register API `https://www.federalregister.gov/api/v1/documents` (free, no auth)
-- Filter: presidential documents (executive orders, proclamations, memoranda)
-- Track: new executive orders, especially trade/tariff/industry-related
-- Keyword filter: tariff, trade, sanction, regulation, industry, energy, technology, defense
-- Metadata: `{ document_type, title, executive_order_number, signing_date, topics, federal_register_url }`
-- Poll interval: every 15 min
+### Earnings Scanner (`earnings-scanner.ts`)
+- Data source: Alpha Vantage earnings calendar (free tier, needs API key but make optional)
+- Alternative: scrape earnings whispers or use Yahoo Finance earnings calendar
+- Track: upcoming earnings dates (pre-market/after-hours), EPS estimates
+- Pre-event: alert 1 day before earnings
+- Post-event: actual EPS vs estimate, beat/miss/inline, revenue surprise
+- Metadata: `{ ticker, report_date, fiscal_quarter, eps_estimate, eps_actual, revenue_estimate, revenue_actual, surprise_pct, guidance }`
+- Poll interval: every 30 min
 
-### DOJ Antitrust Scanner (`doj-scanner.ts`)
-- Data source: DOJ press releases RSS `https://www.justice.gov/atr/press-releases/feed`
-- Track: merger challenges, antitrust lawsuits, consent decrees, investigations
-- Extract company names and tickers from press release titles
-- Emit events for: new antitrust actions, merger blocks, settlement announcements
-- Metadata: `{ action_type, companies, case_type, title, url, date }`
-- Poll interval: every 15 min
+### WARN Act Scanner (`warn-scanner.ts`)
+- Data source: US DOL WARN Act notices (state-level RSS/pages)
+- Track: mass layoff notices (>100 employees)
+- Extract company name and match to ticker
+- Metadata: `{ company, state, employees_affected, layoff_date, notice_date, reason }`
+- Poll interval: hourly
 
 ### Files to create
-- `packages/backend/src/scanners/fda-scanner.ts`
-- `packages/backend/src/scanners/whitehouse-scanner.ts`
-- `packages/backend/src/scanners/doj-scanner.ts`
-- `packages/backend/src/__tests__/fda-scanner.test.ts`
-- `packages/backend/src/__tests__/whitehouse-scanner.test.ts`
-- `packages/backend/src/__tests__/doj-scanner.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-fda-response.json`
-- `packages/backend/src/__tests__/fixtures/mock-federal-register.json`
-- `packages/backend/src/__tests__/fixtures/mock-doj-rss.xml`
+- `packages/backend/src/scanners/analyst-scanner.ts`
+- `packages/backend/src/scanners/earnings-scanner.ts`
+- `packages/backend/src/scanners/warn-scanner.ts`
+- `packages/backend/src/__tests__/analyst-scanner.test.ts`
+- `packages/backend/src/__tests__/earnings-scanner.test.ts`
+- `packages/backend/src/__tests__/warn-scanner.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-analyst-ratings.json`
+- `packages/backend/src/__tests__/fixtures/mock-earnings-calendar.json`
+- `packages/backend/src/__tests__/fixtures/mock-warn-notices.json`
 
 ### Requirements
 - Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
 - Register all scanners in app.ts
+- IMPORTANT: After adding new test files, update `packages/backend/eslint.config.js` and increase `maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING` if needed (currently 64)
 - Tests must use mock data (no real API calls in tests)
 - Tests must NOT use PGlite — use simple mocks for the event bus
 - All tests must complete in <10s
+- Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing to verify
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
