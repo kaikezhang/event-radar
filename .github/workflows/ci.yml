@@ -30,7 +30,7 @@ jobs:
         run: pnpm lint
 
       - name: Unit Tests
-        run: pnpm test
+        run: pnpm --filter @event-radar/backend test && pnpm --filter @event-radar/shared test && pnpm --filter @event-radar/frontend test
 
       - name: Build
         run: pnpm build
