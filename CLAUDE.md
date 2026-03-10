@@ -377,69 +377,85 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P4.2.2 — Event Outcome Tracker
+## Current Task: P4.2.3 — Win Rate Analysis API
 
 ### Goal
-Build the Event Outcome Tracker service that automatically tracks price changes after events are detected. Uses the PriceService (P4.2.1) to fetch prices at T+1h, T+1d, T+1w, T+1m intervals and stores results in the `event_outcomes` table.
+Build detailed win rate analysis API that extends the outcome tracker. Provides deep analytics for backtesting: win rates sliced by event type, severity, source, ticker, time period, and direction signal accuracy.
 
-### Outcome Tracker Service (`outcome-tracker.ts`)
-- Create `packages/backend/src/services/outcome-tracker.ts`
-- On new event with ticker → schedule outcome checks at T+1h, T+1d, T+1w, T+1m
+### Analysis Service (`win-rate-analysis.ts`)
+- Create `packages/backend/src/services/win-rate-analysis.ts`
 - Methods:
-  - `scheduleOutcomeTracking(event: Event): void` — register event for tracking
-  - `processOutcomes(): Promise<void>` — check all pending outcomes, fetch prices, update DB
-  - `getOutcome(eventId: string): Promise<EventOutcome | null>`
-  - `getOutcomesByTicker(ticker: string, limit?: number): Promise<EventOutcome[]>`
-  - `getOutcomeStats(filters?: { eventType?, severity?, source? }): Promise<OutcomeStats>`
-- Use a simple polling loop (every 5 min) to check which outcomes are due
-- Store results in `event_outcomes` table (from P4.2.1 schema)
+  - `getWinRateByEventType(interval?: string): Promise<WinRateBreakdown[]>` — win rate per event type
+  - `getWinRateBySeverity(interval?: string): Promise<WinRateBreakdown[]>` — win rate per severity level
+  - `getWinRateBySource(interval?: string): Promise<WinRateBreakdown[]>` — win rate per scanner source
+  - `getDirectionAccuracy(): Promise<DirectionAccuracy>` — how accurate are direction predictions
+  - `getTopPerformingSignals(limit?: number): Promise<SignalPerformance[]>` — best event type + source combos
+  - `getPerformanceOverTime(bucketDays?: number): Promise<PerformanceTrend[]>` — accuracy trend over time
+- All methods query `event_outcomes` table joined with `events`
 
-### Outcome Stats Types
-- Add to `packages/shared/src/schemas/price-types.ts`:
+### Types (add to shared)
 ```typescript
-export interface OutcomeStats {
+export interface WinRateBreakdown {
+  category: string;        // event type, severity level, or source name
   totalEvents: number;
   trackedEvents: number;
-  byInterval: {
-    label: string;           // "T+1h", "T+1d", etc.
-    avgChange: number;       // average % change
-    medianChange: number;
-    winRate: number;         // % of events where direction was correct
-    sampleSize: number;
-  }[];
-  byEventType: Record<string, {
-    count: number;
-    avgChange1d: number;
-    winRate1d: number;
-  }>;
-  bySource: Record<string, {
-    count: number;
-    avgChange1d: number;
-    winRate1d: number;
-  }>;
+  winRate1h: number;
+  winRate1d: number;
+  winRate1w: number;
+  avgReturn1d: number;
+  medianReturn1d: number;
+  bestReturn: number;
+  worstReturn: number;
+}
+
+export interface DirectionAccuracy {
+  totalPredictions: number;
+  correctPredictions: number;
+  accuracy: number;
+  byDirection: {
+    bullish: { total: number; correct: number; accuracy: number };
+    bearish: { total: number; correct: number; accuracy: number };
+    neutral: { total: number; correct: number; accuracy: number };
+  };
+}
+
+export interface SignalPerformance {
+  eventType: string;
+  source: string;
+  count: number;
+  winRate1d: number;
+  avgReturn1d: number;
+  sharpeRatio: number;
+}
+
+export interface PerformanceTrend {
+  period: string;          // "2026-W10", "2026-03"
+  eventCount: number;
+  winRate: number;
+  avgReturn: number;
 }
 ```
 
 ### API Endpoints
-- Add to existing Fastify routes:
-  - `GET /api/v1/outcomes/:eventId` — get outcome for specific event
-  - `GET /api/v1/outcomes/stats` — get aggregate outcome statistics
-  - `GET /api/v1/outcomes/ticker/:ticker` — get outcomes for ticker
+- `GET /api/v1/analysis/win-rate?groupBy=eventType|severity|source&interval=1d|1w`
+- `GET /api/v1/analysis/direction-accuracy`
+- `GET /api/v1/analysis/top-signals?limit=10`
+- `GET /api/v1/analysis/performance-trend?bucketDays=7`
 
 ### Files to create/modify
-- `packages/backend/src/services/outcome-tracker.ts` (new)
-- `packages/shared/src/schemas/price-types.ts` (add OutcomeStats)
-- `packages/backend/src/routes/outcomes.ts` (new API routes)
+- `packages/backend/src/services/win-rate-analysis.ts` (new)
+- `packages/backend/src/routes/analysis.ts` (new)
 - `packages/backend/src/app.ts` (register routes)
-- `packages/backend/src/__tests__/outcome-tracker.test.ts` (new)
+- `packages/shared/src/schemas/price-types.ts` (add types)
+- `packages/shared/src/index.ts` (export new types)
+- `packages/backend/src/__tests__/win-rate-analysis.test.ts` (new)
 
 ### Requirements
-- Use PriceService from `./price-service.ts` for price fetching
-- Follow existing service/route patterns in codebase
+- Use existing DB connection patterns from outcome-tracker
 - Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing
-- If eslint fails with `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js`
-- Tests must use mock data, no real API calls
-- Create branch `feat/outcome-tracker`, commit, push, create PR to main
+- If eslint `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js`
+- Tests must use mock data, no real DB
+- Create branch `feat/win-rate-analysis`, commit, push, create PR to main
 
 ### Scanner Plugin Interface (`scanner-plugin.ts`)
 - Define a `ScannerPlugin` interface that external plugins must implement
