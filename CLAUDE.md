@@ -377,112 +377,69 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P4.2.1 — Historical Price Data Fetching
+## Current Task: P4.2.2 — Event Outcome Tracker
 
 ### Goal
-Build historical price data fetching for backtesting framework. This is the foundation for outcome tracking and accuracy analysis.
+Build the Event Outcome Tracker service that automatically tracks price changes after events are detected. Uses the PriceService (P4.2.1) to fetch prices at T+1h, T+1d, T+1w, T+1m intervals and stores results in the `event_outcomes` table.
 
-### Price Service (`price-service.ts`)
-- Create `packages/backend/src/services/price-service.ts`
-- Use `yfinance` library to fetch historical price data
+### Outcome Tracker Service (`outcome-tracker.ts`)
+- Create `packages/backend/src/services/outcome-tracker.ts`
+- On new event with ticker → schedule outcome checks at T+1h, T+1d, T+1w, T+1m
 - Methods:
-  - `getPriceAt(ticker: string, date: Date): Promise<number | null>` — get closing price at specific date
-  - `getPriceChange(ticker: string, fromDate: Date, toDate: Date): Promise<{ percent: number; absolute: number }>`
-  - `getHistoricalPrices(ticker: string, startDate: Date, endDate: Date): Promise<PriceData[]>`
-  - `getPriceAfterEvent(ticker: string, eventTime: Date, intervals: number[]): Promise<PriceAfterEvent>` where intervals = [1h, 1d, 1w, 1m] in hours
-- Handle market holidays (return previous trading day's close)
-- Cache prices in memory (TTL 1 hour) to avoid repeated API calls
-- Error handling: return null for invalid tickers or API failures
+  - `scheduleOutcomeTracking(event: Event): void` — register event for tracking
+  - `processOutcomes(): Promise<void>` — check all pending outcomes, fetch prices, update DB
+  - `getOutcome(eventId: string): Promise<EventOutcome | null>`
+  - `getOutcomesByTicker(ticker: string, limit?: number): Promise<EventOutcome[]>`
+  - `getOutcomeStats(filters?: { eventType?, severity?, source? }): Promise<OutcomeStats>`
+- Use a simple polling loop (every 5 min) to check which outcomes are due
+- Store results in `event_outcomes` table (from P4.2.1 schema)
 
-### Price Types (`price-types.ts`)
-- Create `packages/shared/src/price-types.ts`
+### Outcome Stats Types
+- Add to `packages/shared/src/schemas/price-types.ts`:
 ```typescript
-export interface PriceData {
-  ticker: string;
-  date: Date;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export interface PriceChange {
-  ticker: string;
-  fromDate: Date;
-  toDate: Date;
-  fromPrice: number;
-  toPrice: number;
-  absolute: number;
-  percent: number;
-}
-
-export interface PriceAfterEvent {
-  ticker: string;
-  eventTime: Date;
-  prices: {
-    interval: number;        // hours: 1, 24, 168, 720
-    label: string;          // "T+1h", "T+1d", "T+1w", "T+1m"
-    price: number | null;
-    change: number | null;  // percent change from event price
-    absolute: number | null;
+export interface OutcomeStats {
+  totalEvents: number;
+  trackedEvents: number;
+  byInterval: {
+    label: string;           // "T+1h", "T+1d", etc.
+    avgChange: number;       // average % change
+    medianChange: number;
+    winRate: number;         // % of events where direction was correct
+    sampleSize: number;
   }[];
+  byEventType: Record<string, {
+    count: number;
+    avgChange1d: number;
+    winRate1d: number;
+  }>;
+  bySource: Record<string, {
+    count: number;
+    avgChange1d: number;
+    winRate1d: number;
+  }>;
 }
 ```
 
-### Database Schema Update
-- Add to `packages/backend/src/db/schema.sql`:
-```sql
--- Price cache table (for efficient lookups)
-CREATE TABLE IF NOT EXISTS price_cache (
-  ticker VARCHAR(10) NOT NULL,
-  date DATE NOT NULL,
-  close_price DECIMAL(10, 2),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  PRIMARY KEY (ticker, date)
-);
+### API Endpoints
+- Add to existing Fastify routes:
+  - `GET /api/v1/outcomes/:eventId` — get outcome for specific event
+  - `GET /api/v1/outcomes/stats` — get aggregate outcome statistics
+  - `GET /api/v1/outcomes/ticker/:ticker` — get outcomes for ticker
 
--- Event outcomes table (tracks price after events)
-CREATE TABLE IF NOT EXISTS event_outcomes (
-  id SERIAL PRIMARY KEY,
-  event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  ticker VARCHAR(10) NOT NULL,
-  event_time TIMESTAMP NOT NULL,
-  event_price DECIMAL(10, 2),
-  price_1h DECIMAL(10, 2),
-  price_1d DECIMAL(10, 2),
-  price_1w DECIMAL(10, 2),
-  price_1m DECIMAL(10, 2),
-  change_1h DECIMAL(10, 4),
-  change_1d DECIMAL(10, 4),
-  change_1w DECIMAL(10, 4),
-  change_1m DECIMAL(10, 4),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(event_id)
-);
-
--- Index for efficient queries
-CREATE INDEX idx_event_outcomes_ticker ON event_outcomes(ticker);
-CREATE INDEX idx_event_outcomes_event_time ON event_outcomes(event_time);
-```
-
-### Unit Tests
-- Create `packages/backend/src/__tests__/price-service.test.ts`
-- Mock yfinance to test price calculation logic
-- Test: price change calculation (correct percent/absolute)
-- Test: T+1h/d/w/m intervals (24h = 1 trading day)
-- Test: market holiday handling
-- Test: cache behavior
-- Test: error handling for invalid tickers
+### Files to create/modify
+- `packages/backend/src/services/outcome-tracker.ts` (new)
+- `packages/shared/src/schemas/price-types.ts` (add OutcomeStats)
+- `packages/backend/src/routes/outcomes.ts` (new API routes)
+- `packages/backend/src/app.ts` (register routes)
+- `packages/backend/src/__tests__/outcome-tracker.test.ts` (new)
 
 ### Requirements
-- Use yfinance for price data (already in project deps)
-- Follow existing service patterns in codebase
-- Register new tables in schema.ts if using ORM
+- Use PriceService from `./price-service.ts` for price fetching
+- Follow existing service/route patterns in codebase
 - Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing
-- If eslint fails with `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js` (currently 64)
-- Create branch `feat/price-service`, commit, push, create PR to main
+- If eslint fails with `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js`
+- Tests must use mock data, no real API calls
+- Create branch `feat/outcome-tracker`, commit, push, create PR to main
 
 ### Scanner Plugin Interface (`scanner-plugin.ts`)
 - Define a `ScannerPlugin` interface that external plugins must implement
