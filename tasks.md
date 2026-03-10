@@ -51,7 +51,11 @@ Phase 1A 全部完成 ✅ 等主人确认后启动 Phase 1B。
 - [ ] **P2.3** Event Detail panel
 - [x] **P2.4** Chart panel（TradingView Lightweight Charts）✅
 - [x] **P2.5** System Health bar + Auth ✅
-- [~] **P2.6** Deployment + E2E tests
+- [x] **P2.6** Deployment + E2E tests ✅
+
+---
+
+## Phase 2 完成！🎉
 - [ ] **P2.6** Deployment + E2E tests
 
 ---
