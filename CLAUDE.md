@@ -44,41 +44,55 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.1.1 Event Similarity Matching
+## Current Task: P4.1.2 Cross-Source Event Dedup & Merge
 
 ### Requirements
 
-**目标**: 实现事件相似度匹配算法，找出相似事件
+**目标**: 同一事件从多个源收到时，自动去重合并为一条
 
-1. **Similarity Service** (`packages/backend/src/services/similarity.ts`)
-   - `calculateSimilarity(event1, event2): number` — 返回 0-1 相似度分数
-   - 算法:
-     - Ticker match: +0.3 (同一股票)
-     - Time window: 30天内 +0.2, 7天内 +0.3
-     - Content similarity: 关键词重叠度 (Jaccard) 或 embedding cosine similarity
-     - Source correlation: 同一行业/板块 +0.1
-   - 返回 `{ score: number, factors: { ticker: number, time: number, content: number, source: number } }`
+1. **Dedup Service** (`packages/backend/src/services/event-dedup.ts`)
+   - `findDuplicates(newEvent): Promise<DedupResult>` — 查找已有重复事件
+   - 去重规则（按优先级）:
+     - **Exact match**: 同 source + 同 sourceId → 100% 重复
+     - **Strong match**: 同 ticker + 同 eventType + 时间差<5min + 标题相似度>0.8 → 高置信重复
+     - **Likely match**: 同 ticker + 时间差<30min + 内容相似度>0.7 → 可能重复
+   - 使用 P4.1.1 的 similarity service 计算内容相似度
 
-2. **Similar Events API** (`GET /events/:id/similar?limit=10`)
-   - 查询同 ticker 事件
-   - 计算相似度分数
-   - 返回 top N 最相似事件
+2. **Merge Logic** (`packages/backend/src/services/event-merger.ts`)
+   - `mergeEvents(primary, duplicates): MergedEvent`
+   - 合并策略:
+     - 保留最早的事件作为 primary
+     - 合并所有 source URLs 到 `sources[]` 数组
+     - severity 取最高值
+     - tags 取并集
+     - 记录合并历史: `mergedFrom: string[]` (被合并事件 ID 列表)
 
-3. **Database** (`event_similarities` table)
-   - `event_id_1`, `event_id_2`, `similarity_score`, `factors`, `created_at`
-   - Index on (event_id_1, similarity_score DESC)
-   - 定期批量计算并存储
+3. **Database Schema**
+   - `events` 表新增字段: `merged_from text[]`, `source_urls jsonb`, `is_duplicate boolean default false`
+   - 被合并的事件标记 `is_duplicate = true`，不在 feed 中显示
 
-4. **Tests** 
-   - Unit tests for similarity algorithm
-   - Mock events with known similarity
+4. **Pipeline Integration**
+   - 新事件进入 pipeline 时先跑 dedup check
+   - 如果找到重复 → merge 而不是创建新记录
+   - Event bus emit `event:merged` 事件
+
+5. **API Updates**
+   - `GET /events` 默认过滤 `is_duplicate = false`
+   - `GET /events/:id` 返回 `sources[]` 和 `mergedFrom`
+
+6. **Tests**
+   - 精确重复检测
+   - 跨源重复检测（同一 SEC filing 从 SEC + 新闻两个源收到）
+   - 合并逻辑测试
+   - Pipeline 集成测试
 
 ### Files to create/modify
-- `packages/shared/src/schemas/similarity-types.ts` — Zod schemas
-- `packages/backend/src/services/similarity.ts` — Core similarity logic
-- `packages/backend/src/routes/similarity.ts` — REST endpoints
-- `packages/backend/src/app.ts` — Register routes
-- `packages/backend/src/__tests__/similarity.test.ts`
+- `packages/shared/src/schemas/dedup-types.ts` — Zod schemas
+- `packages/backend/src/services/event-dedup.ts` — 去重逻辑
+- `packages/backend/src/services/event-merger.ts` — 合并逻辑
+- `packages/backend/src/db/schema.ts` — 新增字段
+- `packages/backend/src/__tests__/event-dedup.test.ts`
+- `packages/backend/src/__tests__/event-merger.test.ts`
 
 3. **CI/CD** (GitHub Actions)
    - Auto build + test on PR
