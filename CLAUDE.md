@@ -377,85 +377,67 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
-## Current Task: P4.2.3 — Win Rate Analysis API
+## Current Task: P4.1.1 — 事件相似度匹配算法
 
 ### Goal
-Build detailed win rate analysis API that extends the outcome tracker. Provides deep analytics for backtesting: win rates sliced by event type, severity, source, ticker, time period, and direction signal accuracy.
+Build event similarity matching that groups related events across different sources. Given a new event, find similar/related events based on ticker overlap, time proximity, and content similarity.
 
-### Analysis Service (`win-rate-analysis.ts`)
-- Create `packages/backend/src/services/win-rate-analysis.ts`
+### Similarity Service (`event-similarity.ts`)
+- Create `packages/backend/src/services/event-similarity.ts`
 - Methods:
-  - `getWinRateByEventType(interval?: string): Promise<WinRateBreakdown[]>` — win rate per event type
-  - `getWinRateBySeverity(interval?: string): Promise<WinRateBreakdown[]>` — win rate per severity level
-  - `getWinRateBySource(interval?: string): Promise<WinRateBreakdown[]>` — win rate per scanner source
-  - `getDirectionAccuracy(): Promise<DirectionAccuracy>` — how accurate are direction predictions
-  - `getTopPerformingSignals(limit?: number): Promise<SignalPerformance[]>` — best event type + source combos
-  - `getPerformanceOverTime(bucketDays?: number): Promise<PerformanceTrend[]>` — accuracy trend over time
-- All methods query `event_outcomes` table joined with `events`
+  - `findSimilarEvents(eventId: string, options?: SimilarityOptions): Promise<SimilarEvent[]>` — find similar events for a given event
+  - `computeSimilarity(eventA: Event, eventB: Event): SimilarityScore` — pairwise similarity score
+  - `buildSimilarityIndex(): void` — pre-compute similarity clusters (optional, for batch processing)
+- Similarity factors (weighted):
+  - **Ticker overlap** (weight 0.4): shared tickers between events → Jaccard index
+  - **Time proximity** (weight 0.3): events within 30min → high score, decays exponentially
+  - **Content similarity** (weight 0.3): keyword overlap in headlines/summaries → cosine similarity on TF-IDF or simple Jaccard on extracted keywords
+- Threshold: similarity >= 0.5 to be considered "similar"
 
 ### Types (add to shared)
 ```typescript
-export interface WinRateBreakdown {
-  category: string;        // event type, severity level, or source name
-  totalEvents: number;
-  trackedEvents: number;
-  winRate1h: number;
-  winRate1d: number;
-  winRate1w: number;
-  avgReturn1d: number;
-  medianReturn1d: number;
-  bestReturn: number;
-  worstReturn: number;
+export interface SimilarityOptions {
+  maxResults?: number;       // default 10
+  timeWindowMinutes?: number; // default 60
+  minScore?: number;         // default 0.5
+  sameTickerOnly?: boolean;  // default false
 }
 
-export interface DirectionAccuracy {
-  totalPredictions: number;
-  correctPredictions: number;
-  accuracy: number;
-  byDirection: {
-    bullish: { total: number; correct: number; accuracy: number };
-    bearish: { total: number; correct: number; accuracy: number };
-    neutral: { total: number; correct: number; accuracy: number };
-  };
+export interface SimilarEvent {
+  eventId: string;
+  score: number;             // 0-1 composite similarity
+  tickerScore: number;       // 0-1
+  timeScore: number;         // 0-1
+  contentScore: number;      // 0-1
+  event: Event;              // the similar event
 }
 
-export interface SignalPerformance {
-  eventType: string;
-  source: string;
-  count: number;
-  winRate1d: number;
-  avgReturn1d: number;
-  sharpeRatio: number;
-}
-
-export interface PerformanceTrend {
-  period: string;          // "2026-W10", "2026-03"
-  eventCount: number;
-  winRate: number;
-  avgReturn: number;
+export interface SimilarityScore {
+  composite: number;
+  ticker: number;
+  time: number;
+  content: number;
 }
 ```
 
 ### API Endpoints
-- `GET /api/v1/analysis/win-rate?groupBy=eventType|severity|source&interval=1d|1w`
-- `GET /api/v1/analysis/direction-accuracy`
-- `GET /api/v1/analysis/top-signals?limit=10`
-- `GET /api/v1/analysis/performance-trend?bucketDays=7`
+- `GET /api/v1/events/:id/similar?limit=10&timeWindow=60&minScore=0.5`
 
 ### Files to create/modify
-- `packages/backend/src/services/win-rate-analysis.ts` (new)
-- `packages/backend/src/routes/analysis.ts` (new)
-- `packages/backend/src/app.ts` (register routes)
-- `packages/shared/src/schemas/price-types.ts` (add types)
+- `packages/backend/src/services/event-similarity.ts` (new)
+- `packages/shared/src/schemas/similarity-types.ts` (new — types + zod schemas)
 - `packages/shared/src/index.ts` (export new types)
-- `packages/backend/src/__tests__/win-rate-analysis.test.ts` (new)
+- `packages/backend/src/routes/events.ts` (add similar endpoint)
+- `packages/backend/src/__tests__/event-similarity.test.ts` (new)
 
 ### Requirements
-- Use existing DB connection patterns from outcome-tracker
+- Use existing DB connection patterns
+- Keyword extraction: simple tokenize + stopword removal (no external NLP lib needed)
 - Run `pnpm build && pnpm --filter @event-radar/backend lint` before committing
 - If eslint `maximumDefaultProjectFileMatchCount` error, increase it in `packages/backend/eslint.config.js`
 - Tests must use mock data, no real DB
-- Create branch `feat/win-rate-analysis`, commit, push, create PR to main
+- ≥10 tests: same ticker high score, different ticker low score, time decay, content overlap, threshold filtering, empty results, options handling
+- Create branch `feat/event-similarity`, commit, push, create PR to main
 
 ### Scanner Plugin Interface (`scanner-plugin.ts`)
 - Define a `ScannerPlugin` interface that external plugins must implement
