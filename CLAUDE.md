@@ -44,27 +44,27 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P2.5 System Health Bar + Auth
+## Current Task: P2.6 Deployment + E2E Tests
 
 ### Requirements
 
-1. **System Health Bar**
-   - Scanner status indicators (green/yellow/red)
-   - Show last event time
-   - Database connection status
-   - Memory/CPU usage (optional)
+1. **Docker Compose**
+   - All services containerized
+   - PostgreSQL, Backend, Frontend, SEC service
+   - Health checks for all services
 
-2. **Authentication Improvements**
-   - Add user session management
-   - Store API key securely
-   - Logout functionality
+2. **E2E Tests with Playwright**
+   - Test login flow
+   - Test event list loads
+   - Test event detail panel
+   - Test chart renders
 
-### Files to modify
-- `packages/frontend/src/components/health-bar.tsx` - health status
-- Update auth context
+3. **CI/CD** (GitHub Actions)
+   - Auto build + test on PR
+   - Deploy to cloud (optional)
 
 ### Verification
-`turbo build` must pass.
+All tests pass.
 
 **Goal**: TradingView chart with event markers overlay.
 

@@ -50,7 +50,8 @@ Phase 1A 全部完成 ✅ 等主人确认后启动 Phase 1B。
 - [ ] **P2.2** Live Event Feed（WebSocket + virtual list）
 - [ ] **P2.3** Event Detail panel
 - [x] **P2.4** Chart panel（TradingView Lightweight Charts）✅
-- [~] **P2.5** System Health bar + Auth
+- [x] **P2.5** System Health bar + Auth ✅
+- [~] **P2.6** Deployment + E2E tests
 - [ ] **P2.6** Deployment + E2E tests
 
 ---
