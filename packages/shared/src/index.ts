@@ -78,6 +78,18 @@ export {
   type SimilarityScore,
   type SimilarEvent,
 } from './schemas/similarity-types.js';
+export {
+  CrossSourceMatchTypeSchema,
+  CrossSourceDedupResultSchema,
+  SourceUrlSchema,
+  MergedEventDataSchema,
+  CrossSourceDedupOptionsSchema,
+  type CrossSourceMatchType,
+  type CrossSourceDedupResult,
+  type SourceUrl,
+  type MergedEventData,
+  type CrossSourceDedupOptions,
+} from './schemas/dedup-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
