@@ -8,7 +8,6 @@ import {
   type Result,
 } from '@event-radar/shared';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
-import { extractTickers } from './ticker-extractor.js';
 
 const POLL_INTERVAL_MS = 1_800_000; // 30 minutes
 const MIN_TRADE_AMOUNT = 50_000;
