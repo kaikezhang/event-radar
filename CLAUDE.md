@@ -377,16 +377,40 @@ Unlike Tier 2 (browser scraping), these sources provide proper RSS feeds — muc
 ### Dependencies to add (packages/backend)
 - `rss-parser`
 
+## Current Task: P3.1 — Reddit & StockTwits Social Scanners
+
+### Goal
+Build Tier 4 social media scanners: Reddit (WSB + stocks subreddits) and StockTwits sentiment tracker.
+
+### Reddit Scanner (`reddit-scanner.ts`)
+- Poll Reddit JSON API (no auth needed): `https://www.reddit.com/r/wallstreetbets/hot.json?limit=25`
+- Also scan: r/stocks, r/investing, r/options
+- Extract: tickers from title/body (use existing ticker-extractor), upvote count, comment count, awards
+- Anomaly detection: flag posts with unusually high engagement (>500 upvotes in <2h, or >200 comments)
+- Emit events with metadata: `{ subreddit, upvotes, comments, post_url, sentiment_keywords }`
+- Rate limit: 1 request per subreddit per 60s (Reddit rate limits unauthenticated at 10/min)
+- Dedup by post ID
+
+### StockTwits Scanner (`stocktwits-scanner.ts`)  
+- Poll StockTwits trending: `https://api.stocktwits.com/api/2/trending/symbols.json` (no auth)
+- Poll symbol stream: `https://api.stocktwits.com/api/2/streams/symbol/{SYMBOL}.json`
+- Track: trending symbols, message volume spikes, bullish/bearish sentiment ratio
+- Emit events when: new symbol enters trending, sentiment flips, volume spike >2x average
+- Rate limit: respect 200 requests/hour limit
+
 ### Files to create
-- `packages/backend/src/scanners/rss/rss-parser.ts`
-- `packages/backend/src/scanners/rss/ticker-extractor.ts`
-- `packages/backend/src/scanners/pr-newswire-scanner.ts`
-- `packages/backend/src/scanners/businesswire-scanner.ts`
-- `packages/backend/src/scanners/globenewswire-scanner.ts`
-- `packages/backend/src/__tests__/rss-parser.test.ts`
-- `packages/backend/src/__tests__/ticker-extractor.test.ts`
-- `packages/backend/src/__tests__/newswire-scanners.test.ts`
-- `packages/backend/src/__tests__/fixtures/mock-rss-feed.xml`
+- `packages/backend/src/scanners/reddit-scanner.ts`
+- `packages/backend/src/scanners/stocktwits-scanner.ts`
+- `packages/backend/src/__tests__/reddit-scanner.test.ts`
+- `packages/backend/src/__tests__/stocktwits-scanner.test.ts`
+- `packages/backend/src/__tests__/fixtures/mock-reddit-response.json`
+- `packages/backend/src/__tests__/fixtures/mock-stocktwits-response.json`
+
+### Requirements
+- Follow existing scanner patterns (extend BaseScanner, register in scanner registry)
+- Tests must use mock data (no real API calls in tests)
+- Tests must NOT use PGlite — use simple mocks for the event bus
+- All tests must complete in <10s
 
 ### Verification
 `turbo build && turbo test && turbo lint` must pass.
