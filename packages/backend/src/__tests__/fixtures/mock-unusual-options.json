@@ -1,0 +1,59 @@
+{
+  "data": [
+    {
+      "id": "opt-001",
+      "ticker": "TSLA",
+      "strike": 250,
+      "expiry": "2026-04-17",
+      "option_type": "call",
+      "premium": 500000,
+      "volume": 15000,
+      "open_interest": 2000,
+      "trade_type": "sweep"
+    },
+    {
+      "id": "opt-002",
+      "ticker": "AAPL",
+      "strike": 200,
+      "expiry": "2026-03-21",
+      "option_type": "put",
+      "premium": 250000,
+      "volume": 8000,
+      "open_interest": 1500,
+      "trade_type": "block"
+    },
+    {
+      "id": "opt-003",
+      "ticker": "NVDA",
+      "strike": 900,
+      "expiry": "2026-06-20",
+      "option_type": "call",
+      "premium": 1200000,
+      "volume": 5000,
+      "open_interest": 800,
+      "trade_type": "sweep"
+    },
+    {
+      "id": "opt-004",
+      "ticker": "SPY",
+      "strike": 520,
+      "expiry": "2026-03-14",
+      "option_type": "put",
+      "premium": 30000,
+      "volume": 200,
+      "open_interest": 5000,
+      "trade_type": "split"
+    },
+    {
+      "id": "opt-005",
+      "ticker": "AMD",
+      "strike": 180,
+      "expiry": "2026-04-17",
+      "option_type": "call",
+      "premium": 75000,
+      "volume": 12000,
+      "open_interest": 1000,
+      "trade_type": "sweep"
+    }
+  ]
+}
