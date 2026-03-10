@@ -70,6 +70,14 @@ export {
   type SignalPerformance,
   type PerformanceTrend,
 } from './schemas/win-rate-types.js';
+export {
+  SimilarityOptionsSchema,
+  SimilarityScoreSchema,
+  SimilarEventSchema,
+  type SimilarityOptions,
+  type SimilarityScore,
+  type SimilarEvent,
+} from './schemas/similarity-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
