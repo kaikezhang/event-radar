@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count, gte, lte, or, ilike } from 'drizzle-orm';
+import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+import { findSimilarEvents } from '../services/event-similarity.js';
 
 // Query params schema for GET /api/events
 const ListEventsQuerySchema = {
@@ -71,9 +72,28 @@ const SimilarEventsQuerySchema = {
     limit: {
       type: 'integer',
       minimum: 1,
-      maximum: 20,
+      maximum: 50,
       default: 10,
       description: 'Maximum similar events to return',
+    },
+    timeWindow: {
+      type: 'integer',
+      minimum: 1,
+      maximum: 10080,
+      default: 60,
+      description: 'Time window in minutes to search for similar events',
+    },
+    minScore: {
+      type: 'number',
+      minimum: 0,
+      maximum: 1,
+      default: 0.5,
+      description: 'Minimum similarity score threshold (0-1)',
+    },
+    sameTickerOnly: {
+      type: 'boolean',
+      default: false,
+      description: 'Only return events with the same ticker',
     },
   },
 } as const;
@@ -202,8 +222,8 @@ export function registerEventRoutes(
 
   /**
    * GET /api/events/:id/similar
-   * Get similar events based on ticker, tags, or source
-   * Returns up to 10 similar events from the last 7 days
+   * Find similar events using weighted similarity scoring
+   * Factors: ticker overlap (0.4), time proximity (0.3), content similarity (0.3)
    */
   server.get('/api/events/:id/similar', {
     schema: {
@@ -212,9 +232,14 @@ export function registerEventRoutes(
     },
   }, async (request, reply) => {
     const { id } = request.params as EventParams;
-    const query = request.query as { limit?: number };
+    const query = request.query as {
+      limit?: number;
+      timeWindow?: number;
+      minScore?: number;
+      sameTickerOnly?: boolean;
+    };
 
-    // Get the source event
+    // Check that the event exists
     const [sourceEvent] = await db
       .select()
       .from(events)
@@ -225,62 +250,14 @@ export function registerEventRoutes(
       return reply.status(404).send({ error: 'Event not found' });
     }
 
-    const limit = Math.min(query.limit || 10, 10);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const similar = await findSimilarEvents(db, id, {
+      maxResults: query.limit,
+      timeWindowMinutes: query.timeWindow,
+      minScore: query.minScore,
+      sameTickerOnly: query.sameTickerOnly,
+    });
 
-    // Build similarity conditions
-    const similarityConditions = [];
-
-    // 1. Same source
-    similarityConditions.push(eq(events.source, sourceEvent.source));
-
-    // 2. Same severity if available
-    if (sourceEvent.severity) {
-      similarityConditions.push(eq(events.severity, sourceEvent.severity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'));
-    }
-
-    // 3. Title contains similar keywords (extract key terms from title)
-    if (sourceEvent.title) {
-      // Extract significant words from title (longer than 4 chars)
-      const words = sourceEvent.title
-        .split(/\s+/)
-        .filter((w) => w.length > 4)
-        .slice(0, 3);
-      
-      if (words.length > 0) {
-        // Create OR conditions for title search
-        const titleConditions = words.map((word) => 
-          ilike(events.title, `%${word}%`)
-        );
-        if (titleConditions.length > 0) {
-          similarityConditions.push(or(...titleConditions));
-        }
-      }
-    }
-
-    // Exclude the source event itself
-    const excludeCondition = sql`${events.id} != ${id}`;
-
-    // Date filter (last 7 days)
-    const dateCondition = gte(events.receivedAt, sevenDaysAgo);
-
-    // Combine all conditions
-    const where = and(
-      excludeCondition,
-      dateCondition,
-      similarityConditions.length > 0 ? or(...similarityConditions) : undefined
-    );
-
-    // Fetch similar events
-    const similarEvents = await db
-      .select()
-      .from(events)
-      .where(where)
-      .orderBy(sql`${events.receivedAt} desc`)
-      .limit(limit);
-
-    return { data: similarEvents };
+    return { data: similar };
   });
 
   /**
