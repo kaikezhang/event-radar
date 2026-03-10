@@ -10,6 +10,7 @@ import {
   date,
   index,
   primaryKey,
+  boolean,
 } from 'drizzle-orm/pg-core';
 
 export const events = pgTable('events', {
@@ -27,6 +28,10 @@ export const events = pgTable('events', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // Dedup fields
+  mergedFrom: text('merged_from').array(),
+  sourceUrls: jsonb('source_urls'),
+  isDuplicate: boolean('is_duplicate').default(false),
 });
 
 export const priceCache = pgTable(
