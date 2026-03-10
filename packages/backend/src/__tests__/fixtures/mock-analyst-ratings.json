@@ -1,0 +1,69 @@
+{
+  "ratings": [
+    {
+      "id": "ar-001",
+      "ticker": "NVDA",
+      "analyst_firm": "Goldman Sachs",
+      "analyst_name": "Toshiya Hari",
+      "old_rating": "Neutral",
+      "new_rating": "Buy",
+      "old_pt": 120,
+      "new_pt": 180,
+      "action_type": "upgrade",
+      "published_at": "2026-03-10T08:00:00Z",
+      "url": "https://benzinga.com/analyst/nvda-upgrade"
+    },
+    {
+      "id": "ar-002",
+      "ticker": "TSLA",
+      "analyst_firm": "Morgan Stanley",
+      "analyst_name": "Adam Jonas",
+      "old_rating": "Overweight",
+      "new_rating": "Underweight",
+      "old_pt": 400,
+      "new_pt": 250,
+      "action_type": "downgrade",
+      "published_at": "2026-03-10T07:30:00Z",
+      "url": "https://benzinga.com/analyst/tsla-downgrade"
+    },
+    {
+      "id": "ar-003",
+      "ticker": "PLTR",
+      "analyst_firm": "Wedbush",
+      "analyst_name": "Dan Ives",
+      "old_rating": null,
+      "new_rating": "Outperform",
+      "old_pt": null,
+      "new_pt": 35,
+      "action_type": "initiation",
+      "published_at": "2026-03-10T06:00:00Z",
+      "url": "https://benzinga.com/analyst/pltr-initiation"
+    },
+    {
+      "id": "ar-004",
+      "ticker": "AAPL",
+      "analyst_firm": "JP Morgan",
+      "analyst_name": null,
+      "old_rating": "Overweight",
+      "new_rating": "Overweight",
+      "old_pt": 210,
+      "new_pt": 225,
+      "action_type": "pt_change",
+      "published_at": "2026-03-10T05:00:00Z",
+      "url": "https://benzinga.com/analyst/aapl-pt"
+    },
+    {
+      "id": "ar-005",
+      "ticker": "META",
+      "analyst_firm": "Barclays",
+      "analyst_name": "Ross Sandler",
+      "old_rating": "Sell",
+      "new_rating": "Buy",
+      "old_pt": 300,
+      "new_pt": 550,
+      "action_type": "upgrade",
+      "published_at": "2026-03-10T04:00:00Z",
+      "url": "https://benzinga.com/analyst/meta-upgrade"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "earnings": [
+    {
+      "id": "earn-001",
+      "ticker": "NVDA",
+      "report_date": "2026-03-11",
+      "report_time": "after-hours",
+      "fiscal_quarter": "Q4 2026",
+      "eps_estimate": 0.82,
+      "eps_actual": null,
+      "revenue_estimate": 38500000000,
+      "revenue_actual": null,
+      "surprise_pct": null,
+      "guidance": null
+    },
+    {
+      "id": "earn-002",
+      "ticker": "AAPL",
+      "report_date": "2026-03-08",
+      "report_time": "after-hours",
+      "fiscal_quarter": "Q1 2026",
+      "eps_estimate": 2.35,
+      "eps_actual": 2.58,
+      "revenue_estimate": 124000000000,
+      "revenue_actual": 128500000000,
+      "surprise_pct": 9.8,
+      "guidance": "Raised full-year guidance"
+    },
+    {
+      "id": "earn-003",
+      "ticker": "TSLA",
+      "report_date": "2026-03-08",
+      "report_time": "after-hours",
+      "fiscal_quarter": "Q4 2025",
+      "eps_estimate": 0.75,
+      "eps_actual": 0.60,
+      "revenue_estimate": 25800000000,
+      "revenue_actual": 24100000000,
+      "surprise_pct": -20.0,
+      "guidance": "Lowered FY26 deliveries forecast"
+    },
+    {
+      "id": "earn-004",
+      "ticker": "MSFT",
+      "report_date": "2026-03-08",
+      "report_time": "pre-market",
+      "fiscal_quarter": "Q2 2026",
+      "eps_estimate": 3.10,
+      "eps_actual": 3.12,
+      "revenue_estimate": 65000000000,
+      "revenue_actual": 65200000000,
+      "surprise_pct": 0.6,
+      "guidance": null
+    },
+    {
+      "id": "earn-005",
+      "ticker": "AMZN",
+      "report_date": "2026-04-15",
+      "report_time": "after-hours",
+      "fiscal_quarter": "Q1 2026",
+      "eps_estimate": 1.15,
+      "eps_actual": null,
+      "revenue_estimate": 155000000000,
+      "revenue_actual": null,
+      "surprise_pct": null,
+      "guidance": null
+    }
+  ]
+}
