@@ -5,9 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 4 — P4.2.1 历史价格数据获取** (待启动)
+**Phase 4 — P4.1.1 事件相似度匹配算法** (待启动)
 
-Phase 3 全部完成 ✅ 启动 Phase 4 Intelligence Layer
+Phase 4.2 回测框架全部完成 ✅ 进入 P4.1 关联引擎
 
 ---
 
@@ -86,17 +86,10 @@ Phase 3 全部完成 ✅ 启动 Phase 4 Intelligence Layer
   - 2+源确认同一事件 → severity 升级
   - 配置：多少源触发升级
 
-### P4.2 回测框架
-- [ ] **P4.2.1** 历史价格数据获取
-  - 集成 yfinance 获取历史价格
-  - T+1h, T+1d, T+1w, T+1m 价格变化计算
-- [ ] **P4.2.2** 事件结果追踪表
-  - `event_outcomes` table: event_id, ticker, price_at_event, price_1h, price_1d, price_1w, price_1m
-  - 每日 cron job 更新价格
-- [ ] **P4.2.3** 胜率分析 API
-  - 按 event_type 统计胜率
-  - 按 severity 统计胜率
-  - 按 source 统计胜率
+### P4.2 回测框架 ✅ (2026-03-10)
+- [x] **P4.2.1** 历史价格数据获取 — PR #23
+- [x] **P4.2.2** 事件结果追踪表 — PR #24
+- [x] **P4.2.3** 胜率分析 API — PR #25
 
 ### P4.3 准确率追踪 & 自改进
 - [ ] **P4.3.1** 分类准确率记录
