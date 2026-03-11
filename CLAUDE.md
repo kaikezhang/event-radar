@@ -44,92 +44,131 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.3.1 — 分类准确率记录
+## Current Task: P4.3.2 — 方向信号准确率 & 用户反馈
 
 ### Goal
-追踪 AI 分类的准确率：将分类预测（severity, direction）与实际市场结果对比，计算准确率，为后续自适应调整提供数据基础。
+P4.3.2 + P4.3.3 合并：增强方向信号准确率的细粒度追踪，并添加用户反馈机制让用户标记预测是否正确。
 
 ### Requirements
 
-1. **Classification Accuracy Service** (`packages/backend/src/services/classification-accuracy.ts`)
-   - `recordPrediction(eventId, prediction): Promise<void>` — 记录分类预测
-   - `recordOutcome(eventId, outcome): Promise<void>` — 记录实际结果
-   - `evaluateAccuracy(eventId): Promise<AccuracyResult>` — 对比预测 vs 结果
-   - `getAccuracyStats(options): Promise<AccuracyStats>` — 汇总准确率统计
-   - 准确率维度:
-     - **Severity 准确率**: 预测 severity vs 实际影响大小 (price move magnitude)
-     - **Direction 准确率**: 预测涨/跌 vs 实际涨/跌 (TP/TN/FP/FN)
-     - **按源分类**: 每个 scanner source 的分类准确率
-     - **按事件类型**: 每种 event type 的准确率
-     - **按时间**: 滚动 7/30/90 天准确率
+1. **Direction Signal Analytics** (`packages/backend/src/services/direction-analytics.ts`)
+   - `getDirectionBreakdown(options): Promise<DirectionBreakdown>` — 按时间窗口的方向准确率
+     - 分 T+1h, T+1d, T+1w 三个维度评估方向预测
+     - 每个维度独立计算 TP/TN/FP/FN
+     - 价格变化 > +1% = bullish outcome, < -1% = bearish, 其余 = neutral
+   - `getConfidenceCalibration(options): Promise<CalibrationData[]>` — 置信度校准
+     - 按 confidence 分桶 (0-0.2, 0.2-0.4, ..., 0.8-1.0)
+     - 每个桶的实际准确率 vs 预测 confidence
+     - 完美校准 = 对角线
+   - `getTopMispredictions(options): Promise<Misprediction[]>` — 最大误判列表
+     - 高 confidence 但预测错误的事件
+     - 按 |confidence - actual_accuracy| 降序排列
 
-2. **Types** (`packages/shared/src/schemas/accuracy-types.ts`)
+2. **User Feedback Service** (`packages/backend/src/services/user-feedback.ts`)
+   - `submitFeedback(eventId, feedback): Promise<void>` — 用户标记预测正确/错误
+   - `getFeedback(eventId): Promise<UserFeedback | null>` — 获取反馈
+   - `getFeedbackStats(): Promise<FeedbackStats>` — 反馈统计
+   - Feedback 类型: `correct`, `incorrect`, `partially_correct`
+   - 可选: 用户可添加 note (自由文本)
+
+3. **Types** (`packages/shared/src/schemas/feedback-types.ts`)
    ```typescript
-   export interface ClassificationPrediction {
-     eventId: string;
-     predictedSeverity: string;     // CRITICAL/HIGH/MEDIUM/LOW
-     predictedDirection: string;    // bullish/bearish/neutral
-     confidence: number;            // 0-1
-     classifiedBy: string;          // 'rule-engine' | 'llm' | 'hybrid'
-     classifiedAt: string;
+   export interface DirectionBreakdown {
+     period: string;
+     horizons: {
+       '1h': DirectionMetrics;
+       '1d': DirectionMetrics;
+       '1w': DirectionMetrics;
+     };
    }
 
-   export interface ClassificationOutcome {
-     eventId: string;
-     actualDirection: string;       // bullish/bearish/neutral (based on price move)
-     priceChangePercent1h: number;
-     priceChangePercent1d: number;
-     priceChangePercent1w: number;
-     evaluatedAt: string;
+   export interface DirectionMetrics {
+     total: number;
+     accuracy: number;
+     tp: number; tn: number; fp: number; fn: number;
+     precision: number; recall: number; f1: number;
    }
 
-   export interface AccuracyResult {
-     eventId: string;
-     severityCorrect: boolean;
-     directionCorrect: boolean;
-     confidenceCalibration: number; // how well confidence matched reality
+   export interface CalibrationData {
+     bucket: string;          // "0.0-0.2", "0.2-0.4", etc.
+     avgConfidence: number;
+     actualAccuracy: number;
+     count: number;
    }
 
-   export interface AccuracyStats {
-     totalEvaluated: number;
-     severityAccuracy: number;      // 0-1
-     directionAccuracy: number;     // 0-1
-     truePositives: number;
-     trueNegatives: number;
-     falsePositives: number;
-     falseNegatives: number;
-     precision: number;
-     recall: number;
-     f1Score: number;
-     bySource: Record<string, { accuracy: number; count: number }>;
-     byEventType: Record<string, { accuracy: number; count: number }>;
-     period: string;                // '7d' | '30d' | '90d' | 'all'
+   export interface Misprediction {
+     eventId: string;
+     title: string;
+     predictedDirection: string;
+     actualDirection: string;
+     confidence: number;
+     priceChange1d: number;
+   }
+
+   export interface UserFeedback {
+     id: string;
+     eventId: string;
+     verdict: 'correct' | 'incorrect' | 'partially_correct';
+     note: string | null;
+     createdAt: string;
+   }
+
+   export interface FeedbackStats {
+     total: number;
+     correct: number;
+     incorrect: number;
+     partiallyCorrect: number;
+     agreementRate: number;  // feedback agrees with auto-evaluation
    }
    ```
 
-3. **Database Schema** — `classification_predictions` 表 + `classification_outcomes` 表
-   - `classification_predictions`: id, event_id (FK), predicted_severity, predicted_direction, confidence, classified_by, classified_at
-   - `classification_outcomes`: id, event_id (FK), actual_direction, price_change_1h, price_change_1d, price_change_1w, evaluated_at
+4. **Database Schema**
+   - `user_feedback` 表: id, event_id (FK unique), verdict, note, created_at, updated_at
    - 用 drizzle-orm schema 定义
 
-4. **Pipeline Integration**
-   - 分类完成时 → 自动调用 `recordPrediction`
-   - P4.2 outcome tracker 记录价格变化时 → 自动调用 `recordOutcome` + `evaluateAccuracy`
-   - 准确率统计每 100 个事件 emit 一次 `accuracy:updated` 到 event bus
-
 5. **API Endpoints**
-   - `GET /api/v1/accuracy/stats?period=30d` — 准确率统计
-   - `GET /api/v1/accuracy/stats?groupBy=source` — 按源分组统计
-   - `GET /api/v1/accuracy/stats?groupBy=eventType` — 按事件类型分组
-   - `GET /api/v1/accuracy/events/:id` — 单个事件的预测 vs 结果
+   - `GET /api/v1/accuracy/direction?period=30d` — 方向准确率 breakdown
+   - `GET /api/v1/accuracy/calibration` — 置信度校准数据
+   - `GET /api/v1/accuracy/mispredictions?limit=20` — 最大误判
+   - `POST /api/v1/feedback/:eventId` — 提交反馈 `{ verdict, note? }`
+   - `GET /api/v1/feedback/:eventId` — 获取反馈
+   - `GET /api/v1/feedback/stats` — 反馈统计
+   - 所有 endpoints 需要 API key auth
 
-6. **Tests** (≥12 tests)
-   - 记录预测
-   - 记录结果
-   - 正确评估 direction (TP/TN/FP/FN)
-   - Severity 准确率计算
+6. **Tests** (≥15 tests)
+   - Direction breakdown 各时间窗口计算
+   - T+1h vs T+1d 不同结果
+   - Confidence calibration 分桶正确
+   - Mispredictions 排序正确
+   - 提交 feedback
+   - 重复提交 feedback（upsert）
+   - 获取不存在的 feedback → null
+   - Feedback stats 计算
+   - Agreement rate（feedback vs auto-evaluation 一致性）
+   - API auth 验证
    - 空数据处理
-   - 按源分组统计
+   - 阈值边界（+1% exactly）
+
+### Files to create/modify
+- `packages/shared/src/schemas/feedback-types.ts` — Zod schemas + types
+- `packages/shared/src/index.ts` — export
+- `packages/backend/src/db/schema.ts` — user_feedback 表
+- `packages/backend/src/services/direction-analytics.ts` — 方向分析
+- `packages/backend/src/services/user-feedback.ts` — 用户反馈
+- `packages/backend/src/routes/accuracy.ts` — 新增 endpoints
+- `packages/backend/src/routes/feedback.ts` — 反馈 API
+- `packages/backend/src/app.ts` — 注册 routes
+- `packages/backend/src/__tests__/direction-analytics.test.ts`
+- `packages/backend/src/__tests__/user-feedback.test.ts`
+
+### Dependencies
+- P4.3.1 classification accuracy service（读取 predictions + outcomes）
+- P4.2 outcome tracker（价格变化数据）
+
+### Verification
+- `pnpm build && pnpm --filter @event-radar/backend lint` must pass
+- All tests pass
+- Create branch `feat/direction-feedback`, commit, push, create PR to main
    - 按事件类型统计
    - 时间窗口过滤 (7d/30d/90d)
    - Confidence calibration 计算
