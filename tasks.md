@@ -5,9 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 4 — P4.4.3 告警预算系统** (待启动)
+**Phase 4 — P4.5.1 历史事件浏览器** (待启动)
 
-P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4.1+4.4.2 ✅
+P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4 ✅
 
 ---
 
@@ -100,14 +100,10 @@ P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4.1+4.4.2 ✅
   - 递归下降 DSL parser, AND/OR 优先级, NOT/IN/CONTAINS/MATCHES
   - Rule engine v2: first-match-wins, CRUD API, test/validate endpoints
   - 26 tests (11 parser + 8 engine + 7 API), 2279 行
-- [ ] **P4.4.3** 告警预算系统
-  - 每小时最大告警数限制
-  - 优先级队列：HIGH > MEDIUM > LOW
-  - 超过预算时抑制 LOW priority
-- [ ] **P4.4.4** 渐进式 severity
-  - 新事件默认 MEDIUM
-  - 多源确认后升级到 HIGH
-  - 用户交互后锁定 severity
+- [x] **P4.4.3+P4.4.4** 告警预算系统 + 渐进式 Severity ✅ PR #35
+  - 告警流量控制: 每小时预算、按优先级分配、CRITICAL 永远放行
+  - 渐进式 severity: 多源确认自动升级、用户锁定、降级
+  - 21 tests, 1508 行
 
 ### P4.5 高级仪表盘
 - [ ] **P4.5.1** 历史事件浏览器
