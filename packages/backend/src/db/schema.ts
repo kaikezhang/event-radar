@@ -6,6 +6,7 @@ import {
   timestamp,
   jsonb,
   serial,
+  integer,
   decimal,
   date,
   index,
@@ -76,6 +77,50 @@ export const eventOutcomes = pgTable(
   (table) => [
     index('idx_event_outcomes_ticker').on(table.ticker),
     index('idx_event_outcomes_event_time').on(table.eventTime),
+  ],
+);
+
+export const storyGroups = pgTable(
+  'story_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    tickers: jsonb('tickers').notNull().$type<string[]>(),
+    eventType: varchar('event_type', { length: 100 }).notNull(),
+    severity: varchar('severity', { length: 20 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    eventCount: integer('event_count').notNull().default(1),
+    firstEventAt: timestamp('first_event_at', { withTimezone: true }).notNull(),
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_story_groups_status').on(table.status),
+    index('idx_story_groups_last_event_at').on(table.lastEventAt),
+  ],
+);
+
+export const storyEvents = pgTable(
+  'story_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storyGroupId: uuid('story_group_id')
+      .notNull()
+      .references(() => storyGroups.id, { onDelete: 'cascade' }),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    sequenceNumber: integer('sequence_number').notNull(),
+    isKeyEvent: boolean('is_key_event').notNull().default(false),
+  },
+  (table) => [
+    index('idx_story_events_story_group_id').on(table.storyGroupId),
+    index('idx_story_events_event_id').on(table.eventId),
   ],
 );
 

@@ -90,6 +90,18 @@ export {
   type MergedEventData,
   type CrossSourceDedupOptions,
 } from './schemas/dedup-types.js';
+export {
+  StoryGroupStatusSchema,
+  StoryEventSchema,
+  StoryGroupSchema,
+  StoryGroupResultSchema,
+  StoryGroupOptionsSchema,
+  type StoryGroupStatus,
+  type StoryEvent,
+  type StoryGroup,
+  type StoryGroupResult,
+  type StoryGroupOptions,
+} from './schemas/story-group-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
