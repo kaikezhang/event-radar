@@ -13,7 +13,7 @@ import {
   primaryKey,
   boolean,
 } from 'drizzle-orm/pg-core';
-import type { RuleActionValue, RuleConditionNode } from '@event-radar/shared';
+import type { BudgetConfig, Priority, RuleActionValue, RuleConditionNode } from '@event-radar/shared';
 
 export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -274,5 +274,88 @@ export const alertRules = pgTable(
   (table) => [
     index('idx_alert_rules_rule_order').on(table.ruleOrder),
     index('idx_alert_rules_enabled').on(table.enabled),
+  ],
+);
+
+export const alertLog = pgTable(
+  'alert_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    priority: varchar('priority', { length: 20 }).notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    suppressed: boolean('suppressed').notNull().default(false),
+    suppressionReason: text('suppression_reason'),
+  },
+  (table) => [
+    index('idx_alert_log_event_id').on(table.eventId),
+    index('idx_alert_log_sent_at').on(table.sentAt),
+    index('idx_alert_log_suppressed').on(table.suppressed),
+  ],
+);
+
+export const budgetConfig = pgTable(
+  'budget_config',
+  {
+    id: integer('id').primaryKey().default(1),
+    maxAlertsPerHour: integer('max_alerts_per_hour').notNull().default(50),
+    priorityShares: jsonb('priority_shares')
+      .notNull()
+      .$type<BudgetConfig['priorityShares']>(),
+    windowMinutes: integer('window_minutes').notNull().default(60),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_budget_config_updated_at').on(table.updatedAt)],
+);
+
+export const severityOverrides = pgTable(
+  'severity_overrides',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' })
+      .unique(),
+    severity: varchar('severity', { length: 20 }).notNull().$type<Priority>(),
+    locked: boolean('locked').notNull().default(false),
+    lockedBy: varchar('locked_by', { length: 20 }),
+    sourceCount: integer('source_count').notNull().default(1),
+    reason: text('reason').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_severity_overrides_event_id').on(table.eventId),
+    index('idx_severity_overrides_locked').on(table.locked),
+  ],
+);
+
+export const severityChanges = pgTable(
+  'severity_changes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    previousSeverity: varchar('previous_severity', { length: 20 })
+      .notNull()
+      .$type<Priority>(),
+    newSeverity: varchar('new_severity', { length: 20 }).notNull().$type<Priority>(),
+    reason: text('reason').notNull(),
+    changedBy: varchar('changed_by', { length: 20 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_severity_changes_event_id').on(table.eventId),
+    index('idx_severity_changes_created_at').on(table.createdAt),
   ],
 );

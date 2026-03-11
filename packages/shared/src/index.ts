@@ -199,3 +199,15 @@ export {
   type RuleInput,
   type RuleTestRequest,
 } from './schemas/rule-types.js';
+export {
+  BudgetConfigSchema,
+  BudgetUsageSchema,
+  BudgetDecisionSchema,
+  SeverityResultSchema,
+  SeverityChangeSchema,
+  type BudgetConfig,
+  type BudgetUsage,
+  type BudgetDecision,
+  type SeverityResult,
+  type SeverityChange,
+} from './schemas/alert-budget-types.js';
