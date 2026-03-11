@@ -34,4 +34,18 @@ describe('GET /health', () => {
     expect(firstBody.startedAt).toBe(new Date(firstBody.startedAt).toISOString());
     expect(secondBody.startedAt).toBe(firstBody.startedAt);
   });
+
+  it('returns uptimeSeconds as a non-negative number', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(typeof body.uptimeSeconds).toBe('number');
+    expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+  });
 });

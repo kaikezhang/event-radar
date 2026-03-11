@@ -131,6 +131,7 @@ export function buildApp(options?: {
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
+  const startTime = Date.now();
   const eventBus = new InMemoryEventBus();
   const registry = new ScannerRegistry();
   const alertRouter = options?.alertRouter ?? buildAlertRouter();
@@ -391,6 +392,7 @@ export function buildApp(options?: {
     return reply.send({
       status: dbStatus === 'connected' ? 'ok' : 'degraded',
       startedAt,
+      uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
       scanners,
       db: {
         status: dbStatus,
