@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import backendPackage from '../package.json' with { type: 'json' };
 import {
   InMemoryEventBus,
   ScannerRegistry,
@@ -392,6 +393,7 @@ export function buildApp(options?: {
 
     return reply.send({
       status: dbStatus === 'connected' ? 'ok' : 'degraded',
+      version: backendPackage.version,
       startedAt,
       uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
       scanners,
