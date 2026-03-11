@@ -38,6 +38,7 @@ import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerWinRateRoutes } from './routes/win-rate.js';
 import { registerStoryGroupRoutes } from './routes/story-groups.js';
 import { registerAccuracyRoutes } from './routes/accuracy.js';
+import { registerFeedbackRoutes } from './routes/feedback.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -384,6 +385,7 @@ export function buildApp(options?: {
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
     registerAccuracyRoutes(server, db, { apiKey });
+    registerFeedbackRoutes(server, db, { apiKey });
   }
 
   // Register scanner health routes

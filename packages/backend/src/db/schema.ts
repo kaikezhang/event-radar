@@ -167,6 +167,26 @@ export const storyEvents = pgTable(
   ],
 );
 
+export const userFeedback = pgTable(
+  'user_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' })
+      .unique(),
+    verdict: varchar('verdict', { length: 30 }).notNull(),
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_user_feedback_event_id').on(table.eventId)],
+);
+
 export const deliveries = pgTable('deliveries', {
   id: uuid('id').primaryKey().defaultRandom(),
   eventId: uuid('event_id')

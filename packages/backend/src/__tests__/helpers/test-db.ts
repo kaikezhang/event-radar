@@ -25,6 +25,7 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM user_feedback`);
   await db.execute(sql`DELETE FROM deliveries`);
   await db.execute(sql`DELETE FROM classification_outcomes`);
   await db.execute(sql`DELETE FROM classification_predictions`);
@@ -101,6 +102,17 @@ export async function createTestDb(): Promise<{
       price_change_1d DECIMAL(10, 4) NOT NULL,
       price_change_1w DECIMAL(10, 4) NOT NULL,
       evaluated_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS user_feedback (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      verdict VARCHAR(30) NOT NULL,
+      note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 

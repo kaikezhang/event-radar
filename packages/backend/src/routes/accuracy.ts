@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
+import { DirectionAnalyticsService } from '../services/direction-analytics.js';
 import type { Database } from '../db/connection.js';
 
 const EventIdParamsSchema = {
@@ -15,6 +16,21 @@ const AccuracyStatsQuerySchema = {
   properties: {
     period: { type: 'string', enum: ['7d', '30d', '90d', 'all'] },
     groupBy: { type: 'string', enum: ['source', 'eventType'] },
+  },
+} as const;
+
+const DirectionQuerySchema = {
+  type: 'object',
+  properties: {
+    period: { type: 'string', enum: ['7d', '30d', '90d', 'all'] },
+  },
+} as const;
+
+const MispredictionsQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+    period: { type: 'string', enum: ['7d', '30d', '90d', 'all'] },
   },
 } as const;
 
@@ -57,6 +73,7 @@ export function registerAccuracyRoutes(
   options?: AccuracyRouteOptions,
 ): void {
   const accuracyService = new ClassificationAccuracyService(db);
+  const directionService = new DirectionAnalyticsService(db);
 
   server.get('/api/v1/accuracy/stats', {
     schema: { querystring: AccuracyStatsQuerySchema },
@@ -97,5 +114,41 @@ export function registerAccuracyRoutes(
     }
 
     return details;
+  });
+
+  server.get('/api/v1/accuracy/direction', {
+    schema: { querystring: DirectionQuerySchema },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getDirectionBreakdown({ period: query.period });
+  });
+
+  server.get('/api/v1/accuracy/calibration', {
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getConfidenceCalibration({ period: query.period });
+  });
+
+  server.get('/api/v1/accuracy/mispredictions', {
+    schema: { querystring: MispredictionsQuerySchema },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      limit?: number;
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getTopMispredictions({
+      limit: query.limit,
+      period: query.period,
+    });
   });
 }
