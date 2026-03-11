@@ -37,6 +37,7 @@ import { registerScannerRoutes } from './routes/scanners.js';
 import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerWinRateRoutes } from './routes/win-rate.js';
 import { registerStoryGroupRoutes } from './routes/story-groups.js';
+import { registerAccuracyRoutes } from './routes/accuracy.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -57,6 +58,16 @@ import {
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebSocketPlugin } from './plugins/websocket.js';
+import { OutcomeTracker } from './services/outcome-tracker.js';
+import { ClassificationAccuracyService } from './services/classification-accuracy.js';
+import type {
+  AccuracyDirection,
+  ClassificationPrediction,
+  ClassificationResult,
+  LlmClassificationResult,
+  Result,
+  RawEvent,
+} from '@event-radar/shared';
 
 export interface AppContext {
   server: FastifyInstance;
@@ -123,6 +134,13 @@ export function buildApp(options?: {
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
   const deduplicator = new EventDeduplicator();
+  const accuracyService = db
+    ? new ClassificationAccuracyService(db, { eventBus })
+    : undefined;
+  const outcomeTracker =
+    db != null
+      ? new OutcomeTracker(db, undefined, accuracyService)
+      : undefined;
 
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
@@ -256,7 +274,7 @@ export function buildApp(options?: {
   }
 
   // Wire EventBus → LLM classifier (async enrichment, fire-and-forget)
-  if (llmClassifier) {
+  if (llmClassifier && !db) {
     eventBus.subscribe(async (event) => {
       const ruleResult = ruleEngine.classify(event);
       const llmResult = await llmClassifier.classify(event, ruleResult);
@@ -273,7 +291,25 @@ export function buildApp(options?: {
   if (db) {
     eventBus.subscribe(async (event) => {
       const result = ruleEngine.classify(event);
-      await storeEvent(db, { event, severity: result.severity });
+      const eventId = await storeEvent(db, { event, severity: result.severity });
+      const llmResult = llmClassifier
+        ? await llmClassifier.classify(event, result)
+        : undefined;
+
+      if (llmClassifier && llmResult) {
+        llmClassificationsTotal.inc({ status: llmResult.ok ? 'success' : 'failure' });
+      }
+
+      if (accuracyService) {
+        await accuracyService.recordPrediction(
+          eventId,
+          buildPredictionPayload(event, result, llmResult),
+        );
+      }
+
+      if (outcomeTracker) {
+        await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
+      }
     });
   }
 
@@ -347,10 +383,61 @@ export function buildApp(options?: {
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
+    registerAccuracyRoutes(server, db);
   }
 
   // Register scanner health routes
   registerScannerRoutes(server, registry);
 
   return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator };
+}
+
+function buildPredictionPayload(
+  event: RawEvent,
+  ruleResult: ClassificationResult,
+  llmResult?: Result<LlmClassificationResult, Error>,
+): Omit<ClassificationPrediction, 'eventId'> {
+  if (llmResult?.ok) {
+    return {
+      predictedSeverity: llmResult.value.severity,
+      predictedDirection: normalizeLlmDirection(llmResult.value.direction),
+      confidence: llmResult.value.confidence,
+      classifiedBy: 'hybrid',
+      classifiedAt: new Date().toISOString(),
+    };
+  }
+
+  return {
+    predictedSeverity: ruleResult.severity,
+    predictedDirection: extractFallbackDirection(event),
+    confidence: ruleResult.confidence,
+    classifiedBy: 'rule-engine',
+    classifiedAt: new Date().toISOString(),
+  };
+}
+
+function extractFallbackDirection(event: RawEvent): AccuracyDirection {
+  const direction = event.metadata?.['direction'];
+  if (typeof direction === 'string') {
+    const normalized = direction.toLowerCase();
+    if (
+      normalized === 'bullish' ||
+      normalized === 'bearish' ||
+      normalized === 'neutral'
+    ) {
+      return normalized;
+    }
+  }
+
+  return 'neutral';
+}
+
+function normalizeLlmDirection(direction: LlmClassificationResult['direction']): AccuracyDirection {
+  if (direction === 'BULLISH') {
+    return 'bullish';
+  }
+  if (direction === 'BEARISH') {
+    return 'bearish';
+  }
+  return 'neutral';
 }
