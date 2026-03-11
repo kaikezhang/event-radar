@@ -97,6 +97,8 @@ export function isHighEngagement(
 
 export class RedditScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500);
+  private readonly responseTextCache = new WeakMap<Response, string>();
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({
@@ -113,7 +115,7 @@ export class RedditScanner extends BaseScanner {
 
       for (const subreddit of SUBREDDITS) {
         const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`;
-        const response = await fetch(url, {
+        const response = await this.fetchFn(url, {
           headers: {
             'User-Agent': 'event-radar/1.0',
           },
@@ -123,14 +125,15 @@ export class RedditScanner extends BaseScanner {
           continue; // Skip this subreddit but don't fail the whole poll
         }
 
-        const json = (await response.json()) as RedditApiResponse;
+        const json = await this.readJson(response);
         const posts = parseRedditResponse(json);
 
         for (const post of posts) {
-          if (this.seenIds.has(post.id)) continue;
+          const seenKey = `${subreddit}:${post.id}`;
+          if (this.seenIds.has(seenKey)) continue;
           if (post.stickied) continue;
 
-          this.seenIds.add(post.id);
+          this.seenIds.add(seenKey);
 
           const fullText = `${post.title} ${post.selftext}`;
           const tickers = extractTickers(fullText);
@@ -169,5 +172,18 @@ export class RedditScanner extends BaseScanner {
       const error = e instanceof Error ? e : new Error(String(e));
       return err(error);
     }
+  }
+
+  private async readJson(response: Response): Promise<RedditApiResponse> {
+    if (response.bodyUsed) {
+      const cached = this.responseTextCache.get(response);
+      if (cached != null) {
+        return JSON.parse(cached) as RedditApiResponse;
+      }
+    }
+
+    const text = await response.text();
+    this.responseTextCache.set(response, text);
+    return JSON.parse(text) as RedditApiResponse;
   }
 }

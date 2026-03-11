@@ -25,6 +25,7 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM alert_rules`);
   await db.execute(sql`DELETE FROM reclassification_queue`);
   await db.execute(sql`DELETE FROM weight_adjustments`);
   await db.execute(sql`DELETE FROM source_weights`);
@@ -136,6 +137,20 @@ export async function createTestDb(): Promise<{
       new_weights JSONB NOT NULL,
       reason TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS alert_rules (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      dsl TEXT NOT NULL,
+      conditions_ast JSONB NOT NULL,
+      actions JSONB NOT NULL,
+      rule_order INTEGER NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 

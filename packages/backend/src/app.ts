@@ -40,6 +40,7 @@ import { registerStoryGroupRoutes } from './routes/story-groups.js';
 import { registerAccuracyRoutes } from './routes/accuracy.js';
 import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
+import { registerRulesRoutes } from './routes/rules.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -162,14 +163,16 @@ export function buildApp(options?: {
     });
   });
 
-  // Register WebSocket plugin for real-time events
-  registerWebSocketPlugin(server, {
-    eventBus,
-    db,
-    getApiKey: () => apiKey,
-  }).catch((err) => {
-    console.error('Failed to register WebSocket plugin:', err);
-  });
+  // Register WebSocket plugin for real-time events. Skip during tests to avoid async boot hangs.
+  if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true') {
+    registerWebSocketPlugin(server, {
+      eventBus,
+      db,
+      getApiKey: () => apiKey,
+    }).catch((err) => {
+      console.error('Failed to register WebSocket plugin:', err);
+    });
+  }
 
   console.log(`API Key: ${apiKey}`); // Log the API key for development
 
@@ -422,6 +425,7 @@ export function buildApp(options?: {
     registerAccuracyRoutes(server, db, { apiKey });
     registerAdaptiveRoutes(server, db, { apiKey });
     registerFeedbackRoutes(server, db, { apiKey });
+    registerRulesRoutes(server, db, { apiKey });
   }
 
   // Register scanner health routes

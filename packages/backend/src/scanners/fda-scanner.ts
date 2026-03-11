@@ -33,7 +33,6 @@ const FDA_ACTION_KEYWORDS = [
   'phase 1',
   'phase 2',
   'phase 3',
-  'breakthrough therapy',
   'fast track',
   'priority review',
   'accelerated approval',
