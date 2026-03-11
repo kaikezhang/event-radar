@@ -1,7 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { SubmitFeedbackInputSchema } from '@event-radar/shared';
 import { UserFeedbackService } from '../services/user-feedback.js';
 import type { Database } from '../db/connection.js';
+import { requireApiKey } from './auth-middleware.js';
 
 const EventIdParamsSchema = {
   type: 'object',
@@ -27,41 +28,20 @@ interface FeedbackRouteOptions {
   apiKey?: string;
 }
 
-async function requireApiKey(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  apiKey?: string,
-): Promise<void> {
-  if (request.apiKeyAuthenticated) {
-    return;
-  }
-
-  const providedKey = request.headers['x-api-key'];
-  if (!providedKey) {
-    await reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
-    });
-    return;
-  }
-
-  if (apiKey && providedKey !== apiKey) {
-    await reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Invalid API key',
-    });
-    return;
-  }
-
-  request.apiKeyAuthenticated = true;
-}
-
 export function registerFeedbackRoutes(
   server: FastifyInstance,
   db: Database,
   options?: FeedbackRouteOptions,
 ): void {
   const feedbackService = new UserFeedbackService(db);
+
+  // Register /stats BEFORE parametric /:eventId to avoid route shadowing
+  server.get('/api/v1/feedback/stats', {
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async () => {
+    return feedbackService.getFeedbackStats();
+  });
 
   server.post('/api/v1/feedback/:eventId', {
     schema: {
@@ -103,12 +83,5 @@ export function registerFeedbackRoutes(
     }
 
     return feedback;
-  });
-
-  server.get('/api/v1/feedback/stats', {
-    preHandler: async (request, reply) =>
-      requireApiKey(request, reply, options?.apiKey),
-  }, async () => {
-    return feedbackService.getFeedbackStats();
   });
 }

@@ -111,9 +111,11 @@ export class UserFeedbackService {
       else if (verdict === 'partially_correct') partiallyCorrect++;
 
       // Agreement: does user feedback agree with auto-evaluation?
+      // partially_correct is excluded from agreement calculation —
+      // it's an ambiguous verdict that doesn't clearly map to auto-eval's binary correct/incorrect.
       const predicted = predictionMap.get(row.eventId);
       const actual = outcomeMap.get(row.eventId);
-      if (predicted && actual) {
+      if (predicted && actual && verdict !== 'partially_correct') {
         const autoCorrect = predicted === actual;
         const userSaysCorrect = verdict === 'correct';
         if (autoCorrect === userSaysCorrect) {
@@ -122,12 +124,15 @@ export class UserFeedbackService {
       }
     }
 
+    // Agreement rate denominator excludes partially_correct (ambiguous verdict)
+    const agreementDenominator = correct + incorrect;
+
     return {
       total: rows.length,
       correct,
       incorrect,
       partiallyCorrect,
-      agreementRate: rows.length > 0 ? agreements / rows.length : 0,
+      agreementRate: agreementDenominator > 0 ? agreements / agreementDenominator : 0,
     };
   }
 }

@@ -87,6 +87,9 @@ export class DirectionAnalyticsService {
       const bucketLabel = this.getBucketLabel(confidence);
       const bucket = buckets.get(bucketLabel)!;
 
+      // Calibration uses T+1d horizon as the reference timeframe.
+      // This is intentional: 1d provides the best balance of signal availability
+      // and prediction relevance. Future work could parameterize the horizon.
       const actualDirection = this.deriveDirection(Number(row.priceChange1d));
       const correct = row.predictedDirection === actualDirection;
 
@@ -110,12 +113,47 @@ export class DirectionAnalyticsService {
     const limit = options?.limit ?? 20;
     const rows = await this.getJoinedRows(period);
 
-    const mispredictions: Misprediction[] = [];
+    // Build calibration buckets to compute per-bucket actual accuracy
+    const bucketStats = new Map<
+      string,
+      { correctCount: number; count: number }
+    >();
+    for (const label of [
+      '0.0-0.2',
+      '0.2-0.4',
+      '0.4-0.6',
+      '0.6-0.8',
+      '0.8-1.0',
+    ]) {
+      bucketStats.set(label, { correctCount: 0, count: 0 });
+    }
+    for (const row of rows) {
+      const confidence = Number(row.confidence);
+      const bucketLabel = this.getBucketLabel(confidence);
+      const bucket = bucketStats.get(bucketLabel)!;
+      const actualDirection = this.deriveDirection(Number(row.priceChange1d));
+      bucket.count += 1;
+      if (row.predictedDirection === actualDirection) {
+        bucket.correctCount += 1;
+      }
+    }
+
+    const bucketAccuracyMap = new Map<string, number>();
+    for (const [label, data] of bucketStats) {
+      bucketAccuracyMap.set(
+        label,
+        data.count > 0 ? data.correctCount / data.count : 0,
+      );
+    }
+
+    const mispredictions: Array<Misprediction & { calibrationDelta: number }> = [];
 
     for (const row of rows) {
       const actualDirection = this.deriveDirection(Number(row.priceChange1d));
       if (row.predictedDirection !== actualDirection) {
         const confidence = Number(row.confidence);
+        const bucketLabel = this.getBucketLabel(confidence);
+        const bucketAccuracy = bucketAccuracyMap.get(bucketLabel) ?? 0;
         mispredictions.push({
           eventId: row.eventId,
           title: row.title,
@@ -123,14 +161,19 @@ export class DirectionAnalyticsService {
           actualDirection,
           confidence,
           priceChange1d: Number(row.priceChange1d),
+          calibrationDelta: Math.abs(confidence - bucketAccuracy),
         });
       }
     }
 
-    // Sort by |confidence - actual_accuracy| descending (high confidence wrong = worst)
-    mispredictions.sort((a, b) => b.confidence - a.confidence);
+    // Sort by |confidence - bucket_actual_accuracy| descending.
+    // Events where the model was most overconfident relative to its bucket's
+    // actual accuracy are the worst mispredictions.
+    mispredictions.sort((a, b) => b.calibrationDelta - a.calibrationDelta);
 
-    return mispredictions.slice(0, limit);
+    // Strip internal calibrationDelta before returning
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    return mispredictions.slice(0, limit).map(({ calibrationDelta, ...rest }) => rest);
   }
 
   private computeMetricsForHorizon(

@@ -208,31 +208,36 @@ describe('DirectionAnalyticsService', () => {
     }
   });
 
-  it('returns top mispredictions sorted by confidence', async () => {
+  it('sorts mispredictions by |confidence - bucket_accuracy| not raw confidence', async () => {
     const accuracy = new ClassificationAccuracyService(db);
     const service = new DirectionAnalyticsService(db);
 
-    // High confidence misprediction
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1', title: 'High conf wrong' }), severity: 'HIGH' });
-    await accuracy.recordPrediction(e1, makePrediction({ confidence: 0.95, predictedDirection: 'bullish' }));
-    await accuracy.recordOutcome(e1, makeOutcome({ priceChangePercent1d: -5.0 }));
+    // Setup: 3 correct predictions in 0.8-1.0 bucket to make bucket accuracy high (75%)
+    for (let i = 0; i < 3; i++) {
+      const eid = await storeEvent(db, { event: makeRawEvent({ source: `correct-hi-${i}` }), severity: 'HIGH' });
+      await accuracy.recordPrediction(eid, makePrediction({ confidence: 0.85, predictedDirection: 'bullish' }));
+      await accuracy.recordOutcome(eid, makeOutcome({ priceChangePercent1d: 5.0 })); // correct
+    }
 
-    // Low confidence misprediction
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2', title: 'Low conf wrong' }), severity: 'HIGH' });
-    await accuracy.recordPrediction(e2, makePrediction({ confidence: 0.55, predictedDirection: 'bullish' }));
-    await accuracy.recordOutcome(e2, makeOutcome({ priceChangePercent1d: -3.0 }));
+    // Misprediction A: confidence=0.9, bucket 0.8-1.0 (bucket accuracy = 3/4 = 0.75)
+    // calibration delta = |0.9 - 0.75| = 0.15
+    const eA = await storeEvent(db, { event: makeRawEvent({ source: 'misA', title: 'Mis A high conf' }), severity: 'HIGH' });
+    await accuracy.recordPrediction(eA, makePrediction({ confidence: 0.9, predictedDirection: 'bullish' }));
+    await accuracy.recordOutcome(eA, makeOutcome({ priceChangePercent1d: -5.0 })); // wrong
 
-    // Correct prediction (should not appear)
-    const e3 = await storeEvent(db, { event: makeRawEvent({ source: 's3', title: 'Correct' }), severity: 'HIGH' });
-    await accuracy.recordPrediction(e3, makePrediction({ confidence: 0.9, predictedDirection: 'bullish' }));
-    await accuracy.recordOutcome(e3, makeOutcome({ priceChangePercent1d: 5.0 }));
+    // Misprediction B: confidence=0.55, bucket 0.4-0.6 (bucket accuracy = 0/1 = 0.0)
+    // calibration delta = |0.55 - 0.0| = 0.55
+    const eB = await storeEvent(db, { event: makeRawEvent({ source: 'misB', title: 'Mis B low conf' }), severity: 'HIGH' });
+    await accuracy.recordPrediction(eB, makePrediction({ confidence: 0.55, predictedDirection: 'bullish' }));
+    await accuracy.recordOutcome(eB, makeOutcome({ priceChangePercent1d: -3.0 })); // wrong
 
     const mispredictions = await service.getTopMispredictions({ limit: 10 });
 
     expect(mispredictions).toHaveLength(2);
-    expect(mispredictions[0]!.confidence).toBe(0.95); // highest confidence first
-    expect(mispredictions[0]!.title).toBe('High conf wrong');
-    expect(mispredictions[1]!.confidence).toBe(0.55);
+    // By raw confidence: A (0.9) > B (0.55) — A would be first
+    // By calibration delta: B (0.55) > A (0.15) — B should be first
+    expect(mispredictions[0]!.title).toBe('Mis B low conf');
+    expect(mispredictions[1]!.title).toBe('Mis A high conf');
   });
 
   it('respects mispredictions limit', async () => {
