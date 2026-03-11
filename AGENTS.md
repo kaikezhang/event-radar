@@ -71,9 +71,15 @@ pnpm build && pnpm --filter @event-radar/backend lint
 
 ## 当前任务
 
-读 `CLAUDE.md` 的 "Current Task" 部分获取详细任务说明。
-
+读 `TASK.md` 获取当前任务的详细 spec。
 读 `tasks.md` 获取整体开发计划和进度。
+
+**你的角色取决于调用方式：**
+- "implement/develop" → 实现 TASK.md spec，创建 PR，**不要 merge**
+- "review" → 只做代码审查，输出 findings 后立即退出。**不要修代码，不要 merge**
+- "fix" → 修复指定问题，commit push。**不要 merge**
+
+**任何情况下都不要运行 `gh pr merge`！**
 
 ## Reference Docs
 
