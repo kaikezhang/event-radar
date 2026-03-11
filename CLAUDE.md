@@ -44,88 +44,115 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.1.4 — 多源确认自动升级 Severity
+## Current Task: P4.3.1 — 分类准确率记录
 
 ### Goal
-当同一事件被 2+ 个不同来源确认时，自动升级其 severity 等级。多源确认 = 高可信度。
+追踪 AI 分类的准确率：将分类预测（severity, direction）与实际市场结果对比，计算准确率，为后续自适应调整提供数据基础。
 
 ### Requirements
 
-1. **Multi-Source Confirmation Service** (`packages/backend/src/services/multi-source-confirmation.ts`)
-   - `checkConfirmation(eventId): Promise<ConfirmationResult>` — 检查事件的多源确认状态
-   - `processNewConfirmation(primaryEventId, confirmingSource): Promise<ConfirmationResult>` — 新源确认时处理升级
-   - 升级规则:
-     - **2 sources**: LOW → MEDIUM, MEDIUM → HIGH (confidence boost +0.15)
-     - **3+ sources**: any → HIGH, HIGH → CRITICAL (confidence boost +0.25)
-     - 已经是 CRITICAL 的不再升级
-     - 只有不同 source 才算确认（同一 source 多次不算）
-   - 与 P4.1.2 dedup 集成：当 dedup 发现 merge 目标时，触发 confirmation check
+1. **Classification Accuracy Service** (`packages/backend/src/services/classification-accuracy.ts`)
+   - `recordPrediction(eventId, prediction): Promise<void>` — 记录分类预测
+   - `recordOutcome(eventId, outcome): Promise<void>` — 记录实际结果
+   - `evaluateAccuracy(eventId): Promise<AccuracyResult>` — 对比预测 vs 结果
+   - `getAccuracyStats(options): Promise<AccuracyStats>` — 汇总准确率统计
+   - 准确率维度:
+     - **Severity 准确率**: 预测 severity vs 实际影响大小 (price move magnitude)
+     - **Direction 准确率**: 预测涨/跌 vs 实际涨/跌 (TP/TN/FP/FN)
+     - **按源分类**: 每个 scanner source 的分类准确率
+     - **按事件类型**: 每种 event type 的准确率
+     - **按时间**: 滚动 7/30/90 天准确率
 
-2. **Types** (`packages/shared/src/schemas/confirmation-types.ts`)
+2. **Types** (`packages/shared/src/schemas/accuracy-types.ts`)
    ```typescript
-   export interface ConfirmationResult {
+   export interface ClassificationPrediction {
      eventId: string;
-     sourceCount: number;           // 确认源数量
-     sources: string[];             // 确认源列表
-     previousSeverity: string;
-     newSeverity: string;
-     upgraded: boolean;             // 是否发生了升级
-     confidenceBoost: number;       // 置信度提升量
-     newConfidence: number;         // 最终置信度
+     predictedSeverity: string;     // CRITICAL/HIGH/MEDIUM/LOW
+     predictedDirection: string;    // bullish/bearish/neutral
+     confidence: number;            // 0-1
+     classifiedBy: string;          // 'rule-engine' | 'llm' | 'hybrid'
+     classifiedAt: string;
    }
 
-   export interface ConfirmationConfig {
-     minSourcesForUpgrade: number;  // default 2
-     twoSourceBoost: number;        // default 0.15
-     threeSourceBoost: number;      // default 0.25
-     maxConfidence: number;         // default 0.99
+   export interface ClassificationOutcome {
+     eventId: string;
+     actualDirection: string;       // bullish/bearish/neutral (based on price move)
+     priceChangePercent1h: number;
+     priceChangePercent1d: number;
+     priceChangePercent1w: number;
+     evaluatedAt: string;
+   }
+
+   export interface AccuracyResult {
+     eventId: string;
+     severityCorrect: boolean;
+     directionCorrect: boolean;
+     confidenceCalibration: number; // how well confidence matched reality
+   }
+
+   export interface AccuracyStats {
+     totalEvaluated: number;
+     severityAccuracy: number;      // 0-1
+     directionAccuracy: number;     // 0-1
+     truePositives: number;
+     trueNegatives: number;
+     falsePositives: number;
+     falseNegatives: number;
+     precision: number;
+     recall: number;
+     f1Score: number;
+     bySource: Record<string, { accuracy: number; count: number }>;
+     byEventType: Record<string, { accuracy: number; count: number }>;
+     period: string;                // '7d' | '30d' | '90d' | 'all'
    }
    ```
 
-3. **Database Changes**
-   - `events` 表新增: `confirmed_sources jsonb default '[]'`, `confirmation_count integer default 1`
-   - 或者复用 P4.1.2 的 `source_urls` 字段（如果已有则不新增，直接用 source_urls.length）
+3. **Database Schema** — `classification_predictions` 表 + `classification_outcomes` 表
+   - `classification_predictions`: id, event_id (FK), predicted_severity, predicted_direction, confidence, classified_by, classified_at
+   - `classification_outcomes`: id, event_id (FK), actual_direction, price_change_1h, price_change_1d, price_change_1w, evaluated_at
+   - 用 drizzle-orm schema 定义
 
 4. **Pipeline Integration**
-   - Dedup merge 发生时 → 自动调用 `processNewConfirmation`
-   - Story group 新事件加入时 → 检查 group 内不同 source 数量 → 触发确认
-   - Event bus emit `event:severity-upgraded` 事件（含旧/新 severity）
-   - Delivery 层收到 severity-upgraded 时，如果新 severity >= HIGH，发送升级通知
+   - 分类完成时 → 自动调用 `recordPrediction`
+   - P4.2 outcome tracker 记录价格变化时 → 自动调用 `recordOutcome` + `evaluateAccuracy`
+   - 准确率统计每 100 个事件 emit 一次 `accuracy:updated` 到 event bus
 
-5. **API Updates**
-   - `GET /events/:id` 响应新增 `confirmationCount` 和 `confirmedSources` 字段
-   - `GET /api/v1/events?confirmed=true` — 筛选多源确认的事件
+5. **API Endpoints**
+   - `GET /api/v1/accuracy/stats?period=30d` — 准确率统计
+   - `GET /api/v1/accuracy/stats?groupBy=source` — 按源分组统计
+   - `GET /api/v1/accuracy/stats?groupBy=eventType` — 按事件类型分组
+   - `GET /api/v1/accuracy/events/:id` — 单个事件的预测 vs 结果
 
 6. **Tests** (≥12 tests)
-   - 单源事件不升级
-   - 2 源确认: LOW → MEDIUM
-   - 2 源确认: MEDIUM → HIGH
-   - 3 源确认: → CRITICAL
-   - 已经 CRITICAL 不再升级
-   - 同一 source 多次不算新确认
-   - Confidence boost 正确计算
-   - Confidence 不超过 maxConfidence
-   - Dedup 触发确认的集成测试
-   - Story group 触发确认的集成测试
-   - API 过滤 confirmed=true
-   - Event bus 正确 emit severity-upgraded
+   - 记录预测
+   - 记录结果
+   - 正确评估 direction (TP/TN/FP/FN)
+   - Severity 准确率计算
+   - 空数据处理
+   - 按源分组统计
+   - 按事件类型统计
+   - 时间窗口过滤 (7d/30d/90d)
+   - Confidence calibration 计算
+   - F1 score 计算
+   - Pipeline 集成（分类完成自动记录）
+   - API 响应格式
 
 ### Files to create/modify
-- `packages/shared/src/schemas/confirmation-types.ts` — Zod schemas + types
+- `packages/shared/src/schemas/accuracy-types.ts` — Zod schemas + types
 - `packages/shared/src/index.ts` — export
-- `packages/backend/src/services/multi-source-confirmation.ts` — 核心逻辑
-- `packages/backend/src/db/schema.ts` — 字段（如需要）
-- `packages/backend/src/routes/events.ts` — API 更新
-- `packages/backend/src/__tests__/multi-source-confirmation.test.ts`
+- `packages/backend/src/db/schema.ts` — 新增表
+- `packages/backend/src/services/classification-accuracy.ts` — 核心逻辑
+- `packages/backend/src/routes/accuracy.ts` — API routes
+- `packages/backend/src/app.ts` — 注册 routes
+- `packages/backend/src/__tests__/classification-accuracy.test.ts`
 
 ### Dependencies
-- P4.1.2 dedup service（merge 触发确认）
-- P4.1.3 story group service（group 内多源触发确认）
+- P4.2 outcome tracker（价格变化数据）
 
 ### Verification
 - `pnpm build && pnpm --filter @event-radar/backend lint` must pass
 - All tests pass
-- Create branch `feat/multi-source-confirmation`, commit, push, create PR to main
+- Create branch `feat/classification-accuracy`, commit, push, create PR to main
 
 3. **CI/CD** (GitHub Actions)
    - Auto build + test on PR
