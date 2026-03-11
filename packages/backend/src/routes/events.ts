@@ -49,6 +49,10 @@ const ListEventsQuerySchema = {
       default: 0,
       description: 'Number of events to skip',
     },
+    confirmed: {
+      type: 'boolean',
+      description: 'Filter for multi-source confirmed events (confirmation_count >= 2)',
+    },
   },
 } as const;
 
@@ -107,6 +111,7 @@ export interface ListEventsQuery {
   dateTo?: string;
   limit?: number;
   offset?: number;
+  confirmed?: boolean;
 }
 
 export interface EventParams {
@@ -166,6 +171,11 @@ export function registerEventRoutes(
       conditions.push(lte(events.receivedAt, toDate));
     }
 
+    // Filter for multi-source confirmed events
+    if (query.confirmed) {
+      conditions.push(gte(events.confirmationCount, 2));
+    }
+
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
@@ -217,7 +227,11 @@ export function registerEventRoutes(
       return reply.status(404).send({ error: 'Event not found' });
     }
 
-    return event;
+    return {
+      ...event,
+      confirmationCount: event.confirmationCount ?? 1,
+      confirmedSources: (event.confirmedSources as string[] | null) ?? [event.source],
+    };
   });
 
   /**

@@ -102,6 +102,12 @@ export {
   type StoryGroupResult,
   type StoryGroupOptions,
 } from './schemas/story-group-types.js';
+export {
+  ConfirmationResultSchema,
+  ConfirmationConfigSchema,
+  type ConfirmationResult,
+  type ConfirmationConfig,
+} from './schemas/confirmation-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
