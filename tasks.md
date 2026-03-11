@@ -5,9 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 4 — P4.1.3 "Developing Story" 分组** (正在执行)
+**Phase 4 — P4.1.4 多源确认自动升级 Severity** (正在执行)
 
-Phase 4.2 回测框架 ✅ P4.1.1 相似度 ✅ P4.1.2 去重合并 ✅ 继续 P4.1
+Phase 4.2 回测框架 ✅ P4.1.1 相似度 ✅ P4.1.2 去重合并 ✅ P4.1.3 Story Groups ✅ 继续 P4.1
 
 ---
 
@@ -79,9 +79,9 @@ Phase 4.2 回测框架 ✅ P4.1.1 相似度 ✅ P4.1.2 去重合并 ✅ 继续 P
 - [x] **P4.1.2** 跨源事件去重 & 合并 ✅ PR #28
   - 同一事件从多个源收到 → 合并为一个事件
   - 保留所有来源链接
-- [ ] **P4.1.3** "Developing Story" 分组
+- [x] **P4.1.3** "Developing Story" 分组 ✅ PR #29
   - 30分钟内关联事件归为一组
-  - Group ID + sequence number
+  - Group ID + sequence number, 17 tests
 - [ ] **P4.1.4** 多源确认自动升级
   - 2+源确认同一事件 → severity 升级
   - 配置：多少源触发升级

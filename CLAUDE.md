@@ -44,110 +44,88 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.1.3 — "Developing Story" 分组
+## Current Task: P4.1.4 — 多源确认自动升级 Severity
 
 ### Goal
-当多个相关事件在短时间内出现时，自动归为同一个 "Developing Story"（发展中故事），让用户看到的是一个故事线，而不是碎片化的事件列表。
+当同一事件被 2+ 个不同来源确认时，自动升级其 severity 等级。多源确认 = 高可信度。
 
 ### Requirements
 
-1. **Story Group Service** (`packages/backend/src/services/story-group.ts`)
-   - `assignStoryGroup(event): Promise<StoryGroupResult>` — 新事件进来时，判断是否属于某个已有 story group
-   - `getStoryGroup(groupId): Promise<StoryGroup>` — 获取 story group 详情（含所有事件）
-   - `listActiveStoryGroups(options): Promise<StoryGroup[]>` — 列出活跃的 story groups
-   - Story Group 匹配规则:
-     - 同 ticker + 时间窗口 30min 内 + 同 eventType 或标题相似度 > 0.6 → 归入同一 story
-     - 已有 story group 的时间窗口 = 最后一个事件时间 + 30min（滑动窗口）
-     - Story group 在最后一个事件超过 2 小时后自动关闭（status: 'closed'）
+1. **Multi-Source Confirmation Service** (`packages/backend/src/services/multi-source-confirmation.ts`)
+   - `checkConfirmation(eventId): Promise<ConfirmationResult>` — 检查事件的多源确认状态
+   - `processNewConfirmation(primaryEventId, confirmingSource): Promise<ConfirmationResult>` — 新源确认时处理升级
+   - 升级规则:
+     - **2 sources**: LOW → MEDIUM, MEDIUM → HIGH (confidence boost +0.15)
+     - **3+ sources**: any → HIGH, HIGH → CRITICAL (confidence boost +0.25)
+     - 已经是 CRITICAL 的不再升级
+     - 只有不同 source 才算确认（同一 source 多次不算）
+   - 与 P4.1.2 dedup 集成：当 dedup 发现 merge 目标时，触发 confirmation check
 
-2. **Types** (`packages/shared/src/schemas/story-group-types.ts`)
+2. **Types** (`packages/shared/src/schemas/confirmation-types.ts`)
    ```typescript
-   export interface StoryGroup {
-     id: string;                    // UUID
-     title: string;                 // 自动生成的 story 标题（取第一个事件标题）
-     tickers: string[];             // 所有涉及的 ticker
-     eventType: string;             // 主要事件类型
-     severity: string;              // 最高 severity
-     status: 'active' | 'closed';   // 活跃/已关闭
-     eventCount: number;            // 事件数量
-     firstEventAt: string;          // 第一个事件时间
-     lastEventAt: string;           // 最后一个事件时间
-     events: StoryEvent[];          // 时间线
-     createdAt: string;
-     updatedAt: string;
-   }
-
-   export interface StoryEvent {
+   export interface ConfirmationResult {
      eventId: string;
-     sequenceNumber: number;        // 1, 2, 3... (按时间排序)
-     source: string;
-     title: string;
-     publishedAt: string;
-     isKeyEvent: boolean;           // 是否是关键事件（severity >= HIGH）
+     sourceCount: number;           // 确认源数量
+     sources: string[];             // 确认源列表
+     previousSeverity: string;
+     newSeverity: string;
+     upgraded: boolean;             // 是否发生了升级
+     confidenceBoost: number;       // 置信度提升量
+     newConfidence: number;         // 最终置信度
    }
 
-   export interface StoryGroupResult {
-     assigned: boolean;             // 是否被分配到 story group
-     groupId: string | null;        // story group ID
-     isNewGroup: boolean;           // 是否创建了新 group
-     sequenceNumber: number | null; // 在 group 中的序号
-   }
-
-   export interface StoryGroupOptions {
-     timeWindowMinutes?: number;    // default 30
-     closedAfterMinutes?: number;   // default 120
-     minSimilarity?: number;        // default 0.6
-     limit?: number;                // default 20
-     status?: 'active' | 'closed' | 'all';
+   export interface ConfirmationConfig {
+     minSourcesForUpgrade: number;  // default 2
+     twoSourceBoost: number;        // default 0.15
+     threeSourceBoost: number;      // default 0.25
+     maxConfidence: number;         // default 0.99
    }
    ```
 
-3. **Database Schema** — `story_groups` 表 + `story_events` 关联表
-   - `story_groups`: id, title, tickers (jsonb), event_type, severity, status, event_count, first_event_at, last_event_at, created_at, updated_at
-   - `story_events`: id, story_group_id (FK), event_id (FK), sequence_number, is_key_event
-   - 用 drizzle-orm schema 定义
+3. **Database Changes**
+   - `events` 表新增: `confirmed_sources jsonb default '[]'`, `confirmation_count integer default 1`
+   - 或者复用 P4.1.2 的 `source_urls` 字段（如果已有则不新增，直接用 source_urls.length）
 
 4. **Pipeline Integration**
-   - 新事件经过 dedup 后 → story group 分配
-   - 如果分配到已有 group → 更新 group 的 lastEventAt, eventCount, severity
-   - Event bus emit `story:updated` 事件（附 groupId）
+   - Dedup merge 发生时 → 自动调用 `processNewConfirmation`
+   - Story group 新事件加入时 → 检查 group 内不同 source 数量 → 触发确认
+   - Event bus emit `event:severity-upgraded` 事件（含旧/新 severity）
+   - Delivery 层收到 severity-upgraded 时，如果新 severity >= HIGH，发送升级通知
 
-5. **API Endpoints**
-   - `GET /api/v1/story-groups?status=active&limit=20` — 列出 story groups
-   - `GET /api/v1/story-groups/:id` — story group 详情（含事件时间线）
-   - `GET /api/v1/events/:id` — 响应中新增 `storyGroupId` 和 `sequenceNumber` 字段
+5. **API Updates**
+   - `GET /events/:id` 响应新增 `confirmationCount` 和 `confirmedSources` 字段
+   - `GET /api/v1/events?confirmed=true` — 筛选多源确认的事件
 
 6. **Tests** (≥12 tests)
-   - 新事件创建新 story group
-   - 相关事件归入已有 group
-   - 不相关事件不归入（不同 ticker、超过时间窗口）
-   - 滑动窗口：新事件延长 group 活跃时间
-   - Group 自动关闭（超过 2 小时无新事件）
-   - Severity 升级（新事件 severity 更高时更新 group）
-   - Sequence number 正确递增
-   - isKeyEvent 标记
-   - API endpoints 响应格式
-   - 空结果处理
-   - 边界条件（刚好在时间窗口边缘）
-   - 多 ticker story（不同 ticker 但相关事件）
+   - 单源事件不升级
+   - 2 源确认: LOW → MEDIUM
+   - 2 源确认: MEDIUM → HIGH
+   - 3 源确认: → CRITICAL
+   - 已经 CRITICAL 不再升级
+   - 同一 source 多次不算新确认
+   - Confidence boost 正确计算
+   - Confidence 不超过 maxConfidence
+   - Dedup 触发确认的集成测试
+   - Story group 触发确认的集成测试
+   - API 过滤 confirmed=true
+   - Event bus 正确 emit severity-upgraded
 
 ### Files to create/modify
-- `packages/shared/src/schemas/story-group-types.ts` — Zod schemas + types
-- `packages/shared/src/index.ts` — export new types
-- `packages/backend/src/db/schema.ts` — 新增 story_groups + story_events 表
-- `packages/backend/src/services/story-group.ts` — 核心逻辑
-- `packages/backend/src/routes/story-groups.ts` — API routes
-- `packages/backend/src/app.ts` — 注册新 routes
-- `packages/backend/src/__tests__/story-group.test.ts`
+- `packages/shared/src/schemas/confirmation-types.ts` — Zod schemas + types
+- `packages/shared/src/index.ts` — export
+- `packages/backend/src/services/multi-source-confirmation.ts` — 核心逻辑
+- `packages/backend/src/db/schema.ts` — 字段（如需要）
+- `packages/backend/src/routes/events.ts` — API 更新
+- `packages/backend/src/__tests__/multi-source-confirmation.test.ts`
 
 ### Dependencies
-- 使用 P4.1.1 的 similarity service 计算标题/内容相似度
-- 使用 P4.1.2 的 dedup service（先 dedup 再 story group）
+- P4.1.2 dedup service（merge 触发确认）
+- P4.1.3 story group service（group 内多源触发确认）
 
 ### Verification
 - `pnpm build && pnpm --filter @event-radar/backend lint` must pass
 - All tests pass
-- Create branch `feat/story-groups`, commit, push, create PR to main
+- Create branch `feat/multi-source-confirmation`, commit, push, create PR to main
 
 3. **CI/CD** (GitHub Actions)
    - Auto build + test on PR
