@@ -5,6 +5,8 @@ import {
   RuleSchema,
   ConditionSchema,
   ActionSchema,
+  ClassificationPredictionSchema,
+  AccuracyStatsSchema,
   ok,
   err,
 } from '../index.js';
@@ -195,5 +197,44 @@ describe('Result', () => {
     if (!result.ok) {
       expect(result.error.message).toBe('failed');
     }
+  });
+});
+
+describe('Accuracy schemas', () => {
+  it('should parse a valid classification prediction', () => {
+    const result = ClassificationPredictionSchema.safeParse({
+      eventId: '550e8400-e29b-41d4-a716-446655440000',
+      predictedSeverity: 'HIGH',
+      predictedDirection: 'bullish',
+      confidence: 0.82,
+      classifiedBy: 'hybrid',
+      classifiedAt: '2026-03-11T12:00:00.000Z',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse accuracy stats payloads', () => {
+    const result = AccuracyStatsSchema.safeParse({
+      totalEvaluated: 4,
+      severityAccuracy: 0.75,
+      directionAccuracy: 0.5,
+      truePositives: 1,
+      trueNegatives: 1,
+      falsePositives: 1,
+      falseNegatives: 1,
+      precision: 0.5,
+      recall: 0.5,
+      f1Score: 0.5,
+      bySource: {
+        'sec-edgar': { accuracy: 0.75, count: 4 },
+      },
+      byEventType: {
+        '8-K': { accuracy: 0.75, count: 4 },
+      },
+      period: '30d',
+    });
+
+    expect(result.success).toBe(true);
   });
 });

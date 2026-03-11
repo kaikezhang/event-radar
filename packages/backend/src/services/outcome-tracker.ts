@@ -1,10 +1,17 @@
 import { eq, count, sql } from 'drizzle-orm';
-import type { Result, OutcomeStats, RawEvent } from '@event-radar/shared';
+import type {
+  AccuracyDirection,
+  ClassificationOutcome,
+  Result,
+  OutcomeStats,
+  RawEvent,
+} from '@event-radar/shared';
 import { ok, err } from '@event-radar/shared';
 import { PriceService } from './price-service.js';
 import { eventOutcomes } from '../db/schema.js';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+import { ClassificationAccuracyService } from './classification-accuracy.js';
 
 /** Intervals in hours: 1h, 1d, 1w, 1m */
 const TRACKING_INTERVALS = [
@@ -35,10 +42,16 @@ export interface OutcomeRecord {
 export class OutcomeTracker {
   private readonly db: Database;
   private readonly priceService: PriceService;
+  private readonly accuracyService?: ClassificationAccuracyService;
 
-  constructor(db: Database, priceService?: PriceService) {
+  constructor(
+    db: Database,
+    priceService?: PriceService,
+    accuracyService?: ClassificationAccuracyService,
+  ) {
     this.db = db;
     this.priceService = priceService ?? new PriceService();
+    this.accuracyService = accuracyService;
   }
 
   /**
@@ -46,6 +59,20 @@ export class OutcomeTracker {
    * Creates a row in event_outcomes with the event price and null interval prices.
    */
   async scheduleOutcomeTracking(event: RawEvent): Promise<Result<void, Error>> {
+    return this.scheduleTrackingForId(event.id, event);
+  }
+
+  async scheduleOutcomeTrackingForEvent(
+    eventId: string,
+    event: RawEvent,
+  ): Promise<Result<void, Error>> {
+    return this.scheduleTrackingForId(eventId, event);
+  }
+
+  private async scheduleTrackingForId(
+    eventId: string,
+    event: RawEvent,
+  ): Promise<Result<void, Error>> {
     const ticker = this.extractTicker(event);
     if (!ticker) {
       return err(new Error(`No ticker found for event ${event.id}`));
@@ -59,7 +86,7 @@ export class OutcomeTracker {
       await this.db
         .insert(eventOutcomes)
         .values({
-          eventId: event.id,
+          eventId,
           ticker,
           eventTime,
           eventPrice: eventPrice != null ? String(eventPrice) : null,
@@ -234,6 +261,17 @@ export class OutcomeTracker {
       .update(eventOutcomes)
       .set(updates)
       .where(eq(eventOutcomes.id, row.id));
+
+    if (this.accuracyService) {
+      const updatedRow = {
+        ...row,
+        [this.priceColumnKey(interval.column)]: String(price),
+        ...(change != null
+          ? { [this.changeColumnKey(interval.changeCol)]: String(change) }
+          : {}),
+      };
+      await this.syncAccuracyOutcome(updatedRow);
+    }
   }
 
   private changeColumnKey(col: string): keyof typeof eventOutcomes.$inferSelect {
@@ -244,6 +282,57 @@ export class OutcomeTracker {
       change_1m: 'change1m',
     };
     return map[col]!;
+  }
+
+  private async syncAccuracyOutcome(
+    row: typeof eventOutcomes.$inferSelect,
+  ): Promise<void> {
+    if (
+      row.change1h == null ||
+      row.change1d == null ||
+      row.change1w == null ||
+      !this.accuracyService
+    ) {
+      return;
+    }
+
+    const outcome = this.buildClassificationOutcome(row);
+    await this.accuracyService.recordOutcome(row.eventId, outcome);
+    await this.accuracyService.evaluateAccuracy(row.eventId);
+  }
+
+  private buildClassificationOutcome(
+    row: typeof eventOutcomes.$inferSelect,
+  ): Omit<ClassificationOutcome, 'eventId'> {
+    const change1h = Number(row.change1h ?? 0);
+    const change1d = Number(row.change1d ?? 0);
+    const change1w = Number(row.change1w ?? 0);
+    const directionalMove = this.pickDirectionalMove(change1h, change1d, change1w);
+
+    return {
+      actualDirection: this.toAccuracyDirection(directionalMove),
+      priceChangePercent1h: change1h,
+      priceChangePercent1d: change1d,
+      priceChangePercent1w: change1w,
+      evaluatedAt: new Date().toISOString(),
+    };
+  }
+
+  private pickDirectionalMove(...changes: number[]): number {
+    const byMagnitude = [...changes].sort(
+      (left, right) => Math.abs(right) - Math.abs(left),
+    );
+    return byMagnitude[0] ?? 0;
+  }
+
+  private toAccuracyDirection(change: number): AccuracyDirection {
+    if (change >= 0.25) {
+      return 'bullish';
+    }
+    if (change <= -0.25) {
+      return 'bearish';
+    }
+    return 'neutral';
   }
 
   private async computeIntervalStats(

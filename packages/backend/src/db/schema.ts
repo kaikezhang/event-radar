@@ -83,6 +83,46 @@ export const eventOutcomes = pgTable(
   ],
 );
 
+export const classificationPredictions = pgTable(
+  'classification_predictions',
+  {
+    id: serial('id').primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' })
+      .unique(),
+    predictedSeverity: varchar('predicted_severity', { length: 20 }).notNull(),
+    predictedDirection: varchar('predicted_direction', { length: 20 }).notNull(),
+    confidence: decimal('confidence', { precision: 5, scale: 4 }).notNull(),
+    classifiedBy: varchar('classified_by', { length: 20 }).notNull(),
+    classifiedAt: timestamp('classified_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('idx_classification_predictions_event_id').on(table.eventId),
+    index('idx_classification_predictions_classified_at').on(table.classifiedAt),
+  ],
+);
+
+export const classificationOutcomes = pgTable(
+  'classification_outcomes',
+  {
+    id: serial('id').primaryKey(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' })
+      .unique(),
+    actualDirection: varchar('actual_direction', { length: 20 }).notNull(),
+    priceChange1h: decimal('price_change_1h', { precision: 10, scale: 4 }).notNull(),
+    priceChange1d: decimal('price_change_1d', { precision: 10, scale: 4 }).notNull(),
+    priceChange1w: decimal('price_change_1w', { precision: 10, scale: 4 }).notNull(),
+    evaluatedAt: timestamp('evaluated_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('idx_classification_outcomes_event_id').on(table.eventId),
+    index('idx_classification_outcomes_evaluated_at').on(table.evaluatedAt),
+  ],
+);
+
 export const storyGroups = pgTable(
   'story_groups',
   {

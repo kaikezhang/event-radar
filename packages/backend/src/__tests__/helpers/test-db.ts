@@ -26,6 +26,9 @@ export async function safeCloseServer(
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM deliveries`);
+  await db.execute(sql`DELETE FROM classification_outcomes`);
+  await db.execute(sql`DELETE FROM classification_predictions`);
+  await db.execute(sql`DELETE FROM event_outcomes`);
   await db.execute(sql`DELETE FROM events`);
 }
 
@@ -54,6 +57,50 @@ export async function createTestDb(): Promise<{
       is_duplicate BOOLEAN DEFAULT FALSE,
       confirmed_sources JSONB DEFAULT '[]',
       confirmation_count INTEGER DEFAULT 1
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS event_outcomes (
+      id SERIAL PRIMARY KEY,
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      ticker VARCHAR(10) NOT NULL,
+      event_time TIMESTAMPTZ NOT NULL,
+      event_price DECIMAL(10, 2),
+      price_1h DECIMAL(10, 2),
+      price_1d DECIMAL(10, 2),
+      price_1w DECIMAL(10, 2),
+      price_1m DECIMAL(10, 2),
+      change_1h DECIMAL(10, 4),
+      change_1d DECIMAL(10, 4),
+      change_1w DECIMAL(10, 4),
+      change_1m DECIMAL(10, 4),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS classification_predictions (
+      id SERIAL PRIMARY KEY,
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      predicted_severity VARCHAR(20) NOT NULL,
+      predicted_direction VARCHAR(20) NOT NULL,
+      confidence DECIMAL(5, 4) NOT NULL,
+      classified_by VARCHAR(20) NOT NULL,
+      classified_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS classification_outcomes (
+      id SERIAL PRIMARY KEY,
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      actual_direction VARCHAR(20) NOT NULL,
+      price_change_1h DECIMAL(10, 4) NOT NULL,
+      price_change_1d DECIMAL(10, 4) NOT NULL,
+      price_change_1w DECIMAL(10, 4) NOT NULL,
+      evaluated_at TIMESTAMPTZ NOT NULL
     )
   `);
 
