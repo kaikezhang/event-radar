@@ -5,9 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 4 — P4.4.1+P4.4.2 自定义规则 DSL & 解析器** (正在执行)
+**Phase 4 — P4.4.3 告警预算系统** (待启动)
 
-P4.1 ✅ P4.2 ✅ P4.3 ✅
+P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4.1+4.4.2 ✅
 
 ---
 
@@ -95,17 +95,11 @@ P4.1 ✅ P4.2 ✅ P4.3 ✅
 - [x] **P4.3.1** 分类准确率记录 ✅ PR #31 (17 tests)
 - [x] **P4.3.2+P4.3.3** 方向信号准确率 & 用户反馈 ✅ PR #32 (26 tests)
 - [x] **P4.3.4** 自适应分类调整 ✅ PR #33 (24 tests)
-- [ ] **P4.3.4** 自适应分类调整
-  - 基于反馈调整分类权重
-  - Low confidence 事件优先送 LLM 重分类
-
 ### P4.4 智能告警 & 规则引擎
-- [ ] **P4.4.1** 自定义规则 DSL
-  - 语法: `IF source=X AND keyword=Y AND severity>=Z THEN priority=HIGH`
-  - 支持: source, ticker, keyword, event_type, severity, confidence
-- [ ] **P4.4.2** 规则引擎解析器
-  - Parse DSL to executable rules
-  - Rule validation (语法检查)
+- [x] **P4.4.1+P4.4.2** 自定义规则 DSL + 解析器 ✅ PR #34
+  - 递归下降 DSL parser, AND/OR 优先级, NOT/IN/CONTAINS/MATCHES
+  - Rule engine v2: first-match-wins, CRUD API, test/validate endpoints
+  - 26 tests (11 parser + 8 engine + 7 API), 2279 行
 - [ ] **P4.4.3** 告警预算系统
   - 每小时最大告警数限制
   - 优先级队列：HIGH > MEDIUM > LOW

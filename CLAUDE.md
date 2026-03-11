@@ -46,131 +46,141 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.4.1+P4.4.2 — 自定义规则 DSL & 解析器
+## Current Task: P4.4.3+P4.4.4 — 告警预算系统 & 渐进式 Severity
 
 ### Goal
-实现告警自定义规则系统：用户定义规则 DSL 来过滤/优先级排序事件，规则引擎解析并执行这些规则。
+实现告警流量控制和事件 severity 自动升级机制，防止告警洪泛并让 severity 反映多源确认等信号。
 
 ### Requirements
 
-1. **Rule DSL Grammar**
-   - 语法: `IF <conditions> THEN <actions>`
-   - 条件支持:
-     - `source = "sec-edgar"` / `source IN ("sec-edgar", "reddit")`
-     - `ticker = "AAPL"` / `ticker IN ("AAPL", "TSLA")`
-     - `keyword CONTAINS "merger"` / `keyword MATCHES "acqui.*"`
-     - `event_type = "filing"` / `event_type IN ("filing", "earnings")`
-     - `severity >= "HIGH"` (比较: `=`, `!=`, `>`, `>=`, `<`, `<=`)
-     - `confidence >= 0.8`
-   - 逻辑运算: `AND`, `OR`, `NOT`, 括号分组
-   - Actions:
-     - `priority = "CRITICAL"` / `priority = "HIGH"` / `priority = "MEDIUM"` / `priority = "LOW"`
-     - `tag = "watchlist"` / `tag = "ignore"`
-     - `notify = true` / `notify = false`
-   - 示例:
-     ```
-     IF source = "sec-edgar" AND severity >= "HIGH" AND ticker IN ("AAPL", "TSLA") THEN priority = "CRITICAL"
-     IF keyword CONTAINS "bankruptcy" THEN priority = "CRITICAL", notify = true
-     IF confidence < 0.3 THEN tag = "low-quality", notify = false
-     ```
+1. **Alert Budget Service** (`packages/backend/src/services/alert-budget.ts`)
+   - `AlertBudgetService` class, constructor takes `db: Database`
+   - `checkBudget(priority: Priority): Promise<BudgetDecision>` — 检查当前窗口内该优先级是否可发送
+     - `BudgetDecision = { allowed: boolean; reason?: string; queuePosition?: number }`
+   - `recordAlert(eventId: string, priority: Priority): Promise<void>` — 记录已发送告警
+   - `getUsage(windowMinutes?: number): Promise<BudgetUsage>` — 获取当前窗口使用情况
+     - 默认窗口 60 分钟
+   - `getBudgetConfig(): Promise<BudgetConfig>` — 获取预算配置
+   - `updateBudgetConfig(config: Partial<BudgetConfig>): Promise<BudgetConfig>` — 更新预算配置
+   - Budget 逻辑:
+     - 每小时最大告警数（默认 50）
+     - CRITICAL 永远放行（不受预算限制）
+     - HIGH 预算: 总预算的 40%
+     - MEDIUM 预算: 总预算的 35%
+     - LOW 预算: 总预算的 25%
+     - 超预算时按优先级抑制: LOW 先停 → MEDIUM → HIGH
+     - 被抑制的告警记录到 `suppressed_alerts` 表（审计用）
 
-2. **Rule Parser** (`packages/backend/src/services/rule-parser.ts`)
-   - `parseRule(dsl: string): Result<ParsedRule, ParseError>` — 解析 DSL 字符串
-   - `validateRule(rule: ParsedRule): Result<void, ValidationError[]>` — 验证规则合法性
-   - 使用递归下降解析器（不依赖外部库）
-   - 清晰的错误消息（行号、列号、期望 vs 实际）
+2. **Progressive Severity Service** (`packages/backend/src/services/progressive-severity.ts`)
+   - `ProgressiveSeverityService` class, constructor takes `db: Database`
+   - `getEffectiveSeverity(eventId: string): Promise<SeverityResult>` — 计算事件当前有效 severity
+     - `SeverityResult = { severity: Priority; reason: string; locked: boolean; sourceCount: number }`
+   - `recordConfirmation(eventId: string, source: string): Promise<SeverityResult>` — 记录新源确认，可能升级 severity
+   - `lockSeverity(eventId: string, severity: Priority, reason: string): Promise<void>` — 用户交互锁定 severity
+   - `getSeverityHistory(eventId: string): Promise<SeverityChange[]>` — severity 变更历史
+   - Severity 升级规则:
+     - 新事件默认 MEDIUM
+     - 2 个源确认 → HIGH
+     - 3+ 个源确认 → CRITICAL
+     - 用户反馈 incorrect → 降级一档（CRITICAL→HIGH, HIGH→MEDIUM, etc.）
+     - 用户手动锁定 → 固定，不再自动变更
+   - 每次变更 emit `severity:changed` 到 event bus
 
-3. **Rule Engine** (`packages/backend/src/services/rule-engine-v2.ts`)
-   - `evaluateRules(event, rules): RuleResult` — 对事件执行所有规则
-   - 规则按优先级排序执行（用户可设定 rule order）
-   - 第一个匹配的规则决定 priority（first-match-wins）
-   - 未匹配任何规则 → 使用默认 priority
-   - `addRule(rule): Promise<Rule>` — 添加规则
-   - `updateRule(id, rule): Promise<Rule>` — 更新规则
-   - `deleteRule(id): Promise<void>` — 删除规则
-   - `listRules(): Promise<Rule[]>` — 列出所有规则
-   - `reorderRules(ids): Promise<void>` — 重排规则顺序
-
-4. **Types** (`packages/shared/src/schemas/rule-types.ts`)
+3. **Types** (`packages/shared/src/schemas/alert-budget-types.ts`)
    ```typescript
-   export const ConditionOperatorSchema = z.enum(['=', '!=', '>', '>=', '<', '<=', 'IN', 'CONTAINS', 'MATCHES']);
-   export const LogicalOperatorSchema = z.enum(['AND', 'OR']);
-   export const RuleFieldSchema = z.enum(['source', 'ticker', 'keyword', 'event_type', 'severity', 'confidence']);
-   export const PrioritySchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
-
-   export const ParsedConditionSchema = z.object({
-     field: RuleFieldSchema,
-     operator: ConditionOperatorSchema,
-     value: z.union([z.string(), z.number(), z.array(z.string())]),
-     negate: z.boolean().default(false),
+   export const BudgetConfigSchema = z.object({
+     maxAlertsPerHour: z.number().int().min(1).max(1000).default(50),
+     priorityShares: z.object({
+       CRITICAL: z.number().min(0).max(1), // 不限制, 但统计
+       HIGH: z.number().min(0).max(1).default(0.4),
+       MEDIUM: z.number().min(0).max(1).default(0.35),
+       LOW: z.number().min(0).max(1).default(0.25),
+     }),
+     windowMinutes: z.number().int().min(1).max(1440).default(60),
    });
 
-   export const ParsedRuleSchema = z.object({
+   export const BudgetUsageSchema = z.object({
+     window: z.object({ startedAt: z.string(), minutes: z.number() }),
+     total: z.object({ used: z.number(), limit: z.number() }),
+     byPriority: z.record(z.string(), z.object({ used: z.number(), limit: z.number() })),
+     suppressed: z.number(),
+   });
+
+   export const BudgetDecisionSchema = z.object({
+     allowed: z.boolean(),
+     reason: z.string().optional(),
+     queuePosition: z.number().optional(),
+   });
+
+   export const SeverityResultSchema = z.object({
+     severity: PrioritySchema,
+     reason: z.string(),
+     locked: z.boolean(),
+     sourceCount: z.number().int().min(0),
+   });
+
+   export const SeverityChangeSchema = z.object({
      id: z.string().uuid(),
-     name: z.string(),
-     dsl: z.string(),
-     conditions: z.any(), // parsed AST
-     actions: z.record(z.string(), z.union([z.string(), z.boolean()])),
-     order: z.number(),
-     enabled: z.boolean().default(true),
+     eventId: z.string().uuid(),
+     previousSeverity: PrioritySchema,
+     newSeverity: PrioritySchema,
+     reason: z.string(),
+     changedBy: z.enum(['system', 'user']),
      createdAt: z.string(),
-     updatedAt: z.string(),
-   });
-
-   export const RuleResultSchema = z.object({
-     matched: z.boolean(),
-     ruleId: z.string().nullable(),
-     ruleName: z.string().nullable(),
-     actions: z.record(z.string(), z.union([z.string(), z.boolean()])),
    });
    ```
 
-5. **Database Schema**
-   - `alert_rules` 表: id (uuid), name, dsl (text), conditions_ast (jsonb), actions (jsonb), rule_order (int), enabled (bool), created_at, updated_at
-   - 用 drizzle-orm schema 定义
+4. **Database Schema** — 新增表（在 `packages/backend/src/db/schema.ts` 添加）
+   - `alert_log` 表: id (uuid PK), event_id (uuid FK), priority (varchar), sent_at (timestamp), suppressed (bool), suppression_reason (text nullable)
+   - `budget_config` 表: id (int PK default 1), max_alerts_per_hour (int), priority_shares (jsonb), window_minutes (int), updated_at (timestamp)
+   - `severity_overrides` 表: id (uuid PK), event_id (uuid FK unique), severity (varchar), locked (bool), locked_by (varchar nullable — 'system' or 'user'), source_count (int), reason (text), updated_at (timestamp)
+   - `severity_changes` 表: id (uuid PK), event_id (uuid FK), previous_severity (varchar), new_severity (varchar), reason (text), changed_by (varchar — 'system' or 'user'), created_at (timestamp)
 
-6. **API Endpoints**
-   - `POST /api/v1/rules` — 创建规则 `{ name, dsl }`（自动 parse + validate）
-   - `GET /api/v1/rules` — 列出所有规则
-   - `PUT /api/v1/rules/:id` — 更新规则
-   - `DELETE /api/v1/rules/:id` — 删除规则
-   - `POST /api/v1/rules/reorder` — 重排 `{ ids: string[] }`
-   - `POST /api/v1/rules/test` — 测试规则 `{ dsl, event }` → 返回匹配结果
-   - `POST /api/v1/rules/validate` — 验证 DSL 语法 `{ dsl }` → 返回错误或 OK
-   - 所有 endpoints 需要 API key auth
+5. **API Endpoints** — 新路由 `packages/backend/src/routes/alert-budget.ts`
+   - `GET /api/v1/budget/usage` — 当前预算使用情况
+   - `GET /api/v1/budget/config` — 获取预算配置
+   - `PUT /api/v1/budget/config` — 更新预算配置
+   - `GET /api/v1/budget/suppressed?limit=20` — 被抑制的告警列表
+   - `GET /api/v1/severity/:eventId` — 获取事件有效 severity
+   - `POST /api/v1/severity/:eventId/lock` — 锁定 severity `{ severity, reason }`
+   - `GET /api/v1/severity/:eventId/history` — severity 变更历史
+   - 所有 endpoints 需要 API key auth（复用 `requireApiKey`）
 
-7. **Tests** (≥15 tests)
-   - 解析简单条件 `source = "sec-edgar"`
-   - 解析复合条件 AND/OR
-   - 解析 IN 列表
-   - 解析 CONTAINS/MATCHES
-   - 解析 severity 比较（有序: LOW < MEDIUM < HIGH < CRITICAL）
-   - 解析语法错误 → 清晰错误消息
-   - 规则执行 first-match-wins
-   - 多规则优先级排序
-   - 未匹配 → 默认结果
-   - CRUD 操作
-   - 规则重排序
-   - 测试 endpoint
-   - 验证 endpoint
-   - API auth
-   - 空规则列表
+6. **Tests** (≥18 tests)
+   - Budget: CRITICAL 永远放行
+   - Budget: 超预算后 LOW 被抑制
+   - Budget: 超预算后 MEDIUM 被抑制（LOW 已满）
+   - Budget: HIGH 不受 LOW 超标影响
+   - Budget: 预算使用统计正确
+   - Budget: 被抑制的告警有审计记录
+   - Budget: 更新预算配置
+   - Budget: 窗口时间过期后重置
+   - Budget: 并发安全（transaction）
+   - Severity: 新事件默认 MEDIUM
+   - Severity: 2 源确认 → HIGH
+   - Severity: 3+ 源确认 → CRITICAL
+   - Severity: 用户锁定后不再自动变更
+   - Severity: 用户反馈 incorrect → 降级
+   - Severity: 变更历史记录
+   - Severity: emit severity:changed event
+   - API: auth 验证
+   - API: budget usage 返回正确格式
 
 ### Files to create/modify
-- `packages/shared/src/schemas/rule-types.ts`
+- `packages/shared/src/schemas/alert-budget-types.ts` — Zod schemas + types
 - `packages/shared/src/index.ts` — export
-- `packages/backend/src/db/schema.ts` — alert_rules 表
-- `packages/backend/src/services/rule-parser.ts` — 递归下降解析器
-- `packages/backend/src/services/rule-engine-v2.ts` — 规则引擎
-- `packages/backend/src/routes/rules.ts` — API
+- `packages/backend/src/db/schema.ts` — 4 个新表
+- `packages/backend/src/services/alert-budget.ts` — 告警预算
+- `packages/backend/src/services/progressive-severity.ts` — 渐进式 severity
+- `packages/backend/src/routes/alert-budget.ts` — API routes
 - `packages/backend/src/app.ts` — 注册 routes
-- `packages/backend/src/__tests__/rule-parser.test.ts`
-- `packages/backend/src/__tests__/rule-engine-v2.test.ts`
+- `packages/backend/src/__tests__/alert-budget.test.ts`
+- `packages/backend/src/__tests__/progressive-severity.test.ts`
 
 ### Verification
 - `pnpm build && pnpm --filter @event-radar/backend lint` must pass
 - All tests pass
-- Create branch `feat/rule-dsl`, commit, push, create PR to main
+- Create branch `feat/alert-budget`, commit, push, create PR to main
 - **严禁 merge PR！严禁运行 gh pr merge！**
    - 按事件类型统计
    - 时间窗口过滤 (7d/30d/90d)
