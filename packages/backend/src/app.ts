@@ -130,6 +130,7 @@ export function buildApp(options?: {
   apiKey?: string;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
+  const startedAt = new Date().toISOString();
   const eventBus = new InMemoryEventBus();
   const registry = new ScannerRegistry();
   const alertRouter = options?.alertRouter ?? buildAlertRouter();
@@ -389,6 +390,7 @@ export function buildApp(options?: {
 
     return reply.send({
       status: dbStatus === 'connected' ? 'ok' : 'degraded',
+      startedAt,
       scanners,
       db: {
         status: dbStatus,
