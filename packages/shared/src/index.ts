@@ -211,3 +211,15 @@ export {
   type SeverityResult,
   type SeverityChange,
 } from './schemas/alert-budget-types.js';
+export {
+  HistoryEventSchema,
+  HistoryPaginationSchema,
+  HistoryResponseSchema,
+  SectorAggregateSchema,
+  SectorAggregateResponseSchema,
+  type HistoryEvent,
+  type HistoryPagination,
+  type HistoryResponse,
+  type SectorAggregate,
+  type SectorAggregateResponse,
+} from './schemas/history-types.js';

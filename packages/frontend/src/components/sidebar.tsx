@@ -8,6 +8,7 @@ import {
   Radio,
   Bell,
   Settings,
+  History,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { useState } from "react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "History", href: "/dashboard/history", icon: History },
   { name: "Events", href: "/dashboard/events", icon: Radio },
   { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },

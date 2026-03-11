@@ -42,6 +42,7 @@ import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
+import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -424,6 +425,7 @@ export function buildApp(options?: {
   // Register event query routes if db is available
   if (db) {
     registerEventRoutes(server, db);
+    registerEventsHistoryRoutes(server, db, { apiKey });
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
