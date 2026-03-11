@@ -47,6 +47,7 @@ pnpm --filter @event-radar/backend test   # test backend only
 
 - **完成任务后**: `git checkout -b feat/xxx` → commit → push → `gh pr create` → 等 owner merge
 - **禁止直接 push 到 main**
+- **严禁 merge PR！** 不要运行 `gh pr merge`、`git merge` 到 main。你只负责创建 PR 和修代码，merge 由 orchestrator 执行
 - **Conventional Commits**: `feat(scanner): add SEC 8-K polling`, `fix(api): handle null ticker`
 - **Branch naming**: `feat/`, `fix/`, `docs/`
 

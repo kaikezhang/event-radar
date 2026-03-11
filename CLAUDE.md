@@ -26,6 +26,8 @@ packages/sec-service/— Python FastAPI microservice
 
 - 完成任务后：创建新分支 → commit → push → 创建 PR → 由 master/owner merge 到 main
 - 禁止直接 push 到 main
+- **严禁 merge PR！** 你只负责创建 PR 和修改代码，merge 由晚晚（orchestrator）执行
+- 不要运行 `gh pr merge`、`git merge` 到 main、或任何合并操作
 - 修改 md/docs 可直接 commit 到 main
 
 ## Key Constraints
