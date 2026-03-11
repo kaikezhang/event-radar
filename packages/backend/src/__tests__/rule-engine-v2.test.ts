@@ -122,6 +122,23 @@ describe('RuleEngineV2 evaluation', () => {
     expect(result.ruleId).toBe(containsRule.id);
     expect(result.actions.priority).toBe('CRITICAL');
   });
+
+  it('treats invalid MATCHES regex patterns as non-matching', async () => {
+    const engine = new RuleEngineV2();
+    const invalidRegexRule = parseStoredRule(
+      'IF keyword MATCHES "[" THEN priority = "CRITICAL"',
+      { name: 'Invalid regex', order: 1 },
+    );
+
+    const result = await engine.evaluateRules(makeEvent(), [invalidRegexRule]);
+
+    expect(result).toEqual({
+      matched: false,
+      ruleId: null,
+      ruleName: null,
+      actions: { priority: 'MEDIUM' },
+    });
+  });
 });
 
 describe('RuleEngineV2 CRUD', () => {
@@ -187,10 +204,21 @@ describe('RuleEngineV2 CRUD', () => {
       dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
     });
 
-    await engine.deleteRule(created.id);
+    const deleted = await engine.deleteRule(created.id);
 
+    expect(deleted).toBe(true);
     const rules = await engine.listRules();
     expect(rules).toEqual([]);
+  });
+
+  it('reports when deleting a non-existent rule', async () => {
+    const engine = new RuleEngineV2(db);
+
+    const deleted = await engine.deleteRule(
+      '11111111-1111-1111-1111-111111111111',
+    );
+
+    expect(deleted).toBe(false);
   });
 
   it('reorders rules', async () => {
@@ -209,5 +237,21 @@ describe('RuleEngineV2 CRUD', () => {
     const rules = await engine.listRules();
     expect(rules.map((rule) => rule.id)).toEqual([second.id, first.id]);
     expect(rules.map((rule) => rule.order)).toEqual([0, 1]);
+  });
+
+  it('rejects reorder requests that do not include the full rule set', async () => {
+    const engine = new RuleEngineV2(db);
+    const first = await engine.addRule({
+      name: 'First',
+      dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+    });
+    await engine.addRule({
+      name: 'Second',
+      dsl: 'IF ticker = "AAPL" THEN priority = "CRITICAL"',
+    });
+
+    await expect(engine.reorderRules([first.id])).rejects.toThrow(
+      'submitted rule IDs must match the full rule set',
+    );
   });
 });

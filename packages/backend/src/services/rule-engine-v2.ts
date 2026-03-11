@@ -35,6 +35,8 @@ interface RuleUpdateInput {
 }
 
 export class RuleEngineV2 {
+  private readonly regexCache = new Map<string, RegExp>();
+
   constructor(private readonly db?: Database) {}
 
   async evaluateRules(
@@ -128,12 +130,17 @@ export class RuleEngineV2 {
     return this.mapRow(row);
   }
 
-  async deleteRule(id: string): Promise<void> {
+  async deleteRule(id: string): Promise<boolean> {
     if (!this.db) {
-      return;
+      return false;
     }
 
-    await this.db.delete(alertRules).where(eq(alertRules.id, id));
+    const deletedRows = await this.db
+      .delete(alertRules)
+      .where(eq(alertRules.id, id))
+      .returning({ id: alertRules.id });
+
+    return deletedRows.length > 0;
   }
 
   async listRules(): Promise<ParsedRule[]> {
@@ -150,11 +157,26 @@ export class RuleEngineV2 {
   }
 
   async reorderRules(ids: string[]): Promise<void> {
-    if (!this.db || ids.length === 0) {
+    if (!this.db) {
       return;
     }
 
     await this.db.transaction(async (tx) => {
+      const existingRules = await tx
+        .select({ id: alertRules.id })
+        .from(alertRules)
+        .orderBy(asc(alertRules.ruleOrder));
+      const existingIds = existingRules.map((rule) => rule.id);
+      const submittedIds = new Set(ids);
+
+      const hasFullRuleSet = existingIds.length === ids.length &&
+        submittedIds.size === ids.length &&
+        existingIds.every((id) => submittedIds.has(id));
+
+      if (!hasFullRuleSet) {
+        throw new Error('submitted rule IDs must match the full rule set');
+      }
+
       for (const [index, id] of ids.entries()) {
         await tx
           .update(alertRules)
@@ -190,7 +212,7 @@ export class RuleEngineV2 {
     dsl: string,
     overrides: Partial<ParsedRule> = {},
   ): ParsedRule {
-    const parsed = parseRule(dsl);
+    const parsed = parseRule(dsl, overrides.name);
     if (!parsed.ok) {
       throw new Error(parsed.error.message);
     }
@@ -255,9 +277,11 @@ export class RuleEngineV2 {
           typeof node.value === 'string' &&
           actual.toLowerCase().includes(node.value.toLowerCase());
       case 'MATCHES':
-        return typeof actual === 'string' &&
-          typeof node.value === 'string' &&
-          new RegExp(node.value, 'i').test(actual);
+        if (typeof actual !== 'string' || typeof node.value !== 'string') {
+          return false;
+        }
+
+        return this.getCachedRegex(node.value)?.test(actual) ?? false;
       case '>':
       case '>=':
       case '<':
@@ -304,6 +328,21 @@ export class RuleEngineV2 {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private getCachedRegex(pattern: string): RegExp | null {
+    const cached = this.regexCache.get(pattern);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const compiled = new RegExp(pattern, 'i');
+      this.regexCache.set(pattern, compiled);
+      return compiled;
+    } catch {
+      return null;
+    }
   }
 }
 
