@@ -150,6 +150,18 @@ export {
   type SubmitFeedbackInput,
   type FeedbackStats,
 } from './schemas/feedback-types.js';
+export {
+  SourceWeightsSchema,
+  ReclassificationReasonSchema,
+  ReclassificationItemSchema,
+  WeightAdjustmentSchema,
+  ReclassificationCandidateSchema,
+  type SourceWeights,
+  type ReclassificationReason,
+  type ReclassificationItem,
+  type WeightAdjustment,
+  type ReclassificationCandidate,
+} from './schemas/adaptive-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
