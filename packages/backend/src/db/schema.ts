@@ -187,6 +187,59 @@ export const userFeedback = pgTable(
   (table) => [index('idx_user_feedback_event_id').on(table.eventId)],
 );
 
+export const sourceWeights = pgTable(
+  'source_weights',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    source: varchar('source', { length: 100 }).notNull().unique(),
+    weight: decimal('weight', { precision: 5, scale: 4 }).notNull(),
+    sampleSize: integer('sample_size').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_source_weights_source').on(table.source)],
+);
+
+export const weightAdjustments = pgTable(
+  'weight_adjustments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    previousWeights: jsonb('previous_weights')
+      .notNull()
+      .$type<Record<string, number>>(),
+    newWeights: jsonb('new_weights')
+      .notNull()
+      .$type<Record<string, number>>(),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_weight_adjustments_created_at').on(table.createdAt)],
+);
+
+export const reclassificationQueue = pgTable(
+  'reclassification_queue',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' })
+      .unique(),
+    reason: varchar('reason', { length: 50 }).notNull(),
+    priority: integer('priority').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_reclassification_queue_status').on(table.status),
+    index('idx_reclassification_queue_priority').on(table.priority),
+  ],
+);
+
 export const deliveries = pgTable('deliveries', {
   id: uuid('id').primaryKey().defaultRandom(),
   eventId: uuid('event_id')

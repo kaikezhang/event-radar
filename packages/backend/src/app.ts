@@ -38,6 +38,7 @@ import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerWinRateRoutes } from './routes/win-rate.js';
 import { registerStoryGroupRoutes } from './routes/story-groups.js';
 import { registerAccuracyRoutes } from './routes/accuracy.js';
+import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -61,6 +62,7 @@ import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebSocketPlugin } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
+import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import type {
   AccuracyDirection,
   ClassificationPrediction,
@@ -137,6 +139,9 @@ export function buildApp(options?: {
   const deduplicator = new EventDeduplicator();
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
+    : undefined;
+  const adaptiveService = db
+    ? new AdaptiveClassifierService(db, { accuracyService, eventBus })
     : undefined;
   const outcomeTracker =
     db != null
@@ -302,14 +307,44 @@ export function buildApp(options?: {
       }
 
       if (accuracyService) {
+        const predictionPayload = await buildPredictionPayload(
+          event,
+          result,
+          llmResult,
+          adaptiveService,
+        );
         await accuracyService.recordPrediction(
           eventId,
-          buildPredictionPayload(event, result, llmResult),
+          predictionPayload,
         );
+
+        if (adaptiveService) {
+          await adaptiveService.enqueueEventIfNeeded({
+            eventId,
+            source: event.source,
+            confidence: predictionPayload.confidence,
+          });
+        }
       }
 
       if (outcomeTracker) {
         await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
+      }
+    });
+  }
+
+  if (adaptiveService && eventBus.subscribeTopic) {
+    eventBus.subscribeTopic('accuracy:updated', async (payload) => {
+      const totalEvaluated =
+        payload &&
+        typeof payload === 'object' &&
+        'totalEvaluated' in payload &&
+        typeof payload.totalEvaluated === 'number'
+          ? payload.totalEvaluated
+          : null;
+
+      if (totalEvaluated != null) {
+        await adaptiveService.recalculateWeightsIfNeeded(totalEvaluated);
       }
     });
   }
@@ -385,6 +420,7 @@ export function buildApp(options?: {
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
     registerAccuracyRoutes(server, db, { apiKey });
+    registerAdaptiveRoutes(server, db, { apiKey });
     registerFeedbackRoutes(server, db, { apiKey });
   }
 
@@ -394,16 +430,21 @@ export function buildApp(options?: {
   return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator };
 }
 
-function buildPredictionPayload(
+async function buildPredictionPayload(
   event: RawEvent,
   ruleResult: ClassificationResult,
   llmResult?: Result<LlmClassificationResult, Error>,
-): Omit<ClassificationPrediction, 'eventId'> {
+  adaptiveService?: AdaptiveClassifierService,
+): Promise<Omit<ClassificationPrediction, 'eventId'>> {
+  const sourceWeight = adaptiveService
+    ? await adaptiveService.getSourceWeight(event.source)
+    : 1;
+
   if (llmResult?.ok) {
     return {
       predictedSeverity: llmResult.value.severity,
       predictedDirection: normalizeLlmDirection(llmResult.value.direction),
-      confidence: llmResult.value.confidence,
+      confidence: applySourceWeight(llmResult.value.confidence, sourceWeight),
       classifiedBy: 'hybrid',
       classifiedAt: new Date().toISOString(),
     };
@@ -412,10 +453,14 @@ function buildPredictionPayload(
   return {
     predictedSeverity: ruleResult.severity,
     predictedDirection: extractFallbackDirection(event),
-    confidence: ruleResult.confidence,
+    confidence: applySourceWeight(ruleResult.confidence, sourceWeight),
     classifiedBy: 'rule-engine',
     classifiedAt: new Date().toISOString(),
   };
+}
+
+function applySourceWeight(confidence: number, sourceWeight: number): number {
+  return Math.min(1, Math.max(0, Number((confidence * sourceWeight).toFixed(4))));
 }
 
 function extractFallbackDirection(event: RawEvent): AccuracyDirection {

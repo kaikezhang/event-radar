@@ -25,6 +25,9 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM reclassification_queue`);
+  await db.execute(sql`DELETE FROM weight_adjustments`);
+  await db.execute(sql`DELETE FROM source_weights`);
   await db.execute(sql`DELETE FROM user_feedback`);
   await db.execute(sql`DELETE FROM deliveries`);
   await db.execute(sql`DELETE FROM classification_outcomes`);
@@ -113,6 +116,37 @@ export async function createTestDb(): Promise<{
       note TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS source_weights (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source VARCHAR(100) NOT NULL UNIQUE,
+      weight DECIMAL(5, 4) NOT NULL,
+      sample_size INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS weight_adjustments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      previous_weights JSONB NOT NULL,
+      new_weights JSONB NOT NULL,
+      reason TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS reclassification_queue (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      reason VARCHAR(50) NOT NULL,
+      priority INTEGER NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
