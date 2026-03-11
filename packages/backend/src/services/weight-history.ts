@@ -24,28 +24,30 @@ export class WeightHistoryService {
       sampleSizes,
     );
 
-    await this.db.insert(weightAdjustments).values({
-      previousWeights: previous.weights,
-      newWeights: parsed.weights,
-      reason,
-      createdAt: new Date(parsed.updatedAt),
-    });
-
-    await this.db.delete(sourceWeights);
-
     const entries = Object.entries(parsed.weights);
-    if (entries.length === 0) {
-      return;
-    }
+    await this.db.transaction(async (tx) => {
+      await tx.insert(weightAdjustments).values({
+        previousWeights: previous.weights,
+        newWeights: parsed.weights,
+        reason,
+        createdAt: new Date(parsed.updatedAt),
+      });
 
-    await this.db.insert(sourceWeights).values(
-      entries.map(([source, weight]) => ({
-        source,
-        weight: String(weight),
-        sampleSize: normalizedSampleSizes[source] ?? 0,
-        updatedAt: new Date(parsed.updatedAt),
-      })),
-    );
+      await tx.delete(sourceWeights);
+
+      if (entries.length === 0) {
+        return;
+      }
+
+      await tx.insert(sourceWeights).values(
+        entries.map(([source, weight]) => ({
+          source,
+          weight: String(weight),
+          sampleSize: normalizedSampleSizes[source] ?? 0,
+          updatedAt: new Date(parsed.updatedAt),
+        })),
+      );
+    });
   }
 
   async getHistory(limit = 20): Promise<WeightAdjustment[]> {

@@ -10,6 +10,7 @@ import { registerAdaptiveRoutes } from '../routes/adaptive.js';
 import { AdaptiveClassifierService } from '../services/adaptive-classifier.js';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
 import { UserFeedbackService } from '../services/user-feedback.js';
+import { WeightHistoryService } from '../services/weight-history.js';
 import {
   cleanTestDb,
   createTestDb,
@@ -166,6 +167,95 @@ describe('AdaptiveClassifierService', () => {
     expect(weights.sampleSize).toBe(0);
   });
 
+  it('recalculates from a neutral base weight instead of compounding persisted weights', async () => {
+    let currentWeights = {
+      weights: { 'sec-edgar': 1.5, reddit: 0.8 },
+      updatedAt: '2026-03-11T10:00:00.000Z',
+      sampleSize: 40,
+    };
+    const accuracyService = {
+      getAccuracyStats: vi.fn().mockResolvedValue({
+        totalEvaluated: 40,
+        severityAccuracy: 0,
+        directionAccuracy: 0,
+        truePositives: 0,
+        trueNegatives: 0,
+        falsePositives: 0,
+        falseNegatives: 0,
+        precision: 0,
+        recall: 0,
+        f1Score: 0,
+        bySource: {
+          'sec-edgar': { accuracy: 0.75, count: 20 },
+          reddit: { accuracy: 0.25, count: 20 },
+        },
+        byEventType: {},
+        period: 'all',
+      }),
+    } as unknown as ClassificationAccuracyService;
+    const weightHistoryService = {
+      getCurrentWeights: vi.fn(async () => currentWeights),
+      recordAdjustment: vi.fn(async (weights) => {
+        currentWeights = weights;
+      }),
+    } as unknown as WeightHistoryService;
+    const service = new AdaptiveClassifierService(db, {
+      accuracyService,
+      weightHistoryService,
+    });
+
+    const weights = await service.recalculateWeights();
+
+    expect(weights.weights['sec-edgar']).toBe(1.5);
+    expect(weights.weights.reddit).toBe(0.5);
+  });
+
+  it('clamps weights at 2.0 when the raw ratio exceeds the max', async () => {
+    let currentWeights = {
+      weights: {},
+      updatedAt: '2026-03-11T10:00:00.000Z',
+      sampleSize: 80,
+    };
+    const accuracyService = {
+      getAccuracyStats: vi.fn().mockResolvedValue({
+        totalEvaluated: 80,
+        severityAccuracy: 0,
+        directionAccuracy: 0,
+        truePositives: 0,
+        trueNegatives: 0,
+        falsePositives: 0,
+        falseNegatives: 0,
+        precision: 0,
+        recall: 0,
+        f1Score: 0,
+        bySource: {
+          alpha: { accuracy: 0.875, count: 20 },
+          beta: { accuracy: 0, count: 20 },
+          gamma: { accuracy: 0, count: 20 },
+          delta: { accuracy: 0.125, count: 20 },
+        },
+        byEventType: {},
+        period: 'all',
+      }),
+    } as unknown as ClassificationAccuracyService;
+    const weightHistoryService = {
+      getCurrentWeights: vi.fn(async () => currentWeights),
+      recordAdjustment: vi.fn(async (weights) => {
+        currentWeights = weights;
+      }),
+    } as unknown as WeightHistoryService;
+    const service = new AdaptiveClassifierService(db, {
+      accuracyService,
+      weightHistoryService,
+    });
+
+    const weights = await service.recalculateWeights();
+
+    expect(weights.weights.alpha).toBe(2);
+    expect(weights.weights.beta).toBe(0.1);
+    expect(weights.weights.gamma).toBe(0.1);
+  });
+
   it('publishes a weights updated event after recalculation', async () => {
     const accuracyService = new ClassificationAccuracyService(db);
     const eventBus = new InMemoryEventBus();
@@ -317,6 +407,66 @@ describe('AdaptiveClassifierService', () => {
       'low_source_accuracy',
     ]);
   });
+
+  it('uses a single source stats lookup when syncing incorrect feedback into the queue', async () => {
+    const accuracyService = new ClassificationAccuracyService(db);
+    const feedbackService = new UserFeedbackService(db);
+    const service = new AdaptiveClassifierService(db, {
+      accuracyService,
+      feedbackService,
+    });
+
+    const firstEventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
+      severity: 'HIGH',
+    });
+    await accuracyService.recordPrediction(firstEventId, makePrediction({ confidence: 0.88 }));
+    await feedbackService.submitFeedback(firstEventId, 'incorrect');
+
+    const secondEventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'reddit', id: randomUUID() }),
+      severity: 'HIGH',
+    });
+    await accuracyService.recordPrediction(secondEventId, makePrediction({ confidence: 0.77 }));
+    await feedbackService.submitFeedback(secondEventId, 'incorrect');
+
+    const statsSpy = vi.spyOn(accuracyService, 'getAccuracyStats');
+
+    const queue = await service.getReclassificationQueue(10);
+
+    expect(queue).toHaveLength(2);
+    expect(statsSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-enqueues the same event idempotently', async () => {
+    const accuracyService = new ClassificationAccuracyService(db);
+    const service = new AdaptiveClassifierService(db, { accuracyService });
+    const eventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
+      severity: 'HIGH',
+    });
+
+    await accuracyService.recordPrediction(eventId, makePrediction({ confidence: 0.44 }));
+
+    await service.enqueueEventIfNeeded({
+      eventId,
+      source: 'sec-edgar',
+      confidence: 0.44,
+    });
+    await service.enqueueEventIfNeeded({
+      eventId,
+      source: 'sec-edgar',
+      confidence: 0.44,
+    });
+
+    const queue = await service.getReclassificationQueue(10);
+
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({
+      eventId,
+      reason: 'low_confidence',
+    });
+  });
 });
 
 describe('Adaptive API', () => {
@@ -462,5 +612,27 @@ describe('Adaptive pipeline integration', () => {
 
     expect(weights.weights['sec-edgar']).toBe(1);
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('does not auto-recalculate twice for the same evaluated state across service instances', async () => {
+    const accuracyService = new ClassificationAccuracyService(db);
+
+    await seedEvaluatedEvents(db, accuracyService, {
+      count: 20,
+      source: 'sec-edgar',
+    });
+
+    const firstService = new AdaptiveClassifierService(db, { accuracyService });
+    const secondService = new AdaptiveClassifierService(db, { accuracyService });
+
+    await firstService.recalculateWeightsIfNeeded(500);
+    await secondService.recalculateWeightsIfNeeded(500);
+
+    const history = await new WeightHistoryService(db).getHistory(10);
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      reason: 'auto_recalculate_500_outcomes',
+    });
   });
 });

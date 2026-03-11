@@ -84,7 +84,6 @@ export class AdaptiveClassifierService {
       });
     }
 
-    const current = await this.getSourceWeights();
     const averageAccuracy =
       sources.reduce((total, [, value]) => total + value.accuracy, 0) / sources.length;
     const updatedAt = new Date().toISOString();
@@ -98,8 +97,7 @@ export class AdaptiveClassifierService {
           return [source, 1];
         }
 
-        const baseWeight = current.weights[source] ?? 1;
-        const scaledWeight = baseWeight * (value.accuracy / averageAccuracy);
+        const scaledWeight = 1.0 * (value.accuracy / averageAccuracy);
         return [source, this.clampWeight(scaledWeight)];
       }),
     );
@@ -122,6 +120,10 @@ export class AdaptiveClassifierService {
     return nextWeights;
   }
 
+  /**
+   * `feedbackVerdict` and `sourceAccuracy` must already be populated before calling.
+   * Use `enqueueEventIfNeeded()` when those derived fields still need to be looked up.
+   */
   shouldReclassify(candidate: ReclassificationCandidate): boolean {
     return this.getReclassificationReason(candidate) !== null;
   }
@@ -189,16 +191,26 @@ export class AdaptiveClassifierService {
   async recalculateWeightsIfNeeded(
     totalEvaluated: number,
   ): Promise<SourceWeights | null> {
-    if (
-      totalEvaluated <= 0 ||
-      totalEvaluated % 500 !== 0 ||
-      totalEvaluated === this.lastAutoRecalculatedAt
-    ) {
+    if (totalEvaluated <= 0 || totalEvaluated % 500 !== 0) {
       return null;
     }
 
-    this.lastAutoRecalculatedAt = totalEvaluated;
-    return this.recalculateWeights(`auto_recalculate_${totalEvaluated}_outcomes`);
+    const [latestAdjustment] = await this.weightHistoryService.getHistory(1);
+    const latestAdjustmentTimestamp = latestAdjustment
+      ? Date.parse(latestAdjustment.createdAt)
+      : 0;
+    if (latestAdjustmentTimestamp > this.lastAutoRecalculatedAt) {
+      this.lastAutoRecalculatedAt = latestAdjustmentTimestamp;
+    }
+
+    const reason = `auto_recalculate_${totalEvaluated}_outcomes`;
+    if (latestAdjustment?.reason === reason) {
+      return null;
+    }
+
+    const weights = await this.recalculateWeights(reason);
+    this.lastAutoRecalculatedAt = Date.parse(weights.updatedAt);
+    return weights;
   }
 
   private getReclassificationReason(
@@ -240,12 +252,14 @@ export class AdaptiveClassifierService {
       .innerJoin(events, eq(events.id, userFeedback.eventId))
       .where(eq(userFeedback.verdict, 'incorrect'));
 
+    const stats = await this.accuracyService.getAccuracyStats({ groupBy: 'source' });
+
     for (const row of rows) {
       await this.upsertQueueItem({
         eventId: row.eventId,
         reason: 'user_feedback_incorrect',
         confidence: Number(row.confidence),
-        sourceAccuracy: await this.getSourceAccuracy(row.source),
+        sourceAccuracy: stats.bySource[row.source]?.accuracy ?? null,
       });
     }
   }

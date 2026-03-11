@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import type { Database } from '../db/connection.js';
 import { WeightHistoryService } from '../services/weight-history.js';
@@ -107,5 +107,46 @@ describe('WeightHistoryService', () => {
       reddit: 0.6,
     });
     expect(current.sampleSize).toBe(40);
+  });
+
+  it('records adjustments inside a transaction', async () => {
+    const txInsertValues = vi.fn().mockResolvedValue(undefined);
+    const tx = {
+      insert: vi.fn(() => ({
+        values: txInsertValues,
+      })),
+      delete: vi.fn().mockResolvedValue(undefined),
+    };
+    const rootSelect = vi.fn(() => ({
+      from: vi.fn().mockResolvedValue([]),
+    }));
+    const rootInsert = vi.fn();
+    const rootDelete = vi.fn();
+    const transaction = vi.fn(
+      async (callback: (transaction: typeof tx) => Promise<void>) =>
+        callback(tx),
+    );
+    const dbMock = {
+      select: rootSelect,
+      insert: rootInsert,
+      delete: rootDelete,
+      transaction,
+    } as unknown as Database;
+    const service = new WeightHistoryService(dbMock);
+
+    await service.recordAdjustment(
+      {
+        weights: { 'sec-edgar': 1.2, reddit: 0.8 },
+        updatedAt: '2026-03-11T12:00:00.000Z',
+        sampleSize: 40,
+      },
+      'transactional write',
+    );
+
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(rootInsert).not.toHaveBeenCalled();
+    expect(rootDelete).not.toHaveBeenCalled();
+    expect(tx.insert).toHaveBeenCalledTimes(2);
+    expect(tx.delete).toHaveBeenCalledOnce();
   });
 });
