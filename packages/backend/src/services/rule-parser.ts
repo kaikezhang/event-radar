@@ -52,15 +52,19 @@ const KEYWORDS = new Set([
   'FALSE',
 ]);
 const PRIORITIES = new Set<Priority>(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+const MAX_MATCHES_PATTERN_LENGTH = 200;
 
-export function parseRule(dsl: string): Result<ParsedRule, ParseError> {
+export function parseRule(
+  dsl: string,
+  name = 'Parsed rule',
+): Result<ParsedRule, ParseError> {
   const tokens = tokenize(dsl.trim());
   if (!tokens.ok) {
     return tokens;
   }
 
   try {
-    return ok(new Parser(tokens.value, dsl.trim()).parse());
+    return ok(new Parser(tokens.value, dsl.trim(), name).parse());
   } catch (error) {
     return err(error as ParseError);
   }
@@ -165,6 +169,27 @@ function validateKeywordCondition(
     errors.push({
       path,
       message: 'keyword conditions require a string value',
+    });
+    return;
+  }
+
+  if (operator !== 'MATCHES') {
+    return;
+  }
+
+  if (value.length > MAX_MATCHES_PATTERN_LENGTH) {
+    errors.push({
+      path,
+      message: `MATCHES patterns must be ${MAX_MATCHES_PATTERN_LENGTH} characters or fewer`,
+    });
+  }
+
+  try {
+    new RegExp(value, 'i');
+  } catch {
+    errors.push({
+      path,
+      message: 'MATCHES pattern must be a valid regular expression',
     });
   }
 }
@@ -278,6 +303,7 @@ class Parser {
   constructor(
     private readonly tokens: Token[],
     private readonly dsl: string,
+    private readonly name: string,
   ) {}
 
   parse(): ParsedRule {
@@ -291,7 +317,7 @@ class Parser {
 
     return {
       id: randomUUID(),
-      name: 'Parsed rule',
+      name: this.name,
       dsl: this.dsl,
       conditions,
       actions,

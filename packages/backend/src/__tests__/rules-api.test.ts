@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { PGlite } from '@electric-sql/pglite';
@@ -37,6 +38,63 @@ describe('Rules API', () => {
     const response = await apiServer.inject({
       method: 'GET',
       url: '/api/v1/rules',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: 'Unauthorized',
+      message: 'Missing X-API-Key header',
+    });
+  });
+
+  it.each([
+    {
+      method: 'POST' as const,
+      url: '/api/v1/rules',
+      payload: {
+        name: 'Critical SEC',
+        dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+      },
+    },
+    {
+      method: 'PUT' as const,
+      url: `/api/v1/rules/${randomUUID()}`,
+      payload: {
+        name: 'Updated rule',
+        dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+      },
+    },
+    {
+      method: 'DELETE' as const,
+      url: `/api/v1/rules/${randomUUID()}`,
+    },
+    {
+      method: 'POST' as const,
+      url: '/api/v1/rules/reorder',
+      payload: {
+        ids: [randomUUID()],
+      },
+    },
+    {
+      method: 'POST' as const,
+      url: '/api/v1/rules/test',
+      payload: {
+        dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+        event: {},
+      },
+    },
+    {
+      method: 'POST' as const,
+      url: '/api/v1/rules/validate',
+      payload: {
+        dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+      },
+    },
+  ])('returns 401 without API key for $method $url', async ({ method, url, payload }) => {
+    const response = await apiServer.inject({
+      method,
+      url,
+      payload,
     });
 
     expect(response.statusCode).toBe(401);
@@ -115,6 +173,17 @@ describe('Rules API', () => {
     expect(deleteResponse.statusCode).toBe(204);
   });
 
+  it('returns 404 when deleting a non-existent rule', async () => {
+    const response = await apiServer.inject({
+      method: 'DELETE',
+      url: `/api/v1/rules/${randomUUID()}`,
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: 'Rule not found' });
+  });
+
   it('reorders rules', async () => {
     const first = await apiServer.inject({
       method: 'POST',
@@ -158,6 +227,45 @@ describe('Rules API', () => {
       secondBody.id,
       firstBody.id,
     ]);
+  });
+
+  it('rejects reorder requests that omit existing rules', async () => {
+    const first = await apiServer.inject({
+      method: 'POST',
+      url: '/api/v1/rules',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: {
+        name: 'First',
+        dsl: 'IF source = "sec-edgar" THEN priority = "HIGH"',
+      },
+    });
+    await apiServer.inject({
+      method: 'POST',
+      url: '/api/v1/rules',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: {
+        name: 'Second',
+        dsl: 'IF ticker = "AAPL" THEN priority = "CRITICAL"',
+      },
+    });
+
+    const firstBody = first.json() as { id: string };
+    const response = await apiServer.inject({
+      method: 'POST',
+      url: '/api/v1/rules/reorder',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: { ids: [firstBody.id] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'Invalid rule order',
+      details: [
+        expect.objectContaining({
+          message: expect.stringContaining('submitted rule IDs must match the full rule set'),
+        }),
+      ],
+    });
   });
 
   it('tests a rule against an event payload', async () => {

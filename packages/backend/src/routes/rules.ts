@@ -99,9 +99,18 @@ export function registerRulesRoutes(
   server.post('/api/v1/rules/reorder', {
     schema: { body: ReorderBodySchema },
     preHandler: withAuth,
-  }, async (request) => {
+  }, async (request, reply) => {
     const body = request.body as { ids: string[] };
-    await engine.reorderRules(body.ids);
+    try {
+      await engine.reorderRules(body.ids);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.status(400).send({
+        error: 'Invalid rule order',
+        details: [{ message }],
+      });
+    }
+
     return { success: true };
   });
 
@@ -186,7 +195,11 @@ export function registerRulesRoutes(
     preHandler: withAuth,
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    await engine.deleteRule(id);
+    const deleted = await engine.deleteRule(id);
+    if (!deleted) {
+      return reply.status(404).send({ error: 'Rule not found' });
+    }
+
     return reply.status(204).send();
   });
 }
@@ -196,7 +209,7 @@ function validateDsl(
   name?: string,
   enabled?: boolean,
 ): { error: string; details: unknown[] } | null {
-  const parsed = parseRule(dsl);
+  const parsed = parseRule(dsl, name);
   if (!parsed.ok) {
     return {
       error: 'Invalid rule DSL',

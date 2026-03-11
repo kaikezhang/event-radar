@@ -166,6 +166,20 @@ describe('parseRule', () => {
     });
   });
 
+  it('accepts a custom parsed rule name', () => {
+    const result = parseRule(
+      'IF source = "sec-edgar" THEN priority = "HIGH"',
+      'Custom name',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.name).toBe('Custom name');
+  });
+
   it('returns a clear parse error for a missing THEN clause', () => {
     const result = parseRule('IF source = "sec-edgar" priority = "HIGH"');
 
@@ -248,5 +262,45 @@ describe('validateRule', () => {
 
     expect(validation.error[0]?.path).toBe('actions.priority');
     expect(validation.error[0]?.message).toContain('must be one of');
+  });
+
+  it('rejects invalid regex patterns in MATCHES conditions', () => {
+    const parsed = parseRule(
+      'IF keyword MATCHES "[" THEN priority = "HIGH"',
+    );
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+
+    const validation = validateRule(parsed.value);
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      return;
+    }
+
+    expect(validation.error[0]?.path).toBe('conditions.keyword');
+    expect(validation.error[0]?.message).toContain('valid regular expression');
+  });
+
+  it('rejects MATCHES patterns longer than 200 characters', () => {
+    const parsed = parseRule(
+      `IF keyword MATCHES "${'a'.repeat(201)}" THEN priority = "HIGH"`,
+    );
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+
+    const validation = validateRule(parsed.value);
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      return;
+    }
+
+    expect(validation.error[0]?.path).toBe('conditions.keyword');
+    expect(validation.error[0]?.message).toContain('200 characters');
   });
 });
