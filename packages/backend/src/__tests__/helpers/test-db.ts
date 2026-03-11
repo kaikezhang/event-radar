@@ -48,7 +48,12 @@ export async function createTestDb(): Promise<{
       metadata JSONB,
       severity VARCHAR(20),
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      merged_from TEXT[],
+      source_urls JSONB,
+      is_duplicate BOOLEAN DEFAULT FALSE,
+      confirmed_sources JSONB DEFAULT '[]',
+      confirmation_count INTEGER DEFAULT 1
     )
   `);
 

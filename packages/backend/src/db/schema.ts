@@ -33,6 +33,9 @@ export const events = pgTable('events', {
   mergedFrom: text('merged_from').array(),
   sourceUrls: jsonb('source_urls'),
   isDuplicate: boolean('is_duplicate').default(false),
+  // Multi-source confirmation fields
+  confirmedSources: jsonb('confirmed_sources').$type<string[]>(),
+  confirmationCount: integer('confirmation_count').default(1),
 });
 
 export const priceCache = pgTable(
