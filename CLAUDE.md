@@ -44,55 +44,110 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.1.2 Cross-Source Event Dedup & Merge
+## Current Task: P4.1.3 — "Developing Story" 分组
+
+### Goal
+当多个相关事件在短时间内出现时，自动归为同一个 "Developing Story"（发展中故事），让用户看到的是一个故事线，而不是碎片化的事件列表。
 
 ### Requirements
 
-**目标**: 同一事件从多个源收到时，自动去重合并为一条
+1. **Story Group Service** (`packages/backend/src/services/story-group.ts`)
+   - `assignStoryGroup(event): Promise<StoryGroupResult>` — 新事件进来时，判断是否属于某个已有 story group
+   - `getStoryGroup(groupId): Promise<StoryGroup>` — 获取 story group 详情（含所有事件）
+   - `listActiveStoryGroups(options): Promise<StoryGroup[]>` — 列出活跃的 story groups
+   - Story Group 匹配规则:
+     - 同 ticker + 时间窗口 30min 内 + 同 eventType 或标题相似度 > 0.6 → 归入同一 story
+     - 已有 story group 的时间窗口 = 最后一个事件时间 + 30min（滑动窗口）
+     - Story group 在最后一个事件超过 2 小时后自动关闭（status: 'closed'）
 
-1. **Dedup Service** (`packages/backend/src/services/event-dedup.ts`)
-   - `findDuplicates(newEvent): Promise<DedupResult>` — 查找已有重复事件
-   - 去重规则（按优先级）:
-     - **Exact match**: 同 source + 同 sourceId → 100% 重复
-     - **Strong match**: 同 ticker + 同 eventType + 时间差<5min + 标题相似度>0.8 → 高置信重复
-     - **Likely match**: 同 ticker + 时间差<30min + 内容相似度>0.7 → 可能重复
-   - 使用 P4.1.1 的 similarity service 计算内容相似度
+2. **Types** (`packages/shared/src/schemas/story-group-types.ts`)
+   ```typescript
+   export interface StoryGroup {
+     id: string;                    // UUID
+     title: string;                 // 自动生成的 story 标题（取第一个事件标题）
+     tickers: string[];             // 所有涉及的 ticker
+     eventType: string;             // 主要事件类型
+     severity: string;              // 最高 severity
+     status: 'active' | 'closed';   // 活跃/已关闭
+     eventCount: number;            // 事件数量
+     firstEventAt: string;          // 第一个事件时间
+     lastEventAt: string;           // 最后一个事件时间
+     events: StoryEvent[];          // 时间线
+     createdAt: string;
+     updatedAt: string;
+   }
 
-2. **Merge Logic** (`packages/backend/src/services/event-merger.ts`)
-   - `mergeEvents(primary, duplicates): MergedEvent`
-   - 合并策略:
-     - 保留最早的事件作为 primary
-     - 合并所有 source URLs 到 `sources[]` 数组
-     - severity 取最高值
-     - tags 取并集
-     - 记录合并历史: `mergedFrom: string[]` (被合并事件 ID 列表)
+   export interface StoryEvent {
+     eventId: string;
+     sequenceNumber: number;        // 1, 2, 3... (按时间排序)
+     source: string;
+     title: string;
+     publishedAt: string;
+     isKeyEvent: boolean;           // 是否是关键事件（severity >= HIGH）
+   }
 
-3. **Database Schema**
-   - `events` 表新增字段: `merged_from text[]`, `source_urls jsonb`, `is_duplicate boolean default false`
-   - 被合并的事件标记 `is_duplicate = true`，不在 feed 中显示
+   export interface StoryGroupResult {
+     assigned: boolean;             // 是否被分配到 story group
+     groupId: string | null;        // story group ID
+     isNewGroup: boolean;           // 是否创建了新 group
+     sequenceNumber: number | null; // 在 group 中的序号
+   }
+
+   export interface StoryGroupOptions {
+     timeWindowMinutes?: number;    // default 30
+     closedAfterMinutes?: number;   // default 120
+     minSimilarity?: number;        // default 0.6
+     limit?: number;                // default 20
+     status?: 'active' | 'closed' | 'all';
+   }
+   ```
+
+3. **Database Schema** — `story_groups` 表 + `story_events` 关联表
+   - `story_groups`: id, title, tickers (jsonb), event_type, severity, status, event_count, first_event_at, last_event_at, created_at, updated_at
+   - `story_events`: id, story_group_id (FK), event_id (FK), sequence_number, is_key_event
+   - 用 drizzle-orm schema 定义
 
 4. **Pipeline Integration**
-   - 新事件进入 pipeline 时先跑 dedup check
-   - 如果找到重复 → merge 而不是创建新记录
-   - Event bus emit `event:merged` 事件
+   - 新事件经过 dedup 后 → story group 分配
+   - 如果分配到已有 group → 更新 group 的 lastEventAt, eventCount, severity
+   - Event bus emit `story:updated` 事件（附 groupId）
 
-5. **API Updates**
-   - `GET /events` 默认过滤 `is_duplicate = false`
-   - `GET /events/:id` 返回 `sources[]` 和 `mergedFrom`
+5. **API Endpoints**
+   - `GET /api/v1/story-groups?status=active&limit=20` — 列出 story groups
+   - `GET /api/v1/story-groups/:id` — story group 详情（含事件时间线）
+   - `GET /api/v1/events/:id` — 响应中新增 `storyGroupId` 和 `sequenceNumber` 字段
 
-6. **Tests**
-   - 精确重复检测
-   - 跨源重复检测（同一 SEC filing 从 SEC + 新闻两个源收到）
-   - 合并逻辑测试
-   - Pipeline 集成测试
+6. **Tests** (≥12 tests)
+   - 新事件创建新 story group
+   - 相关事件归入已有 group
+   - 不相关事件不归入（不同 ticker、超过时间窗口）
+   - 滑动窗口：新事件延长 group 活跃时间
+   - Group 自动关闭（超过 2 小时无新事件）
+   - Severity 升级（新事件 severity 更高时更新 group）
+   - Sequence number 正确递增
+   - isKeyEvent 标记
+   - API endpoints 响应格式
+   - 空结果处理
+   - 边界条件（刚好在时间窗口边缘）
+   - 多 ticker story（不同 ticker 但相关事件）
 
 ### Files to create/modify
-- `packages/shared/src/schemas/dedup-types.ts` — Zod schemas
-- `packages/backend/src/services/event-dedup.ts` — 去重逻辑
-- `packages/backend/src/services/event-merger.ts` — 合并逻辑
-- `packages/backend/src/db/schema.ts` — 新增字段
-- `packages/backend/src/__tests__/event-dedup.test.ts`
-- `packages/backend/src/__tests__/event-merger.test.ts`
+- `packages/shared/src/schemas/story-group-types.ts` — Zod schemas + types
+- `packages/shared/src/index.ts` — export new types
+- `packages/backend/src/db/schema.ts` — 新增 story_groups + story_events 表
+- `packages/backend/src/services/story-group.ts` — 核心逻辑
+- `packages/backend/src/routes/story-groups.ts` — API routes
+- `packages/backend/src/app.ts` — 注册新 routes
+- `packages/backend/src/__tests__/story-group.test.ts`
+
+### Dependencies
+- 使用 P4.1.1 的 similarity service 计算标题/内容相似度
+- 使用 P4.1.2 的 dedup service（先 dedup 再 story group）
+
+### Verification
+- `pnpm build && pnpm --filter @event-radar/backend lint` must pass
+- All tests pass
+- Create branch `feat/story-groups`, commit, push, create PR to main
 
 3. **CI/CD** (GitHub Actions)
    - Auto build + test on PR
