@@ -25,6 +25,10 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM severity_changes`);
+  await db.execute(sql`DELETE FROM severity_overrides`);
+  await db.execute(sql`DELETE FROM budget_config`);
+  await db.execute(sql`DELETE FROM alert_log`);
   await db.execute(sql`DELETE FROM alert_rules`);
   await db.execute(sql`DELETE FROM reclassification_queue`);
   await db.execute(sql`DELETE FROM weight_adjustments`);
@@ -173,6 +177,52 @@ export async function createTestDb(): Promise<{
       status VARCHAR(20) NOT NULL DEFAULT 'pending',
       error TEXT,
       sent_at TIMESTAMPTZ
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS alert_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      priority VARCHAR(20) NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      suppressed BOOLEAN NOT NULL DEFAULT FALSE,
+      suppression_reason TEXT
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS budget_config (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      max_alerts_per_hour INTEGER NOT NULL DEFAULT 50,
+      priority_shares JSONB NOT NULL,
+      window_minutes INTEGER NOT NULL DEFAULT 60,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS severity_overrides (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
+      severity VARCHAR(20) NOT NULL,
+      locked BOOLEAN NOT NULL DEFAULT FALSE,
+      locked_by VARCHAR(20),
+      source_count INTEGER NOT NULL DEFAULT 1,
+      reason TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS severity_changes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      previous_severity VARCHAR(20) NOT NULL,
+      new_severity VARCHAR(20) NOT NULL,
+      reason TEXT NOT NULL,
+      changed_by VARCHAR(20) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 

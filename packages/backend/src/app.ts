@@ -41,6 +41,7 @@ import { registerAccuracyRoutes } from './routes/accuracy.js';
 import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
+import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -426,6 +427,7 @@ export function buildApp(options?: {
     registerAdaptiveRoutes(server, db, { apiKey });
     registerFeedbackRoutes(server, db, { apiKey });
     registerRulesRoutes(server, db, { apiKey });
+    registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
   }
 
   // Register scanner health routes
