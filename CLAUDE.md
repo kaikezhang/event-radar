@@ -46,131 +46,115 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.3.2 — 方向信号准确率 & 用户反馈
+## Current Task: P4.3.4 — 自适应分类调整
 
 ### Goal
-P4.3.2 + P4.3.3 合并：增强方向信号准确率的细粒度追踪，并添加用户反馈机制让用户标记预测是否正确。
+基于 P4.3.1-3 收集的准确率数据和用户反馈，实现自适应分类调整：自动调整规则引擎权重，low-confidence 事件优先送 LLM 重分类。
 
 ### Requirements
 
-1. **Direction Signal Analytics** (`packages/backend/src/services/direction-analytics.ts`)
-   - `getDirectionBreakdown(options): Promise<DirectionBreakdown>` — 按时间窗口的方向准确率
-     - 分 T+1h, T+1d, T+1w 三个维度评估方向预测
-     - 每个维度独立计算 TP/TN/FP/FN
-     - 价格变化 > +1% = bullish outcome, < -1% = bearish, 其余 = neutral
-   - `getConfidenceCalibration(options): Promise<CalibrationData[]>` — 置信度校准
-     - 按 confidence 分桶 (0-0.2, 0.2-0.4, ..., 0.8-1.0)
-     - 每个桶的实际准确率 vs 预测 confidence
-     - 完美校准 = 对角线
-   - `getTopMispredictions(options): Promise<Misprediction[]>` — 最大误判列表
-     - 高 confidence 但预测错误的事件
-     - 按 |confidence - actual_accuracy| 降序排列
+1. **Adaptive Classification Service** (`packages/backend/src/services/adaptive-classifier.ts`)
+   - `getSourceWeights(): Promise<SourceWeights>` — 获取每个 source 的当前权重
+     - 默认权重 1.0，基于准确率数据动态调整
+     - 权重范围 0.1 - 2.0
+   - `recalculateWeights(): Promise<SourceWeights>` — 重新计算权重
+     - 基于 `ClassificationAccuracyService.getAccuracyStats({ groupBy: 'source' })`
+     - 准确率高的 source → 提高权重，准确率低的 → 降低权重
+     - 公式: `newWeight = clamp(baseWeight * (sourceAccuracy / avgAccuracy), 0.1, 2.0)`
+     - 最少需要 20 个评估样本才调整（否则保持默认）
+   - `shouldReclassify(event): boolean` — 判断是否需要 LLM 重分类
+     - confidence < 0.5 → 必须重分类
+     - confidence 0.5-0.7 且该 source 准确率 < 0.6 → 重分类
+     - 用户 feedback = 'incorrect' → 重分类
+   - `getReclassificationQueue(limit): Promise<Event[]>` — 待重分类事件队列
+     - 按优先级排序：用户标记错误 > low confidence > low source accuracy
 
-2. **User Feedback Service** (`packages/backend/src/services/user-feedback.ts`)
-   - `submitFeedback(eventId, feedback): Promise<void>` — 用户标记预测正确/错误
-   - `getFeedback(eventId): Promise<UserFeedback | null>` — 获取反馈
-   - `getFeedbackStats(): Promise<FeedbackStats>` — 反馈统计
-   - Feedback 类型: `correct`, `incorrect`, `partially_correct`
-   - 可选: 用户可添加 note (自由文本)
+2. **Weight Adjustment History** (`packages/backend/src/services/weight-history.ts`)
+   - `recordAdjustment(weights, reason): Promise<void>` — 记录权重变更
+   - `getHistory(limit): Promise<WeightAdjustment[]>` — 变更历史
+   - 用于审计和回滚
 
-3. **Types** (`packages/shared/src/schemas/feedback-types.ts`)
+3. **Types** (`packages/shared/src/schemas/adaptive-types.ts`)
    ```typescript
-   export interface DirectionBreakdown {
-     period: string;
-     horizons: {
-       '1h': DirectionMetrics;
-       '1d': DirectionMetrics;
-       '1w': DirectionMetrics;
-     };
-   }
+   export const SourceWeightsSchema = z.object({
+     weights: z.record(z.string(), z.number().min(0.1).max(2.0)),
+     updatedAt: z.string(),
+     sampleSize: z.number(),
+   });
 
-   export interface DirectionMetrics {
-     total: number;
-     accuracy: number;
-     tp: number; tn: number; fp: number; fn: number;
-     precision: number; recall: number; f1: number;
-   }
+   export const ReclassificationReasonSchema = z.enum([
+     'low_confidence',
+     'low_source_accuracy',
+     'user_feedback_incorrect',
+   ]);
 
-   export interface CalibrationData {
-     bucket: string;          // "0.0-0.2", "0.2-0.4", etc.
-     avgConfidence: number;
-     actualAccuracy: number;
-     count: number;
-   }
+   export const ReclassificationItemSchema = z.object({
+     eventId: z.string(),
+     reason: ReclassificationReasonSchema,
+     confidence: z.number(),
+     sourceAccuracy: z.number().nullable(),
+     priority: z.number(), // higher = more urgent
+   });
 
-   export interface Misprediction {
-     eventId: string;
-     title: string;
-     predictedDirection: string;
-     actualDirection: string;
-     confidence: number;
-     priceChange1d: number;
-   }
-
-   export interface UserFeedback {
-     id: string;
-     eventId: string;
-     verdict: 'correct' | 'incorrect' | 'partially_correct';
-     note: string | null;
-     createdAt: string;
-   }
-
-   export interface FeedbackStats {
-     total: number;
-     correct: number;
-     incorrect: number;
-     partiallyCorrect: number;
-     agreementRate: number;  // feedback agrees with auto-evaluation
-   }
+   export const WeightAdjustmentSchema = z.object({
+     id: z.string(),
+     previousWeights: z.record(z.string(), z.number()),
+     newWeights: z.record(z.string(), z.number()),
+     reason: z.string(),
+     createdAt: z.string(),
+   });
    ```
 
 4. **Database Schema**
-   - `user_feedback` 表: id, event_id (FK unique), verdict, note, created_at, updated_at
+   - `source_weights` 表: id, source, weight, sample_size, updated_at
+   - `weight_adjustments` 表: id, previous_weights (JSON), new_weights (JSON), reason, created_at
+   - `reclassification_queue` 表: id, event_id (FK), reason, priority, status ('pending'|'done'), created_at
    - 用 drizzle-orm schema 定义
 
 5. **API Endpoints**
-   - `GET /api/v1/accuracy/direction?period=30d` — 方向准确率 breakdown
-   - `GET /api/v1/accuracy/calibration` — 置信度校准数据
-   - `GET /api/v1/accuracy/mispredictions?limit=20` — 最大误判
-   - `POST /api/v1/feedback/:eventId` — 提交反馈 `{ verdict, note? }`
-   - `GET /api/v1/feedback/:eventId` — 获取反馈
-   - `GET /api/v1/feedback/stats` — 反馈统计
+   - `GET /api/v1/adaptive/weights` — 当前 source 权重
+   - `POST /api/v1/adaptive/recalculate` — 触发权重重算
+   - `GET /api/v1/adaptive/queue?limit=20` — 重分类队列
+   - `GET /api/v1/adaptive/history?limit=20` — 权重调整历史
    - 所有 endpoints 需要 API key auth
 
-6. **Tests** (≥15 tests)
-   - Direction breakdown 各时间窗口计算
-   - T+1h vs T+1d 不同结果
-   - Confidence calibration 分桶正确
-   - Mispredictions 排序正确
-   - 提交 feedback
-   - 重复提交 feedback（upsert）
-   - 获取不存在的 feedback → null
-   - Feedback stats 计算
-   - Agreement rate（feedback vs auto-evaluation 一致性）
+6. **Pipeline Integration**
+   - 分类完成时 → 检查 `shouldReclassify()` → 如果需要加入队列
+   - 每 500 个新 outcome → 自动 `recalculateWeights()`
+   - 权重变更 → emit `weights:updated` 到 event bus
+
+7. **Tests** (≥12 tests)
+   - 权重计算公式正确
+   - 样本不足时保持默认权重
+   - 权重 clamp 在 0.1-2.0
+   - shouldReclassify 各条件判断
+   - 重分类队列优先级排序
+   - 权重历史记录
    - API auth 验证
    - 空数据处理
-   - 阈值边界（+1% exactly）
+   - 权重重算触发条件
 
 ### Files to create/modify
-- `packages/shared/src/schemas/feedback-types.ts` — Zod schemas + types
+- `packages/shared/src/schemas/adaptive-types.ts` — Zod schemas + types
 - `packages/shared/src/index.ts` — export
-- `packages/backend/src/db/schema.ts` — user_feedback 表
-- `packages/backend/src/services/direction-analytics.ts` — 方向分析
-- `packages/backend/src/services/user-feedback.ts` — 用户反馈
-- `packages/backend/src/routes/accuracy.ts` — 新增 endpoints
-- `packages/backend/src/routes/feedback.ts` — 反馈 API
+- `packages/backend/src/db/schema.ts` — 新表
+- `packages/backend/src/services/adaptive-classifier.ts` — 核心自适应逻辑
+- `packages/backend/src/services/weight-history.ts` — 权重历史
+- `packages/backend/src/routes/adaptive.ts` — API
 - `packages/backend/src/app.ts` — 注册 routes
-- `packages/backend/src/__tests__/direction-analytics.test.ts`
-- `packages/backend/src/__tests__/user-feedback.test.ts`
+- `packages/backend/src/__tests__/adaptive-classifier.test.ts`
+- `packages/backend/src/__tests__/weight-history.test.ts`
 
 ### Dependencies
-- P4.3.1 classification accuracy service（读取 predictions + outcomes）
-- P4.2 outcome tracker（价格变化数据）
+- P4.3.1 classification accuracy service（准确率数据）
+- P4.3.2 direction analytics（方向准确率）
+- P4.3.3 user feedback（用户反馈）
 
 ### Verification
 - `pnpm build && pnpm --filter @event-radar/backend lint` must pass
 - All tests pass
-- Create branch `feat/direction-feedback`, commit, push, create PR to main
+- Create branch `feat/adaptive-classifier`, commit, push, create PR to main
+- **DO NOT merge the PR**
    - 按事件类型统计
    - 时间窗口过滤 (7d/30d/90d)
    - Confidence calibration 计算
