@@ -46,115 +46,132 @@ After any change: `turbo build && turbo test && turbo lint` must all pass.
 
 Read `tasks.md` for current task and development plan.
 
-## Current Task: P4.3.4 — 自适应分类调整
+## Current Task: P4.4.1+P4.4.2 — 自定义规则 DSL & 解析器
 
 ### Goal
-基于 P4.3.1-3 收集的准确率数据和用户反馈，实现自适应分类调整：自动调整规则引擎权重，low-confidence 事件优先送 LLM 重分类。
+实现告警自定义规则系统：用户定义规则 DSL 来过滤/优先级排序事件，规则引擎解析并执行这些规则。
 
 ### Requirements
 
-1. **Adaptive Classification Service** (`packages/backend/src/services/adaptive-classifier.ts`)
-   - `getSourceWeights(): Promise<SourceWeights>` — 获取每个 source 的当前权重
-     - 默认权重 1.0，基于准确率数据动态调整
-     - 权重范围 0.1 - 2.0
-   - `recalculateWeights(): Promise<SourceWeights>` — 重新计算权重
-     - 基于 `ClassificationAccuracyService.getAccuracyStats({ groupBy: 'source' })`
-     - 准确率高的 source → 提高权重，准确率低的 → 降低权重
-     - 公式: `newWeight = clamp(baseWeight * (sourceAccuracy / avgAccuracy), 0.1, 2.0)`
-     - 最少需要 20 个评估样本才调整（否则保持默认）
-   - `shouldReclassify(event): boolean` — 判断是否需要 LLM 重分类
-     - confidence < 0.5 → 必须重分类
-     - confidence 0.5-0.7 且该 source 准确率 < 0.6 → 重分类
-     - 用户 feedback = 'incorrect' → 重分类
-   - `getReclassificationQueue(limit): Promise<Event[]>` — 待重分类事件队列
-     - 按优先级排序：用户标记错误 > low confidence > low source accuracy
+1. **Rule DSL Grammar**
+   - 语法: `IF <conditions> THEN <actions>`
+   - 条件支持:
+     - `source = "sec-edgar"` / `source IN ("sec-edgar", "reddit")`
+     - `ticker = "AAPL"` / `ticker IN ("AAPL", "TSLA")`
+     - `keyword CONTAINS "merger"` / `keyword MATCHES "acqui.*"`
+     - `event_type = "filing"` / `event_type IN ("filing", "earnings")`
+     - `severity >= "HIGH"` (比较: `=`, `!=`, `>`, `>=`, `<`, `<=`)
+     - `confidence >= 0.8`
+   - 逻辑运算: `AND`, `OR`, `NOT`, 括号分组
+   - Actions:
+     - `priority = "CRITICAL"` / `priority = "HIGH"` / `priority = "MEDIUM"` / `priority = "LOW"`
+     - `tag = "watchlist"` / `tag = "ignore"`
+     - `notify = true` / `notify = false`
+   - 示例:
+     ```
+     IF source = "sec-edgar" AND severity >= "HIGH" AND ticker IN ("AAPL", "TSLA") THEN priority = "CRITICAL"
+     IF keyword CONTAINS "bankruptcy" THEN priority = "CRITICAL", notify = true
+     IF confidence < 0.3 THEN tag = "low-quality", notify = false
+     ```
 
-2. **Weight Adjustment History** (`packages/backend/src/services/weight-history.ts`)
-   - `recordAdjustment(weights, reason): Promise<void>` — 记录权重变更
-   - `getHistory(limit): Promise<WeightAdjustment[]>` — 变更历史
-   - 用于审计和回滚
+2. **Rule Parser** (`packages/backend/src/services/rule-parser.ts`)
+   - `parseRule(dsl: string): Result<ParsedRule, ParseError>` — 解析 DSL 字符串
+   - `validateRule(rule: ParsedRule): Result<void, ValidationError[]>` — 验证规则合法性
+   - 使用递归下降解析器（不依赖外部库）
+   - 清晰的错误消息（行号、列号、期望 vs 实际）
 
-3. **Types** (`packages/shared/src/schemas/adaptive-types.ts`)
+3. **Rule Engine** (`packages/backend/src/services/rule-engine-v2.ts`)
+   - `evaluateRules(event, rules): RuleResult` — 对事件执行所有规则
+   - 规则按优先级排序执行（用户可设定 rule order）
+   - 第一个匹配的规则决定 priority（first-match-wins）
+   - 未匹配任何规则 → 使用默认 priority
+   - `addRule(rule): Promise<Rule>` — 添加规则
+   - `updateRule(id, rule): Promise<Rule>` — 更新规则
+   - `deleteRule(id): Promise<void>` — 删除规则
+   - `listRules(): Promise<Rule[]>` — 列出所有规则
+   - `reorderRules(ids): Promise<void>` — 重排规则顺序
+
+4. **Types** (`packages/shared/src/schemas/rule-types.ts`)
    ```typescript
-   export const SourceWeightsSchema = z.object({
-     weights: z.record(z.string(), z.number().min(0.1).max(2.0)),
-     updatedAt: z.string(),
-     sampleSize: z.number(),
+   export const ConditionOperatorSchema = z.enum(['=', '!=', '>', '>=', '<', '<=', 'IN', 'CONTAINS', 'MATCHES']);
+   export const LogicalOperatorSchema = z.enum(['AND', 'OR']);
+   export const RuleFieldSchema = z.enum(['source', 'ticker', 'keyword', 'event_type', 'severity', 'confidence']);
+   export const PrioritySchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+
+   export const ParsedConditionSchema = z.object({
+     field: RuleFieldSchema,
+     operator: ConditionOperatorSchema,
+     value: z.union([z.string(), z.number(), z.array(z.string())]),
+     negate: z.boolean().default(false),
    });
 
-   export const ReclassificationReasonSchema = z.enum([
-     'low_confidence',
-     'low_source_accuracy',
-     'user_feedback_incorrect',
-   ]);
-
-   export const ReclassificationItemSchema = z.object({
-     eventId: z.string(),
-     reason: ReclassificationReasonSchema,
-     confidence: z.number(),
-     sourceAccuracy: z.number().nullable(),
-     priority: z.number(), // higher = more urgent
-   });
-
-   export const WeightAdjustmentSchema = z.object({
-     id: z.string(),
-     previousWeights: z.record(z.string(), z.number()),
-     newWeights: z.record(z.string(), z.number()),
-     reason: z.string(),
+   export const ParsedRuleSchema = z.object({
+     id: z.string().uuid(),
+     name: z.string(),
+     dsl: z.string(),
+     conditions: z.any(), // parsed AST
+     actions: z.record(z.string(), z.union([z.string(), z.boolean()])),
+     order: z.number(),
+     enabled: z.boolean().default(true),
      createdAt: z.string(),
+     updatedAt: z.string(),
+   });
+
+   export const RuleResultSchema = z.object({
+     matched: z.boolean(),
+     ruleId: z.string().nullable(),
+     ruleName: z.string().nullable(),
+     actions: z.record(z.string(), z.union([z.string(), z.boolean()])),
    });
    ```
 
-4. **Database Schema**
-   - `source_weights` 表: id, source, weight, sample_size, updated_at
-   - `weight_adjustments` 表: id, previous_weights (JSON), new_weights (JSON), reason, created_at
-   - `reclassification_queue` 表: id, event_id (FK), reason, priority, status ('pending'|'done'), created_at
+5. **Database Schema**
+   - `alert_rules` 表: id (uuid), name, dsl (text), conditions_ast (jsonb), actions (jsonb), rule_order (int), enabled (bool), created_at, updated_at
    - 用 drizzle-orm schema 定义
 
-5. **API Endpoints**
-   - `GET /api/v1/adaptive/weights` — 当前 source 权重
-   - `POST /api/v1/adaptive/recalculate` — 触发权重重算
-   - `GET /api/v1/adaptive/queue?limit=20` — 重分类队列
-   - `GET /api/v1/adaptive/history?limit=20` — 权重调整历史
+6. **API Endpoints**
+   - `POST /api/v1/rules` — 创建规则 `{ name, dsl }`（自动 parse + validate）
+   - `GET /api/v1/rules` — 列出所有规则
+   - `PUT /api/v1/rules/:id` — 更新规则
+   - `DELETE /api/v1/rules/:id` — 删除规则
+   - `POST /api/v1/rules/reorder` — 重排 `{ ids: string[] }`
+   - `POST /api/v1/rules/test` — 测试规则 `{ dsl, event }` → 返回匹配结果
+   - `POST /api/v1/rules/validate` — 验证 DSL 语法 `{ dsl }` → 返回错误或 OK
    - 所有 endpoints 需要 API key auth
 
-6. **Pipeline Integration**
-   - 分类完成时 → 检查 `shouldReclassify()` → 如果需要加入队列
-   - 每 500 个新 outcome → 自动 `recalculateWeights()`
-   - 权重变更 → emit `weights:updated` 到 event bus
-
-7. **Tests** (≥12 tests)
-   - 权重计算公式正确
-   - 样本不足时保持默认权重
-   - 权重 clamp 在 0.1-2.0
-   - shouldReclassify 各条件判断
-   - 重分类队列优先级排序
-   - 权重历史记录
-   - API auth 验证
-   - 空数据处理
-   - 权重重算触发条件
+7. **Tests** (≥15 tests)
+   - 解析简单条件 `source = "sec-edgar"`
+   - 解析复合条件 AND/OR
+   - 解析 IN 列表
+   - 解析 CONTAINS/MATCHES
+   - 解析 severity 比较（有序: LOW < MEDIUM < HIGH < CRITICAL）
+   - 解析语法错误 → 清晰错误消息
+   - 规则执行 first-match-wins
+   - 多规则优先级排序
+   - 未匹配 → 默认结果
+   - CRUD 操作
+   - 规则重排序
+   - 测试 endpoint
+   - 验证 endpoint
+   - API auth
+   - 空规则列表
 
 ### Files to create/modify
-- `packages/shared/src/schemas/adaptive-types.ts` — Zod schemas + types
+- `packages/shared/src/schemas/rule-types.ts`
 - `packages/shared/src/index.ts` — export
-- `packages/backend/src/db/schema.ts` — 新表
-- `packages/backend/src/services/adaptive-classifier.ts` — 核心自适应逻辑
-- `packages/backend/src/services/weight-history.ts` — 权重历史
-- `packages/backend/src/routes/adaptive.ts` — API
+- `packages/backend/src/db/schema.ts` — alert_rules 表
+- `packages/backend/src/services/rule-parser.ts` — 递归下降解析器
+- `packages/backend/src/services/rule-engine-v2.ts` — 规则引擎
+- `packages/backend/src/routes/rules.ts` — API
 - `packages/backend/src/app.ts` — 注册 routes
-- `packages/backend/src/__tests__/adaptive-classifier.test.ts`
-- `packages/backend/src/__tests__/weight-history.test.ts`
-
-### Dependencies
-- P4.3.1 classification accuracy service（准确率数据）
-- P4.3.2 direction analytics（方向准确率）
-- P4.3.3 user feedback（用户反馈）
+- `packages/backend/src/__tests__/rule-parser.test.ts`
+- `packages/backend/src/__tests__/rule-engine-v2.test.ts`
 
 ### Verification
 - `pnpm build && pnpm --filter @event-radar/backend lint` must pass
 - All tests pass
-- Create branch `feat/adaptive-classifier`, commit, push, create PR to main
-- **DO NOT merge the PR**
+- Create branch `feat/rule-dsl`, commit, push, create PR to main
+- **严禁 merge PR！严禁运行 gh pr merge！**
    - 按事件类型统计
    - 时间窗口过滤 (7d/30d/90d)
    - Confidence calibration 计算
