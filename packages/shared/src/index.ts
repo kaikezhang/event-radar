@@ -132,6 +132,24 @@ export {
   type ConfirmationResult,
   type ConfirmationConfig,
 } from './schemas/confirmation-types.js';
+export {
+  DirectionMetricsSchema,
+  DirectionBreakdownSchema,
+  CalibrationDataSchema,
+  MispredictionSchema,
+  FeedbackVerdictSchema,
+  UserFeedbackSchema,
+  SubmitFeedbackInputSchema,
+  FeedbackStatsSchema,
+  type DirectionMetrics,
+  type DirectionBreakdown,
+  type CalibrationData,
+  type Misprediction,
+  type FeedbackVerdict,
+  type UserFeedback,
+  type SubmitFeedbackInput,
+  type FeedbackStats,
+} from './schemas/feedback-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';

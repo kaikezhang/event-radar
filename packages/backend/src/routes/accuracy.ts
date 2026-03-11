@@ -1,6 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
+import { DirectionAnalyticsService } from '../services/direction-analytics.js';
 import type { Database } from '../db/connection.js';
+import { requireApiKey } from './auth-middleware.js';
 
 const EventIdParamsSchema = {
   type: 'object',
@@ -18,37 +20,23 @@ const AccuracyStatsQuerySchema = {
   },
 } as const;
 
+const DirectionQuerySchema = {
+  type: 'object',
+  properties: {
+    period: { type: 'string', enum: ['7d', '30d', '90d', 'all'] },
+  },
+} as const;
+
+const MispredictionsQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+    period: { type: 'string', enum: ['7d', '30d', '90d', 'all'] },
+  },
+} as const;
+
 interface AccuracyRouteOptions {
   apiKey?: string;
-}
-
-async function requireApiKey(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  apiKey?: string,
-): Promise<void> {
-  if (request.apiKeyAuthenticated) {
-    return;
-  }
-
-  const providedKey = request.headers['x-api-key'];
-  if (!providedKey) {
-    await reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
-    });
-    return;
-  }
-
-  if (apiKey && providedKey !== apiKey) {
-    await reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Invalid API key',
-    });
-    return;
-  }
-
-  request.apiKeyAuthenticated = true;
 }
 
 export function registerAccuracyRoutes(
@@ -57,6 +45,7 @@ export function registerAccuracyRoutes(
   options?: AccuracyRouteOptions,
 ): void {
   const accuracyService = new ClassificationAccuracyService(db);
+  const directionService = new DirectionAnalyticsService(db);
 
   server.get('/api/v1/accuracy/stats', {
     schema: { querystring: AccuracyStatsQuerySchema },
@@ -97,5 +86,41 @@ export function registerAccuracyRoutes(
     }
 
     return details;
+  });
+
+  server.get('/api/v1/accuracy/direction', {
+    schema: { querystring: DirectionQuerySchema },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getDirectionBreakdown({ period: query.period });
+  });
+
+  server.get('/api/v1/accuracy/calibration', {
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getConfidenceCalibration({ period: query.period });
+  });
+
+  server.get('/api/v1/accuracy/mispredictions', {
+    schema: { querystring: MispredictionsQuerySchema },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const query = request.query as {
+      limit?: number;
+      period?: '7d' | '30d' | '90d' | 'all';
+    };
+    return directionService.getTopMispredictions({
+      limit: query.limit,
+      period: query.period,
+    });
   });
 }
