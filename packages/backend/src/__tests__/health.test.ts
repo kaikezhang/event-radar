@@ -48,4 +48,20 @@ describe('GET /health', () => {
     expect(typeof body.uptimeSeconds).toBe('number');
     expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
   });
+
+  it('returns version as a semver string', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = response.json();
+
+    expect(typeof body.version).toBe('string');
+    expect(body.version).toMatch(
+      /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/,
+    );
+  });
 });
