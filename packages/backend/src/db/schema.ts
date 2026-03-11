@@ -13,6 +13,7 @@ import {
   primaryKey,
   boolean,
 } from 'drizzle-orm/pg-core';
+import type { RuleActionValue, RuleConditionNode } from '@event-radar/shared';
 
 export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -250,3 +251,28 @@ export const deliveries = pgTable('deliveries', {
   error: text('error'),
   sentAt: timestamp('sent_at', { withTimezone: true }),
 });
+
+export const alertRules = pgTable(
+  'alert_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    dsl: text('dsl').notNull(),
+    conditionsAst: jsonb('conditions_ast').notNull().$type<RuleConditionNode>(),
+    actions: jsonb('actions')
+      .notNull()
+      .$type<Record<string, RuleActionValue>>(),
+    ruleOrder: integer('rule_order').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_alert_rules_rule_order').on(table.ruleOrder),
+    index('idx_alert_rules_enabled').on(table.enabled),
+  ],
+);

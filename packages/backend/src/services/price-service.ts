@@ -135,7 +135,7 @@ export class PriceService {
   private readonly cacheTtlMs: number;
 
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(options?: { cacheTtlMs?: number }) {
     this.cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
