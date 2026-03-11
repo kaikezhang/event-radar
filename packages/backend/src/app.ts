@@ -383,7 +383,7 @@ export function buildApp(options?: {
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
-    registerAccuracyRoutes(server, db);
+    registerAccuracyRoutes(server, db, { apiKey });
   }
 
   // Register scanner health routes
@@ -429,6 +429,9 @@ function extractFallbackDirection(event: RawEvent): AccuracyDirection {
     }
   }
 
+  // TODO: Revisit rule-engine fallback direction. Defaulting to neutral when
+  // metadata is missing reduces the binary sample size and can inflate
+  // aggregate direction metrics.
   return 'neutral';
 }
 

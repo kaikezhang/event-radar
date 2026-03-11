@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { count, eq, gte } from 'drizzle-orm';
 import type {
   AccuracyDirection,
   AccuracyEventDetails,
@@ -156,38 +156,48 @@ export class ClassificationAccuracyService {
     let trueNegatives = 0;
     let falsePositives = 0;
     let falseNegatives = 0;
+    let directionEvaluatedCount = 0;
 
     const bySource = new Map<string, { totalScore: number; count: number }>();
     const byEventType = new Map<string, { totalScore: number; count: number }>();
 
     for (const row of rows) {
       const result = this.buildAccuracyResult(row.prediction, row.outcome);
-      const score =
-        (Number(result.severityCorrect) + Number(result.directionCorrect)) / 2;
+      const includeBinaryDirection = this.shouldIncludeBinaryDirectionMetrics(
+        row.prediction.predictedDirection,
+        row.outcome.actualDirection,
+      );
+      const score = includeBinaryDirection
+        ? (Number(result.severityCorrect) + Number(result.directionCorrect)) / 2
+        : Number(result.severityCorrect);
 
       severityCorrectCount += Number(result.severityCorrect);
-      directionCorrectCount += Number(result.directionCorrect);
 
-      if (
-        row.prediction.predictedDirection === 'bullish' &&
-        row.outcome.actualDirection === 'bullish'
-      ) {
-        truePositives++;
-      } else if (
-        row.prediction.predictedDirection === 'bearish' &&
-        row.outcome.actualDirection === 'bearish'
-      ) {
-        trueNegatives++;
-      } else if (
-        row.prediction.predictedDirection === 'bullish' &&
-        row.outcome.actualDirection === 'bearish'
-      ) {
-        falsePositives++;
-      } else if (
-        row.prediction.predictedDirection === 'bearish' &&
-        row.outcome.actualDirection === 'bullish'
-      ) {
-        falseNegatives++;
+      if (includeBinaryDirection) {
+        directionEvaluatedCount++;
+        directionCorrectCount += Number(result.directionCorrect);
+
+        if (
+          row.prediction.predictedDirection === 'bullish' &&
+          row.outcome.actualDirection === 'bullish'
+        ) {
+          truePositives++;
+        } else if (
+          row.prediction.predictedDirection === 'bearish' &&
+          row.outcome.actualDirection === 'bearish'
+        ) {
+          trueNegatives++;
+        } else if (
+          row.prediction.predictedDirection === 'bullish' &&
+          row.outcome.actualDirection === 'bearish'
+        ) {
+          falsePositives++;
+        } else if (
+          row.prediction.predictedDirection === 'bearish' &&
+          row.outcome.actualDirection === 'bullish'
+        ) {
+          falseNegatives++;
+        }
       }
 
       this.addGroupedScore(bySource, row.source, score);
@@ -204,7 +214,10 @@ export class ClassificationAccuracyService {
     return {
       totalEvaluated: rows.length,
       severityAccuracy: this.safeDivide(severityCorrectCount, rows.length),
-      directionAccuracy: this.safeDivide(directionCorrectCount, rows.length),
+      directionAccuracy: this.safeDivide(
+        directionCorrectCount,
+        directionEvaluatedCount,
+      ),
       truePositives,
       trueNegatives,
       falsePositives,
@@ -266,23 +279,33 @@ export class ClassificationAccuracyService {
   }
 
   private async emitAccuracyUpdateIfNeeded(): Promise<void> {
-    if (!this.eventBus) {
+    if (!this.eventBus?.publishTopic) {
       return;
     }
 
-    const stats = await this.getAccuracyStats();
+    const [{ totalEvaluated }] = await this.db
+      .select({ totalEvaluated: count() })
+      .from(classificationPredictions)
+      .innerJoin(
+        classificationOutcomes,
+        eq(classificationOutcomes.eventId, classificationPredictions.eventId),
+      );
+    const total = Number(totalEvaluated);
+
     if (
-      stats.totalEvaluated > 0 &&
-      stats.totalEvaluated % 100 === 0 &&
-      stats.totalEvaluated !== this.lastEmittedTotal
+      total > 0 &&
+      total % 100 === 0 &&
+      total !== this.lastEmittedTotal
     ) {
-      this.lastEmittedTotal = stats.totalEvaluated;
+      this.lastEmittedTotal = total;
+      const stats = await this.getAccuracyStats();
       await this.eventBus.publishTopic('accuracy:updated', stats);
     }
   }
 
   private async getJoinedRows(period: AccuracyPeriod): Promise<AccuracyJoinRow[]> {
-    const rows = await this.db
+    const cutoffDate = this.getPeriodCutoff(period);
+    const query = this.db
       .select({
         eventId: classificationPredictions.eventId,
         predictedSeverity: classificationPredictions.predictedSeverity,
@@ -304,6 +327,9 @@ export class ClassificationAccuracyService {
         eq(classificationOutcomes.eventId, classificationPredictions.eventId),
       )
       .innerJoin(events, eq(events.id, classificationPredictions.eventId));
+    const rows = cutoffDate
+      ? await query.where(gte(classificationPredictions.classifiedAt, cutoffDate))
+      : await query;
 
     return rows
       .map((row) => {
@@ -326,8 +352,7 @@ export class ClassificationAccuracyService {
         const eventType = this.extractEventType(row.rawPayload);
 
         return { prediction, outcome, source: row.source, eventType };
-      })
-      .filter((row) => this.isInPeriod(row.outcome.evaluatedAt, period));
+      });
   }
 
   private buildAccuracyResult(
@@ -400,14 +425,23 @@ export class ClassificationAccuracyService {
     return 'unknown';
   }
 
-  private isInPeriod(evaluatedAt: string, period: AccuracyPeriod): boolean {
+  private getPeriodCutoff(period: AccuracyPeriod): Date | null {
     if (period === 'all') {
-      return true;
+      return null;
     }
 
     const days = PERIOD_TO_DAYS[period];
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    return new Date(evaluatedAt) >= cutoff;
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  }
+
+  private shouldIncludeBinaryDirectionMetrics(
+    predictedDirection: AccuracyDirection,
+    actualDirection: AccuracyDirection,
+  ): boolean {
+    // Neutral predictions/outcomes are excluded from the binary confusion matrix.
+    // This keeps TP/TN/FP/FN, precision, recall, and F1 aligned to bullish/bearish
+    // classification until we add a dedicated neutral bucket to AccuracyStats.
+    return predictedDirection !== 'neutral' && actualDirection !== 'neutral';
   }
 
   private toPrediction(row: {

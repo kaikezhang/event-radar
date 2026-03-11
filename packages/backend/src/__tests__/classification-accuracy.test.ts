@@ -21,6 +21,7 @@ import {
 import type { Database } from '../db/connection.js';
 import type { PGlite } from '@electric-sql/pglite';
 import { registerAccuracyRoutes } from '../routes/accuracy.js';
+import { PriceService } from '../services/price-service.js';
 
 const TEST_API_KEY = 'accuracy-api-key';
 
@@ -63,59 +64,12 @@ function makeOutcome(
   };
 }
 
-async function createAccuracyTables(db: Database): Promise<void> {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS classification_predictions (
-      id SERIAL PRIMARY KEY,
-      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
-      predicted_severity VARCHAR(20) NOT NULL,
-      predicted_direction VARCHAR(20) NOT NULL,
-      confidence DECIMAL(5, 4) NOT NULL,
-      classified_by VARCHAR(20) NOT NULL,
-      classified_at TIMESTAMPTZ NOT NULL
-    )
-  `);
-
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS classification_outcomes (
-      id SERIAL PRIMARY KEY,
-      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
-      actual_direction VARCHAR(20) NOT NULL,
-      price_change_1h DECIMAL(10, 4) NOT NULL,
-      price_change_1d DECIMAL(10, 4) NOT NULL,
-      price_change_1w DECIMAL(10, 4) NOT NULL,
-      evaluated_at TIMESTAMPTZ NOT NULL
-    )
-  `);
-
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS event_outcomes (
-      id SERIAL PRIMARY KEY,
-      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE UNIQUE,
-      ticker VARCHAR(10) NOT NULL,
-      event_time TIMESTAMPTZ NOT NULL,
-      event_price DECIMAL(10, 2),
-      price_1h DECIMAL(10, 2),
-      price_1d DECIMAL(10, 2),
-      price_1w DECIMAL(10, 2),
-      price_1m DECIMAL(10, 2),
-      change_1h DECIMAL(10, 4),
-      change_1d DECIMAL(10, 4),
-      change_1w DECIMAL(10, 4),
-      change_1m DECIMAL(10, 4),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-}
-
 describe('ClassificationAccuracyService', () => {
   let db: Database;
   let client: PGlite;
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
-    await createAccuracyTables(db);
   });
 
   afterAll(async () => {
@@ -312,6 +266,35 @@ describe('ClassificationAccuracyService', () => {
     expect(stats.period).toBe('30d');
   });
 
+  it('filters stats by prediction classification time instead of outcome evaluation time', async () => {
+    const service = new ClassificationAccuracyService(db);
+    const oldPredictionId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'sec-edgar' }),
+      severity: 'HIGH',
+    });
+    const recentPredictionId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'fed' }),
+      severity: 'HIGH',
+    });
+
+    await service.recordPrediction(
+      oldPredictionId,
+      makePrediction({ classifiedAt: '2025-10-01T12:00:00.000Z' }),
+    );
+    await service.recordOutcome(
+      oldPredictionId,
+      makeOutcome({ evaluatedAt: '2026-03-10T12:00:00.000Z' }),
+    );
+
+    await service.recordPrediction(recentPredictionId, makePrediction());
+    await service.recordOutcome(recentPredictionId, makeOutcome());
+
+    const stats = await service.getAccuracyStats({ period: '30d' });
+    expect(stats.totalEvaluated).toBe(1);
+    expect(stats.bySource['fed']?.count).toBe(1);
+    expect(stats.bySource['sec-edgar']).toBeUndefined();
+  });
+
   it('computes confidence calibration', async () => {
     const service = new ClassificationAccuracyService(db);
     const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
@@ -351,6 +334,67 @@ describe('ClassificationAccuracyService', () => {
     expect(stats.f1Score).toBeCloseTo(0.5, 5);
   });
 
+  it('excludes neutral predictions and outcomes from binary direction metrics', async () => {
+    const service = new ClassificationAccuracyService(db);
+    const bullishEventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'sec-edgar' }),
+      severity: 'HIGH',
+    });
+    const neutralEventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'fed' }),
+      severity: 'LOW',
+    });
+
+    await service.recordPrediction(
+      bullishEventId,
+      makePrediction({ predictedDirection: 'bullish', predictedSeverity: 'HIGH' }),
+    );
+    await service.recordOutcome(
+      bullishEventId,
+      makeOutcome({ actualDirection: 'bullish' }),
+    );
+
+    await service.recordPrediction(
+      neutralEventId,
+      makePrediction({ predictedDirection: 'neutral', predictedSeverity: 'LOW' }),
+    );
+    await service.recordOutcome(
+      neutralEventId,
+      makeOutcome({
+        actualDirection: 'bearish',
+        priceChangePercent1h: -0.05,
+        priceChangePercent1d: -0.08,
+        priceChangePercent1w: -0.1,
+      }),
+    );
+
+    const stats = await service.getAccuracyStats();
+    expect(stats.totalEvaluated).toBe(2);
+    expect(stats.directionAccuracy).toBe(1);
+    expect(stats.truePositives).toBe(1);
+    expect(stats.trueNegatives).toBe(0);
+    expect(stats.falsePositives).toBe(0);
+    expect(stats.falseNegatives).toBe(0);
+    expect(stats.precision).toBe(1);
+    expect(stats.recall).toBe(1);
+    expect(stats.f1Score).toBe(1);
+  });
+
+  it('does not run full accuracy stats before the 100-event threshold', async () => {
+    const eventBus = new InMemoryEventBus();
+    const service = new ClassificationAccuracyService(db, { eventBus });
+    const statsSpy = vi.spyOn(service, 'getAccuracyStats');
+    const eventId = await storeEvent(db, {
+      event: makeRawEvent({ source: 'sec-edgar' }),
+      severity: 'HIGH',
+    });
+
+    await service.recordPrediction(eventId, makePrediction());
+    await service.recordOutcome(eventId, makeOutcome());
+
+    expect(statsSpy).not.toHaveBeenCalled();
+  });
+
   it('emits accuracy updates every 100 evaluated events', async () => {
     const eventBus = new InMemoryEventBus();
     const handler = vi.fn();
@@ -379,10 +423,9 @@ describe('Classification accuracy API and pipeline integration', () => {
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
-    await createAccuracyTables(db);
     appCtx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     apiServer = Fastify({ logger: false });
-    registerAccuracyRoutes(apiServer, db);
+    registerAccuracyRoutes(apiServer, db, { apiKey: TEST_API_KEY });
     await apiServer.ready();
   }, 20000);
 
@@ -416,15 +459,15 @@ describe('Classification accuracy API and pipeline integration', () => {
     const service = new ClassificationAccuracyService(db);
     await service.recordPrediction(eventId, makePrediction());
 
-    const tracker = new OutcomeTracker(db, {
-      getPriceAt: vi
-        .fn()
-        .mockResolvedValueOnce({ ok: true, value: 100 })
-        .mockResolvedValueOnce({ ok: true, value: 103 })
-        .mockResolvedValueOnce({ ok: true, value: 104 })
-        .mockResolvedValueOnce({ ok: true, value: 105 })
-        .mockResolvedValueOnce({ ok: true, value: 106 }),
-    } as never, service);
+    const priceService = new PriceService();
+    vi.spyOn(priceService, 'getPriceAt')
+      .mockResolvedValueOnce({ ok: true, value: 100 })
+      .mockResolvedValueOnce({ ok: true, value: 103 })
+      .mockResolvedValueOnce({ ok: true, value: 104 })
+      .mockResolvedValueOnce({ ok: true, value: 105 })
+      .mockResolvedValueOnce({ ok: true, value: 106 });
+
+    const tracker = new OutcomeTracker(db, priceService, service);
 
     await tracker.scheduleOutcomeTrackingForEvent(
       eventId,
@@ -436,6 +479,19 @@ describe('Classification accuracy API and pipeline integration', () => {
 
     const evaluation = await service.evaluateAccuracy(eventId);
     expect(evaluation).not.toBeNull();
+  });
+
+  it('requires API key for accuracy routes', async () => {
+    const response = await apiServer.inject({
+      method: 'GET',
+      url: '/api/v1/accuracy/stats',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: 'Unauthorized',
+      message: 'Missing X-API-Key header',
+    });
   });
 
   it('returns accuracy stats from the API', async () => {
@@ -450,6 +506,9 @@ describe('Classification accuracy API and pipeline integration', () => {
     const response = await apiServer.inject({
       method: 'GET',
       url: '/api/v1/accuracy/stats?period=30d&groupBy=source',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -470,6 +529,9 @@ describe('Classification accuracy API and pipeline integration', () => {
     const response = await apiServer.inject({
       method: 'GET',
       url: `/api/v1/accuracy/events/${eventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
