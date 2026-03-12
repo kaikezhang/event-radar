@@ -179,9 +179,21 @@ export class BreakingNewsScanner extends BaseScanner {
           const items = parseRssXml(xml);
           let matchedCount = 0;
 
+          const MAX_ITEM_AGE_MS = 60 * 60 * 1000; // 1 hour
+          const now = Date.now();
+
           for (const item of items) {
             const dedupKey = item.guid || item.link;
             if (this.seenUrls.has(dedupKey)) continue;
+
+            // Skip items older than 1 hour at scanner level
+            if (item.pubDate) {
+              const itemAge = now - new Date(item.pubDate).getTime();
+              if (itemAge > MAX_ITEM_AGE_MS) {
+                this.seenUrls.add(dedupKey);
+                continue;
+              }
+            }
 
             const fullText = `${item.title} ${item.description}`;
             const matched = matchKeywords(fullText);
