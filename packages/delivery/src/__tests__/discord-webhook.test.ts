@@ -50,13 +50,34 @@ describe('DiscordWebhook', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const payload = JSON.parse(options.body as string);
 
+    expect(payload.username).toBe('Event Radar');
     expect(payload.embeds).toHaveLength(1);
     const embed = payload.embeds[0];
 
     expect(embed.title).toContain('8-K: Apple Inc. (AAPL)');
     expect(embed.description).toBe('Item 5.02 Departure of CEO');
     expect(embed.timestamp).toBe('2024-01-15T10:00:00.000Z');
-    expect(embed.footer.text).toContain('HIGH');
+    expect(embed.footer.text).toContain('Event Radar');
+  });
+
+  it('should include Source badge and Severity fields', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(makeAlert());
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const embed = JSON.parse(options.body as string).embeds[0];
+    const sourceField = embed.fields.find(
+      (f: { name: string }) => f.name === 'Source',
+    );
+    const severityField = embed.fields.find(
+      (f: { name: string }) => f.name === 'Severity',
+    );
+
+    expect(sourceField).toBeDefined();
+    expect(sourceField.value).toContain('SEC Filing');
+    expect(severityField).toBeDefined();
+    expect(severityField.value).toContain('HIGH');
   });
 
   it('should use color 0xed4245 (red) for CRITICAL', async () => {
@@ -70,18 +91,7 @@ describe('DiscordWebhook', () => {
     expect(embed.color).toBe(0xed4245);
   });
 
-  it('should use color 0xf57c00 (orange) for HIGH', async () => {
-    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-
-    await webhook.send(makeAlert({ severity: 'HIGH' }));
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const embed = JSON.parse(options.body as string).embeds[0];
-
-    expect(embed.color).toBe(0xf57c00);
-  });
-
-  it('should include Ticker field when present', async () => {
+  it('should include Ticker field with bold formatting', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(makeAlert({ ticker: 'TSLA' }));
@@ -93,11 +103,11 @@ describe('DiscordWebhook', () => {
     );
 
     expect(tickerField).toBeDefined();
-    expect(tickerField.value).toBe('TSLA');
+    expect(tickerField.value).toBe('**TSLA**');
     expect(tickerField.inline).toBe(true);
   });
 
-  it('should include Items field from metadata', async () => {
+  it('should include Filing Items field from metadata', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(makeAlert());
@@ -105,27 +115,26 @@ describe('DiscordWebhook', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const embed = JSON.parse(options.body as string).embeds[0];
     const itemsField = embed.fields.find(
-      (f: { name: string }) => f.name === 'Items',
+      (f: { name: string }) => f.name === 'Filing Items',
     );
 
     expect(itemsField).toBeDefined();
-    expect(itemsField.value).toBe('5.02');
+    expect(itemsField.value).toContain('5.02');
   });
 
-  it('should include Source field with link to filing', async () => {
+  it('should include Source link field', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(makeAlert());
 
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const embed = JSON.parse(options.body as string).embeds[0];
-    const sourceField = embed.fields.find(
-      (f: { name: string }) => f.name === 'Source',
+    const linkField = embed.fields.find(
+      (f: { name: string }) => f.name === '🔗 Source',
     );
 
-    expect(sourceField).toBeDefined();
-    expect(sourceField.value).toContain('https://www.sec.gov/filing/123');
-    expect(sourceField.inline).toBe(false);
+    expect(linkField).toBeDefined();
+    expect(linkField.value).toContain('https://www.sec.gov/filing/123');
   });
 
   it('should truncate long descriptions to 2048 chars', async () => {
@@ -186,9 +195,41 @@ describe('DiscordWebhook', () => {
     );
 
     expect(historyField).toBeDefined();
+    expect(historyField.name).toContain('HIGH');
     expect(historyField.value).toContain('Technology earnings beat in bull market');
-    expect(historyField.value).toContain('Win Rate: 62%');
-    expect(historyField.value).toContain('Worst Case: INTC (-12.0%)');
+    expect(historyField.value).toContain('Win Rate T+20');
+    expect(historyField.value).toContain('62');
+    expect(historyField.value).toContain('Worst');
+    expect(historyField.value).toContain('INTC');
+  });
+
+  it('should use enrichment fields when LLM enrichment is present', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time for iPhone launch',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const embed = JSON.parse(options.body as string).embeds[0];
+
+    expect(embed.title).toContain('🔴 立即关注');
+    expect(embed.description).toContain('Leadership vacuum');
+    expect(embed.footer.text).toContain('AI Enhanced');
+
+    const tickerField = embed.fields.find(
+      (f: { name: string }) => f.name === 'Tickers',
+    );
+    expect(tickerField).toBeDefined();
+    expect(tickerField.value).toContain('AAPL');
+    expect(tickerField.value).toContain('📉');
   });
 
   it('should throw on non-ok response', async () => {

@@ -50,7 +50,7 @@ describe('BarkPusher', () => {
     expect(url).toBe('https://api.day.app/my-key');
   });
 
-  it('should send title, body, level, and group in POST body', async () => {
+  it('should send formatted title with severity emoji, ticker, and source tag', async () => {
     const pusher = new BarkPusher({ key: 'k' });
 
     await pusher.send(makeAlert({ severity: 'HIGH' }));
@@ -58,10 +58,12 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
-    expect(body.title).toBe('8-K: Apple Inc. (AAPL)');
-    expect(body.body).toBe('Item 5.02 Departure of CEO');
+    // New format: emoji + $TICKER + source tag
+    expect(body.title).toContain('$AAPL');
+    expect(body.title).toContain('📋SEC');
+    expect(body.body).toBe('8-K: Apple Inc. (AAPL)');
     expect(body.level).toBe('timeSensitive');
-    expect(body.group).toBe('high');
+    expect(body.group).toBe('event-radar-high');
   });
 
   it('should set level=critical and sound=alarm for CRITICAL alerts', async () => {
@@ -74,10 +76,10 @@ describe('BarkPusher', () => {
 
     expect(body.level).toBe('critical');
     expect(body.sound).toBe('alarm');
-    expect(body.group).toBe('critical');
+    expect(body.group).toBe('event-radar-critical');
   });
 
-  it('should NOT set sound for non-CRITICAL alerts', async () => {
+  it('should set sound=bell for HIGH alerts', async () => {
     const pusher = new BarkPusher({ key: 'k' });
 
     await pusher.send(makeAlert({ severity: 'HIGH' }));
@@ -85,6 +87,15 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
+    expect(body.sound).toBe('bell');
+  });
+
+  it('should NOT set sound for MEDIUM/LOW alerts', async () => {
+    const pusher = new BarkPusher({ key: 'k' });
+
+    await pusher.send(makeAlert({ severity: 'MEDIUM' }));
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
     expect(body.sound).toBeUndefined();
   });
 
@@ -139,7 +150,7 @@ describe('BarkPusher', () => {
           worstCase: null,
           topMatches: [],
           patternSummary:
-            'Technology earnings beat in correction market: +12.0% avg alpha T+20, 68% win rate (18 cases)',
+            'Technology earnings beat in correction market',
         },
       }),
     );
@@ -147,8 +158,32 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
-    expect(body.body).toContain('Item 5.02 Departure of CEO');
-    expect(body.body).toContain('📊 18 similar cases: +12.0% avg alpha, 68% win rate');
+    expect(body.body).toContain('8-K: Apple Inc. (AAPL)');
+    expect(body.body).toContain('📊 18 similar');
+    expect(body.body).toContain('+12.0%');
+    expect(body.body).toContain('68%');
+  });
+
+  it('should use enrichment action as title when LLM enrichment is present', async () => {
+    const pusher = new BarkPusher({ key: 'k' });
+
+    await pusher.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+
+    expect(body.title).toContain('🔴 立即关注');
+    expect(body.title).toContain('AAPL');
+    expect(body.body).toBe('Apple CEO departure triggers uncertainty');
   });
 
   it('should throw on non-ok response', async () => {
@@ -174,31 +209,5 @@ describe('BarkPusher', () => {
 
     const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://bark.example.com/k');
-  });
-
-  it('appends a short historical pattern summary to the body', async () => {
-    const pusher = new BarkPusher({ key: 'k' });
-
-    await pusher.send(
-      makeAlert({
-        historicalContext: {
-          matchCount: 18,
-          confidence: 'medium',
-          avgAlphaT5: 0.05,
-          avgAlphaT20: 0.12,
-          winRateT20: 68,
-          medianAlphaT20: 0.1,
-          bestCase: null,
-          worstCase: null,
-          topMatches: [],
-          patternSummary: 'Technology earnings beat in correction: +12.0% avg alpha T+20, 68% win rate (18 cases)',
-        },
-      }),
-    );
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-
-    expect(body.body).toContain('📊 18 similar cases: +12.0% avg alpha, 68% win rate');
   });
 });

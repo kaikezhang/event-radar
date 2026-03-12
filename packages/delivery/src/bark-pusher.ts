@@ -15,11 +15,26 @@ const SEVERITY_TO_BARK_LEVEL: Record<Severity, string> = {
   LOW: 'passive',
 };
 
-const SEVERITY_TO_GROUP: Record<Severity, string> = {
-  CRITICAL: 'critical',
-  HIGH: 'high',
-  MEDIUM: 'medium',
-  LOW: 'low',
+const SEVERITY_EMOJI: Record<Severity, string> = {
+  CRITICAL: '🔴',
+  HIGH: '🟠',
+  MEDIUM: '🟡',
+  LOW: '🟢',
+};
+
+/** Short source labels for Bark push (space constrained) */
+const SOURCE_SHORT: Record<string, string> = {
+  'whitehouse': '🏛️WH',
+  'sec-edgar': '📋SEC',
+  'sec-regulatory': '📋SEC',
+  'fda': '💊FDA',
+  'doj-antitrust': '⚖️DOJ',
+  'federal-register': '📜FedReg',
+  'breaking-news': '📰News',
+  'reddit': '💬Reddit',
+  'stocktwits': '💬ST',
+  'unusual-options': '🎯Options',
+  'econ-calendar': '📅Econ',
 };
 
 export class BarkPusher implements DeliveryService {
@@ -38,28 +53,41 @@ export class BarkPusher implements DeliveryService {
   async send(alert: AlertEvent): Promise<void> {
     const url = `${this.serverUrl}/${this.key}`;
     const enrichment = alert.enrichment;
+    const sourceTag = SOURCE_SHORT[alert.event.source] ?? alert.event.source;
 
-    const title = enrichment
-      ? `${enrichment.action} ${enrichment.tickers[0]?.symbol ?? ''}`
+    // Title: [Source] Severity + ticker or action
+    let title: string;
+    if (enrichment) {
+      const ticker = enrichment.tickers[0]?.symbol ?? '';
+      title = `${enrichment.action} ${ticker}`.trim();
+    } else {
+      const sev = SEVERITY_EMOJI[alert.severity];
+      const ticker = alert.ticker ? ` $${alert.ticker}` : '';
+      title = `${sev}${ticker} ${sourceTag}`;
+    }
+
+    // Body: summary + historical one-liner
+    let bodyText = enrichment
+      ? enrichment.summary
       : alert.event.title;
-
-    let bodyText = enrichment ? enrichment.summary : alert.event.body;
 
     if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
       const ctx = alert.historicalContext;
       const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
-      bodyText += `\n📊 ${ctx.matchCount} similar cases: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% avg alpha, ${ctx.winRateT20.toFixed(0)}% win rate`;
+      bodyText += `\n📊 ${ctx.matchCount} similar: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% avg, ${ctx.winRateT20.toFixed(0)}% win`;
     }
 
     const body: Record<string, string> = {
-      title: title.trim(),
-      body: bodyText,
+      title: title.trim().slice(0, 100),
+      body: bodyText.slice(0, 500),
       level: SEVERITY_TO_BARK_LEVEL[alert.severity],
-      group: SEVERITY_TO_GROUP[alert.severity],
+      group: `event-radar-${alert.severity.toLowerCase()}`,
     };
 
     if (alert.severity === 'CRITICAL') {
       body.sound = 'alarm';
+    } else if (alert.severity === 'HIGH') {
+      body.sound = 'bell';
     }
 
     if (alert.event.url) {
