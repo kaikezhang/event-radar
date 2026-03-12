@@ -55,7 +55,7 @@ export async function extractAllTextContent(
 }
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 
 /**
  * Ring buffer for tracking seen IDs (deduplication).
