@@ -4,6 +4,7 @@ export const DedupMatchTypeSchema = z.enum([
   'exact-id',
   'ticker-window',
   'content-similarity',
+  'db-lookup',
   'none',
 ]);
 

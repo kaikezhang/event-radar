@@ -153,7 +153,7 @@ export function buildApp(options?: {
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
-  const deduplicator = new EventDeduplicator();
+  const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const llmEnricher = new LLMEnricher(options?.llmEnricherConfig);
   const accuracyService = db

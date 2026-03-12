@@ -23,6 +23,7 @@ interface AuthPluginOptions {
 
 export async function registerAuthPlugin(
   server: FastifyInstance,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _options: AuthPluginOptions,
 ): Promise<void> {
   // CORS headers for all responses
