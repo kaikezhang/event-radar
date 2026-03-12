@@ -25,9 +25,24 @@ export async function registerAuthPlugin(
   server: FastifyInstance,
   options: AuthPluginOptions,
 ): Promise<void> {
-  const { apiKey, publicRoutes = ['/health', '/api/health/ping', '/metrics'] } = options;
+  const { apiKey, publicRoutes = ['/health', '/api/health/ping', '/metrics', '/ws/'] } = options;
+
+  // CORS headers for all responses
+  server.addHook('onSend', async (_request, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Authorization');
+  });
 
   server.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    // CORS preflight — always allow
+    if (request.method === 'OPTIONS') {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Authorization');
+      return reply.status(204).send();
+    }
+
     // Skip auth for public routes
     const isPublicRoute = publicRoutes.some(route => 
       request.url.startsWith(route)
