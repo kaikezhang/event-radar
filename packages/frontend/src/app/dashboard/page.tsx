@@ -9,9 +9,8 @@ import { FilterBar } from '@/components/filter-bar';
 import { EventList } from '@/components/event-list';
 import { EventDetailPanel } from '@/components/event-detail-panel';
 
-// Mock API URL and key for development
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'dev-api-key-12345';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'er-dev-2026';
 
 // Mock sources for filter
 const MOCK_SOURCES = [

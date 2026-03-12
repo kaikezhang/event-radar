@@ -42,8 +42,8 @@ function isEventItem(item: EventItem | EventDetail): item is EventItem {
   return 'ticker' in item;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'dev-api-key-12345';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'er-dev-2026';
 
 interface EventDetailPanelProps {
   event: EventItem | null;
