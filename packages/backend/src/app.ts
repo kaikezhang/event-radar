@@ -70,7 +70,7 @@ import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
-import { registerWebSocketPlugin } from './plugins/websocket.js';
+// WebSocket removed
 import { OutcomeTracker } from './services/outcome-tracker.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
@@ -181,18 +181,6 @@ export function buildApp(options?: {
     });
   });
 
-  // Register WebSocket plugin for real-time events. Skip during tests to avoid async boot hangs.
-  const wsEnabled = process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true';
-  if (wsEnabled) {
-    void server.register(async () => {
-      // WebSocket disabled temporarily — using REST polling fallback
-      // await registerWebSocketPlugin(server, {
-      //   eventBus,
-      //   db,
-      //   getApiKey: () => apiKey,
-      // });
-    });
-  }
 
   console.log(`API Key: ${apiKey}`); // Log the API key for development
 
