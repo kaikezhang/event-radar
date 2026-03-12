@@ -139,4 +139,62 @@ describe('bootstrap-earnings helpers', () => {
       expect(resolveCoverageDateTo([], new Date('2026-03-12T15:45:00.000Z'))).toBe('2026-03-12');
     });
   });
+
+  describe('decimal precision safety', () => {
+    it('should widen eps_surprise_pct to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.epsSurprisePct.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen revenue_surprise_pct to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.revenueSurprisePct.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen yoy_revenue_growth to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.yoyRevenueGrowth.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen yoy_eps_growth to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.yoyEpsGrowth.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should clamp null surprise values without changing them', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(null)).toBeNull();
+    });
+
+    it('should leave in-range surprise values unchanged', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(18282)).toBe(18282);
+    });
+
+    it('should clamp large positive surprise values to the storage ceiling', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(123456789)).toBe(99999999);
+    });
+
+    it('should clamp large negative surprise values to the storage floor', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(-123456789)).toBe(-99999999);
+    });
+  });
 });
