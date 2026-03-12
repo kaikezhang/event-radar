@@ -20,10 +20,18 @@ Real-time stock market event detection + AI-powered historical analysis platform
 - ESM with .js extensions in imports
 - Use existing patterns (BaseScanner, EventBus, RuleEngine)
 - All new files need tests
-- Do NOT merge PRs — create PR and stop
+- **NEVER push directly to main!** Always create a feature branch and PR
+- Do NOT merge PRs — create PR and stop. Only 晚晚 merges.
 - Run `pnpm --filter @event-radar/backend test` before creating PR — all tests must pass
 - DB: PostgreSQL with Drizzle ORM (see `packages/backend/src/db/schema.ts`)
 - DB URL: `postgresql://radar:radar@localhost:5432/event_radar`
+
+## Git Workflow (MANDATORY)
+1. Create a feature branch from main: `git checkout -b feat/your-feature main`
+2. Make your changes, commit
+3. Push the feature branch: `git push origin feat/your-feature`
+4. Create a PR: `gh pr create --title "..." --body "..."`
+5. **STOP.** Do not merge. Do not push to main directly. Ever.
 
 ## Current Task
 
