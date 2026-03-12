@@ -37,10 +37,15 @@ export class BarkPusher implements DeliveryService {
 
   async send(alert: AlertEvent): Promise<void> {
     const url = `${this.serverUrl}/${this.key}`;
+    const enrichment = alert.enrichment;
+
+    const title = enrichment
+      ? `${enrichment.action} ${enrichment.tickers[0]?.symbol ?? ''}`
+      : alert.event.title;
 
     const body: Record<string, string> = {
-      title: alert.event.title,
-      body: alert.event.body,
+      title: title.trim(),
+      body: enrichment ? enrichment.summary : alert.event.body,
       level: SEVERITY_TO_BARK_LEVEL[alert.severity],
       group: SEVERITY_TO_GROUP[alert.severity],
     };

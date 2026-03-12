@@ -54,7 +54,7 @@ function makeForm4Event(
     body: `Insider ${variant.toLowerCase()} transaction`,
     url: 'https://www.sec.gov/filing/form4',
     timestamp: new Date(),
-    metadata: { ticker: 'AAPL', shares: 50000 },
+    metadata: { ticker: 'AAPL', shares: 50000, transactionValue: 5_000_000 },
     ...overrides,
   };
 }
@@ -81,6 +81,7 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
   });
 
   afterAll(async () => {
@@ -185,6 +186,7 @@ describe('Integration: Form 4 → classify → delivery', () => {
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
   });
 
   afterAll(async () => {
@@ -270,6 +272,7 @@ describe('Integration: metrics counters after pipeline', () => {
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
   });
 
   afterAll(async () => {
@@ -498,14 +501,14 @@ describe('Integration: error scenarios', () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
-      payload: make8KEvent('4.02'),
+      payload: make8KEvent('4.02', { metadata: { ticker: 'AAA', item_types: ['4.02'] } }),
     });
 
     // MEDIUM → discord only (1 delivery)
     await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
-      payload: make8KEvent('2.02'),
+      payload: make8KEvent('2.02', { metadata: { ticker: 'BBB', item_types: ['2.02'] } }),
     });
 
     await new Promise((r) => setTimeout(r, 50));
