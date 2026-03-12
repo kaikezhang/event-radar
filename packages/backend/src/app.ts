@@ -172,13 +172,14 @@ export function buildApp(options?: {
   });
 
   // Register WebSocket plugin for real-time events. Skip during tests to avoid async boot hangs.
-  if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true') {
-    registerWebSocketPlugin(server, {
-      eventBus,
-      db,
-      getApiKey: () => apiKey,
-    }).catch((err) => {
-      console.error('Failed to register WebSocket plugin:', err);
+  const wsEnabled = process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true';
+  if (wsEnabled) {
+    void server.register(async () => {
+      await registerWebSocketPlugin(server, {
+        eventBus,
+        db,
+        getApiKey: () => apiKey,
+      });
     });
   }
 

@@ -1,93 +1,74 @@
-# Current Task: P1B.2 — Tier 2 Social Scanners (Truth Social + X/Twitter)
+# Current Task: A.2 — Scanner Data Flow Fix + End-to-End Verification
+
+## Context
+Backend is running with PG connected. 12 scanners registered. But only DummyScanner produces events. Real scanners (breaking-news, reddit, stocktwits, econ-calendar) poll successfully but emit 0 events. Need to diagnose and fix.
 
 ## Goal
-实现两个政治/社交 scanner：Trump Truth Social 和 Elon Musk X (Twitter) 监控。这两个是市场影响最大的个人社交账号。
+Make at least 3 real scanners produce genuine events that get stored in the database.
 
 ## Requirements
 
-### 1. Truth Social Scanner (`packages/backend/src/scanners/truth-social-scanner.ts`)
-- 继承 `BaseScanner`
-- 监控 Trump 的 Truth Social 帖子
-- 数据源：Truth Social RSS/API 或第三方聚合（truthsocial.com/@realDonaldTrump）
-  - 优先尝试 RSS: `https://truthsocial.com/@realDonaldTrump.rss`
-  - 备选：用 public API 或第三方镜像站
-- 解析帖子内容，提取：
-  - 关键词匹配（tariff, trade, china, ban, executive order 等）
-  - Ticker 提取（如果提到公司名）
-  - Sentiment 初步判断
-- `scan()` 返回 `RawEvent[]`
-- Dedup：基于 post ID 去重
-- Poll interval: 60s（可配置）
+### 1. Diagnose scanner output
+For each scanner that has `lastScanAt` but 0 events, add temporary `console.log` or structured logging to understand:
+- Is the HTTP fetch succeeding? What status code?
+- Is the response body valid? Any parse errors?
+- Is the keyword/relevance filter too strict?
+- Are events being created but not emitted through eventBus?
 
-### 2. X/Twitter Scanner (`packages/backend/src/scanners/x-scanner.ts`)
-- 继承 `BaseScanner`
-- 监控 Elon Musk (@elonmusk) 的推文
-- 数据源：X API v2 (需要 Bearer Token) 或 Nitter RSS 镜像
-  - 优先：Nitter RSS `https://nitter.net/elonmusk/rss`（免费，不需要 API key）
-  - 备选：X API v2 `/2/users/:id/tweets`
-- 解析推文内容，提取关键词、ticker、sentiment
-- 特殊处理：Elon 的推文可能影响 TSLA, DOGE, BTC
-  - 如果推文提到 Tesla/SpaceX 相关 → ticker: TSLA
-  - 如果推文提到 crypto/doge → 标记 crypto-related
-- Dedup：基于 tweet ID
-- Poll interval: 60s
+### 2. Fix Breaking News Scanner
+- Check if Reuters RSS URL works (may need updating)
+- Check AP News RSS URL (rsshub.app may be down)
+- Add at least 2 more reliable RSS feeds (e.g., MarketWatch RSS, CNBC RSS, Yahoo Finance RSS)
+- Relax keyword filter slightly — add: `merger`, `acquisition`, `layoff`, `guidance`, `earnings`, `bankruptcy`, `stimulus`, `shutdown`
+- Add logging: `console.log(\`[breaking-news] Fetched ${items.length} items from ${feed.name}, ${events.length} matched keywords\`)`
 
-### 3. Keyword Extraction Utility (`packages/backend/src/utils/keyword-extractor.ts`)
-- `extractTickers(text: string): string[]` — 从文本提取 ticker symbols
-  - 匹配 $AAPL 格式
-  - 匹配已知公司名到 ticker 映射（Apple → AAPL, Tesla → TSLA 等）
-  - 常见 50 个公司名映射表
-- `extractKeywords(text: string, dictionary: string[]): string[]` — 匹配关键词列表
-- `estimateSentiment(text: string): 'bullish' | 'bearish' | 'neutral'`
-  - 简单关键词 sentiment：ban/tariff/sanctions → bearish, deal/agreement/boost → bullish
-  - 不用 ML，纯关键词匹配（LLM classifier 会补充）
+### 3. Fix Reddit Scanner
+- Check if Reddit RSS (`.json` endpoint) works without auth
+- Subreddits to scan: `r/wallstreetbets`, `r/stocks`, `r/investing`
+- Verify the response parsing (Reddit JSON structure)
+- Add logging similar to breaking-news
 
-### 4. Scanner Registration
-- 在 scanner registry 注册两个新 scanner
-- Env vars: `TRUTH_SOCIAL_ENABLED`, `X_SCANNER_ENABLED`（默认 disabled）
-- X API key: `X_BEARER_TOKEN`（可选，没有时用 Nitter RSS）
+### 4. Fix StockTwits Scanner
+- Verify StockTwits API endpoint still works
+- Check if auth is needed
+- Add logging
 
-### 5. Types (`packages/shared/src/schemas/social-types.ts`)
-```typescript
-export const SocialPostSchema = z.object({
-  platform: z.enum(['truth_social', 'x_twitter']),
-  postId: z.string(),
-  author: z.string(),
-  content: z.string(),
-  publishedAt: z.string(),
-  url: z.string(),
-  replyCount: z.number().optional(),
-  likeCount: z.number().optional(),
-  repostCount: z.number().optional(),
-});
+### 5. Fix FedWatch Scanner
+- Verify CME FedWatch data source
+- Check if the URL/API has changed
+
+### 6. Fix EconCalendar Scanner
+- Verify the calendar JSON config is correct
+- Check if events are calendar-driven (only emit on event day)
+
+### 7. Build script improvement
+- Add a `postbuild` script or turbo task to copy `src/config/*.json` to `dist/config/`
+- Currently `econ-calendar.json` must be manually copied
+
+### 8. Add startup banner
+In `packages/backend/src/index.ts`, after server starts, log:
+```
+console.log('='.repeat(60));
+console.log('Event Radar Backend v0.0.1');
+console.log(`Scanners: ${registry.count()} registered`);
+console.log(`Database: connected`);
+console.log(`API Key: ${apiKey}`);
+console.log(`Port: ${port}`);
+console.log('='.repeat(60));
 ```
 
-### 6. Tests (≥10 tests)
-- Truth Social: parse RSS item → RawEvent
-- Truth Social: extract ticker from "tariff on China" → no ticker
-- Truth Social: extract ticker from "Truth about Tesla" → TSLA
-- Truth Social: dedup by post ID
-- X Scanner: parse tweet → RawEvent
-- X Scanner: Elon + Tesla mention → TSLA ticker
-- X Scanner: crypto mention → tagged
-- Keyword extractor: $AAPL → ['AAPL']
-- Keyword extractor: "Apple announced" → ['AAPL']
-- Sentiment: "ban imports" → bearish
-- Sentiment: "great deal" → bullish
-
-### Files to create/modify
-- `packages/shared/src/schemas/social-types.ts`
-- `packages/shared/src/index.ts` — export
-- `packages/backend/src/scanners/truth-social-scanner.ts`
-- `packages/backend/src/scanners/x-scanner.ts`
-- `packages/backend/src/utils/keyword-extractor.ts`
-- `packages/backend/src/scanners/registry.ts` — register
-- `packages/backend/src/__tests__/truth-social-scanner.test.ts`
-- `packages/backend/src/__tests__/x-scanner.test.ts`
-- `packages/backend/src/__tests__/keyword-extractor.test.ts`
-
 ## Verification
-- `pnpm build && pnpm --filter @event-radar/backend lint` passes
-- All tests pass
-- Branch `feat/social-scanners`, create PR to main
+- `pnpm build` passes
+- Start server with `DATABASE_URL=postgresql://radar:radar@localhost:5432/event_radar node packages/backend/dist/index.js`
+- Within 2 minutes, `GET /api/events` returns events from at least 2 non-dummy sources
 - **DO NOT merge. DO NOT run gh pr merge.**
+
+## Files likely to modify
+- `packages/backend/src/scanners/breaking-news-scanner.ts`
+- `packages/backend/src/scanners/reddit-scanner.ts`
+- `packages/backend/src/scanners/stocktwits-scanner.ts`
+- `packages/backend/src/scanners/fedwatch-scanner.ts`
+- `packages/backend/src/scanners/econ-calendar-scanner.ts`
+- `packages/backend/src/index.ts`
+- `packages/backend/package.json` (postbuild script)
+- `packages/backend/tsconfig.json` (if needed for asset copy)
