@@ -61,6 +61,13 @@ const PRIMARY_SOURCES = new Set([
   'x-scanner',        // Key official X/Twitter posts
   'short-interest',   // Short interest data (exchange reported)
   'warn',             // WARN Act layoff notices (government filings)
+  'federal-register', // Federal Register: rules, notices from gov agencies
+  'sec-regulatory',   // SEC regulatory actions via Federal Register
+  'ftc',              // FTC actions via Federal Register
+  'fed',              // Federal Reserve actions via Federal Register
+  'treasury',         // Treasury actions via Federal Register
+  'commerce',         // Commerce Dept actions via Federal Register
+  'cfpb',             // CFPB actions via Federal Register
 ]);
 
 /**
@@ -140,10 +147,13 @@ export class AlertFilter {
       ? (event.metadata['ticker'] as string).toUpperCase()
       : undefined;
 
-    // Rule 0a: Staleness — drop events older than maxAgeMs (default 1 hour)
+    // Rule 0a: Staleness — primary sources get 24h window, secondary gets maxAgeMs (default 1h)
     const eventAge = Date.now() - event.timestamp.getTime();
-    if (eventAge > this.maxAgeMs) {
-      return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(this.maxAgeMs / 60_000)}min)`, enrichWithLLM: false };
+    const effectiveMaxAge = PRIMARY_SOURCES.has(source)
+      ? 24 * 60 * 60_000  // 24 hours for primary/government sources
+      : this.maxAgeMs;     // 1 hour for secondary sources
+    if (eventAge > effectiveMaxAge) {
+      return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(effectiveMaxAge / 60_000)}min)`, enrichWithLLM: false };
     }
 
     // Rule 0b: Retrospective / analysis articles — only for secondary sources
