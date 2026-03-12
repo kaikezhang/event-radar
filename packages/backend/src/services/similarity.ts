@@ -8,9 +8,11 @@ import {
   historicalEvents,
   metricsEarnings,
 } from '../db/historical-schema.js';
+import { toNumber } from '../utils/number.js';
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_MIN_SCORE = 0;
+const MAX_CANDIDATE_FETCH = 1_000;
 const RECENCY_WINDOW_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 
 const SEVERITY_ORDER = {
@@ -117,21 +119,13 @@ function normalizeText(value?: string | null): string | null {
   return normalized.length > 0 ? normalized.toLowerCase() : null;
 }
 
-function toNumber(value: string | number | null | undefined): number | null {
-  if (value == null) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function sameSign(left?: number | null, right?: number | null): boolean {
   if (left == null || right == null) {
     return false;
   }
 
   if (left === 0 || right === 0) {
+    // Flat momentum on both sides is still treated as directionally aligned here.
     return left === right;
   }
 
@@ -163,6 +157,7 @@ function standardDeviation(values: number[]): number {
   }
 
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  // Population std dev is sufficient here; confidence only upgrades at 5+ matches.
   const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   return Math.sqrt(variance);
 }
@@ -213,9 +208,12 @@ function earningsMetricsBonus(
 export function scoreCandidate(
   query: SimilarityQuery,
   candidate: HistoricalSimilarityCandidate,
+  referenceDate: number | Date = Date.now(),
 ): { score: number; scoreBreakdown: Record<string, number> } {
   const scoreBreakdown: Record<string, number> = {};
   let score = 0;
+  const referenceTime = referenceDate instanceof Date ? referenceDate.getTime() : referenceDate;
+  const candidateTime = new Date(candidate.eventDate).getTime();
 
   if (
     normalizeText(query.eventSubtype) != null &&
@@ -263,7 +261,11 @@ export function scoreCandidate(
     score += 1;
   }
 
-  if (Date.now() - new Date(candidate.eventDate).getTime() <= RECENCY_WINDOW_MS) {
+  if (
+    Number.isFinite(referenceTime) &&
+    candidateTime <= referenceTime &&
+    referenceTime - candidateTime <= RECENCY_WINDOW_MS
+  ) {
     scoreBreakdown.recencyBonus = 1;
     score += 1;
   }
@@ -330,6 +332,7 @@ export function calculateAggregateStats(
           headline: sortedByAlpha[0].headline,
         }
       : null,
+    // With a single similar event, best and worst case intentionally point to the same row.
     worstCase: sortedByAlpha.at(-1)
       ? {
           ticker: sortedByAlpha.at(-1)!.ticker,
@@ -452,7 +455,10 @@ export async function findSimilarEvents(
     .leftJoin(eventMarketContext, eq(eventMarketContext.eventId, historicalEvents.id))
     .leftJoin(metricsEarnings, eq(metricsEarnings.eventId, historicalEvents.id))
     .where(and(...conditions))
-    .orderBy(desc(historicalEvents.eventTs));
+    .orderBy(desc(historicalEvents.eventTs))
+    // The dataset is still small (~2400 events total), so JS-side scoring stays intentional for flexibility.
+    // This DB cap is just a guard rail against future bulk imports pulling an unbounded candidate set at once.
+    .limit(MAX_CANDIDATE_FETCH);
 
   const candidates = rows
     .map(buildCandidate)

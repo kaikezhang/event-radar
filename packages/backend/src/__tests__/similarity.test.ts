@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
@@ -14,6 +14,7 @@ import {
   type HistoricalSimilarityCandidate,
   type SimilarityQuery,
 } from '../services/similarity.js';
+import { parseSeverityCsv } from '../routes/historical.js';
 import {
   cleanTestDb,
   createTestDb,
@@ -671,6 +672,24 @@ describe('similarity service', () => {
     expect(result.scoreBreakdown.metricsBonus).toBe(3);
   });
 
+  it('allows callers to pin recency scoring with a reference date', () => {
+    const recentCandidate = makeCandidate({
+      eventDate: '2024-03-15T00:00:00.000Z',
+    });
+
+    expect(scoreCandidate(BASE_QUERY, recentCandidate, new Date('2026-03-12T00:00:00.000Z'))).toMatchObject({
+      scoreBreakdown: expect.objectContaining({
+        recencyBonus: 1,
+      }),
+    });
+
+    expect(scoreCandidate(BASE_QUERY, recentCandidate, new Date('2028-03-16T00:00:00.000Z'))).toMatchObject({
+      scoreBreakdown: expect.not.objectContaining({
+        recencyBonus: 1,
+      }),
+    });
+  });
+
   it('computes confidence bands from sample size and alpha dispersion', () => {
     expect(calculateConfidence([0.11, 0.08])).toBe('insufficient');
     expect(calculateConfidence([0.11, 0.08, 0.12, 0.09])).toBe('low');
@@ -733,6 +752,28 @@ describe('similarity service', () => {
     });
   });
 
+  it('keeps best and worst case identical when only one similar event exists', () => {
+    const stats = calculateAggregateStats([
+      {
+        ticker: 'AAPL',
+        headline: 'Apple beats',
+        returnT1: 0.03,
+        returnT5: 0.07,
+        returnT20: 0.14,
+        alphaT1: 0.01,
+        alphaT5: 0.05,
+        alphaT20: 0.12,
+      },
+    ] satisfies AggregateStatsInput[]);
+
+    expect(stats.bestCase).toEqual({
+      ticker: 'AAPL',
+      alphaT20: 0.12,
+      headline: 'Apple beats',
+    });
+    expect(stats.worstCase).toEqual(stats.bestCase);
+  });
+
   it('fetches, scores, filters, and sorts similar historical events', async () => {
     await seedHistoricalFixture(sharedDb);
 
@@ -751,6 +792,25 @@ describe('similarity service', () => {
     });
     expect(result.confidence).toBe('low');
     expect(result.stats.count).toBe(4);
+  });
+
+  it('logs and drops unrecognized severity filters from CSV input', () => {
+    const logger = {
+      debug: vi.fn(),
+    };
+
+    expect(parseSeverityCsv('high, bogus, medium, ???', logger)).toEqual(['high', 'medium']);
+    expect(logger.debug).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenNthCalledWith(
+      1,
+      { severity: 'bogus' },
+      'Ignoring unrecognized historical severity filter',
+    );
+    expect(logger.debug).toHaveBeenNthCalledWith(
+      2,
+      { severity: '???' },
+      'Ignoring unrecognized historical severity filter',
+    );
   });
 });
 
@@ -844,6 +904,31 @@ describe('historical routes', () => {
       ],
       pagination: {
         limit: 2,
+        offset: 0,
+        total: 4,
+      },
+    });
+  });
+
+  it('accepts date-only from filters and ISO datetime to filters', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/historical/events?from=2024-01-01&to=2025-12-31T23:59:59.000Z&limit=10&offset=0',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [
+        expect.objectContaining({ ticker: 'MSFT' }),
+        expect.objectContaining({ ticker: 'NVDA' }),
+        expect.objectContaining({ ticker: 'PFE' }),
+        expect.objectContaining({ ticker: 'PFE' }),
+      ],
+      pagination: {
+        limit: 10,
         offset: 0,
         total: 4,
       },

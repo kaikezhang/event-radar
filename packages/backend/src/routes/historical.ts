@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply } from 'fastify';
 import {
   and,
   asc,
@@ -27,12 +27,21 @@ import {
   metricsOther,
 } from '../db/historical-schema.js';
 import { findSimilarEvents } from '../services/similarity.js';
+import { toNumber } from '../utils/number.js';
 import { requireApiKey } from './auth-middleware.js';
+
+const HISTORICAL_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
 const severitySchema = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
-  z.enum(['critical', 'high', 'medium', 'low']),
+  z.enum(HISTORICAL_SEVERITIES),
 );
+
+const DateFilterSchema = z.union([
+  z.string().date(),
+  z.string().datetime(),
+  z.string().datetime({ offset: true }),
+]);
 
 const SimilarityQuerySchema = z.object({
   eventType: z.string().trim().min(1),
@@ -53,8 +62,8 @@ const SimilarityQuerySchema = z.object({
 const EventsQuerySchema = z.object({
   ticker: z.string().trim().min(1).optional(),
   eventType: z.string().trim().min(1).optional(),
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
+  from: DateFilterSchema.optional(),
+  to: DateFilterSchema.optional(),
   severity: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(20),
   offset: z.coerce.number().int().min(0).default(0),
@@ -87,15 +96,6 @@ function sendValidationError(reply: FastifyReply, error: z.ZodError): void {
   });
 }
 
-function toNumber(value: string | number | null | undefined): number | null {
-  if (value == null) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function toIsoString(value: string | Date | null | undefined): string | null {
   if (value == null) {
     return null;
@@ -113,7 +113,9 @@ function toIsoString(value: string | Date | null | undefined): string | null {
   return value;
 }
 
-function parseSeverityCsv(raw?: string): string[] {
+type SeverityLogger = Pick<FastifyBaseLogger, 'debug'>;
+
+export function parseSeverityCsv(raw?: string, logger?: SeverityLogger): string[] {
   if (!raw) {
     return [];
   }
@@ -122,12 +124,26 @@ function parseSeverityCsv(raw?: string): string[] {
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter((value) => value.length > 0)
-    .filter((value): value is z.infer<typeof severitySchema> =>
-      ['critical', 'high', 'medium', 'low'].includes(value),
-    );
+    .filter((value): value is z.infer<typeof severitySchema> => {
+      const isKnownSeverity = HISTORICAL_SEVERITIES.includes(
+        value as (typeof HISTORICAL_SEVERITIES)[number],
+      );
+
+      if (!isKnownSeverity) {
+        logger?.debug(
+          { severity: value },
+          'Ignoring unrecognized historical severity filter',
+        );
+      }
+
+      return isKnownSeverity;
+    });
 }
 
-function buildEventsWhere(query: z.infer<typeof EventsQuerySchema>): SQL[] {
+function buildEventsWhere(
+  query: z.infer<typeof EventsQuerySchema>,
+  logger?: SeverityLogger,
+): SQL[] {
   const conditions: SQL[] = [];
 
   if (query.ticker) {
@@ -146,7 +162,7 @@ function buildEventsWhere(query: z.infer<typeof EventsQuerySchema>): SQL[] {
     conditions.push(lte(historicalEvents.eventTs, new Date(query.to)));
   }
 
-  const severities = parseSeverityCsv(query.severity);
+  const severities = parseSeverityCsv(query.severity, logger);
   if (severities.length > 0) {
     conditions.push(inArray(historicalEvents.severity, severities));
   }
@@ -235,7 +251,7 @@ export function registerHistoricalRoutes(
     }
 
     const query = parsed.data;
-    const conditions = buildEventsWhere(query);
+    const conditions = buildEventsWhere(query, request.log);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [rows, totals] = await Promise.all([
