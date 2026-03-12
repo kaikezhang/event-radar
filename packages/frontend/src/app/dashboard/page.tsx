@@ -10,7 +10,6 @@ import { EventList } from '@/components/event-list';
 import { EventDetailPanel } from '@/components/event-detail-panel';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'er-dev-2026';
 
 // Mock sources for filter
 const MOCK_SOURCES = [
@@ -45,7 +44,6 @@ export default function DashboardPage() {
     deletePreset,
   } = useEventsWebSocket({
     apiUrl: API_URL,
-    apiKey: API_KEY,
     onCriticalOrHigh: handleCriticalOrHigh,
     soundEnabled,
   });

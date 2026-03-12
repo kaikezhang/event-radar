@@ -43,7 +43,6 @@ function isEventItem(item: EventItem | EventDetail): item is EventItem {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'er-dev-2026';
 
 interface EventDetailPanelProps {
   event: EventItem | null;
@@ -305,7 +304,6 @@ export function EventDetailPanel({ event, onClose }: EventDetailPanelProps) {
     fetchEvent,
   } = useEventDetail({
     apiUrl: API_URL,
-    apiKey: API_KEY,
   });
 
   // Fetch full event details when event changes

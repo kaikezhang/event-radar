@@ -29,7 +29,7 @@ export interface SavedPreset {
 
 export interface UseEventsWebSocketOptions {
   apiUrl: string;
-  apiKey: string;
+  apiKey?: string;
   onCriticalOrHigh?: (event: EventItem) => void;
   soundEnabled?: boolean;
 }
@@ -51,7 +51,7 @@ const MAX_RECONNECT_DELAY = 30000;
 const POLL_INTERVAL = 5000;
 const MAX_WS_FAILURES = 5;
 
-function buildWsUrl(apiUrl: string, apiKey: string): string {
+function buildWsUrl(apiUrl: string): string {
   // Auto-detect protocol based on page protocol or API URL
   const isSecure =
     (typeof window !== 'undefined' && window.location.protocol === 'https:') ||
@@ -61,13 +61,13 @@ function buildWsUrl(apiUrl: string, apiKey: string): string {
   const baseUrl = apiUrl
     ? apiUrl.replace(/^https?:\/\//, '')
     : (typeof window !== 'undefined' ? window.location.host : 'localhost:3080');
-  return `${wsProtocol}://${baseUrl}/ws/events?apiKey=${encodeURIComponent(apiKey)}`;
+  return `${wsProtocol}://${baseUrl}/ws/events`;
 }
 
 export function useEventsWebSocket(
   options: UseEventsWebSocketOptions
 ): UseEventsWebSocketReturn {
-  const { apiUrl, apiKey, onCriticalOrHigh, soundEnabled = true } = options;
+  const { apiUrl, onCriticalOrHigh, soundEnabled = true } = options;
 
   const [events, setEvents] = useState<EventItem[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -183,9 +183,7 @@ export function useEventsWebSocket(
     const poll = async () => {
       if (!mountedRef.current) return;
       try {
-        const response = await fetch(`${apiUrl}/api/events`, {
-          headers: { 'X-API-Key': apiKey },
-        });
+        const response = await fetch(`${apiUrl}/api/events`);
         if (response.ok) {
           const data = await response.json();
           const eventList: EventItem[] = Array.isArray(data) ? data : data.events || [];
@@ -201,7 +199,7 @@ export function useEventsWebSocket(
 
     poll();
     pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
-  }, [apiUrl, apiKey]);
+  }, [apiUrl]);
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -222,7 +220,7 @@ export function useEventsWebSocket(
       return;
     }
 
-    const wsUrl = buildWsUrl(apiUrl, apiKey);
+    const wsUrl = buildWsUrl(apiUrl);
 
     let ws: WebSocket;
     try {
@@ -275,7 +273,7 @@ export function useEventsWebSocket(
     };
 
     wsRef.current = ws;
-  }, [apiUrl, apiKey, handleMessage, startPolling, stopPolling]);
+  }, [apiUrl, handleMessage, startPolling, stopPolling]);
 
   // Initial connection
   useEffect(() => {

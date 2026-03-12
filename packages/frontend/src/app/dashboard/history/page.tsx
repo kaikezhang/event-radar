@@ -16,7 +16,6 @@ import { SectorHeatmap } from "@/components/sector-heatmap";
 import { useBroadcastSync } from "@/lib/broadcast-sync";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "er-dev-2026";
 
 function parseCsv(value: string | null): string[] {
   if (!value) {
@@ -285,7 +284,7 @@ function HistoryDashboardContent() {
       </div>
 
       <SectorHeatmap
-        apiKey={API_KEY}
+        apiKey=""
         apiUrl={API_URL}
         dateFrom={query.dateFrom}
         dateTo={query.dateTo}
@@ -321,7 +320,7 @@ function HistoryDashboardContent() {
         href={buildPanelHref("chart")}
       >
         <EventImpactChart
-          apiKey={API_KEY}
+          apiKey=""
           apiUrl={API_URL}
           ticker={activeTicker}
           dateFrom={query.dateFrom}
@@ -348,7 +347,7 @@ function HistoryDashboardContent() {
           href={buildPanelHref("events")}
         >
           <EventHistoryBrowser
-            apiKey={API_KEY}
+            apiKey=""
             apiUrl={API_URL}
             query={query}
             selectedEventId={sync.selectedEventId}
@@ -363,7 +362,7 @@ function HistoryDashboardContent() {
           href={buildPanelHref("detail")}
         >
           <HistoryEventDetail
-            apiKey={API_KEY}
+            apiKey=""
             apiUrl={API_URL}
             eventId={sync.selectedEventId ?? null}
           />

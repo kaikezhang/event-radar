@@ -187,12 +187,8 @@ export function EventHistoryBrowser({
     async function loadMetadata() {
       try {
         const [sourcesResponse, typesResponse] = await Promise.all([
-          fetch(`${apiUrl}/api/v1/events/history/sources`, {
-            headers: { "X-API-Key": apiKey },
-          }),
-          fetch(`${apiUrl}/api/v1/events/history/types`, {
-            headers: { "X-API-Key": apiKey },
-          }),
+          fetch(`${apiUrl}/api/v1/events/history/sources`),
+          fetch(`${apiUrl}/api/v1/events/history/types`),
         ]);
 
         if (!sourcesResponse.ok || !typesResponse.ok) {
@@ -277,11 +273,7 @@ export function EventHistoryBrowser({
       }
 
       try {
-        const response = await fetch(`${apiUrl}/api/v1/events/history?${params.toString()}`, {
-          headers: {
-            "X-API-Key": apiKey,
-          },
-        });
+        const response = await fetch(`${apiUrl}/api/v1/events/history?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error("Failed to load historical events");

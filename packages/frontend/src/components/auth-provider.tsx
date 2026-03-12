@@ -9,11 +9,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "er-dev-2026";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   return (
-    <AuthContext.Provider value={{ apiKey: API_KEY, isAuthenticated: true }}>
+    <AuthContext.Provider value={{ apiKey: '', isAuthenticated: true }}>
       {children}
     </AuthContext.Provider>
   );
@@ -22,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    return { isAuthenticated: true, apiKey: '' };
   }
   return context;
 }
