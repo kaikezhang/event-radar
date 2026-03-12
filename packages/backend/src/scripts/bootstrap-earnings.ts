@@ -433,6 +433,7 @@ const TICKERS_CONFIG: readonly TickerConfig[] = [
     sectorEtf: 'XLF',
     exchange: 'NYSE',
     historyTicker: 'XYZ',
+    earningsTicker: 'XYZ',
   },
   {
     ticker: 'SHOP',
@@ -684,9 +685,12 @@ async function main() {
     ]),
   ];
   const benchmarkData: Record<string, PriceBar[]> = {};
-  for (const t of benchmarkTickers) {
+  for (const [i, t] of benchmarkTickers.entries()) {
     console.log(`  Fetching ${t}...`);
     benchmarkData[t] = fetchHistory(t, PRICE_HISTORY_START);
+    if (i < benchmarkTickers.length - 1) {
+      await sleep(350);
+    }
   }
   console.log('Benchmark data loaded.\n');
 
@@ -805,7 +809,7 @@ async function main() {
           .where(
             and(
               eq(hist.historicalEvents.companyId, companyId),
-              eq(hist.historicalEvents.bootstrapBatch, BOOTSTRAP_BATCH),
+              eq(hist.historicalEvents.eventType, 'earnings'),
               eq(hist.historicalEvents.tickerAtTime, cfg.ticker),
               sql`DATE(${hist.historicalEvents.eventTs}) = ${barDate}`,
             ),
@@ -1111,7 +1115,6 @@ async function main() {
           and(
             eq(hist.historicalEvents.companyId, companyId),
             eq(hist.historicalEvents.eventType, 'earnings'),
-            eq(hist.historicalEvents.bootstrapBatch, BOOTSTRAP_BATCH),
           ),
         )
         .orderBy(hist.historicalEvents.eventTs);
@@ -1148,7 +1151,7 @@ async function main() {
           ticker: cfg.ticker,
           sourceType: 'earnings',
           dateFrom: dates[0] ?? PRICE_HISTORY_START,
-          dateTo: dates[dates.length - 1] ?? '2026-03-12',
+          dateTo: dates[dates.length - 1] ?? new Date().toISOString().slice(0, 10),
           scanCompleted: true,
           eventsFound: eventIds.length,
           notes: `Bootstrap batch: ${BOOTSTRAP_BATCH}`,
@@ -1156,6 +1159,8 @@ async function main() {
       }
 
       console.log(`  Done: ${eventIds.length} earnings events`);
+    } catch (err) {
+      console.error(`  [ERROR] Failed to process ${cfg.ticker}:`, err);
     } finally {
       if (index < TICKERS_CONFIG.length - 1) {
         console.log(`  Pausing ${TICKER_DELAY_MS / 1000}s to avoid yfinance rate limits...`);
