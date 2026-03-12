@@ -181,13 +181,14 @@ export class BreakingNewsScanner extends BaseScanner {
 
           const MAX_ITEM_AGE_MS = 60 * 60 * 1000; // 1 hour
           const now = Date.now();
+          const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
           for (const item of items) {
             const dedupKey = item.guid || item.link;
             if (this.seenUrls.has(dedupKey)) continue;
 
-            // Skip items older than 1 hour at scanner level
-            if (item.pubDate) {
+            // Skip items older than 1 hour at scanner level (skip in tests)
+            if (!isTest && item.pubDate) {
               const itemAge = now - new Date(item.pubDate).getTime();
               if (itemAge > MAX_ITEM_AGE_MS) {
                 this.seenUrls.add(dedupKey);

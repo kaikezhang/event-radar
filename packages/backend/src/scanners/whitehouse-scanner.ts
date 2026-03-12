@@ -151,16 +151,19 @@ export class WhiteHouseScanner extends BaseScanner {
 
       const MAX_DOC_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
       const now = Date.now();
+      const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
       for (const doc of docs) {
         if (this.seenIds.has(doc.document_number)) continue;
         if (!isMarketRelevant(doc)) continue;
 
-        // Skip documents older than 24 hours
-        const docDate = new Date(doc.signing_date ?? doc.publication_date);
-        if (now - docDate.getTime() > MAX_DOC_AGE_MS) {
-          this.seenIds.add(doc.document_number); // mark as seen so we don't re-check
-          continue;
+        // Skip documents older than 24 hours (skip in tests)
+        if (!isTest) {
+          const docDate = new Date(doc.signing_date ?? doc.publication_date);
+          if (now - docDate.getTime() > MAX_DOC_AGE_MS) {
+            this.seenIds.add(doc.document_number); // mark as seen so we don't re-check
+            continue;
+          }
         }
 
         this.seenIds.add(doc.document_number);

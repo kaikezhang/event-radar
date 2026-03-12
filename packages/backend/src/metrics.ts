@@ -108,6 +108,57 @@ export const historicalEnrichmentTimeoutsTotal = new Counter({
   registers: [registry],
 });
 
+// ============================================================
+// Observability v2 — Pipeline funnel + filter + enrichment
+// ============================================================
+
+/** Counter: pipeline funnel (events reaching each stage) */
+export const pipelineFunnelTotal = new Counter({
+  name: 'pipeline_funnel_total',
+  help: 'Events reaching each pipeline stage',
+  labelNames: ['stage'] as const,
+  registers: [registry],
+});
+
+/** Counter: alert filter decisions */
+export const alertFilterTotal = new Counter({
+  name: 'alert_filter_total',
+  help: 'Alert filter decisions',
+  labelNames: ['decision', 'source', 'reason_category'] as const,
+  registers: [registry],
+});
+
+/** Counter: historical enrichment results */
+export const historicalEnrichmentTotal = new Counter({
+  name: 'historical_enrichment_total',
+  help: 'Historical enrichment outcomes',
+  labelNames: ['result'] as const,
+  registers: [registry],
+});
+
+/** Histogram: historical enrichment duration */
+export const historicalEnrichmentDurationSeconds = new Histogram({
+  name: 'historical_enrichment_duration_seconds',
+  help: 'Duration of historical enrichment queries in seconds',
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+/** Counter: events suppressed during startup grace period */
+export const gracePeriodSuppressedTotal = new Counter({
+  name: 'grace_period_suppressed_total',
+  help: 'Events suppressed during startup grace period',
+  registers: [registry],
+});
+
+/** Counter: delivery errors by channel and error type */
+export const deliveryErrorsTotal = new Counter({
+  name: 'delivery_errors_total',
+  help: 'Delivery errors by channel',
+  labelNames: ['channel', 'error_type'] as const,
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -121,4 +172,10 @@ export function resetMetrics(): void {
   eventsDeduplicatedTotal.reset();
   activeStories.reset();
   historicalEnrichmentTimeoutsTotal.reset();
+  pipelineFunnelTotal.reset();
+  alertFilterTotal.reset();
+  historicalEnrichmentTotal.reset();
+  historicalEnrichmentDurationSeconds.reset();
+  gracePeriodSuppressedTotal.reset();
+  deliveryErrorsTotal.reset();
 }

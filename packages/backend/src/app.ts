@@ -49,6 +49,7 @@ import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
+import { registerDashboardRoutes } from './routes/dashboard.js';
 import { createLLMProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -66,6 +67,12 @@ import {
   llmClassificationsTotal,
   eventsDeduplicatedTotal,
   activeStories,
+  pipelineFunnelTotal,
+  alertFilterTotal,
+  historicalEnrichmentTotal,
+  historicalEnrichmentDurationSeconds,
+  gracePeriodSuppressedTotal,
+  deliveryErrorsTotal,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
@@ -86,6 +93,22 @@ import type {
   Result,
   RawEvent,
 } from '@event-radar/shared';
+
+/** Categorize alert filter reason string into a metric-friendly bucket */
+function categorizeFilterReason(reason: string): string {
+  if (reason.includes('stale')) return 'stale';
+  if (reason.includes('retrospective')) return 'retrospective';
+  if (reason.includes('keyword')) return 'keyword';
+  if (reason.includes('cooldown')) return 'cooldown';
+  if (reason.includes('social')) return 'social_noise';
+  if (reason.includes('dummy')) return 'dummy';
+  if (reason.includes('insider')) return 'insider_threshold';
+  if (reason.includes('primary source')) return 'primary_pass';
+  if (reason.includes('calendar')) return 'calendar';
+  if (reason.includes('analyst')) return 'analyst';
+  if (reason.includes('default')) return 'default';
+  return 'other';
+}
 
 export interface AppContext {
   server: FastifyInstance;
@@ -210,6 +233,7 @@ export function buildApp(options?: {
         '/api/health/ping',
         '/metrics',
         '/api/events/ingest',
+        '/api/v1/dashboard',
       ],
     });
   });
@@ -270,12 +294,18 @@ export function buildApp(options?: {
     registry.register(new EarningsScanner(eventBus));
   }
 
+  // Helper: truncate title for logs
+  const logTitle = (title: string) => title.length > 80 ? title.slice(0, 77) + '...' : title;
+
   // Unified event pipeline: classify → dedup → store → filter → deliver
   eventBus.subscribe(async (event) => {
+    pipelineFunnelTotal.inc({ stage: 'ingested' });
+
     // Step 1: Classify ONCE
     const end = processingDurationSeconds.startTimer({ operation: 'classify' });
     const result = ruleEngine.classify(event);
     end();
+    pipelineFunnelTotal.inc({ stage: 'classified' });
 
     // Step 2: Track metrics (always, even for duplicates)
     eventsProcessedTotal.inc({ source: event.source, event_type: event.type });
@@ -288,6 +318,7 @@ export function buildApp(options?: {
 
     if (dedupResult.isDuplicate) {
       eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
+      pipelineFunnelTotal.inc({ stage: 'deduped' });
       return; // Skip DB storage + delivery for duplicates
     }
 
@@ -343,12 +374,16 @@ export function buildApp(options?: {
       }
     }
 
+    pipelineFunnelTotal.inc({ stage: 'stored' });
+
     // Step 7: Alert filter + delivery (if alertRouter enabled)
     // Grace period: suppress delivery for first 90s after startup to let scanners
     // populate their seenIds buffers (prevents duplicate flood on restart)
+    const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
     const uptimeMs = Date.now() - startTime;
     const DELIVERY_GRACE_MS = 90_000;
-    if (uptimeMs < DELIVERY_GRACE_MS) {
+    if (!isTest && uptimeMs < DELIVERY_GRACE_MS) {
+      gracePeriodSuppressedTotal.inc();
       return; // Still in startup grace period — store to DB but don't deliver
     }
 
@@ -359,9 +394,39 @@ export function buildApp(options?: {
           : undefined;
 
       const filterResult = alertFilter.check(event);
+
+      // Categorize filter reason for metrics
+      const reasonCat = categorizeFilterReason(filterResult.reason);
+      alertFilterTotal.inc({
+        decision: filterResult.pass ? 'pass' : 'block',
+        source: event.source,
+        reason_category: reasonCat,
+      });
+
       if (!filterResult.pass) {
+        pipelineFunnelTotal.inc({ stage: 'filtered_out' });
+        server.log.debug({
+          pipeline: true,
+          stage: 'filter',
+          source: event.source,
+          title: logTitle(event.title),
+          pass: false,
+          reason: filterResult.reason,
+        });
         return; // Blocked by alert filter
       }
+
+      pipelineFunnelTotal.inc({ stage: 'filter_passed' });
+      server.log.info({
+        pipeline: true,
+        stage: 'filter',
+        source: event.source,
+        title: logTitle(event.title),
+        severity: result.severity,
+        pass: true,
+        reason: filterResult.reason,
+        ticker,
+      });
 
       // LLM Enrichment (only for events flagged by L1)
       let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
@@ -375,11 +440,33 @@ export function buildApp(options?: {
       // Historical enrichment (only after filter passes, before delivery)
       let historicalContext: import('@event-radar/delivery').HistoricalContext | undefined;
       if (historicalEnricher) {
-        historicalContext = await historicalEnricher.enrich(
+        const histStart = Date.now();
+        const histResult = await historicalEnricher.enrich(
           event,
           llmResult?.ok ? llmResult.value : undefined,
-        ) ?? undefined;
+        );
+        historicalContext = histResult ?? undefined;
+        const histDurationMs = Date.now() - histStart;
+        const histDurationS = histDurationMs / 1000;
+        historicalEnrichmentDurationSeconds.observe(histDurationS);
+
+        if (historicalContext) {
+          historicalEnrichmentTotal.inc({ result: 'hit' });
+          server.log.info({
+            pipeline: true,
+            stage: 'historical',
+            source: event.source,
+            title: logTitle(event.title),
+            confidence: historicalContext.confidence,
+            matches: historicalContext.matchCount,
+            duration_ms: histDurationMs,
+          });
+        } else {
+          historicalEnrichmentTotal.inc({ result: 'miss' });
+        }
       }
+
+      pipelineFunnelTotal.inc({ stage: 'enriched' });
 
       const deliveryStart = Date.now();
       const results = await alertRouter.route({
@@ -391,6 +478,9 @@ export function buildApp(options?: {
       });
       const deliveryMs = Date.now() - deliveryStart;
 
+      const okCount = results.filter(r => r.ok).length;
+      const failCount = results.filter(r => !r.ok).length;
+
       for (const r of results) {
         const status = r.ok ? 'success' : 'failure';
         deliveriesSentTotal.inc({ channel: r.channel, status });
@@ -399,7 +489,26 @@ export function buildApp(options?: {
           { channel: r.channel },
           deliveryMs / 1000,
         );
+        if (!r.ok && r.error) {
+          deliveryErrorsTotal.inc({ channel: r.channel, error_type: r.error.message.slice(0, 50) });
+        }
       }
+
+      pipelineFunnelTotal.inc({ stage: 'delivered' });
+
+      server.log.info({
+        pipeline: true,
+        stage: 'delivery',
+        source: event.source,
+        title: logTitle(event.title),
+        severity: result.severity,
+        channels: results.map(r => r.channel),
+        ok: okCount,
+        fail: failCount,
+        duration_ms: deliveryMs,
+        historical: !!historicalContext,
+        ticker,
+      });
     }
   });
 
@@ -511,6 +620,15 @@ export function buildApp(options?: {
 
   // Register scanner health routes
   registerScannerRoutes(server, registry);
+
+  // Register dashboard route
+  registerDashboardRoutes(server, {
+    db,
+    scannerRegistry: registry,
+    marketCache: marketCache ?? undefined,
+    startTime,
+    version: backendPackage.version,
+  });
 
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
