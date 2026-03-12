@@ -55,7 +55,11 @@ export async function extractAllTextContent(
 }
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
+
+function persistenceDisabled(): boolean {
+  return process.env.EVENT_RADAR_DISABLE_PERSISTENCE === 'true';
+}
 
 /**
  * Ring buffer for tracking seen IDs (deduplication).
@@ -73,7 +77,7 @@ export class SeenIdBuffer {
   constructor(capacity = 200, name?: string) {
     this.capacity = capacity;
     // Persist to <project>/data/seen/<name>.json if name provided
-    if (name) {
+    if (name && !persistenceDisabled()) {
       const dir = '/tmp/event-radar-seen';
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       this.persistPath = join(dir, `${name}.json`);

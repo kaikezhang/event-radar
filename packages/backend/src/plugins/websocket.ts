@@ -232,7 +232,8 @@ export async function registerWebSocketPlugin(
     heartbeatInterval.unref();
   }
 
-  server.get('/ws/events', { websocket: true }, async (socket, _request) => {
+  server.get('/ws/events', { websocket: true }, async (socket, request) => {
+    void request;
     // Generate client ID
     const clientId = crypto.randomUUID();
 

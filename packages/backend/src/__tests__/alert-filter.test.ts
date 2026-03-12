@@ -1,12 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { existsSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { AlertFilter } from '../pipeline/alert-filter.js';
 import type { RawEvent } from '@event-radar/shared';
 
-const seenDataDir = fileURLToPath(new URL('../../data/seen/', import.meta.url));
-const cooldownPath = join(seenDataDir, 'ticker-cooldown.json');
+const cooldownPath = '/tmp/event-radar-seen/ticker-cooldown.json';
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -38,7 +35,6 @@ describe('AlertFilter', () => {
   afterEach(() => {
     vi.useRealTimers();
     if (existsSync(cooldownPath)) unlinkSync(cooldownPath);
-    rmSync(seenDataDir, { recursive: true, force: true });
   });
 
   describe('disabled filter', () => {

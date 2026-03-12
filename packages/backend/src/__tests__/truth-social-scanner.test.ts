@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { existsSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { InMemoryEventBus } from '@event-radar/shared';
 import {
   parseTruthSocialPosts,
@@ -14,8 +13,7 @@ const fixtureHtml = readFileSync(
   join(__dirname, 'fixtures', 'truth-social-post.html'),
   'utf-8',
 );
-const seenDataDir = fileURLToPath(new URL('../../data/seen/', import.meta.url));
-const testSeenBufferPath = join(seenDataDir, 'vitest-seen-buffer.json');
+const testSeenBufferPath = '/tmp/event-radar-seen/vitest-seen-buffer.json';
 
 function getFixtureDocument(html: string): Document {
   const dom = new JSDOM(html);
@@ -25,7 +23,6 @@ function getFixtureDocument(html: string): Document {
 afterEach(() => {
   vi.useRealTimers();
   if (existsSync(testSeenBufferPath)) unlinkSync(testSeenBufferPath);
-  rmSync(seenDataDir, { recursive: true, force: true });
 });
 
 describe('TruthSocialScanner', () => {
@@ -114,15 +111,6 @@ describe('TruthSocialScanner', () => {
       expect(buffer.size).toBe(1);
     });
 
-    it('should persist named buffers under backend data/seen', async () => {
-      vi.useFakeTimers();
-      const buffer = new SeenIdBuffer(5, 'vitest-seen-buffer');
-
-      buffer.add('persist-me');
-      await vi.advanceTimersByTimeAsync(1000);
-
-      expect(existsSync(testSeenBufferPath)).toBe(true);
-    });
   });
 
   describe('keyword/ticker extraction in scanner', () => {

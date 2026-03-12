@@ -70,7 +70,6 @@ import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
-import { registerWebSocketPlugin } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
@@ -262,7 +261,7 @@ export function buildApp(options?: {
     eventsBySeverity.inc({ severity: result.severity });
 
     // Step 3: Dedup check
-    const dedupResult = deduplicator.check(event);
+    const dedupResult = await deduplicator.check(event);
     activeStories.set(deduplicator.activeStoryCount);
 
     if (dedupResult.isDuplicate) {

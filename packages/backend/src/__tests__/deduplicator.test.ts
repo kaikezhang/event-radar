@@ -179,9 +179,9 @@ describe('EventDeduplicator', () => {
     dedup = new EventDeduplicator({ windowMs: 30 * 60 * 1000 });
   });
 
-  it('should pass through unique events (non-duplicate)', () => {
+  it('should pass through unique events (non-duplicate)', async () => {
     const event = makeEvent();
-    const result = dedup.check(event);
+    const result = await dedup.check(event);
 
     expect(result.isDuplicate).toBe(false);
     expect(result.matchType).toBe('none');
@@ -189,7 +189,7 @@ describe('EventDeduplicator', () => {
     expect(result.originalEventId).toBeUndefined();
   });
 
-  it('should detect exact ID duplicate (same filing from RSS + API)', () => {
+  it('should detect exact ID duplicate (same filing from RSS + API)', async () => {
     const e1 = makeEvent({
       source: 'sec-rss',
       metadata: { filingId: 'SEC-2024-001', ticker: 'AAPL' },
@@ -202,8 +202,8 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:01:00Z');
-    dedup.check(e1, now);
-    const result = dedup.check(e2, now);
+    await dedup.check(e1, now);
+    const result = await dedup.check(e2, now);
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matchType).toBe('exact-id');
@@ -211,7 +211,7 @@ describe('EventDeduplicator', () => {
     expect(result.originalEventId).toBe(e1.id);
   });
 
-  it('should detect ticker + time window duplicate (Trump tariff post + news repost)', () => {
+  it('should detect ticker + time window duplicate (Trump tariff post + news repost)', async () => {
     const e1 = makeEvent({
       source: 'truth-social',
       type: 'political-post',
@@ -230,14 +230,14 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:03:00Z');
-    dedup.check(e1, now);
-    const result = dedup.check(e2, now);
+    await dedup.check(e1, now);
+    const result = await dedup.check(e2, now);
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matchType).toBe('ticker-window');
   });
 
-  it('should detect content similarity duplicate (similar headlines from newswires)', () => {
+  it('should detect content similarity duplicate (similar headlines from newswires)', async () => {
     const e1 = makeEvent({
       source: 'reuters',
       title: 'Federal Reserve raises interest rates by 25 basis points',
@@ -254,15 +254,15 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:01:00Z');
-    dedup.check(e1, now);
-    const result = dedup.check(e2, now);
+    await dedup.check(e1, now);
+    const result = await dedup.check(e2, now);
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matchType).toBe('content-similarity');
     expect(result.matchConfidence).toBeGreaterThanOrEqual(0.8);
   });
 
-  it('should group 3 related events into 1 story', () => {
+  it('should group 3 related events into 1 story', async () => {
     const e1 = makeEvent({
       source: 'sec-rss',
       metadata: { filingId: 'MERGER-001', ticker: 'ACME' },
@@ -280,9 +280,9 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:05:00Z');
-    dedup.check(e1, now);
-    const r2 = dedup.check(e2, now);
-    const r3 = dedup.check(e3, now);
+    await dedup.check(e1, now);
+    const r2 = await dedup.check(e2, now);
+    const r3 = await dedup.check(e3, now);
 
     expect(r2.isDuplicate).toBe(true);
     expect(r2.storyId).toBeDefined();
@@ -297,14 +297,14 @@ describe('EventDeduplicator', () => {
     expect(story!.storyId).toBe(e1.id); // First event becomes story anchor
   });
 
-  it('should remove old events from sliding window', () => {
+  it('should remove old events from sliding window', async () => {
     const oldEvent = makeEvent({
       metadata: { filingId: 'OLD-001' },
       timestamp: new Date('2024-01-15T09:00:00Z'),
     });
 
     // Add old event at its timestamp
-    dedup.check(oldEvent, new Date('2024-01-15T09:00:00Z'));
+    await dedup.check(oldEvent, new Date('2024-01-15T09:00:00Z'));
     expect(dedup.windowSize).toBe(1);
 
     // 31 minutes later, the old event should be cleaned up
@@ -312,13 +312,13 @@ describe('EventDeduplicator', () => {
       metadata: { filingId: 'OLD-001' },
       timestamp: new Date('2024-01-15T09:31:00Z'),
     });
-    const result = dedup.check(newEvent, new Date('2024-01-15T09:31:00Z'));
+    const result = await dedup.check(newEvent, new Date('2024-01-15T09:31:00Z'));
 
     // Old event was cleaned, so no match
     expect(result.isDuplicate).toBe(false);
   });
 
-  it('should let non-duplicate events pass through even with events in window', () => {
+  it('should let non-duplicate events pass through even with events in window', async () => {
     const e1 = makeEvent({
       source: 'sec-edgar',
       title: 'Apple earnings report',
@@ -336,15 +336,15 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:01:00Z');
-    dedup.check(e1, now);
-    const result = dedup.check(e2, now);
+    await dedup.check(e1, now);
+    const result = await dedup.check(e2, now);
 
     expect(result.isDuplicate).toBe(false);
     expect(result.matchType).toBe('none');
     expect(dedup.windowSize).toBe(2);
   });
 
-  it('should return active story count', () => {
+  it('should return active story count', async () => {
     const e1 = makeEvent({
       metadata: { filingId: 'A-001' },
       timestamp: new Date('2024-01-15T10:00:00Z'),
@@ -355,14 +355,14 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:01:00Z');
-    dedup.check(e1, now);
+    await dedup.check(e1, now);
     expect(dedup.activeStoryCount).toBe(0);
 
-    dedup.check(e2, now);
+    await dedup.check(e2, now);
     expect(dedup.activeStoryCount).toBe(1);
   });
 
-  it('should prefer exact ID match over other strategies', () => {
+  it('should prefer exact ID match over other strategies', async () => {
     // Create two events that match on both exact ID and ticker+window
     const e1 = makeEvent({
       metadata: { filingId: 'SEC-001', ticker: 'AAPL' },
@@ -374,8 +374,8 @@ describe('EventDeduplicator', () => {
     });
 
     const now = new Date('2024-01-15T10:01:00Z');
-    dedup.check(e1, now);
-    const result = dedup.check(e2, now);
+    await dedup.check(e1, now);
+    const result = await dedup.check(e2, now);
 
     // Exact ID has confidence 1.0 which should beat ticker-window
     expect(result.isDuplicate).toBe(true);
