@@ -138,7 +138,7 @@ export async function extractTruthSocialPosts(
 }
 
 export class TruthSocialScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'truth-social');
 
   constructor(eventBus: EventBus) {
     super({

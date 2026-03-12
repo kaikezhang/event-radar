@@ -96,7 +96,7 @@ export function isHighEngagement(
 }
 
 export class RedditScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'reddit');
   private readonly responseTextCache = new WeakMap<Response, string>();
   public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 

@@ -107,7 +107,7 @@ export function ratingSeverity(rating: AnalystRating): 'HIGH' | 'MEDIUM' | 'LOW'
 }
 
 export class AnalystScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'analyst');
   /** Override for testing */
   public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
 

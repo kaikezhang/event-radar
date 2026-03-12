@@ -200,7 +200,7 @@ export function isMarketRelevantReply(text: string): boolean {
 }
 
 export class XScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'x');
 
   constructor(eventBus: EventBus) {
     super({

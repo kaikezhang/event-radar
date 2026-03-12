@@ -142,7 +142,7 @@ export function matchKeywords(text: string): string[] {
 }
 
 export class BreakingNewsScanner extends BaseScanner {
-  private readonly seenUrls = new SeenIdBuffer(1000);
+  private readonly seenUrls = new SeenIdBuffer(1000, 'breaking-news');
   private readonly feeds: RssFeedConfig[];
   /** Override for testing */
   public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);

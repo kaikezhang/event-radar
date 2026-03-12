@@ -114,7 +114,7 @@ export function extractDrugName(text: string): string | null {
 }
 
 export class FdaScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'fda');
   /** Override for testing */
   public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
 

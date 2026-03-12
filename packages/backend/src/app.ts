@@ -183,11 +183,12 @@ export function buildApp(options?: {
   const wsEnabled = process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true';
   if (wsEnabled) {
     void server.register(async () => {
-      await registerWebSocketPlugin(server, {
-        eventBus,
-        db,
-        getApiKey: () => apiKey,
-      });
+      // WebSocket disabled temporarily — using REST polling fallback
+      // await registerWebSocketPlugin(server, {
+      //   eventBus,
+      //   db,
+      //   getApiKey: () => apiKey,
+      // });
     });
   }
 

@@ -54,16 +54,30 @@ export async function extractAllTextContent(
   }
 }
 
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+
 /**
  * Ring buffer for tracking seen IDs (deduplication).
  * Keeps only the last `capacity` entries.
+ * Persists to disk so IDs survive backend restarts.
  */
 export class SeenIdBuffer {
   private readonly ids: string[] = [];
   private readonly capacity: number;
+  private readonly persistPath: string | null;
 
-  constructor(capacity = 200) {
+  constructor(capacity = 200, name?: string) {
     this.capacity = capacity;
+    // Persist to /tmp/event-radar-seen/<name>.json if name provided
+    if (name) {
+      const dir = '/tmp/event-radar-seen';
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      this.persistPath = join(dir, `${name}.json`);
+      this.load();
+    } else {
+      this.persistPath = null;
+    }
   }
 
   has(id: string): boolean {
@@ -76,9 +90,27 @@ export class SeenIdBuffer {
     if (this.ids.length > this.capacity) {
       this.ids.shift();
     }
+    this.save();
   }
 
   get size(): number {
     return this.ids.length;
+  }
+
+  private load(): void {
+    if (!this.persistPath || !existsSync(this.persistPath)) return;
+    try {
+      const data = JSON.parse(readFileSync(this.persistPath, 'utf-8'));
+      if (Array.isArray(data)) {
+        this.ids.push(...data.slice(-this.capacity));
+      }
+    } catch { /* ignore corrupt file */ }
+  }
+
+  private save(): void {
+    if (!this.persistPath) return;
+    try {
+      writeFileSync(this.persistPath, JSON.stringify(this.ids));
+    } catch { /* ignore write errors */ }
   }
 }

@@ -70,7 +70,7 @@ export function warnSeverity(
 }
 
 export class WarnScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'warn');
   /** Override for testing */
   public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
 

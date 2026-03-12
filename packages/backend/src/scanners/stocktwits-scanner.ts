@@ -91,8 +91,8 @@ export function analyzeSentiment(messages: StockTwitsMessage[]): {
 }
 
 export class StockTwitsScanner extends BaseScanner {
-  private readonly seenTrending = new SeenIdBuffer(200);
-  private readonly seenMessages = new SeenIdBuffer(500);
+  private readonly seenTrending = new SeenIdBuffer(200, 'stocktwits-trending');
+  private readonly seenMessages = new SeenIdBuffer(500, 'stocktwits-messages');
   private previousTrending: Set<string> = new Set();
   private previousVolumes: Map<string, number> = new Map();
   private previousSentiments: Map<string, number> = new Map();

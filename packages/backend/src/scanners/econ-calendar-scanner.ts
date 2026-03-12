@@ -114,7 +114,7 @@ export function isPostRelease(scheduledTime: Date, now: Date): boolean {
 }
 
 export class EconCalendarScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'econ-calendar');
   private readonly config: EconCalendarConfig;
   private readonly scheduledReleases: ScheduledRelease[];
   /** Allow injecting "now" for testing */

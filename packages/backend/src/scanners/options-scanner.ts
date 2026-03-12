@@ -90,7 +90,7 @@ export function inferSignal(
 }
 
 export class UnusualOptionsScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500);
+  private readonly seenIds = new SeenIdBuffer(500, 'options');
   /** Override for testing */
   public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
 
