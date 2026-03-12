@@ -142,20 +142,24 @@ function maybeAssign<T extends object, K extends keyof T>(
 }
 
 export async function warmSectorCacheWithTickers(db: Database): Promise<void> {
-  const rows = await db
-    .select({
-      ticker: tickerHistory.ticker,
-      sector: companies.sector,
-    })
-    .from(tickerHistory)
-    .innerJoin(companies, eq(companies.id, tickerHistory.companyId));
+  try {
+    const rows = await db
+      .select({
+        ticker: tickerHistory.ticker,
+        sector: companies.sector,
+      })
+      .from(tickerHistory)
+      .innerJoin(companies, eq(companies.id, tickerHistory.companyId));
 
-  for (const row of rows) {
-    if (!row.ticker || !row.sector) {
-      continue;
+    for (const row of rows) {
+      if (!row.ticker || !row.sector) {
+        continue;
+      }
+
+      sectorCache.set(row.ticker.toUpperCase(), row.sector);
     }
-
-    sectorCache.set(row.ticker.toUpperCase(), row.sector);
+  } catch {
+    // Historical ticker metadata is optional in lightweight test databases.
   }
 }
 
@@ -175,21 +179,25 @@ export async function resolveSectorForTicker(
     return cached;
   }
 
-  const rows = await db
-    .select({
-      ticker: tickerHistory.ticker,
-      sector: companies.sector,
-    })
-    .from(tickerHistory)
-    .innerJoin(companies, eq(companies.id, tickerHistory.companyId))
-    .where(eq(sql`upper(${tickerHistory.ticker})`, normalizedTicker));
+  try {
+    const rows = await db
+      .select({
+        ticker: tickerHistory.ticker,
+        sector: companies.sector,
+      })
+      .from(tickerHistory)
+      .innerJoin(companies, eq(companies.id, tickerHistory.companyId))
+      .where(eq(sql`upper(${tickerHistory.ticker})`, normalizedTicker));
 
-  const sector = rows[0]?.sector ?? undefined;
-  if (sector) {
-    sectorCache.set(normalizedTicker, sector);
+    const sector = rows[0]?.sector ?? undefined;
+    if (sector) {
+      sectorCache.set(normalizedTicker, sector);
+    }
+
+    return sector;
+  } catch {
+    return undefined;
   }
-
-  return sector;
 }
 
 export function resetSectorCacheForTests(): void {
