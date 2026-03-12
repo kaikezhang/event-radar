@@ -64,12 +64,15 @@ import { join, dirname } from 'path';
  */
 export class SeenIdBuffer {
   private readonly ids: string[] = [];
+  private readonly idSet: Set<string> = new Set();
   private readonly capacity: number;
   private readonly persistPath: string | null;
+  private dirty = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(capacity = 200, name?: string) {
     this.capacity = capacity;
-    // Persist to /tmp/event-radar-seen/<name>.json if name provided
+    // Persist to <project>/data/seen/<name>.json if name provided
     if (name) {
       const dir = '/tmp/event-radar-seen';
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -80,17 +83,20 @@ export class SeenIdBuffer {
     }
   }
 
+  /** O(1) lookup via Set. */
   has(id: string): boolean {
-    return this.ids.includes(id);
+    return this.idSet.has(id);
   }
 
   add(id: string): void {
-    if (this.has(id)) return;
+    if (this.idSet.has(id)) return;
     this.ids.push(id);
+    this.idSet.add(id);
     if (this.ids.length > this.capacity) {
-      this.ids.shift();
+      const removed = this.ids.shift()!;
+      this.idSet.delete(removed);
     }
-    this.save();
+    this.debouncedSave();
   }
 
   get size(): number {
@@ -102,9 +108,28 @@ export class SeenIdBuffer {
     try {
       const data = JSON.parse(readFileSync(this.persistPath, 'utf-8'));
       if (Array.isArray(data)) {
-        this.ids.push(...data.slice(-this.capacity));
+        const slice = data.slice(-this.capacity);
+        for (const id of slice) {
+          if (typeof id === 'string' && !this.idSet.has(id)) {
+            this.ids.push(id);
+            this.idSet.add(id);
+          }
+        }
       }
     } catch { /* ignore corrupt file */ }
+  }
+
+  /** Debounced save — writes at most once per second to reduce disk I/O. */
+  private debouncedSave(): void {
+    this.dirty = true;
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      if (this.dirty) {
+        this.dirty = false;
+        this.save();
+      }
+    }, 1000);
   }
 
   private save(): void {

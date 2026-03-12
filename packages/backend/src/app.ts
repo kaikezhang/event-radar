@@ -16,6 +16,8 @@ import {
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
 import { DummyScanner } from './scanners/dummy-scanner.js';
+import { AnalystScanner } from './scanners/analyst-scanner.js';
+import { EarningsScanner } from './scanners/earnings-scanner.js';
 import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { XScanner } from './scanners/x-scanner.js';
 import { RedditScanner } from './scanners/reddit-scanner.js';
@@ -195,7 +197,9 @@ export function buildApp(options?: {
   console.log(`API Key: ${apiKey}`); // Log the API key for development
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
-  registry.register(new DummyScanner(eventBus));
+  if (process.env.DUMMY_SCANNER_ENABLED === 'true') {
+    registry.register(new DummyScanner(eventBus));
+  }
 
   if (process.env.TRUTH_SOCIAL_ENABLED === 'true') {
     registry.register(new TruthSocialScanner(eventBus));
@@ -236,112 +240,59 @@ export function buildApp(options?: {
   if (process.env.DOJ_ENABLED !== 'false') {
     registry.register(new DojScanner(eventBus));
   }
+  if (process.env.ANALYST_ENABLED === 'true') {
+    registry.register(new AnalystScanner(eventBus));
+  }
+  if (process.env.EARNINGS_ENABLED === 'true') {
+    registry.register(new EarningsScanner(eventBus));
+  }
 
-  // Wire EventBus → metrics tracking
+  // Unified event pipeline: classify → dedup → store → filter → deliver
   eventBus.subscribe(async (event) => {
+    // Step 1: Classify ONCE
     const end = processingDurationSeconds.startTimer({ operation: 'classify' });
     const result = ruleEngine.classify(event);
     end();
 
+    // Step 2: Track metrics (always, even for duplicates)
     eventsProcessedTotal.inc({ source: event.source, event_type: event.type });
     eventsBySource.inc({ source: event.source });
     eventsBySeverity.inc({ severity: result.severity });
-  });
 
-  // Wire EventBus → RuleEngine classification → Dedup → AlertRouter
-  if (alertRouter.enabled) {
-    eventBus.subscribe(async (event) => {
-      const result = ruleEngine.classify(event);
-      const dedupResult = deduplicator.check(event);
+    // Step 3: Dedup check
+    const dedupResult = deduplicator.check(event);
+    activeStories.set(deduplicator.activeStoryCount);
 
-      // Update story metrics
-      activeStories.set(deduplicator.activeStoryCount);
+    if (dedupResult.isDuplicate) {
+      eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
+      return; // Skip DB storage + delivery for duplicates
+    }
 
-      if (dedupResult.isDuplicate) {
-        eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
-        return; // Skip delivery for duplicates
+    // Step 4: Enrich event metadata with story info
+    if (dedupResult.storyId) {
+      const storyInfo = deduplicator.getStory(event.id);
+      if (storyInfo) {
+        event.metadata = {
+          ...event.metadata,
+          storyId: storyInfo.storyId,
+          storyEventCount: storyInfo.eventCount,
+        };
+        event.title = `Developing: ${event.title}`;
       }
+    }
 
-      // Enrich event metadata with story info if part of a developing story
-      if (dedupResult.storyId) {
-        const storyInfo = deduplicator.getStory(event.id);
-        if (storyInfo) {
-          event.metadata = {
-            ...event.metadata,
-            storyId: storyInfo.storyId,
-            storyEventCount: storyInfo.eventCount,
-          };
-          event.title = `Developing: ${event.title}`;
-        }
-      }
+    // Step 5: LLM classification (once, shared by DB storage and delivery)
+    const llmResult = llmClassifier
+      ? await llmClassifier.classify(event, result)
+      : undefined;
 
-      const ticker =
-        event.metadata && typeof event.metadata['ticker'] === 'string'
-          ? (event.metadata['ticker'] as string)
-          : undefined;
+    if (llmClassifier && llmResult) {
+      llmClassificationsTotal.inc({ status: llmResult.ok ? 'success' : 'failure' });
+    }
 
-      // Layer 1: Smart Alert Filter
-      const filterResult = alertFilter.check(event);
-      if (!filterResult.pass) {
-        return; // Blocked by alert filter
-      }
-
-      // Layer 2: LLM Enrichment (only for events flagged by L1)
-      let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
-      if (filterResult.enrichWithLLM && llmEnricher.enabled) {
-        const llmResult = await llmEnricher.enrich(event);
-        if (llmResult) {
-          enrichment = llmResult;
-        }
-      }
-
-      const deliveryStart = Date.now();
-      const results = await alertRouter.route({
-        event,
-        severity: result.severity,
-        ticker,
-        enrichment,
-      });
-      const deliveryMs = Date.now() - deliveryStart;
-
-      for (const r of results) {
-        const status = r.ok ? 'success' : 'failure';
-        deliveriesSentTotal.inc({ channel: r.channel, status });
-        deliveriesByChannel.inc({ channel: r.channel });
-        deliveryLatencySeconds.observe(
-          { channel: r.channel },
-          deliveryMs / 1000,
-        );
-      }
-    });
-  }
-
-  // Wire EventBus → LLM classifier (async enrichment, fire-and-forget)
-  if (llmClassifier && !db) {
-    eventBus.subscribe(async (event) => {
-      const ruleResult = ruleEngine.classify(event);
-      const llmResult = await llmClassifier.classify(event, ruleResult);
-
-      if (llmResult.ok) {
-        llmClassificationsTotal.inc({ status: 'success' });
-      } else {
-        llmClassificationsTotal.inc({ status: 'failure' });
-      }
-    });
-  }
-
-  // Wire EventBus → database storage
-  if (db) {
-    eventBus.subscribe(async (event) => {
-      const result = ruleEngine.classify(event);
+    // Step 6: Store to DB (if available)
+    if (db) {
       const eventId = await storeEvent(db, { event, severity: result.severity });
-      const llmResult = llmClassifier
-        ? await llmClassifier.classify(event, result)
-        : undefined;
-
-      if (llmClassifier && llmResult) {
-        llmClassificationsTotal.inc({ status: llmResult.ok ? 'success' : 'failure' });
-      }
 
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
@@ -367,8 +318,49 @@ export function buildApp(options?: {
       if (outcomeTracker) {
         await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
       }
-    });
-  }
+    }
+
+    // Step 7: Alert filter + delivery (if alertRouter enabled)
+    if (alertRouter.enabled) {
+      const ticker =
+        event.metadata && typeof event.metadata['ticker'] === 'string'
+          ? (event.metadata['ticker'] as string)
+          : undefined;
+
+      const filterResult = alertFilter.check(event);
+      if (!filterResult.pass) {
+        return; // Blocked by alert filter
+      }
+
+      // LLM Enrichment (only for events flagged by L1)
+      let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
+      if (filterResult.enrichWithLLM && llmEnricher.enabled) {
+        const llmEnrichResult = await llmEnricher.enrich(event);
+        if (llmEnrichResult) {
+          enrichment = llmEnrichResult;
+        }
+      }
+
+      const deliveryStart = Date.now();
+      const results = await alertRouter.route({
+        event,
+        severity: result.severity,
+        ticker,
+        enrichment,
+      });
+      const deliveryMs = Date.now() - deliveryStart;
+
+      for (const r of results) {
+        const status = r.ok ? 'success' : 'failure';
+        deliveriesSentTotal.inc({ channel: r.channel, status });
+        deliveriesByChannel.inc({ channel: r.channel });
+        deliveryLatencySeconds.observe(
+          { channel: r.channel },
+          deliveryMs / 1000,
+        );
+      }
+    }
+  });
 
   if (adaptiveService && eventBus.subscribeTopic) {
     eventBus.subscribeTopic('accuracy:updated', async (payload) => {
