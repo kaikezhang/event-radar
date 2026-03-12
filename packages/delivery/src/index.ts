@@ -8,4 +8,3 @@ export {
   type AlertRouterConfig,
   type ChannelName,
 } from './alert-router.js';
-export { classifySeverity } from './severity-classifier.js';
