@@ -98,6 +98,7 @@ export class StockTwitsScanner extends BaseScanner {
   private previousSentiments: Map<string, number> = new Map();
   /** Symbols to track stream for (populated from trending) */
   private trackedSymbols: string[] = [];
+  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
 
   constructor(eventBus: EventBus) {
     super({
@@ -132,15 +133,19 @@ export class StockTwitsScanner extends BaseScanner {
   private async pollTrending(): Promise<RawEvent[]> {
     const events: RawEvent[] = [];
 
-    const response = await fetch(
+    const response = await this.fetchFn(
       'https://api.stocktwits.com/api/2/trending/symbols.json',
       { headers: { 'User-Agent': 'event-radar/1.0' } },
     );
 
-    if (!response.ok) return events;
+    if (!response.ok) {
+      console.log(`[stocktwits] Trending API returned HTTP ${response.status}`);
+      return events;
+    }
 
     const json = (await response.json()) as StockTwitsTrendingResponse;
     const symbols = parseTrendingResponse(json);
+    console.log(`[stocktwits] Fetched ${symbols.length} trending symbols`);
     const currentTrending = new Set(symbols.map((s) => s.symbol));
 
     // Detect new trending symbols
@@ -173,15 +178,19 @@ export class StockTwitsScanner extends BaseScanner {
   private async pollSymbolStream(symbol: string): Promise<RawEvent[]> {
     const events: RawEvent[] = [];
 
-    const response = await fetch(
+    const response = await this.fetchFn(
       `https://api.stocktwits.com/api/2/streams/symbol/${symbol}.json`,
       { headers: { 'User-Agent': 'event-radar/1.0' } },
     );
 
-    if (!response.ok) return events;
+    if (!response.ok) {
+      console.log(`[stocktwits] Stream ${symbol} returned HTTP ${response.status}`);
+      return events;
+    }
 
     const json = (await response.json()) as StockTwitsStreamResponse;
     const messages = json?.messages ?? [];
+    console.log(`[stocktwits] ${symbol} stream: ${messages.length} messages`);
 
     // Analyze sentiment
     const sentiment = analyzeSentiment(messages);

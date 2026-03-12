@@ -132,11 +132,13 @@ export class FedWatchScanner extends BaseScanner {
       );
 
       if (!response.ok) {
+        console.log(`[fedwatch] API returned HTTP ${response.status}`);
         return err(new Error(`FedWatch API returned ${response.status}`));
       }
 
       const json = (await response.json()) as FedWatchApiResponse;
       const meetings = parseFedWatchResponse(json);
+      console.log(`[fedwatch] Parsed ${meetings.length} FOMC meetings`);
 
       const events: RawEvent[] = [];
 

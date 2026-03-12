@@ -137,6 +137,8 @@ export class EconCalendarScanner extends BaseScanner {
       const events: RawEvent[] = [];
       const now = this.nowFn();
 
+      console.log(`[econ-calendar] Checking ${this.scheduledReleases.length} releases at ${now.toISOString()}`);
+
       for (const release of this.scheduledReleases) {
         const preKey = `pre-${release.releaseKey}`;
         const postKey = `post-${release.releaseKey}`;

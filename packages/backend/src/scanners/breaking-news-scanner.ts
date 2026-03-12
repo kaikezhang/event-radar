@@ -24,6 +24,22 @@ const MARKET_KEYWORDS = [
   'recession',
   'default',
   'bailout',
+  'merger',
+  'acquisition',
+  'layoff',
+  'guidance',
+  'earnings',
+  'bankruptcy',
+  'stimulus',
+  'shutdown',
+  'stock',
+  'market',
+  'trade',
+  'economy',
+  'gdp',
+  'treasury',
+  'debt',
+  'regulation',
 ] as const;
 
 export interface RssFeedConfig {
@@ -39,6 +55,18 @@ const DEFAULT_FEEDS: RssFeedConfig[] = [
   {
     name: 'AP News',
     url: 'https://rsshub.app/apnews/topics/business',
+  },
+  {
+    name: 'MarketWatch',
+    url: 'https://feeds.marketwatch.com/marketwatch/topstories/',
+  },
+  {
+    name: 'CNBC',
+    url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114',
+  },
+  {
+    name: 'Yahoo Finance',
+    url: 'https://finance.yahoo.com/news/rssindex',
   },
 ];
 
@@ -142,10 +170,14 @@ export class BreakingNewsScanner extends BaseScanner {
             },
           });
 
-          if (!response.ok) continue;
+          if (!response.ok) {
+            console.log(`[breaking-news] ${feed.name} returned HTTP ${response.status}`);
+            continue;
+          }
 
           const xml = await response.text();
           const items = parseRssXml(xml);
+          let matchedCount = 0;
 
           for (const item of items) {
             const dedupKey = item.guid || item.link;
@@ -156,6 +188,7 @@ export class BreakingNewsScanner extends BaseScanner {
 
             if (matched.length === 0) continue;
 
+            matchedCount++;
             this.seenUrls.add(dedupKey);
 
             events.push({
@@ -174,8 +207,11 @@ export class BreakingNewsScanner extends BaseScanner {
               },
             });
           }
-        } catch {
-          // Skip failed feeds but continue with others
+
+          console.log(`[breaking-news] Fetched ${items.length} items from ${feed.name}, ${matchedCount} matched keywords`);
+        } catch (feedError) {
+          const msg = feedError instanceof Error ? feedError.message : String(feedError);
+          console.log(`[breaking-news] ${feed.name} failed: ${msg}`);
           continue;
         }
       }

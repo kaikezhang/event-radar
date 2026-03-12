@@ -117,16 +117,18 @@ export class RedditScanner extends BaseScanner {
         const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`;
         const response = await this.fetchFn(url, {
           headers: {
-            'User-Agent': 'event-radar/1.0',
+            'User-Agent': 'event-radar:v0.0.1 (by /u/event-radar-bot)',
           },
         });
 
         if (!response.ok) {
-          continue; // Skip this subreddit but don't fail the whole poll
+          console.log(`[reddit] r/${subreddit} returned HTTP ${response.status}`);
+          continue;
         }
 
         const json = await this.readJson(response);
         const posts = parseRedditResponse(json);
+        console.log(`[reddit] r/${subreddit}: ${posts.length} posts fetched`);
 
         for (const post of posts) {
           const seenKey = `${subreddit}:${post.id}`;
