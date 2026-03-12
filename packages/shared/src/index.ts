@@ -240,3 +240,11 @@ export {
   type LLMEventType,
   type LLMDirection,
 } from './schemas/llm-types.js';
+export {
+  SocialPlatformSchema,
+  SocialPostSchema,
+  SentimentSchema,
+  type SocialPlatform,
+  type SocialPost,
+  type Sentiment,
+} from './schemas/social-types.js';

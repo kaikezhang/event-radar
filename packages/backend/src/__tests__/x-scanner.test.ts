@@ -152,6 +152,104 @@ describe('XScanner', () => {
     });
   });
 
+  describe('ticker and crypto tagging', () => {
+    it('should tag TSLA when Elon mentions Tesla', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          tweetId: 'tesla-1',
+          text: 'Tesla is doing amazing things with AI and robotics',
+          timestamp: new Date().toISOString(),
+          isRetweet: false,
+          isQuote: false,
+          isReply: false,
+          hasMedia: false,
+          url: 'https://x.com/elonmusk/status/tesla-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0]!;
+        expect(event.metadata?.['ticker']).toBe('TSLA');
+        expect(event.metadata?.['tickers']).toContain('TSLA');
+      }
+
+      mockScrape.mockRestore();
+    });
+
+    it('should tag crypto-related when mentioning doge/bitcoin', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          tweetId: 'crypto-1',
+          text: 'Doge to the moon! Bitcoin is the future',
+          timestamp: new Date().toISOString(),
+          isRetweet: false,
+          isQuote: false,
+          isReply: false,
+          hasMedia: false,
+          url: 'https://x.com/elonmusk/status/crypto-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0]!;
+        expect(event.metadata?.['cryptoRelated']).toBe(true);
+      }
+
+      mockScrape.mockRestore();
+    });
+
+    it('should include sentiment in metadata', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          tweetId: 'sentiment-1',
+          text: 'Great partnership and record growth ahead',
+          timestamp: new Date().toISOString(),
+          isRetweet: false,
+          isQuote: false,
+          isReply: false,
+          hasMedia: false,
+          url: 'https://x.com/elonmusk/status/sentiment-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]!.metadata?.['sentiment']).toBe('bullish');
+      }
+
+      mockScrape.mockRestore();
+    });
+  });
+
   describe('deduplication', () => {
     it('should not emit events for already-seen tweet IDs', async () => {
       const eventBus = new InMemoryEventBus();

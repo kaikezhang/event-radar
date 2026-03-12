@@ -106,6 +106,101 @@ describe('TruthSocialScanner', () => {
     });
   });
 
+  describe('keyword/ticker extraction in scanner', () => {
+    it('should extract ticker from "Truth about Tesla"', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new TruthSocialScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          postId: 'ticker-1',
+          text: 'The Truth about Tesla is that they make great cars!',
+          timestamp: new Date().toISOString(),
+          isRepost: false,
+          hasMedia: false,
+          url: 'https://truthsocial.com/@realDonaldTrump/posts/ticker-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0]!;
+        expect(event.metadata?.['ticker']).toBe('TSLA');
+        expect(event.metadata?.['tickers']).toContain('TSLA');
+      }
+
+      mockScrape.mockRestore();
+    });
+
+    it('should return no ticker from "tariff on China"', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new TruthSocialScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          postId: 'noticker-1',
+          text: 'TARIFFS on China are going UP!',
+          timestamp: new Date().toISOString(),
+          isRepost: false,
+          hasMedia: false,
+          url: 'https://truthsocial.com/@realDonaldTrump/posts/noticker-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const event = result.value[0]!;
+        expect(event.metadata?.['ticker']).toBeUndefined();
+        expect(event.metadata?.['tickers']).toHaveLength(0);
+        expect(event.metadata?.['keywords']).toContain('tariffs');
+        expect(event.metadata?.['keywords']).toContain('china');
+      }
+
+      mockScrape.mockRestore();
+    });
+
+    it('should include sentiment in metadata', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new TruthSocialScanner(eventBus);
+
+      const { browserPool } = await import(
+        '../scanners/scraping/browser-pool.js'
+      );
+      const mockScrape = vi.spyOn(browserPool, 'scrape');
+
+      mockScrape.mockResolvedValue([
+        {
+          postId: 'sentiment-1',
+          text: 'Great deal with our partners, tremendous growth!',
+          timestamp: new Date().toISOString(),
+          isRepost: false,
+          hasMedia: false,
+          url: 'https://truthsocial.com/@realDonaldTrump/posts/sentiment-1',
+        },
+      ]);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]!.metadata?.['sentiment']).toBe('bullish');
+      }
+
+      mockScrape.mockRestore();
+    });
+  });
+
   describe('scanner deduplication', () => {
     it('should not emit events for already-seen post IDs', async () => {
       const eventBus = new InMemoryEventBus();
