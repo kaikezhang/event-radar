@@ -78,6 +78,7 @@ import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { HistoricalEnricher } from './pipeline/historical-enricher.js';
+import { AuditLog } from './pipeline/audit-log.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 // WebSocket removed
@@ -187,6 +188,7 @@ export function buildApp(options?: {
     : undefined;
   const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
+  const auditLog = new AuditLog(db);
   const llmEnricher = new LLMEnricher(options?.llmEnricherConfig);
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
@@ -234,12 +236,15 @@ export function buildApp(options?: {
         '/metrics',
         '/api/events/ingest',
         '/api/v1/dashboard',
+        '/api/v1/audit',
+        '/api/v1/audit/stats',
       ],
     });
   });
 
 
-  console.log(`API Key: ${apiKey}`); // Log the API key for development
+  // API key logged at startup (redacted for security)
+  console.log(`API Key: ${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`);
 
   ruleEngine.loadRules(options?.rules ?? DEFAULT_RULES);
 
@@ -319,6 +324,11 @@ export function buildApp(options?: {
     if (dedupResult.isDuplicate) {
       eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
       pipelineFunnelTotal.inc({ stage: 'deduped' });
+      auditLog.record({
+        eventId: event.id, source: event.source, title: event.title,
+        outcome: 'deduped', stoppedAt: 'dedup',
+        reason: `duplicate: ${dedupResult.matchType}`,
+      });
       return; // Skip DB storage + delivery for duplicates
     }
 
@@ -384,6 +394,11 @@ export function buildApp(options?: {
     const DELIVERY_GRACE_MS = 90_000;
     if (!isTest && uptimeMs < DELIVERY_GRACE_MS) {
       gracePeriodSuppressedTotal.inc();
+      auditLog.record({
+        eventId: event.id, source: event.source, title: event.title,
+        severity: result.severity, outcome: 'grace_period', stoppedAt: 'grace_period',
+        reason: `startup grace period (${Math.round(uptimeMs / 1000)}s / ${DELIVERY_GRACE_MS / 1000}s)`,
+      });
       return; // Still in startup grace period — store to DB but don't deliver
     }
 
@@ -412,6 +427,12 @@ export function buildApp(options?: {
           title: logTitle(event.title),
           pass: false,
           reason: filterResult.reason,
+        });
+        auditLog.record({
+          eventId: event.id, source: event.source, title: event.title,
+          severity: result.severity, ticker,
+          outcome: 'filtered', stoppedAt: 'alert_filter',
+          reason: filterResult.reason, reasonCategory: reasonCat,
         });
         return; // Blocked by alert filter
       }
@@ -496,6 +517,7 @@ export function buildApp(options?: {
 
       pipelineFunnelTotal.inc({ stage: 'delivered' });
 
+      const totalPipelineMs = Date.now() - event.timestamp.getTime();
       server.log.info({
         pipeline: true,
         stage: 'delivery',
@@ -508,6 +530,17 @@ export function buildApp(options?: {
         duration_ms: deliveryMs,
         historical: !!historicalContext,
         ticker,
+      });
+      auditLog.record({
+        eventId: event.id, source: event.source, title: event.title,
+        severity: result.severity, ticker,
+        outcome: 'delivered', stoppedAt: 'delivery',
+        reason: filterResult.reason,
+        reasonCategory: reasonCat,
+        deliveryChannels: results.map(r => ({ channel: r.channel, ok: r.ok })),
+        historicalMatch: !!historicalContext,
+        historicalConfidence: historicalContext?.confidence,
+        durationMs: deliveryMs,
       });
     }
   });

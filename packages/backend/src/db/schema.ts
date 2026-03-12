@@ -15,6 +15,40 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { BudgetConfig, Priority, RuleActionValue, RuleConditionNode } from '@event-radar/shared';
 
+/**
+ * Pipeline audit trail — records every event's journey through the pipeline.
+ * Enables per-event debugging: "why was this delivered?" / "where was this blocked?"
+ */
+export const pipelineAudit = pgTable('pipeline_audit', {
+  id: serial('id').primaryKey(),
+  eventId: varchar('event_id', { length: 100 }).notNull(),
+  source: varchar('source', { length: 100 }).notNull(),
+  title: text('title').notNull(),
+  severity: varchar('severity', { length: 20 }),
+  ticker: varchar('ticker', { length: 20 }),
+  /** Final outcome: delivered | filtered | deduped | grace_period | error */
+  outcome: varchar('outcome', { length: 30 }).notNull(),
+  /** Pipeline stage where event stopped (or 'delivery' if it went all the way) */
+  stoppedAt: varchar('stopped_at', { length: 30 }).notNull(),
+  /** Human-readable reason for the outcome */
+  reason: text('reason'),
+  /** Filter reason category (for filtered events) */
+  reasonCategory: varchar('reason_category', { length: 30 }),
+  /** Delivery channels attempted (for delivered events) */
+  deliveryChannels: jsonb('delivery_channels'),
+  /** Historical enrichment result */
+  historicalMatch: boolean('historical_match'),
+  historicalConfidence: varchar('historical_confidence', { length: 20 }),
+  /** Processing duration in ms */
+  durationMs: integer('duration_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_pipeline_audit_created_at').on(table.createdAt),
+  index('idx_pipeline_audit_source').on(table.source),
+  index('idx_pipeline_audit_outcome').on(table.outcome),
+  index('idx_pipeline_audit_ticker').on(table.ticker),
+]);
+
 export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
   source: varchar('source', { length: 100 }).notNull(),
