@@ -32,7 +32,7 @@ P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4 ✅ P4.5 ✅
 ### Phase 1B
 
 - [x] **P1B.1** LLM 分类引擎 ✅ PR #41 (OpenAI/Anthropic/Mock provider, rate limit, 20 tests)
-- [ ] **P1B.2** Tier 2 scanner（Trump Truth Social, Elon X）
+- [x] **P1B.2** Tier 2 scanner enrichment ✅ PR #42 (ticker extraction, keyword matching, sentiment, 26 tests)
 - [ ] **P1B.3** 事件去重
 - [ ] **P1B.4** Delivery: Telegram + webhook
 
