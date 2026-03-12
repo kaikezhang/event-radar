@@ -43,9 +43,17 @@ export class BarkPusher implements DeliveryService {
       ? `${enrichment.action} ${enrichment.tickers[0]?.symbol ?? ''}`
       : alert.event.title;
 
+    let bodyText = enrichment ? enrichment.summary : alert.event.body;
+
+    if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
+      const ctx = alert.historicalContext;
+      const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
+      bodyText += `\n📊 ${ctx.matchCount} similar cases: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% avg alpha, ${ctx.winRateT20.toFixed(0)}% win rate`;
+    }
+
     const body: Record<string, string> = {
       title: title.trim(),
-      body: enrichment ? enrichment.summary : alert.event.body,
+      body: bodyText,
       level: SEVERITY_TO_BARK_LEVEL[alert.severity],
       group: SEVERITY_TO_GROUP[alert.severity],
     };

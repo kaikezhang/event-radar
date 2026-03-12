@@ -101,6 +101,13 @@ export const activeStories = new Gauge({
   registers: [registry],
 });
 
+/** Counter: historical enrichment timeouts */
+export const historicalEnrichmentTimeoutsTotal = new Counter({
+  name: 'historical_enrichment_timeouts_total',
+  help: 'Total number of historical enrichment timeouts',
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -113,4 +120,5 @@ export function resetMetrics(): void {
   processingDurationSeconds.reset();
   eventsDeduplicatedTotal.reset();
   activeStories.reset();
+  historicalEnrichmentTimeoutsTotal.reset();
 }

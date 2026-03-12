@@ -75,6 +75,18 @@ export class TelegramDelivery implements DeliveryService {
       `*Time:* ${alert.event.timestamp.toISOString()}`,
     );
 
+    if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
+      const ctx = alert.historicalContext;
+      const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
+      lines.push(
+        '',
+        escapeMarkdown(
+          `📊 ${ctx.matchCount} similar cases (${ctx.confidence}): avg alpha ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}%, win rate ${ctx.winRateT20.toFixed(0)}%`,
+        ),
+        escapeMarkdown(ctx.patternSummary),
+      );
+    }
+
     return lines.join('\n');
   }
 

@@ -59,6 +59,30 @@ export class DiscordWebhook implements DeliveryService {
       });
     }
 
+    // Historical context field
+    if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
+      const ctx = alert.historicalContext;
+      const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
+
+      let historyText = `**${ctx.patternSummary}**\n`;
+      historyText += `Avg Alpha T+20: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% | `;
+      historyText += `Win Rate: ${ctx.winRateT20.toFixed(0)}%\n`;
+
+      if (ctx.topMatches.length > 0) {
+        historyText += `Most Similar: ${ctx.topMatches[0].ticker} ${ctx.topMatches[0].headline}\n`;
+      }
+      if (ctx.worstCase) {
+        const ws = ctx.worstCase.alphaT20 >= 0 ? '+' : '';
+        historyText += `Worst Case: ${ctx.worstCase.ticker} (${ws}${(ctx.worstCase.alphaT20 * 100).toFixed(1)}%)`;
+      }
+
+      fields.push({
+        name: `📊 Historical Pattern (${ctx.matchCount} cases, ${ctx.confidence.toUpperCase()})`,
+        value: truncate(historyText, 1024),
+        inline: false,
+      });
+    }
+
     const title = enrichment
       ? `${enrichment.action.charAt(0)} ${enrichment.summary}`
       : `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;

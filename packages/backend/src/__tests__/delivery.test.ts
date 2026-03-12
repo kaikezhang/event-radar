@@ -12,13 +12,30 @@ describe('EventBus → delivery integration', () => {
   let ctx: AppContext;
   let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
+  let historicalEnricher: { enrich: ReturnType<typeof vi.fn> };
 
   beforeAll(async () => {
     bark = mockService('bark');
     discord = mockService('discord');
     const alertRouter = new AlertRouter({ bark, discord });
 
-    ctx = buildApp({ logger: false, alertRouter });
+    historicalEnricher = {
+      enrich: vi.fn().mockResolvedValue({
+        matchCount: 12,
+        confidence: 'medium',
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.08,
+        winRateT20: 63,
+        medianAlphaT20: 0.07,
+        bestCase: null,
+        worstCase: null,
+        topMatches: [],
+        patternSummary:
+          'Technology earnings beat in bull market: +8.0% avg alpha T+20, 63% win rate (12 cases)',
+      }),
+    };
+
+    ctx = buildApp({ logger: false, alertRouter, historicalEnricher });
     await ctx.server.ready();
   });
 
@@ -74,6 +91,7 @@ describe('EventBus → delivery integration', () => {
   it('should route MEDIUM event to discord only', async () => {
     bark.send.mockClear();
     discord.send.mockClear();
+    historicalEnricher.enrich.mockClear();
 
     await ctx.server.inject({
       method: 'POST',
@@ -89,6 +107,38 @@ describe('EventBus → delivery integration', () => {
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
     expect(alert.severity).toBe('MEDIUM');
     expect(alert.ticker).toBe('ABC');
+    expect(alert.historicalContext?.matchCount).toBe(12);
+    expect(historicalEnricher.enrich).toHaveBeenCalledOnce();
+  });
+
+  it('should not call the historical enricher when alert filter blocks delivery', async () => {
+    bark.send.mockClear();
+    discord.send.mockClear();
+    historicalEnricher.enrich.mockClear();
+
+    await ctx.server.inject({
+      method: 'POST',
+      url: '/api/events/ingest',
+      payload: {
+        id: '880e8400-e29b-41d4-a716-446655440003',
+        source: 'reddit',
+        type: 'reddit-post',
+        title: 'Low quality post about ABC',
+        body: 'not much here',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          ticker: 'ABC',
+          upvotes: 5,
+          comments: 1,
+        },
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(discord.send).not.toHaveBeenCalled();
+    expect(bark.send).not.toHaveBeenCalled();
+    expect(historicalEnricher.enrich).not.toHaveBeenCalled();
   });
 
   it('should still accept events when no delivery is configured', async () => {

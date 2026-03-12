@@ -195,6 +195,33 @@ describe('TelegramDelivery', () => {
     expect(payload.text).toContain('2024-01-15T10:00:00.000Z');
   });
 
+  it('should append historical context to the markdown body', async () => {
+    const telegram = new TelegramDelivery(defaultConfig);
+
+    await telegram.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 18,
+          confidence: 'medium',
+          avgAlphaT5: 0.05,
+          avgAlphaT20: 0.12,
+          winRateT20: 68,
+          medianAlphaT20: 0.1,
+          bestCase: null,
+          worstCase: null,
+          topMatches: [],
+          patternSummary: 'Technology earnings beat in correction: +12.0% avg alpha T+20, 68% win rate (18 cases)',
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(options.body as string);
+
+    expect(payload.text).toContain('📊 18 similar cases \\(medium\\): avg alpha \\+12\\.0%, win rate 68%');
+    expect(payload.text).toContain('Technology earnings beat in correction');
+  });
+
   it('should not send when disabled', async () => {
     const telegram = new TelegramDelivery({
       ...defaultConfig,
