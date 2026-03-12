@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useTransition } from "react";
+import { Suspense, useEffect, useMemo, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Layers3, Radar } from "lucide-react";
 import {
@@ -61,6 +61,14 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 export default function HistoryDashboardPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96 text-muted-foreground">Loading...</div>}>
+      <HistoryDashboardContent />
+    </Suspense>
+  );
+}
+
+function HistoryDashboardContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
