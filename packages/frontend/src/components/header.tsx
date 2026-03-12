@@ -1,21 +1,11 @@
 "use client";
 
 import { MonitorSpeaker, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBroadcastSync } from "@/lib/broadcast-sync";
 
 export function Header() {
-  const { logout, apiKey } = useAuth();
-  const router = useRouter();
   const sync = useBroadcastSync();
-
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-card px-6">
@@ -35,12 +25,6 @@ export function Header() {
           <MonitorSpeaker className="h-3.5 w-3.5" />
           {sync.activeWindowCount} window{sync.activeWindowCount === 1 ? "" : "s"}
         </Badge>
-        <div className="text-sm text-muted-foreground">
-          API Key: {apiKey ? `${apiKey.slice(0, 8)}...` : "Not set"}
-        </div>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          Logout
-        </Button>
       </div>
     </header>
   );

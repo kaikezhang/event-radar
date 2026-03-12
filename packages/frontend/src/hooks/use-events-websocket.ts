@@ -46,40 +46,57 @@ export interface UseEventsWebSocketReturn {
 }
 
 const MAX_EVENTS = 500;
-const RECONNECT_DELAY = 3000;
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
+const POLL_INTERVAL = 5000;
+const MAX_WS_FAILURES = 5;
+
+function buildWsUrl(apiUrl: string, apiKey: string): string {
+  // Auto-detect protocol based on page protocol or API URL
+  const isSecure =
+    (typeof window !== 'undefined' && window.location.protocol === 'https:') ||
+    apiUrl.startsWith('https');
+  const wsProtocol = isSecure ? 'wss' : 'ws';
+  const baseUrl = apiUrl.replace(/^https?:\/\//, '');
+  return `${wsProtocol}://${baseUrl}/ws/events?apiKey=${encodeURIComponent(apiKey)}`;
+}
 
 export function useEventsWebSocket(
   options: UseEventsWebSocketOptions
 ): UseEventsWebSocketReturn {
   const { apiUrl, apiKey, onCriticalOrHigh, soundEnabled = true } = options;
-  
+
   const [events, setEvents] = useState<EventItem[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const filtersRef = useRef<EventFilters>({});
+  const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
+  const wsFailureCountRef = useRef(0);
+  const usingPollingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // Play sound for critical/high events
   const playAlertSound = useCallback(() => {
     if (!soundEnabled) return;
-    
-    // Create a simple beep sound using Web Audio API
+
     try {
       const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
+
       oscillator.frequency.value = 800;
       oscillator.type = 'sine';
-      
+
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-      
+
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.3);
     } catch (err) {
@@ -104,79 +121,124 @@ export function useEventsWebSocket(
     }
   }, []);
 
+  // Process a new event (shared by WS and polling)
+  const processEvent = useCallback((newEvent: EventItem) => {
+    setEvents((prev) => {
+      const exists = prev.some((e) => e.id === newEvent.id);
+      if (exists) return prev;
+
+      const updated = [newEvent, ...prev];
+      return updated.slice(0, MAX_EVENTS);
+    });
+
+    if (newEvent.severity === 'CRITICAL' || newEvent.severity === 'HIGH') {
+      playAlertSound();
+      sendNotification(newEvent);
+      onCriticalOrHigh?.(newEvent);
+    }
+  }, [playAlertSound, sendNotification, onCriticalOrHigh]);
+
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((data: string) => {
     try {
       const message = JSON.parse(data);
-      
+
       switch (message.type) {
         case 'event': {
-          const newEvent = message.payload as EventItem;
-          
-          setEvents((prev) => {
-            // Check for duplicate
-            const exists = prev.some((e) => e.id === newEvent.id);
-            if (exists) return prev;
-            
-            const updated = [newEvent, ...prev];
-            // Keep only MAX_EVENTS (LRU eviction)
-            return updated.slice(0, MAX_EVENTS);
-          });
-
-          // Trigger alerts for CRITICAL/HIGH severity
-          if (newEvent.severity === 'CRITICAL' || newEvent.severity === 'HIGH') {
-            playAlertSound();
-            sendNotification(newEvent);
-            
-            if (onCriticalOrHigh) {
-              onCriticalOrHigh(newEvent);
-            }
-          }
+          processEvent(message.payload as EventItem);
           break;
         }
-        
+
         case 'init': {
           const payload = message.payload as { events: EventItem[] };
           setEvents(payload.events || []);
           break;
         }
-        
-        case 'heartbeat': {
-          // Heartbeat received, connection is alive
+
+        case 'heartbeat':
+        case 'filters_update':
           break;
-        }
-        
+
         case 'error': {
           const errorPayload = message.payload as { message: string };
           setError(errorPayload.message);
-          break;
-        }
-        
-        case 'filters_update': {
-          // Filters acknowledged
           break;
         }
       }
     } catch (err) {
       console.error('Failed to parse WebSocket message:', err);
     }
-  }, [playAlertSound, sendNotification, onCriticalOrHigh]);
+  }, [processEvent]);
+
+  // Polling fallback: fetch events via REST
+  const startPolling = useCallback(() => {
+    if (pollIntervalRef.current) return;
+
+    usingPollingRef.current = true;
+    console.log('WebSocket unavailable, falling back to polling');
+
+    const poll = async () => {
+      if (!mountedRef.current) return;
+      try {
+        const response = await fetch(`${apiUrl}/api/events`, {
+          headers: { 'X-API-Key': apiKey },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const eventList: EventItem[] = Array.isArray(data) ? data : data.events || [];
+          setEvents(eventList.slice(0, MAX_EVENTS));
+          setIsConnected(true);
+          setError(null);
+        }
+      } catch {
+        setIsConnected(false);
+        setError('Polling failed');
+      }
+    };
+
+    poll();
+    pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
+  }, [apiUrl, apiKey]);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    usingPollingRef.current = false;
+  }, []);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (!mountedRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // If too many WS failures, switch to polling
+    if (wsFailureCountRef.current >= MAX_WS_FAILURES) {
+      startPolling();
       return;
     }
 
-    const wsUrl = `${apiUrl.replace(/^http/, 'ws')}/ws/events?apiKey=${encodeURIComponent(apiKey)}`;
-    const ws = new WebSocket(wsUrl);
-    
+    const wsUrl = buildWsUrl(apiUrl, apiKey);
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      wsFailureCountRef.current++;
+      startPolling();
+      return;
+    }
+
     ws.onopen = () => {
+      if (!mountedRef.current) { ws.close(); return; }
       setIsConnected(true);
       setError(null);
+      reconnectDelayRef.current = INITIAL_RECONNECT_DELAY;
+      wsFailureCountRef.current = 0;
+      stopPolling();
       console.log('WebSocket connected');
-      
-      // Send initial filters if any
+
       if (Object.keys(filtersRef.current).length > 0) {
         ws.send(JSON.stringify({
           type: 'filters_update',
@@ -184,36 +246,46 @@ export function useEventsWebSocket(
         }));
       }
     };
-    
+
     ws.onmessage = (event) => {
       handleMessage(event.data);
     };
-    
+
     ws.onclose = () => {
+      if (!mountedRef.current) return;
       setIsConnected(false);
-      console.log('WebSocket disconnected, reconnecting...');
-      
-      // Schedule reconnect
+      wsFailureCountRef.current++;
+
+      // Exponential backoff
+      const delay = Math.min(reconnectDelayRef.current, MAX_RECONNECT_DELAY);
+      console.log(`WebSocket disconnected, reconnecting in ${delay}ms...`);
+
       reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectDelayRef.current = Math.min(delay * 2, MAX_RECONNECT_DELAY);
         connect();
-      }, RECONNECT_DELAY);
+      }, delay);
     };
-    
+
     ws.onerror = (err) => {
       console.error('WebSocket error:', err);
       setError('Connection error');
     };
-    
+
     wsRef.current = ws;
-  }, [apiUrl, apiKey, handleMessage]);
+  }, [apiUrl, apiKey, handleMessage, startPolling, stopPolling]);
 
   // Initial connection
   useEffect(() => {
+    mountedRef.current = true;
     connect();
-    
+
     return () => {
+      mountedRef.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
       if (wsRef.current) {
         wsRef.current.close();
@@ -224,7 +296,7 @@ export function useEventsWebSocket(
   // Update filters
   const updateFilters = useCallback((filters: EventFilters) => {
     filtersRef.current = filters;
-    
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'filters_update',
