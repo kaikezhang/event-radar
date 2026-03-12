@@ -114,7 +114,7 @@ export function extractTopics(doc: FederalRegisterDocument): string[] {
 export class WhiteHouseScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'whitehouse');
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({

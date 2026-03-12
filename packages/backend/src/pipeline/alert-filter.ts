@@ -128,6 +128,8 @@ export class AlertFilter {
   }
 
   private loadCooldowns(): void {
+    // Skip loading in test environment
+    if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
     try {
       if (!existsSync(AlertFilter.COOLDOWN_PATH)) return;
       const data = JSON.parse(readFileSync(AlertFilter.COOLDOWN_PATH, 'utf-8'));
@@ -143,6 +145,8 @@ export class AlertFilter {
   }
 
   private saveCooldowns(): void {
+    // Skip saving in test environment
+    if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
     this.cooldownDirty = true;
     if (this.cooldownTimer) return;
     this.cooldownTimer = setTimeout(() => {

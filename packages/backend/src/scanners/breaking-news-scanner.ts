@@ -145,7 +145,7 @@ export class BreakingNewsScanner extends BaseScanner {
   private readonly seenUrls = new SeenIdBuffer(1000, 'breaking-news');
   private readonly feeds: RssFeedConfig[];
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus, feeds?: RssFeedConfig[]) {
     super({

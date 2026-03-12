@@ -102,7 +102,7 @@ export function isUpcoming(reportDate: string, now: Date = new Date()): boolean 
 export class EarningsScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'earnings');
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({
