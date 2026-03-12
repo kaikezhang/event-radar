@@ -65,6 +65,8 @@ import {
   activeStories,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
+import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
+import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebSocketPlugin } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
@@ -87,6 +89,8 @@ export interface AppContext {
   ruleEngine: RuleEngine;
   llmClassifier?: LlmClassifier;
   deduplicator: EventDeduplicator;
+  alertFilter: AlertFilter;
+  llmEnricher: LLMEnricher;
 }
 
 function buildAlertRouter(): AlertRouterType {
@@ -133,6 +137,8 @@ export function buildApp(options?: {
   rules?: Rule[];
   llmProvider?: LlmProvider;
   apiKey?: string;
+  alertFilterConfig?: AlertFilterConfig;
+  llmEnricherConfig?: LLMEnricherConfig;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -146,6 +152,8 @@ export function buildApp(options?: {
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
   const deduplicator = new EventDeduplicator();
+  const alertFilter = new AlertFilter(options?.alertFilterConfig);
+  const llmEnricher = new LLMEnricher(options?.llmEnricherConfig);
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
     : undefined;
@@ -271,11 +279,27 @@ export function buildApp(options?: {
           ? (event.metadata['ticker'] as string)
           : undefined;
 
+      // Layer 1: Smart Alert Filter
+      const filterResult = alertFilter.check(event);
+      if (!filterResult.pass) {
+        return; // Blocked by alert filter
+      }
+
+      // Layer 2: LLM Enrichment (only for events flagged by L1)
+      let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
+      if (filterResult.enrichWithLLM && llmEnricher.enabled) {
+        const llmResult = await llmEnricher.enrich(event);
+        if (llmResult) {
+          enrichment = llmResult;
+        }
+      }
+
       const deliveryStart = Date.now();
       const results = await alertRouter.route({
         event,
         severity: result.severity,
         ticker,
+        enrichment,
       });
       const deliveryMs = Date.now() - deliveryStart;
 
@@ -453,7 +477,7 @@ export function buildApp(options?: {
   // Register scanner health routes
   registerScannerRoutes(server, registry);
 
-  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator };
+  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator, alertFilter, llmEnricher };
 }
 
 async function buildPredictionPayload(

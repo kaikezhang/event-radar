@@ -30,8 +30,19 @@ export class DiscordWebhook implements DeliveryService {
 
   async send(alert: AlertEvent): Promise<void> {
     const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+    const enrichment = alert.enrichment;
 
-    if (alert.ticker) {
+    if (enrichment) {
+      // Enhanced format with LLM enrichment
+      const tickerDisplay = enrichment.tickers
+        .map((t) => `${t.symbol} ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
+        .join(', ');
+
+      if (tickerDisplay) {
+        fields.push({ name: 'Tickers', value: tickerDisplay, inline: true });
+      }
+      fields.push({ name: 'Action', value: enrichment.action, inline: true });
+    } else if (alert.ticker) {
       fields.push({ name: 'Ticker', value: alert.ticker, inline: true });
     }
 
@@ -48,13 +59,25 @@ export class DiscordWebhook implements DeliveryService {
       });
     }
 
+    const title = enrichment
+      ? `${enrichment.action.charAt(0)} ${enrichment.summary}`
+      : `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;
+
+    const description = enrichment
+      ? truncate(enrichment.impact, 2048)
+      : truncate(alert.event.body, 2048);
+
+    const footerText = enrichment
+      ? `Event Radar • AI Enhanced • ${alert.severity}`
+      : `Event Radar • ${alert.severity}`;
+
     const embed = {
-      title: `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`,
-      description: truncate(alert.event.body, 2048),
+      title: truncate(title, 256),
+      description,
       color: SEVERITY_COLOR[alert.severity],
       fields,
       timestamp: alert.event.timestamp.toISOString(),
-      footer: { text: `Event Radar • ${alert.severity}` },
+      footer: { text: footerText },
     };
 
     const response = await fetch(this.webhookUrl, {
