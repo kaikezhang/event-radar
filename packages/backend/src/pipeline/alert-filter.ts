@@ -46,6 +46,24 @@ const BREAKING_KEYWORDS = [
 ];
 
 /**
+ * Primary information sources — first-hand, original data.
+ * These always pass the alert filter (subject to staleness + cooldown).
+ * Filings, government actions, social posts from officials, etc.
+ */
+const PRIMARY_SOURCES = new Set([
+  'whitehouse',       // Executive orders, presidential documents
+  'congress',         // Congressional trades (STOCK Act filings)
+  'sec-edgar',        // SEC filings (Form 4, 8-K, etc.)
+  'fda',              // FDA approvals, rejections, advisory committees
+  'doj-antitrust',    // DOJ antitrust actions
+  'unusual-options',  // Unusual options activity (exchange data)
+  'truth-social',     // Trump / official social posts
+  'x-scanner',        // Key official X/Twitter posts
+  'short-interest',   // Short interest data (exchange reported)
+  'warn',             // WARN Act layoff notices (government filings)
+]);
+
+/**
  * Retrospective / analysis article patterns.
  * These are NOT breaking news — they are post-hoc commentary.
  */
@@ -114,49 +132,67 @@ export class AlertFilter {
       return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(this.maxAgeMs / 60_000)}min)`, enrichWithLLM: false };
     }
 
-    // Rule 0b: Retrospective / analysis articles — NOT breaking news
-    const titleAndBody = `${event.title} ${event.body}`;
-    for (const pattern of RETROSPECTIVE_PATTERNS) {
-      if (pattern.test(titleAndBody)) {
-        return { pass: false, reason: `retrospective article: matched "${pattern.source}"`, enrichWithLLM: false };
+    // Rule 0b: Retrospective / analysis articles — only for secondary sources
+    // Primary sources (filings, gov actions) should never be filtered by title patterns
+    if (!PRIMARY_SOURCES.has(source)) {
+      const titleAndBody = `${event.title} ${event.body}`;
+      for (const pattern of RETROSPECTIVE_PATTERNS) {
+        if (pattern.test(titleAndBody)) {
+          return { pass: false, reason: `retrospective article: matched "${pattern.source}"`, enrichWithLLM: false };
+        }
       }
     }
 
-    // Rule 4: Skip dummy scanner events entirely
+    // Rule 1: Skip dummy scanner events entirely
     if (source === 'dummy' || event.type === 'dummy') {
       return { pass: false, reason: 'dummy event skipped', enrichWithLLM: false };
     }
 
-    // Rule 6: Congress trades always pass
-    if (source === 'congress' || event.type === 'congress-trade') {
-      return this.applyTickerCooldown(ticker, { pass: true, reason: 'congress trade — always pass', enrichWithLLM: true });
-    }
+    // ============================================================
+    // PRIMARY SOURCES — first-hand, original information.
+    // These always pass (subject to staleness + ticker cooldown).
+    // ============================================================
 
-    // Rule 8: Options unusual activity always pass
-    if (source === 'unusual-options' || event.type === 'unusual-options') {
-      return this.applyTickerCooldown(ticker, { pass: true, reason: 'unusual options activity — always pass', enrichWithLLM: true });
-    }
-
-    // Rule 7: Insider trades pass if value > threshold
-    if (source === 'sec-edgar' && event.type === 'form-4') {
-      const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
-      if (value >= this.insiderMinValue) {
-        return this.applyTickerCooldown(ticker, { pass: true, reason: `insider trade value $${value} >= $${this.insiderMinValue}`, enrichWithLLM: true });
+    if (PRIMARY_SOURCES.has(source)) {
+      // Special case: insider trades still need value threshold
+      if (source === 'sec-edgar' && event.type === 'form-4') {
+        const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
+        if (value < this.insiderMinValue) {
+          return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };
+        }
       }
-      return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };
+
+      return this.applyTickerCooldown(ticker, {
+        pass: true,
+        reason: `primary source: ${source}`,
+        enrichWithLLM: true,
+      });
     }
 
-    // Rule 2: Social noise filter (Reddit / StockTwits)
+    // ============================================================
+    // SECONDARY SOURCES — commentary, aggregation, social chatter.
+    // Need keyword / engagement filters to cut noise.
+    // ============================================================
+
+    // Social noise filter (Reddit / StockTwits)
     if (source === 'reddit' || source === 'stocktwits') {
       return this.checkSocial(event, ticker);
     }
 
-    // Rule 3: Breaking news filter
+    // Breaking news (RSS aggregation) — needs keyword + retrospective filter
     if (source === 'breaking-news' || event.type === 'breaking-news') {
       return this.checkBreakingNews(event, ticker);
     }
 
-    // Rule 5: Earnings/FDA calendar — only if today or tomorrow
+    // Analyst ratings — watchlist only, cooldown applies
+    if (source === 'analyst') {
+      if (ticker && this.watchlist.has(ticker)) {
+        return this.applyTickerCooldown(ticker, { pass: true, reason: `analyst rating for watchlist ticker ${ticker}`, enrichWithLLM: true });
+      }
+      return { pass: false, reason: 'analyst rating: not on watchlist', enrichWithLLM: false };
+    }
+
+    // Earnings/FDA calendar — only if today or tomorrow
     if (this.isCalendarEvent(event)) {
       return this.checkCalendarEvent(event, ticker);
     }

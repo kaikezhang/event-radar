@@ -172,18 +172,7 @@ describe('AlertFilter', () => {
   });
 
   describe('Rule 3: Breaking news', () => {
-    it('should pass breaking news with watchlist ticker', () => {
-      const event = makeEvent({
-        source: 'breaking-news',
-        type: 'breaking-news',
-        title: 'Some news about TSLA',
-        metadata: { ticker: 'TSLA' },
-      });
-      const result = filter.check(event);
-      expect(result.pass).toBe(true);
-    });
-
-    it('should pass breaking news with keyword', () => {
+    it('should pass breaking news with explosive keyword', () => {
       const event = makeEvent({
         source: 'breaking-news',
         type: 'breaking-news',
@@ -195,15 +184,15 @@ describe('AlertFilter', () => {
       expect(result.reason).toContain('keyword');
     });
 
-    it('should pass breaking news with any ticker', () => {
+    it('should block breaking news with only a ticker (no keyword)', () => {
       const event = makeEvent({
         source: 'breaking-news',
         type: 'breaking-news',
-        title: 'XYZ Corp announces something',
-        metadata: { ticker: 'XYZ' },
+        title: 'TSLA announces routine quarterly update',
+        metadata: { ticker: 'TSLA' },
       });
       const result = filter.check(event);
-      expect(result.pass).toBe(true);
+      expect(result.pass).toBe(false);
     });
 
     it('should block breaking news without ticker or keyword', () => {
