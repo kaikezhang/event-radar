@@ -1,5 +1,6 @@
 import type { RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 
 const require = createRequire(import.meta.url);
 
@@ -51,8 +52,11 @@ export class AlertFilter {
   private readonly insiderMinValue: number;
   readonly enabled: boolean;
 
-  /** ticker → last alert timestamp */
+  /** ticker → last alert timestamp (persisted to disk) */
   private readonly cooldownMap = new Map<string, number>();
+  private static readonly COOLDOWN_PATH = '/tmp/event-radar-seen/ticker-cooldown.json';
+  private cooldownDirty = false;
+  private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config?: AlertFilterConfig) {
     const watchlistArr = config?.watchlist ?? loadDefaultWatchlist();
@@ -62,6 +66,7 @@ export class AlertFilter {
     this.tickerCooldownMs = (config?.tickerCooldownMinutes ?? num('TICKER_COOLDOWN_MINUTES', 60)) * 60_000;
     this.insiderMinValue = config?.insiderMinValue ?? num('INSIDER_MIN_VALUE', 1_000_000);
     this.enabled = config?.enabled ?? process.env.ALERT_FILTER_ENABLED !== 'false';
+    this.loadCooldowns();
   }
 
   check(event: RawEvent): FilterResult {
@@ -120,6 +125,39 @@ export class AlertFilter {
   /** Reset cooldown map (useful for testing). */
   resetCooldowns(): void {
     this.cooldownMap.clear();
+  }
+
+  private loadCooldowns(): void {
+    try {
+      if (!existsSync(AlertFilter.COOLDOWN_PATH)) return;
+      const data = JSON.parse(readFileSync(AlertFilter.COOLDOWN_PATH, 'utf-8'));
+      if (data && typeof data === 'object') {
+        const now = Date.now();
+        for (const [ticker, ts] of Object.entries(data)) {
+          if (typeof ts === 'number' && now - ts < this.tickerCooldownMs) {
+            this.cooldownMap.set(ticker, ts);
+          }
+        }
+      }
+    } catch { /* ignore corrupt file */ }
+  }
+
+  private saveCooldowns(): void {
+    this.cooldownDirty = true;
+    if (this.cooldownTimer) return;
+    this.cooldownTimer = setTimeout(() => {
+      this.cooldownTimer = null;
+      if (this.cooldownDirty) {
+        this.cooldownDirty = false;
+        try {
+          const dir = '/tmp/event-radar-seen';
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          const obj: Record<string, number> = {};
+          for (const [k, v] of this.cooldownMap) obj[k] = v;
+          writeFileSync(AlertFilter.COOLDOWN_PATH, JSON.stringify(obj));
+        } catch { /* ignore write errors */ }
+      }
+    }, 2000);
   }
 
   // --- Private helpers ---
@@ -228,6 +266,7 @@ export class AlertFilter {
     }
 
     this.cooldownMap.set(ticker, now);
+    this.saveCooldowns();
     return result;
   }
 }
