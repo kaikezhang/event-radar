@@ -458,7 +458,7 @@ export async function findSimilarEvents(
     .map(buildCandidate)
     .filter((candidate): candidate is HistoricalSimilarityCandidate => candidate != null);
 
-  const scoredEvents = candidates
+  const allScored = candidates
     .map((candidate) => {
       const { score, scoreBreakdown } = scoreCandidate(query, candidate);
       return {
@@ -474,10 +474,9 @@ export async function findSimilarEvents(
       }
 
       return right.candidate.alphaT20 - left.candidate.alphaT20;
-    })
-    .slice(0, limit);
+    });
 
-  const events: SimilarEvent[] = scoredEvents.map(({ candidate, score, scoreBreakdown }) => ({
+  const toSimilarEvent = ({ candidate, score, scoreBreakdown }: (typeof allScored)[number]): SimilarEvent => ({
     eventId: candidate.eventId,
     ticker: candidate.ticker,
     headline: candidate.headline,
@@ -490,12 +489,15 @@ export async function findSimilarEvents(
     alphaT1: candidate.alphaT1,
     alphaT5: candidate.alphaT5,
     alphaT20: candidate.alphaT20,
-  }));
+  });
+
+  const allQualifying = allScored.map(toSimilarEvent);
+  const events = allQualifying.slice(0, limit);
 
   return {
     events,
-    confidence: calculateConfidence(events.map((event) => event.alphaT20)),
-    stats: calculateAggregateStats(events),
+    confidence: calculateConfidence(allQualifying.map((event) => event.alphaT20)),
+    stats: calculateAggregateStats(allQualifying),
     totalCandidates: candidates.length,
   };
 }

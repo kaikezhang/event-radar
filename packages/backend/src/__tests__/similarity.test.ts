@@ -750,7 +750,7 @@ describe('similarity service', () => {
       score: 17,
     });
     expect(result.confidence).toBe('low');
-    expect(result.stats.count).toBe(3);
+    expect(result.stats.count).toBe(4);
   });
 });
 
@@ -799,7 +799,7 @@ describe('historical routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       totalCandidates: 4,
-      confidence: 'insufficient',
+      confidence: 'low',
       events: [
         expect.objectContaining({
           ticker: 'AAPL',
