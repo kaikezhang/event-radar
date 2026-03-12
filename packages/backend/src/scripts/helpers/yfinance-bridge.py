@@ -8,14 +8,14 @@ Commands:
   multi_history   — get OHLCV history for multiple tickers (batch)
 """
 
-import sys
 import json
-import yfinance as yf
+import sys
+
 import pandas as pd
-from datetime import datetime
+import yfinance as yf
 
 
-def get_earnings_dates(ticker: str, limit: int = 20) -> list[dict]:
+def get_earnings_dates(ticker: str, limit: int = 100) -> dict:
     """Fetch earnings dates with EPS actual/estimate from yfinance."""
     t = yf.Ticker(ticker)
     try:
@@ -24,7 +24,7 @@ def get_earnings_dates(ticker: str, limit: int = 20) -> list[dict]:
         return {"error": str(e), "data": []}
 
     if df is None or df.empty:
-        return {"error": None, "data": []}
+        return {"error": f"No earnings dates found for ticker: {ticker}", "data": []}
 
     results = []
     for idx, row in df.iterrows():
@@ -47,19 +47,35 @@ def get_earnings_dates(ticker: str, limit: int = 20) -> list[dict]:
             "surprise_pct": None if pd.isna(surprise_pct) else float(surprise_pct),
         })
 
+    if not results:
+        return {"error": f"No reported earnings dates found for ticker: {ticker}", "data": []}
+
     return {"error": None, "data": results}
 
 
-def get_history(ticker: str, period: str = "3y", interval: str = "1d") -> dict:
+def get_history(
+    ticker: str,
+    period: str | None = None,
+    interval: str = "1d",
+    start: str = "2019-01-01",
+) -> dict:
     """Fetch OHLCV history for a single ticker."""
     t = yf.Ticker(ticker)
     try:
-        df = t.history(period=period, interval=interval)
+        history_args = {"interval": interval}
+        if start:
+            history_args["start"] = start
+        elif period:
+            history_args["period"] = period
+        else:
+            history_args["start"] = "2019-01-01"
+
+        df = t.history(**history_args)
     except Exception as e:
         return {"error": str(e), "data": []}
 
     if df is None or df.empty:
-        return {"error": None, "data": []}
+        return {"error": f"No price history found for ticker: {ticker}", "data": []}
 
     records = []
     for idx, row in df.iterrows():
@@ -76,14 +92,22 @@ def get_history(ticker: str, period: str = "3y", interval: str = "1d") -> dict:
             "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else None,
         })
 
+    if not records:
+        return {"error": f"No usable price history found for ticker: {ticker}", "data": []}
+
     return {"error": None, "data": records}
 
 
-def get_multi_history(tickers: list[str], period: str = "3y", interval: str = "1d") -> dict:
+def get_multi_history(
+    tickers: list[str],
+    period: str | None = None,
+    interval: str = "1d",
+    start: str = "2019-01-01",
+) -> dict:
     """Fetch OHLCV history for multiple tickers."""
     result = {}
     for ticker in tickers:
-        result[ticker] = get_history(ticker, period, interval)
+        result[ticker] = get_history(ticker, period=period, interval=interval, start=start)
     return result
 
 
@@ -96,11 +120,21 @@ def main():
     action = cmd.get("action")
 
     if action == "earnings_dates":
-        result = get_earnings_dates(cmd["ticker"], cmd.get("limit", 20))
+        result = get_earnings_dates(cmd["ticker"], cmd.get("limit", 100))
     elif action == "history":
-        result = get_history(cmd["ticker"], cmd.get("period", "3y"), cmd.get("interval", "1d"))
+        result = get_history(
+            cmd["ticker"],
+            period=cmd.get("period"),
+            interval=cmd.get("interval", "1d"),
+            start=cmd.get("start", "2019-01-01"),
+        )
     elif action == "multi_history":
-        result = get_multi_history(cmd["tickers"], cmd.get("period", "3y"), cmd.get("interval", "1d"))
+        result = get_multi_history(
+            cmd["tickers"],
+            period=cmd.get("period"),
+            interval=cmd.get("interval", "1d"),
+            start=cmd.get("start", "2019-01-01"),
+        )
     else:
         result = {"error": f"Unknown action: {action}"}
 
