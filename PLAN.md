@@ -69,7 +69,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 3. Log shutdown progress
 **Files:** `packages/backend/src/index.ts`, possibly `packages/shared/src/scanner-registry.ts` (add `stopAll`)
 
-## Fix 8: Remove Dead Code (P1)
+## Fix 8: Remove Dead Code (P1) ✅ MERGED (PR #52 + #53)
 **Branch:** `fix/remove-dead-code`
 **Problem:** Lots of unused code after frontend removal and refactoring.
 **Fix:** Delete these files/dirs:
@@ -88,7 +88,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 **Files:** Multiple deletions
 **Tests:** Run full test suite after deletion to catch broken imports
 
-## Fix 9: Dedup Check DB for sourceEventId (P2)
+## Fix 9: Dedup Check DB for sourceEventId (P2) ✅ MERGED (PR #54)
 **Branch:** `fix/dedup-check-db`
 **Problem:** In-memory dedup window is 30 minutes. If same article appears in different feeds >30min apart, it's treated as new.
 **Fix:**
