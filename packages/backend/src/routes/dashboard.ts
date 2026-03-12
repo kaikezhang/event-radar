@@ -283,14 +283,32 @@ export function registerDashboardRoutes(
     params.push(limit);
 
     try {
-      const result = await (deps.db as unknown as { execute: (q: { sql: string; params: unknown[] }) => Promise<{ rows: AuditRow[] }> }).execute({
-        sql: `SELECT * FROM pipeline_audit ${whereClause} ORDER BY created_at DESC LIMIT $${paramIdx}`,
-        params,
-      });
+      const { sql: sqlTag } = await import('drizzle-orm');
+
+      // Build WHERE clause dynamically using drizzle sql template
+      const pieces: ReturnType<typeof sqlTag>[] = [];
+      pieces.push(sqlTag`SELECT * FROM pipeline_audit`);
+
+      const conds: ReturnType<typeof sqlTag>[] = [];
+      if (outcome) conds.push(sqlTag`outcome = ${outcome}`);
+      if (source) conds.push(sqlTag`source = ${source}`);
+      if (ticker) conds.push(sqlTag`ticker = ${ticker.toUpperCase()}`);
+      if (search) conds.push(sqlTag`title ILIKE ${'%' + search + '%'}`);
+
+      if (conds.length > 0) {
+        pieces.push(sqlTag`WHERE`);
+        pieces.push(conds.reduce((a, b) => sqlTag`${a} AND ${b}`));
+      }
+
+      pieces.push(sqlTag`ORDER BY created_at DESC LIMIT ${limit}`);
+
+      const query = pieces.reduce((a, b) => sqlTag`${a} ${b}`);
+      const result = await deps.db.execute(query);
+      const rows = (result as unknown as { rows: AuditRow[] }).rows;
 
       return reply.send({
-        count: result.rows.length,
-        events: result.rows.map(row => ({
+        count: rows.length,
+        events: rows.map(row => ({
           id: row.id,
           event_id: row.event_id,
           source: row.source,
@@ -309,15 +327,8 @@ export function registerDashboardRoutes(
         })),
       });
     } catch (err) {
-      // Fallback — use raw SQL through drizzle
-      const { sql: sqlTag } = await import('drizzle-orm');
-      const rows = await deps.db.execute(
-        sqlTag.raw(`SELECT * FROM pipeline_audit ORDER BY created_at DESC LIMIT 50`),
-      );
-      return reply.send({
-        count: (rows as unknown as { rows: AuditRow[] }).rows.length,
-        events: (rows as unknown as { rows: AuditRow[] }).rows,
-      });
+      server.log.error({ err, msg: 'audit query failed' });
+      return reply.code(500).send({ error: 'Audit query failed' });
     }
   });
 
