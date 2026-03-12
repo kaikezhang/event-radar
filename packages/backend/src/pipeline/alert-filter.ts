@@ -23,6 +23,8 @@ export interface AlertFilterConfig {
   insiderMinValue?: number;
   /** Whether the filter is enabled (default true). */
   enabled?: boolean;
+  /** Maximum age in minutes for an event to be considered fresh (default 60). */
+  maxAgeMinutes?: number;
 }
 
 const BREAKING_KEYWORDS = [
@@ -34,6 +36,31 @@ const BREAKING_KEYWORDS = [
   'bankruptcy',
   'tariff',
   'fed rate',
+  'investigation',
+  'indictment',
+  'sanctions',
+  'emergency',
+  'recall',
+  'delisted',
+  'default',
+];
+
+/**
+ * Retrospective / analysis article patterns.
+ * These are NOT breaking news — they are post-hoc commentary.
+ */
+const RETROSPECTIVE_PATTERNS = [
+  /\bwhy\b.+\b(?:stock|shares?)\b.+\b(?:today|this week|this morning|yesterday)\b/i,
+  /\bhere'?s why\b/i,
+  /\bwhat happened\b/i,
+  /\bcall transcript\b/i,
+  /\bearnings call\b/i,
+  /\banalyst (?:says?|thinks?|believes?)\b/i,
+  /\b(?:could|may|might|should you)\b.+\b(?:soar|buy|sell|invest)\b/i,
+  /\b(?:top|best|worst)\s+\d+\s+(?:stocks?|picks?|buys?)\b/i,
+  /\bhere (?:are|is) (?:what|why|how)\b/i,
+  /\bhow to\b.+\b(?:invest|trade|buy|profit)\b/i,
+  /\b(?:prediction|forecast|outlook)\b.+\b(?:2026|2027|next year)\b/i,
 ];
 
 function loadDefaultWatchlist(): string[] {
@@ -50,6 +77,7 @@ export class AlertFilter {
   private readonly socialMinComments: number;
   private readonly tickerCooldownMs: number;
   private readonly insiderMinValue: number;
+  private readonly maxAgeMs: number;
   readonly enabled: boolean;
 
   /** ticker → last alert timestamp (persisted to disk) */
@@ -65,6 +93,7 @@ export class AlertFilter {
     this.socialMinComments = config?.socialMinComments ?? num('SOCIAL_MIN_COMMENTS', 200);
     this.tickerCooldownMs = (config?.tickerCooldownMinutes ?? num('TICKER_COOLDOWN_MINUTES', 60)) * 60_000;
     this.insiderMinValue = config?.insiderMinValue ?? num('INSIDER_MIN_VALUE', 1_000_000);
+    this.maxAgeMs = (config?.maxAgeMinutes ?? num('MAX_EVENT_AGE_MINUTES', 60)) * 60_000;
     this.enabled = config?.enabled ?? process.env.ALERT_FILTER_ENABLED !== 'false';
     this.loadCooldowns();
   }
@@ -78,6 +107,20 @@ export class AlertFilter {
     const ticker = typeof event.metadata?.['ticker'] === 'string'
       ? (event.metadata['ticker'] as string).toUpperCase()
       : undefined;
+
+    // Rule 0a: Staleness — drop events older than maxAgeMs (default 1 hour)
+    const eventAge = Date.now() - event.timestamp.getTime();
+    if (eventAge > this.maxAgeMs) {
+      return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(this.maxAgeMs / 60_000)}min)`, enrichWithLLM: false };
+    }
+
+    // Rule 0b: Retrospective / analysis articles — NOT breaking news
+    const titleAndBody = `${event.title} ${event.body}`;
+    for (const pattern of RETROSPECTIVE_PATTERNS) {
+      if (pattern.test(titleAndBody)) {
+        return { pass: false, reason: `retrospective article: matched "${pattern.source}"`, enrichWithLLM: false };
+      }
+    }
 
     // Rule 4: Skip dummy scanner events entirely
     if (source === 'dummy' || event.type === 'dummy') {
@@ -198,37 +241,27 @@ export class AlertFilter {
   }
 
   private checkBreakingNews(event: RawEvent, ticker: string | undefined): FilterResult {
-    // Pass if contains a known ticker
-    if (ticker && this.watchlist.has(ticker)) {
-      return this.applyTickerCooldown(ticker, {
-        pass: true,
-        reason: `breaking news with watchlist ticker ${ticker}`,
-        enrichWithLLM: true,
-      });
-    }
-
-    // Pass if contains breaking keywords
     const text = `${event.title} ${event.body}`.toLowerCase();
+
+    // Must contain a breaking keyword to be considered explosive
+    let matchedKeyword: string | undefined;
     for (const kw of BREAKING_KEYWORDS) {
       if (text.includes(kw)) {
-        return this.applyTickerCooldown(ticker, {
-          pass: true,
-          reason: `breaking news keyword: "${kw}"`,
-          enrichWithLLM: true,
-        });
+        matchedKeyword = kw;
+        break;
       }
     }
 
-    // Check if any ticker is mentioned in the text
-    if (ticker) {
-      return this.applyTickerCooldown(ticker, {
-        pass: true,
-        reason: `breaking news with ticker ${ticker}`,
-        enrichWithLLM: true,
-      });
+    if (!matchedKeyword) {
+      return { pass: false, reason: 'breaking news: no explosive keyword match', enrichWithLLM: false };
     }
 
-    return { pass: false, reason: 'breaking news: no ticker or keyword match', enrichWithLLM: false };
+    // Breaking keyword found — pass with or without ticker
+    return this.applyTickerCooldown(ticker, {
+      pass: true,
+      reason: `breaking news keyword: "${matchedKeyword}"${ticker ? ` (${ticker})` : ''}`,
+      enrichWithLLM: true,
+    });
   }
 
   private isCalendarEvent(event: RawEvent): boolean {
