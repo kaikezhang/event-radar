@@ -10,6 +10,12 @@ import {
 import { browserPool } from './scraping/browser-pool.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import type { Page } from 'playwright';
+import {
+  extractTickers,
+  extractKeywords,
+  estimateSentiment,
+  POLITICAL_KEYWORDS,
+} from '../utils/keyword-extractor.js';
 
 const TRUTH_SOCIAL_URL = 'https://truthsocial.com/@realDonaldTrump';
 const POLL_INTERVAL_MS = 15_000;
@@ -167,6 +173,10 @@ export class TruthSocialScanner extends BaseScanner {
             ? post.text.slice(0, 200) + '…'
             : post.text;
 
+        const tickers = extractTickers(post.text);
+        const keywords = extractKeywords(post.text, POLITICAL_KEYWORDS);
+        const sentiment = estimateSentiment(post.text);
+
         newEvents.push({
           id: randomUUID(),
           source: 'truth-social',
@@ -180,6 +190,10 @@ export class TruthSocialScanner extends BaseScanner {
             postId: post.postId,
             isRepost: post.isRepost,
             hasMedia: post.hasMedia,
+            ticker: tickers[0],
+            tickers,
+            keywords,
+            sentiment,
           },
         });
       }

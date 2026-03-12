@@ -10,6 +10,10 @@ import {
 import { browserPool } from './scraping/browser-pool.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import type { Page } from 'playwright';
+import {
+  extractTickers,
+  estimateSentiment,
+} from '../utils/keyword-extractor.js';
 
 const X_PROFILE_URL = 'https://x.com/elonmusk';
 const POLL_INTERVAL_MS = 30_000;
@@ -237,6 +241,13 @@ export class XScanner extends BaseScanner {
             ? post.text.slice(0, 200) + '…'
             : post.text;
 
+        const tickers = extractTickers(post.text);
+        const sentiment = estimateSentiment(post.text);
+        const lower = post.text.toLowerCase();
+        const isCryptoRelated = ['crypto', 'bitcoin', 'doge', 'dogecoin', 'btc', 'eth'].some(
+          (kw) => lower.includes(kw),
+        );
+
         newEvents.push({
           id: randomUUID(),
           source: 'x',
@@ -251,6 +262,10 @@ export class XScanner extends BaseScanner {
             isRetweet: post.isRetweet,
             isQuote: post.isQuote,
             hasMedia: post.hasMedia,
+            ticker: tickers[0],
+            tickers,
+            sentiment,
+            cryptoRelated: isCryptoRelated,
           },
         });
       }
