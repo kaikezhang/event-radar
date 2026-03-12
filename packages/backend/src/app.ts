@@ -45,6 +45,8 @@ import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
+import { registerClassifyRoute } from './routes/classify.js';
+import { createLLMProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -439,6 +441,13 @@ export function buildApp(options?: {
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
   }
+
+  // Register classify debug route (works without DB)
+  registerClassifyRoute(server, {
+    apiKey,
+    llmProvider: createLLMProvider(),
+    rules: options?.rules ?? DEFAULT_RULES,
+  });
 
   // Register scanner health routes
   registerScannerRoutes(server, registry);

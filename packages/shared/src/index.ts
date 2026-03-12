@@ -229,3 +229,14 @@ export {
   type ImpactEvent,
   type ImpactResponse,
 } from './schemas/impact-types.js';
+export {
+  LLMClassificationSchema,
+  LLMClassificationMethodSchema,
+  LLMEventTypeSchema,
+  LLMDirectionSchema,
+  LLMSeveritySchema,
+  type LLMClassification,
+  type LLMClassificationMethod,
+  type LLMEventType,
+  type LLMDirection,
+} from './schemas/llm-types.js';
