@@ -79,6 +79,20 @@ const RETROSPECTIVE_PATTERNS = [
   /\bhere (?:are|is) (?:what|why|how)\b/i,
   /\bhow to\b.+\b(?:invest|trade|buy|profit)\b/i,
   /\b(?:prediction|forecast|outlook)\b.+\b(?:2026|2027|next year)\b/i,
+  // Clickbait / opinion / advisory patterns
+  /\bworried about\b/i,
+  /\bthis \d+ (?:move|trick|strategy|step)\b/i,
+  /\bmake or break\b/i,
+  /\bbefore it'?s too late\b/i,
+  /\byou need to know\b/i,
+  /\bdon'?t miss\b/i,
+  /\bsecret(?:s)?\b.+\b(?:wall street|investor|trader)\b/i,
+  /\bnobody is talking about\b/i,
+  /\bI'm buying\b/i,
+  /\bmy portfolio\b/i,
+  /\b(?:billionaire|millionaire|warren buffett|cathie wood)\b.+\b(?:buy|sell|load|dump)\b/i,
+  /\b(?:right now|today)\b.*[.!]$/i,  // ends with urgency
+  /\byour portfolio\b/i,
 ];
 
 function loadDefaultWatchlist(): string[] {

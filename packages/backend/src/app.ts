@@ -50,7 +50,7 @@ import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
-import { createLLMProvider } from './services/llm-provider.js';
+import { createLLMProvider, OpenAIProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
 import { LlmClassifier } from './pipeline/llm-classifier.js';
@@ -79,6 +79,7 @@ import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js'
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { HistoricalEnricher } from './pipeline/historical-enricher.js';
 import { AuditLog } from './pipeline/audit-log.js';
+import { LLMGatekeeper } from './pipeline/llm-gatekeeper.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 // WebSocket removed
@@ -94,6 +95,12 @@ import type {
   Result,
   RawEvent,
 } from '@event-radar/shared';
+
+/** Primary sources — mirror of alert-filter.ts PRIMARY_SOURCES for gatekeeper bypass */
+const PRIMARY_SOURCES_SET = new Set([
+  'whitehouse', 'congress', 'sec-edgar', 'fda', 'doj-antitrust',
+  'unusual-options', 'truth-social', 'x-scanner', 'short-interest', 'warn',
+]);
 
 /** Categorize alert filter reason string into a metric-friendly bucket */
 function categorizeFilterReason(reason: string): string {
@@ -189,6 +196,14 @@ export function buildApp(options?: {
   const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const auditLog = new AuditLog(db);
+  const gatekeeperApiKey = process.env.LLM_GATEKEEPER_API_KEY;
+  const gatekeeperModel = process.env.LLM_GATEKEEPER_MODEL ?? 'gpt-4o-mini';
+  const llmGatekeeper = new LLMGatekeeper({
+    provider: gatekeeperApiKey
+      ? new OpenAIProvider({ apiKey: gatekeeperApiKey, model: gatekeeperModel })
+      : undefined,
+    enabled: process.env.LLM_GATEKEEPER_ENABLED === 'true',
+  });
   const llmEnricher = new LLMEnricher(options?.llmEnricherConfig);
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
@@ -448,6 +463,42 @@ export function buildApp(options?: {
         reason: filterResult.reason,
         ticker,
       });
+
+      // LLM Gatekeeper — quality check for secondary sources (breaking-news, etc.)
+      // Primary sources skip this (they're first-hand data, always trustworthy)
+      if (llmGatekeeper.enabled && !PRIMARY_SOURCES_SET.has(event.source.toLowerCase())) {
+        const gateResult = await llmGatekeeper.check(event.title, event.body);
+        if (!gateResult.pass) {
+          pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
+          alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_gatekeeper' });
+          server.log.info({
+            pipeline: true,
+            stage: 'llm_gatekeeper',
+            source: event.source,
+            title: logTitle(event.title),
+            pass: false,
+            reason: gateResult.reason,
+            confidence: gateResult.confidence,
+          });
+          auditLog.record({
+            eventId: event.id, source: event.source, title: event.title,
+            severity: result.severity, ticker,
+            outcome: 'filtered', stoppedAt: 'llm_gatekeeper',
+            reason: `LLM: ${gateResult.reason} (confidence: ${gateResult.confidence})`,
+            reasonCategory: 'llm_gatekeeper',
+          });
+          return;
+        }
+        server.log.info({
+          pipeline: true,
+          stage: 'llm_gatekeeper',
+          source: event.source,
+          title: logTitle(event.title),
+          pass: true,
+          reason: gateResult.reason,
+          confidence: gateResult.confidence,
+        });
+      }
 
       // LLM Enrichment (only for events flagged by L1)
       let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
