@@ -71,9 +71,11 @@ export class SeenIdBuffer {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(capacity = 200, name?: string) {
+    // Skip persistence in test environment to avoid cross-test pollution
+    const isTest = process.env.VITEST || process.env.NODE_ENV === 'test';
     this.capacity = capacity;
     // Persist to <project>/data/seen/<name>.json if name provided
-    if (name) {
+    if (name && !isTest) {
       const dir = '/tmp/event-radar-seen';
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       this.persistPath = join(dir, `${name}.json`);

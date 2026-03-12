@@ -250,7 +250,7 @@ export function buildApp(options?: {
     eventsBySeverity.inc({ severity: result.severity });
 
     // Step 3: Dedup check
-    const dedupResult = deduplicator.check(event);
+    const dedupResult = await deduplicator.check(event);
     activeStories.set(deduplicator.activeStoryCount);
 
     if (dedupResult.isDuplicate) {

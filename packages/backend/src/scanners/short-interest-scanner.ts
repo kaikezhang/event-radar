@@ -77,7 +77,7 @@ export function isMostShorted(entry: ShortInterestEntry): boolean {
 export class ShortInterestScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'short-interest');
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({

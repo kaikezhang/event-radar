@@ -108,7 +108,7 @@ export function detectShifts(
 export class FedWatchScanner extends BaseScanner {
   private previousMeetings: FomcMeeting[] = [];
   /** Override for testing */
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({

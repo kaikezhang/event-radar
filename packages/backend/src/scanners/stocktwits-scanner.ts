@@ -98,7 +98,7 @@ export class StockTwitsScanner extends BaseScanner {
   private previousSentiments: Map<string, number> = new Map();
   /** Symbols to track stream for (populated from trending) */
   private trackedSymbols: string[] = [];
-  public fetchFn: typeof fetch = globalThis.fetch.bind(globalThis);
+  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
     super({
