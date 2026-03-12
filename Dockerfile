@@ -19,9 +19,12 @@ RUN pnpm --filter @event-radar/backend build
 FROM base AS runner
 WORKDIR /app
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=build /app/packages/shared/package.json /app/packages/shared/dist/ packages/shared/
-COPY --from=build /app/packages/delivery/package.json /app/packages/delivery/dist/ packages/delivery/
-COPY --from=build /app/packages/backend/package.json /app/packages/backend/dist/ packages/backend/
+COPY --from=build /app/packages/shared/package.json packages/shared/package.json
+COPY --from=build /app/packages/shared/dist/ packages/shared/dist/
+COPY --from=build /app/packages/delivery/package.json packages/delivery/package.json
+COPY --from=build /app/packages/delivery/dist/ packages/delivery/dist/
+COPY --from=build /app/packages/backend/package.json packages/backend/package.json
+COPY --from=build /app/packages/backend/dist/ packages/backend/dist/
 COPY --from=build /app/node_modules/ node_modules/
 COPY --from=build /app/packages/shared/node_modules/ packages/shared/node_modules/
 COPY --from=build /app/packages/delivery/node_modules/ packages/delivery/node_modules/

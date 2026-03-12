@@ -3,7 +3,7 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: radar
       POSTGRES_PASSWORD: radar
@@ -24,14 +24,31 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
       - BARK_KEY=${BARK_KEY:-}
-      - BARK_SERVER_URL=http://bark-server:8080
+      - BARK_SERVER_URL=${BARK_SERVER_URL:-https://api.day.app}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-      - API_KEY=${API_KEY:-dev-api-key-change-in-production}
+      - API_KEY=${API_KEY:-er-dev-2026}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - BREAKING_NEWS_ENABLED=${BREAKING_NEWS_ENABLED:-true}
+      - FEDWATCH_ENABLED=${FEDWATCH_ENABLED:-true}
+      - WHITEHOUSE_ENABLED=${WHITEHOUSE_ENABLED:-true}
+      - FDA_ENABLED=${FDA_ENABLED:-true}
+      - DOJ_ENABLED=${DOJ_ENABLED:-true}
+      - CONGRESS_ENABLED=${CONGRESS_ENABLED:-true}
+      - ECON_CALENDAR_ENABLED=${ECON_CALENDAR_ENABLED:-true}
+      - SHORT_INTEREST_ENABLED=${SHORT_INTEREST_ENABLED:-true}
+      - REDDIT_ENABLED=${REDDIT_ENABLED:-true}
+      - STOCKTWITS_ENABLED=${STOCKTWITS_ENABLED:-true}
+      - UNUSUAL_OPTIONS_ENABLED=${UNUSUAL_OPTIONS_ENABLED:-true}
+      - ANALYST_ENABLED=${ANALYST_ENABLED:-true}
+      - EARNINGS_ENABLED=${EARNINGS_ENABLED:-true}
+      - WARN_ENABLED=${WARN_ENABLED:-true}
+      - TRUTH_SOCIAL_ENABLED=${TRUTH_SOCIAL_ENABLED:-false}
+      - X_SCANNER_ENABLED=${X_SCANNER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,27 +57,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - event-radar-network
-
-  # SEC Scanner Python Service
-  sec-scanner:
-    build:
-      context: ./services/sec-scanner
-      dockerfile: Dockerfile
-    ports:
-      - "3002:3002"
-    environment:
-      - BACKEND_URL=http://backend:3001
-      - SEC_POLL_INTERVAL=30
-      - SEC_USER_AGENT=EventRadar/0.1 (event-radar@example.com)
-    depends_on:
-      - backend
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    restart: unless-stopped
     networks:
       - event-radar-network
 
@@ -70,28 +67,32 @@ services:
       context: .
       dockerfile: packages/frontend/Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NEXT_PUBLIC_API_KEY=${API_KEY:-dev-api-key-change-in-production}
+      - NEXT_PUBLIC_WS_URL=ws://localhost:3001
+      - NEXT_PUBLIC_API_KEY=${API_KEY:-er-dev-2026}
     depends_on:
       - backend
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
     networks:
       - event-radar-network
 
-  # Bark Server (iOS Push Notifications)
-  bark-server:
-    image: finab/bark-server
+  # SEC Scanner Python Service
+  sec-scanner:
+    build:
+      context: ./services/sec-scanner
+      dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - bark-data:/data
+      - "127.0.0.1:3002:3002"
+    environment:
+      - BACKEND_URL=http://backend:3001
+      - SEC_POLL_INTERVAL=30
+      - SEC_USER_AGENT=EventRadar/0.1 (event-radar@example.com)
+      - API_KEY=${API_KEY:-er-dev-2026}
+    depends_on:
+      - backend
     restart: unless-stopped
     networks:
       - event-radar-network
@@ -102,4 +103,3 @@ networks:
 
 volumes:
   pgdata:
-  bark-data:
