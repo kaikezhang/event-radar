@@ -1,4 +1,7 @@
 import type { Page } from 'playwright';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Extract text content from a CSS selector, returning empty string if not found.
@@ -54,8 +57,9 @@ export async function extractAllTextContent(
   }
 }
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+const SCRAPE_UTILS_DIR = dirname(fileURLToPath(import.meta.url));
+const BACKEND_ROOT = resolve(SCRAPE_UTILS_DIR, '..', '..', '..');
+const SEEN_DATA_DIR = resolve(BACKEND_ROOT, 'data', 'seen');
 
 /**
  * Ring buffer for tracking seen IDs (deduplication).
@@ -72,11 +76,10 @@ export class SeenIdBuffer {
 
   constructor(capacity = 200, name?: string) {
     this.capacity = capacity;
-    // Persist to <project>/data/seen/<name>.json if name provided
+    // Persist to <backend>/data/seen/<name>.json if name provided.
     if (name) {
-      const dir = '/tmp/event-radar-seen';
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      this.persistPath = join(dir, `${name}.json`);
+      if (!existsSync(SEEN_DATA_DIR)) mkdirSync(SEEN_DATA_DIR, { recursive: true });
+      this.persistPath = join(SEEN_DATA_DIR, `${name}.json`);
       this.load();
     } else {
       this.persistPath = null;

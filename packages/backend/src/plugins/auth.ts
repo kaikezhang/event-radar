@@ -25,6 +25,8 @@ export async function registerAuthPlugin(
   server: FastifyInstance,
   _options: AuthPluginOptions,
 ): Promise<void> {
+  void _options;
+
   // CORS headers for all responses
   server.addHook('onSend', async (_request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');

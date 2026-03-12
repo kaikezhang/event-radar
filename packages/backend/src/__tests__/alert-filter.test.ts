@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { existsSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { AlertFilter } from '../pipeline/alert-filter.js';
 import type { RawEvent } from '@event-radar/shared';
+
+const seenDataDir = fileURLToPath(new URL('../../data/seen/', import.meta.url));
+const cooldownPath = join(seenDataDir, 'ticker-cooldown.json');
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -27,6 +33,12 @@ describe('AlertFilter', () => {
       insiderMinValue: 1_000_000,
       enabled: true,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (existsSync(cooldownPath)) unlinkSync(cooldownPath);
+    rmSync(seenDataDir, { recursive: true, force: true });
   });
 
   describe('disabled filter', () => {
@@ -308,6 +320,26 @@ describe('AlertFilter', () => {
 
       expect(filter.check(event1).pass).toBe(true);
       expect(filter.check(event2).pass).toBe(true);
+    });
+
+    it('should persist cooldowns under backend data/seen', async () => {
+      vi.useFakeTimers();
+      const persistentFilter = new AlertFilter({
+        watchlist: ['NVDA'],
+        tickerCooldownMinutes: 60,
+        enabled: true,
+      });
+
+      persistentFilter.check(makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA' },
+      }));
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(existsSync(cooldownPath)).toBe(true);
+      expect(readFileSync(cooldownPath, 'utf-8')).toContain('NVDA');
     });
   });
 

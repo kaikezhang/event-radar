@@ -1,8 +1,13 @@
 import type { RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
+const ALERT_FILTER_DIR = dirname(fileURLToPath(import.meta.url));
+const BACKEND_ROOT = resolve(ALERT_FILTER_DIR, '..', '..');
+const SEEN_DATA_DIR = resolve(BACKEND_ROOT, 'data', 'seen');
 
 export interface FilterResult {
   pass: boolean;
@@ -54,7 +59,7 @@ export class AlertFilter {
 
   /** ticker → last alert timestamp (persisted to disk) */
   private readonly cooldownMap = new Map<string, number>();
-  private static readonly COOLDOWN_PATH = '/tmp/event-radar-seen/ticker-cooldown.json';
+  private static readonly COOLDOWN_PATH = resolve(SEEN_DATA_DIR, 'ticker-cooldown.json');
   private cooldownDirty = false;
   private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -150,8 +155,7 @@ export class AlertFilter {
       if (this.cooldownDirty) {
         this.cooldownDirty = false;
         try {
-          const dir = '/tmp/event-radar-seen';
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          if (!existsSync(SEEN_DATA_DIR)) mkdirSync(SEEN_DATA_DIR, { recursive: true });
           const obj: Record<string, number> = {};
           for (const [k, v] of this.cooldownMap) obj[k] = v;
           writeFileSync(AlertFilter.COOLDOWN_PATH, JSON.stringify(obj));
