@@ -61,24 +61,6 @@ services:
     networks:
       - event-radar-network
 
-  # Frontend Next.js Application
-  frontend:
-    build:
-      context: .
-      dockerfile: packages/frontend/Dockerfile
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NEXT_PUBLIC_WS_URL=ws://localhost:3001
-      - NEXT_PUBLIC_API_KEY=${API_KEY:-er-dev-2026}
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - event-radar-network
-
   # SEC Scanner Python Service
   sec-scanner:
     build:
