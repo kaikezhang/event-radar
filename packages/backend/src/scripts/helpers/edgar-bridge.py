@@ -10,7 +10,7 @@ import sys
 from datetime import date, datetime
 from typing import Any
 
-os.environ["EDGAR_IDENTITY"] = "Event-Radar/1.0 takaikezhang@gmail.com"
+os.environ.setdefault("EDGAR_IDENTITY", "Event-Radar/1.0 takaikezhang@gmail.com")
 
 from edgar import Company  # noqa: E402
 

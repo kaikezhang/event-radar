@@ -46,6 +46,22 @@ describe('bootstrap-8k helpers', () => {
     expect(shouldSkip(['2.02'])).toBe(true);
   });
 
+  it('should centralize actionable item filtering for classification and skipping', async () => {
+    const module = await loadBootstrap8kModule();
+    const getActionableItems = module?.getActionable8kItems as
+      | ((items: string[]) => string[])
+      | undefined;
+
+    expect(typeof getActionableItems).toBe('function');
+    if (typeof getActionableItems !== 'function') return;
+
+    expect(getActionableItems(['2.02', '9.01'])).toEqual([]);
+    expect(getActionableItems(['2.02', '5.02', '9.01', '5.02 details'])).toEqual([
+      '2.02',
+      '5.02',
+    ]);
+  });
+
   it('should keep filings that pair item 2.02 with another material item', async () => {
     const module = await loadBootstrap8kModule();
     const shouldSkip = module?.shouldSkip8kFiling as ((items: string[]) => boolean) | undefined;
@@ -118,6 +134,18 @@ describe('bootstrap-8k helpers', () => {
     expect(formatHeadline('NVDA', '5.02', 'leadership_change')).toBe(
       'NVDA 8-K: Leadership Change (Item 5.02)',
     );
+  });
+
+  it('should keep fallback headline formatting defensive when event types contain empty segments', async () => {
+    const module = await loadBootstrap8kModule();
+    const formatHeadline = module?.format8kHeadline as
+      | ((ticker: string, item: string, eventType: string) => string)
+      | undefined;
+
+    expect(typeof formatHeadline).toBe('function');
+    if (typeof formatHeadline !== 'function') return;
+
+    expect(formatHeadline('NVDA', '99.99', 'other_material_')).not.toContain('undefined');
   });
 
   it('should identify Tier 1 tickers for the longer coverage window', async () => {

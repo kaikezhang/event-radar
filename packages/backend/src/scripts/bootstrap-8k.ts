@@ -25,6 +25,7 @@ import {
   runHistoricalMigrations,
   sleep,
 } from './bootstrap-earnings.js';
+import { insertHistoricalEventBundle } from './helpers/historical-event-bundle.js';
 
 const BOOTSTRAP_BATCH = 'phase2_8k_v1';
 const DB_URL = process.env.DATABASE_URL ?? 'postgresql://radar:radar@localhost:5432/event_radar';
@@ -232,6 +233,15 @@ function normalize8kItems(items: readonly string[]): string[] {
   return [...new Set(normalized)];
 }
 
+export function getActionable8kItems(items: readonly string[]): string[] {
+  const actionableItems = normalize8kItems(items).filter((item) => !ROUTINE_SKIP_ITEMS.has(item));
+  if (actionableItems.length === 1 && actionableItems[0] === '2.02') {
+    return [];
+  }
+
+  return actionableItems;
+}
+
 function upgradeSeverity(baseSeverity: Severity, itemCount: number): Severity {
   if (itemCount <= 1) return baseSeverity;
   const currentIndex = SEVERITY_ORDER.indexOf(baseSeverity);
@@ -246,15 +256,12 @@ function compareClassificationPriority(left: ItemClassification, right: ItemClas
 }
 
 export function shouldSkip8kFiling(items: string[]): boolean {
-  const actionableItems = normalize8kItems(items).filter((item) => !ROUTINE_SKIP_ITEMS.has(item));
-  if (actionableItems.length === 0) return true;
-  return actionableItems.length === 1 && actionableItems[0] === '2.02';
+  return getActionable8kItems(items).length === 0;
 }
 
 export function classify8kItems(items: string[]): Classified8kEvent | null {
-  const actionableItems = normalize8kItems(items).filter((item) => !ROUTINE_SKIP_ITEMS.has(item));
+  const actionableItems = getActionable8kItems(items);
   if (actionableItems.length === 0) return null;
-  if (actionableItems.length === 1 && actionableItems[0] === '2.02') return null;
 
   const rankedItems = actionableItems
     .map((item) => ITEM_CLASSIFICATIONS[item]!)
@@ -271,7 +278,7 @@ export function classify8kItems(items: string[]): Classified8kEvent | null {
 export function format8kHeadline(ticker: string, item: string, eventType: string): string {
   const headlineLabel = ITEM_CLASSIFICATIONS[item]?.headlineLabel ?? eventType
     .split('_')
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .map((part) => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : ''))
     .join(' ');
   return `${ticker} 8-K: ${headlineLabel} (Item ${item})`;
 }
@@ -471,9 +478,8 @@ async function main() {
         }
         const pricingDate = stockBars[eventIdx]!.date;
 
-        const [event] = await db
-          .insert(hist.historicalEvents)
-          .values({
+        await insertHistoricalEventBundle(db, {
+          eventValues: {
             eventTs: new Date(`${filing.filed}T00:00:00.000Z`),
             eventTsPrecision: 'day_only',
             eventTsSource: 'sec_filing',
@@ -487,54 +493,44 @@ async function main() {
             tickerAtTime: cfg.ticker,
             collectionTier: resolveTickerTier(cfg.ticker),
             bootstrapBatch: BOOTSTRAP_BATCH,
-          })
-          .returning({ id: hist.historicalEvents.id });
-
-        await db.insert(hist.eventSources).values({
-          eventId: event.id,
-          sourceType: 'sec_edgar',
-          sourceName: 'SEC EDGAR',
-          sourceUrl: filing.primary_doc_url,
-          sourceNativeId: filing.accession,
-          publishedAt: new Date(`${filing.filed}T00:00:00.000Z`),
-          extractionMethod: 'api_structured',
-          confidence: '1.00',
+          },
+          sourceValues: () => ({
+            sourceType: 'sec_edgar',
+            sourceName: 'SEC EDGAR',
+            sourceUrl: filing.primary_doc_url,
+            sourceNativeId: filing.accession,
+            publishedAt: new Date(`${filing.filed}T00:00:00.000Z`),
+            extractionMethod: 'api_structured',
+            confidence: '1.00',
+          }),
+          stockContextValues: (eventId) =>
+            buildEventStockContextValues({
+              eventId,
+              companyId: company.id,
+              stockBars,
+              eventIdx,
+            }),
+          marketContextValues: (eventId) =>
+            buildEventMarketContextValues({
+              eventId,
+              pricingDate,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+            }),
+          returnsValues: (eventId) =>
+            buildEventReturnsValues({
+              eventId,
+              companyId: company.id,
+              tickerAtTime: cfg.ticker,
+              pricingDate,
+              stockBars,
+              eventIdx,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+              // SEC filing timestamps are only day-precision, so overnight gap math is approximate.
+              t0Eligible: false,
+            }),
         });
-
-        const stockContextValues = buildEventStockContextValues({
-          eventId: event.id,
-          companyId: company.id,
-          stockBars,
-          eventIdx,
-        });
-        if (stockContextValues != null) {
-          await db.insert(hist.eventStockContext).values(stockContextValues);
-        }
-
-        const marketContextValues = buildEventMarketContextValues({
-          eventId: event.id,
-          pricingDate,
-          benchmarkData,
-          sectorEtf: cfg.sectorEtf,
-        });
-        if (marketContextValues != null) {
-          await db.insert(hist.eventMarketContext).values(marketContextValues);
-        }
-
-        const returnsValues = buildEventReturnsValues({
-          eventId: event.id,
-          companyId: company.id,
-          tickerAtTime: cfg.ticker,
-          pricingDate,
-          stockBars,
-          eventIdx,
-          benchmarkData,
-          sectorEtf: cfg.sectorEtf,
-          t0Eligible: false,
-        });
-        if (returnsValues != null) {
-          await db.insert(hist.eventReturns).values(returnsValues);
-        }
 
         insertedCount++;
         summary.events++;

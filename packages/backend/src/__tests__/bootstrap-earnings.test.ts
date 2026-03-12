@@ -4,6 +4,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import * as hist from '../db/historical-schema.js';
 import {
   buildExistingEarningsDedupWhereClause,
+  buildMetricsEarningsInsertValues,
   processTickerConfigs,
   resolveCoverageDateTo,
 } from '../scripts/bootstrap-earnings.js';
@@ -195,6 +196,26 @@ describe('bootstrap-earnings helpers', () => {
       if (typeof clamp !== 'function') return;
 
       expect(clamp(-123456789)).toBe(-99999999);
+    });
+
+    it('should clamp all percentage fields before inserting earnings metrics', () => {
+      const values = buildMetricsEarningsInsertValues('event-1', 'FY2026-Q1', {
+        date: '2026-03-12',
+        eps_estimate: 1.25,
+        eps_actual: 1.5,
+        surprise_pct: 123456789,
+        revenue_surprise_pct: -123456789,
+        yoy_revenue_growth: 123456789,
+        yoy_eps_growth: -123456789,
+      });
+
+      expect(values).toMatchObject({
+        eventId: 'event-1',
+        epsSurprisePct: '99999999',
+        revenueSurprisePct: '-99999999',
+        yoyRevenueGrowth: '99999999',
+        yoyEpsGrowth: '-99999999',
+      });
     });
   });
 });

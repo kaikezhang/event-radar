@@ -28,6 +28,7 @@ import {
   classifyOutcome,
   type PriceBar,
 } from './helpers/technical-indicators.js';
+import { insertHistoricalEventBundle } from './helpers/historical-event-bundle.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -539,6 +540,9 @@ export interface EarningsDate {
   eps_estimate: number | null;
   eps_actual: number | null;
   surprise_pct: number | null;
+  revenue_surprise_pct?: number | null;
+  yoy_revenue_growth?: number | null;
+  yoy_eps_growth?: number | null;
 }
 
 interface YfResponse<T> {
@@ -685,6 +689,31 @@ export function clampPercentageForDecimalStorage(value: number | null): number |
   if (value > DECIMAL_PERCENT_MAX) return DECIMAL_PERCENT_MAX;
   if (value < -DECIMAL_PERCENT_MAX) return -DECIMAL_PERCENT_MAX;
   return value;
+}
+
+export function buildMetricsEarningsInsertValues(
+  eventId: string,
+  fiscalQuarter: string,
+  earning: EarningsDate,
+): typeof hist.metricsEarnings.$inferInsert {
+  const clampedEpsSurprisePct = clampPercentageForDecimalStorage(earning.surprise_pct);
+  const clampedRevenueSurprisePct = clampPercentageForDecimalStorage(
+    earning.revenue_surprise_pct ?? null,
+  );
+  const clampedYoyRevenueGrowth = clampPercentageForDecimalStorage(earning.yoy_revenue_growth ?? null);
+  const clampedYoyEpsGrowth = clampPercentageForDecimalStorage(earning.yoy_eps_growth ?? null);
+
+  return {
+    eventId,
+    fiscalQuarter,
+    epsActual: earning.eps_actual != null ? String(earning.eps_actual) : null,
+    epsEstimate: earning.eps_estimate != null ? String(earning.eps_estimate) : null,
+    epsSurprisePct: clampedEpsSurprisePct != null ? String(clampedEpsSurprisePct) : null,
+    revenueSurprisePct:
+      clampedRevenueSurprisePct != null ? String(clampedRevenueSurprisePct) : null,
+    yoyRevenueGrowth: clampedYoyRevenueGrowth != null ? String(clampedYoyRevenueGrowth) : null,
+    yoyEpsGrowth: clampedYoyEpsGrowth != null ? String(clampedYoyEpsGrowth) : null,
+  };
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -1182,10 +1211,8 @@ async function main() {
             : '';
         const headline = `${cfg.ticker} ${fiscalQuarter} earnings ${subtype}${surpriseStr ? ` (${surpriseStr} surprise)` : ''}`;
 
-        // -- Insert historical_events --
-        const [event] = await db
-          .insert(hist.historicalEvents)
-          .values({
+        const event = await insertHistoricalEventBundle(db, {
+          eventValues: {
             eventTs: new Date(earning.date),
             marketSession: 'after_hours', // Most US earnings are after-hours
             eventTsPrecision: 'day_session',
@@ -1199,67 +1226,44 @@ async function main() {
             tickerAtTime: cfg.ticker,
             collectionTier: 'full',
             bootstrapBatch: BOOTSTRAP_BATCH,
-          })
-          .returning({ id: hist.historicalEvents.id });
+          },
+          sourceValues: () => ({
+            sourceType: 'earnings_calendar',
+            sourceName: 'yfinance',
+            extractionMethod: 'api_structured',
+            confidence: '0.90',
+          }),
+          metricsEarningsValues: (eventId) =>
+            buildMetricsEarningsInsertValues(eventId, fiscalQuarter, earning),
+          stockContextValues: (eventId) =>
+            buildEventStockContextValues({
+              eventId,
+              companyId,
+              stockBars,
+              eventIdx,
+            }),
+          marketContextValues: (eventId) =>
+            buildEventMarketContextValues({
+              eventId,
+              pricingDate: barDate,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+            }),
+          returnsValues: (eventId) =>
+            buildEventReturnsValues({
+              eventId,
+              companyId,
+              tickerAtTime: cfg.ticker,
+              pricingDate: barDate,
+              stockBars,
+              eventIdx,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+              t0Eligible: true,
+            }),
+        });
 
         eventIds.push({ id: event.id, date: barDate, subtype });
-
-        // -- Insert event_sources --
-        await db.insert(hist.eventSources).values({
-          eventId: event.id,
-          sourceType: 'earnings_calendar',
-          sourceName: 'yfinance',
-          extractionMethod: 'api_structured',
-          confidence: '0.90',
-        });
-
-        // -- Insert metrics_earnings --
-        const clampedSurprisePct = clampPercentageForDecimalStorage(earning.surprise_pct);
-        await db.insert(hist.metricsEarnings).values({
-          eventId: event.id,
-          fiscalQuarter,
-          epsActual: earning.eps_actual != null ? String(earning.eps_actual) : null,
-          epsEstimate: earning.eps_estimate != null ? String(earning.eps_estimate) : null,
-          epsSurprisePct: clampedSurprisePct != null ? String(clampedSurprisePct) : null,
-        });
-
-        // -- Insert event_stock_context --
-        const stockContextValues = buildEventStockContextValues({
-          eventId: event.id,
-          companyId,
-          stockBars,
-          eventIdx,
-        });
-        if (stockContextValues != null) {
-          await db.insert(hist.eventStockContext).values(stockContextValues);
-        }
-
-        // -- Insert event_market_context --
-        const marketContextValues = buildEventMarketContextValues({
-          eventId: event.id,
-          pricingDate: barDate,
-          benchmarkData,
-          sectorEtf: cfg.sectorEtf,
-        });
-        if (marketContextValues != null) {
-          await db.insert(hist.eventMarketContext).values(marketContextValues);
-        }
-
-        // -- Insert event_returns --
-        const returnsValues = buildEventReturnsValues({
-          eventId: event.id,
-          companyId,
-          tickerAtTime: cfg.ticker,
-          pricingDate: barDate,
-          stockBars,
-          eventIdx,
-          benchmarkData,
-          sectorEtf: cfg.sectorEtf,
-          t0Eligible: true,
-        });
-        if (returnsValues != null) {
-          await db.insert(hist.eventReturns).values(returnsValues);
-        }
 
         summary.events++;
         process.stdout.write('.');
