@@ -2,7 +2,7 @@
 
 All issues from deep review. Fix in order. Each one = separate branch + PR.
 
-## Fix 1: Unified Event Pipeline (P0 — most critical)
+## Fix 1: Unified Event Pipeline (P0 — most critical) ✅ MERGED (PR #49)
 **Branch:** `fix/unified-pipeline`
 **Problem:** `app.ts` has 3-4 separate `eventBus.subscribe()` callbacks that each call `ruleEngine.classify()` independently. Dedup only happens in the alertRouter subscriber, but DB storage subscriber stores duplicates anyway.
 **Fix:**
@@ -15,7 +15,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 **Files:** `packages/backend/src/app.ts`
 **Tests:** Existing tests must still pass. Add integration test if feasible.
 
-## Fix 2: Disable Dummy Scanner in Production (P0)
+## Fix 2: Disable Dummy Scanner in Production (P0) ✅ MERGED (PR #49)
 **Branch:** `fix/disable-dummy-prod`
 **Problem:** `DummyScanner` always registered, generates fake events every 10 seconds, pollutes DB.
 **Fix:**
@@ -23,7 +23,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 2. Keep it available for tests via constructor injection
 **Files:** `packages/backend/src/app.ts`
 
-## Fix 3: Scanner Auto-Backoff on Consecutive Errors (P0)
+## Fix 3: Scanner Auto-Backoff on Consecutive Errors (P0) ✅ MERGED (PR #51)
 **Branch:** `fix/scanner-backoff`
 **Problem:** Reddit (403), Reuters (404), AP News (403), FedWatch (404) poll every 60s and fail every time. Wastes bandwidth and log spam.
 **Fix:**
@@ -35,7 +35,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 **Files:** `packages/shared/src/base-scanner.ts`
 **Tests:** Add unit tests for backoff behavior
 
-## Fix 4: Register Missing Scanners (Analyst + Earnings) (P0)
+## Fix 4: Register Missing Scanners (Analyst + Earnings) (P0) ✅ MERGED (PR #49)
 **Branch:** `fix/register-missing-scanners`
 **Problem:** `.env` has `ANALYST_ENABLED=true` and `EARNINGS_ENABLED=true` but `app.ts` never registers `AnalystScanner` or `EarningsScanner`.
 **Fix:**
@@ -43,7 +43,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 2. Import already exists for some — verify and add if missing
 **Files:** `packages/backend/src/app.ts`
 
-## Fix 5: Persist Ticker Cooldown Map (P0)
+## Fix 5: Persist Ticker Cooldown Map (P0) ✅ MERGED (PR #49)
 **Branch:** `fix/persist-cooldown`
 **Problem:** `AlertFilter.cooldownMap` is in-memory Map. Restarts clear it → same ticker gets re-alerted within the 60-min cooldown window.
 **Fix:**
@@ -52,7 +52,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 3. Load on construction, save on update
 **Files:** `packages/backend/src/pipeline/alert-filter.ts`
 
-## Fix 6: SeenIdBuffer Use Set Instead of Array (P1)
+## Fix 6: SeenIdBuffer Use Set Instead of Array (P1) ✅ MERGED (cherry-picked from PR #48)
 **Branch:** `fix/seenidbuffer-set`
 **Problem:** `SeenIdBuffer.has()` uses `this.ids.includes(id)` which is O(n). Should use Set for O(1) lookup.
 **Fix:**
@@ -60,7 +60,7 @@ All issues from deep review. Fix in order. Each one = separate branch + PR.
 2. `has()` checks Set, `add()` adds to both, maintains capacity via array
 **Files:** `packages/backend/src/scanners/scraping/scrape-utils.ts`
 
-## Fix 7: Graceful Shutdown (P1)
+## Fix 7: Graceful Shutdown (P1) ✅ MERGED (PR #50)
 **Branch:** `fix/graceful-shutdown`
 **Problem:** No SIGTERM/SIGINT handler. Process kill doesn't clean up DB connections or stop scanners.
 **Fix:**
