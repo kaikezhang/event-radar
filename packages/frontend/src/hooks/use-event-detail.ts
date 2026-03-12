@@ -24,7 +24,7 @@ export interface SimilarEvent {
 
 export interface UseEventDetailOptions {
   apiUrl: string;
-  apiKey: string;
+  apiKey?: string;
 }
 
 export interface UseEventDetailReturn {
@@ -37,7 +37,7 @@ export interface UseEventDetailReturn {
 }
 
 export function useEventDetail(options: UseEventDetailOptions): UseEventDetailReturn {
-  const { apiUrl, apiKey } = options;
+  const { apiUrl } = options;
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [similarEvents, setSimilarEvents] = useState<SimilarEvent[]>([]);
@@ -50,11 +50,7 @@ export function useEventDetail(options: UseEventDetailOptions): UseEventDetailRe
 
     try {
       // Fetch event details
-      const eventResponse = await fetch(`${apiUrl}/api/events/${id}`, {
-        headers: {
-          'X-API-Key': apiKey,
-        },
-      });
+      const eventResponse = await fetch(`${apiUrl}/api/events/${id}`);
 
       if (!eventResponse.ok) {
         if (eventResponse.status === 404) {
@@ -67,11 +63,7 @@ export function useEventDetail(options: UseEventDetailOptions): UseEventDetailRe
       setEvent(eventData);
 
       // Fetch similar events
-      const similarResponse = await fetch(`${apiUrl}/api/events/${id}/similar?limit=10`, {
-        headers: {
-          'X-API-Key': apiKey,
-        },
-      });
+      const similarResponse = await fetch(`${apiUrl}/api/events/${id}/similar?limit=10`);
 
       if (similarResponse.ok) {
         const similarData = await similarResponse.json();
@@ -84,7 +76,7 @@ export function useEventDetail(options: UseEventDetailOptions): UseEventDetailRe
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, apiKey]);
+  }, [apiUrl]);
 
   const clearEvent = useCallback(() => {
     setEvent(null);

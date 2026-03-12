@@ -232,31 +232,14 @@ export async function registerWebSocketPlugin(
     heartbeatInterval.unref();
   }
 
-  server.get('/ws/events', { websocket: true }, async (socket, request) => {
-    // Extract API key from query params
-    const url = new URL(request.url, 'http://localhost');
-    const apiKey = url.searchParams.get('apiKey');
-    const providedKey = options.getApiKey();
-
-    // Validate API key
-    if (apiKey !== providedKey) {
-      const errorMsg: WsMessage = {
-        type: 'error',
-        payload: { message: 'Invalid or missing API key' },
-        timestamp: Date.now(),
-      };
-      socket.send(JSON.stringify(errorMsg));
-      socket.close(4001, 'Unauthorized');
-      return;
-    }
-
+  server.get('/ws/events', { websocket: true }, async (socket, _request) => {
     // Generate client ID
     const clientId = crypto.randomUUID();
-    
-    // Initialize client
+
+    // Initialize client — auth disabled, accept all connections
     const client: WebSocketClient = {
       socket,
-      apiKey,
+      apiKey: '',
       filters: {},
       isAlive: true,
     };

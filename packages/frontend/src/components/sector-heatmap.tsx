@@ -117,11 +117,7 @@ export function SectorHeatmap({
       }
 
       try {
-        const response = await fetch(`${apiUrl}/api/v1/events/sectors?${params.toString()}`, {
-          headers: {
-            "X-API-Key": apiKey,
-          },
-        });
+        const response = await fetch(`${apiUrl}/api/v1/events/sectors?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error("Failed to load sector heatmap");

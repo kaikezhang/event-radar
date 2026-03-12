@@ -23,39 +23,26 @@ interface AuthPluginOptions {
 
 export async function registerAuthPlugin(
   server: FastifyInstance,
-  options: AuthPluginOptions,
+  _options: AuthPluginOptions,
 ): Promise<void> {
-  const { apiKey, publicRoutes = ['/health', '/api/health/ping', '/metrics'] } = options;
+  // CORS headers for all responses
+  server.addHook('onSend', async (_request, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', '*');
+  });
 
   server.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Skip auth for public routes
-    const isPublicRoute = publicRoutes.some(route => 
-      request.url.startsWith(route)
-    );
-    
-    if (isPublicRoute) {
-      request.apiKeyAuthenticated = false;
-      return;
+    // CORS preflight — always allow
+    if (request.method === 'OPTIONS') {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+      return reply.status(204).send();
     }
 
-    // Check for API key
-    const providedKey = request.headers['x-api-key'];
-    
-    if (!providedKey) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'Missing X-API-Key header',
-      });
-    }
-
-    if (providedKey !== apiKey) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'Invalid API key',
-      });
-    }
-
-    request.apiKeyAuthenticated = true;
+    // Auth disabled — all routes are public
+    request.apiKeyAuthenticated = false;
   });
 }
 

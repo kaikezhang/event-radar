@@ -287,11 +287,7 @@ export function EventImpactChart({
       }
 
       try {
-        const response = await fetch(`${apiUrl}/api/v1/events/impact?${params.toString()}`, {
-          headers: {
-            "X-API-Key": apiKey,
-          },
-        });
+        const response = await fetch(`${apiUrl}/api/v1/events/impact?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error("Failed to load event impact data");

@@ -13,8 +13,7 @@ import { EventImpactChart } from "@/components/event-impact-chart";
 import { HistoryEventDetail } from "@/components/history-event-detail";
 import { useBroadcastSync } from "@/lib/broadcast-sync";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "er-dev-2026";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function parseCsv(value: string | null): string[] {
   if (!value) {
@@ -237,7 +236,7 @@ export default function DetachedDashboardPanelPage() {
 
       {panelType === "chart" ? (
         <EventImpactChart
-          apiKey={API_KEY}
+          apiKey=""
           apiUrl={API_URL}
           ticker={effectiveQuery.ticker}
           dateFrom={effectiveQuery.dateFrom}
@@ -254,7 +253,7 @@ export default function DetachedDashboardPanelPage() {
 
       {panelType === "events" ? (
         <EventHistoryBrowser
-          apiKey={API_KEY}
+          apiKey=""
           apiUrl={API_URL}
           query={effectiveQuery}
           selectedEventId={selectedEventId}
@@ -265,7 +264,7 @@ export default function DetachedDashboardPanelPage() {
 
       {panelType === "detail" ? (
         <HistoryEventDetail
-          apiKey={API_KEY}
+          apiKey=""
           apiUrl={API_URL}
           eventId={selectedEventId}
         />
