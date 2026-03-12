@@ -1,370 +1,159 @@
-# TASK.md — Historical Intelligence ↔ Real-time Pipeline Integration
+# TASK.md — Dashboard Frontend
 
 ## Goal
 
-Connect the historical similarity engine (2,400+ events) to the real-time event pipeline so that every alert pushed to users includes historical context: "What happened last time something like this occurred?"
+Build a single-page admin dashboard for Event Radar that visualizes system status, pipeline health, and event audit trail. The dashboard connects to the existing backend APIs.
 
-## Architecture Overview
+## Tech Stack
 
-```
-Current pipeline (app.ts):
-Scanner → EventBus → classify → dedup → LLM classify → store → alert filter → LLM enrich → AlertRouter → push
+- **Framework**: React 19 + Vite
+- **UI**: Tailwind CSS + shadcn/ui (dark mode only)
+- **Charts**: Recharts (lightweight, React-native)
+- **State**: React Query (TanStack Query) for API data fetching
+- **Package**: `packages/dashboard/` in the existing monorepo
+- **Build**: Vite, output to `packages/dashboard/dist/`
+- **Serve**: Backend serves the built dashboard at `/` (static files from dist/)
 
-After this task:
-Scanner → EventBus → classify → dedup → LLM classify → store → alert filter → LLM enrich
-  → [NEW] Historical Enricher → AlertRouter → push (with historical context)
-```
+## Backend APIs Available
 
-The Historical Enricher slots in **after the alert filter and LLM enrichment, right before delivery**. This is critical — we only run the multi-join similarity DB query on events that will actually be delivered, not on every non-duplicate event. It:
-1. Maps the real-time event to a `SimilarityQuery`
-2. Calls `findSimilarEvents()` from `services/similarity.ts`
-3. Attaches `HistoricalContext` to the `AlertEvent`
-4. Delivery channels format the context into the alert message
+All APIs are at `http://localhost:3001`. No auth needed for these endpoints.
 
----
+### 1. `GET /api/v1/dashboard`
+System overview — scanners, pipeline funnel, historical stats, delivery, alerts.
 
-## PR 1: Market Context Cache + Historical Enricher + Delivery Upgrade
+### 2. `GET /api/v1/audit?limit=50&outcome=filtered&source=breaking-news&ticker=TSLA&search=crash`
+Per-event pipeline audit trail. Filterable by outcome, source, ticker, text search.
 
-### 1A. Market Context Cache (`services/market-context-cache.ts`)
+### 3. `GET /api/v1/audit/stats`
+24h breakdown of pipeline outcomes by category.
 
-A cache that holds real-time market data needed for similarity queries.
+### 4. `GET /api/scanners/status`
+Detailed scanner health with timing and error info.
 
-```typescript
-export interface MarketSnapshot {
-  vixLevel: number;
-  spyClose: number;
-  spy50ma: number;
-  spy200ma: number;
-  marketRegime: 'bull' | 'bear' | 'sideways' | 'correction';
-  updatedAt: Date;
-}
+### 5. `GET /health`
+Basic health check with all scanner details and DB status.
 
-export class MarketContextCache {
-  private snapshot: MarketSnapshot | null = null;
-  private refreshIntervalMs: number; // default 300_000 (5 min)
-  private timer: NodeJS.Timeout | null = null;
+### 6. `GET /metrics`
+Prometheus text format metrics (for reference, not displayed directly).
 
-  constructor(config?: { refreshIntervalMs?: number });
+## Pages / Sections
 
-  /** Start periodic refresh. Calls refresh() on interval, but does NOT await initial refresh (non-blocking). Call once at app startup. */
-  start(): void;
+### Page 1: Overview (default)
 
-  /** Stop periodic refresh. Call on shutdown. */
-  stop(): void;
+**Top Bar:**
+- System status badge (healthy/degraded/down)
+- Uptime
+- Grace period indicator (if active)
+- Memory usage
+- Last event time
 
-  /** Get current snapshot (may be null if first refresh hasn't completed yet). Callers must handle null gracefully. */
-  get(): MarketSnapshot | null;
+**Scanner Grid (2 columns):**
+- Card per scanner showing: name, status (color dot), last scan time, error count
+- Degraded/down scanners highlighted in orange/red
+- Backoff indicator
 
-  /** Force refresh now. */
-  refresh(): Promise<void>;
-}
-```
+**Pipeline Funnel (center, large):**
+- Vertical funnel visualization:
+  ```
+  Ingested:     1,250  ████████████████████████████████
+  Deduplicated:   980  ████████████████████████████
+  Unique:         270  ████████
+  Filter Passed:   75  ███
+  Delivered:       75  ███
+  ```
+- Conversion rate at bottom
 
-**Market regime logic:**
-- `bull`: SPY > 200MA AND SPY > 50MA
-- `bear`: SPY < 200MA AND SPY < 50MA
-- `correction`: SPY > 200MA AND SPY < 50MA (pullback in uptrend)
-- `recovery`: SPY < 200MA AND SPY > 50MA (rally in downtrend — renamed from "sideways" which was misleading)
+**Filter Breakdown (pie/donut chart):**
+- Slices: stale, retrospective, keyword, social_noise, cooldown, llm_gatekeeper, etc.
+- Shows where events are being blocked
 
-**Data source:** Use Yahoo Finance chart API directly (not through PriceService — its cache key includes timestamps that change every call, causing cache misses on periodic refreshes). Fetch SPY and ^VIX daily bars. Snap date boundaries to start-of-day UTC to enable simple internal caching. Store the raw 200-day bars internally and only re-fetch when `updatedAt` is stale (> refreshIntervalMs).
+**Delivery Status:**
+- Per-channel: sent count, error count, status dot
+- Historical enrichment hit rate
 
-### 1B. Event Type Mapper (`pipeline/event-type-mapper.ts`)
+**Active Alerts:**
+- List of system warnings (scanner down, backoff, etc.)
 
-Maps real-time `RawEvent` + LLM classification into a `SimilarityQuery`.
+### Page 2: Audit Trail
 
-```typescript
-export interface MappedEventContext {
-  eventType: string;          // mapped to historical event_type
-  eventSubtype?: string;      // e.g., 'beat', 'miss', '5.02'
-  ticker?: string;
-  sector?: string;
-  severity?: string;
-  // From market context cache:
-  vixLevel?: number;
-  marketRegime?: string;
-  // From event metadata (if available):
-  epsSurprisePct?: number;
-  consecutiveBeats?: number;
-}
+**Filter Bar:**
+- Dropdown: outcome (all / delivered / filtered / deduped / grace_period)
+- Dropdown: source (all / breaking-news / stocktwits / whitehouse / etc.)
+- Text input: search in title
+- Text input: ticker filter
 
-export function mapEventToSimilarityQuery(
-  event: RawEvent,
-  llmResult?: LlmClassificationResult,
-  marketSnapshot?: MarketSnapshot,
-): MappedEventContext | null;
-```
+**Event Table:**
+- Columns: Time, Source, Title, Severity, Ticker, Outcome, Stopped At, Reason
+- Color-coded outcome badges:
+  - delivered → green
+  - filtered → red
+  - deduped → gray
+  - grace_period → yellow
+  - error → red outline
+- Click row → expand to show full details (delivery channels, historical match, confidence, duration)
 
-**Mapping rules:**
+**Auto-refresh** every 10 seconds with smooth update (no flicker).
 
-| Real-time Source | `event.source` | Mapping Logic |
-|-----------------|----------------|---------------|
-| SEC EDGAR | `sec-edgar` | Map Item numbers to historical types (same as bootstrap-8k classification). Item 2.02→earnings, 5.02→leadership_change, 1.01→contract_material, etc. |
-| Earnings Scanner | `earnings` | `eventType: 'earnings'`, subtype from metadata (beat/miss/meet) |
-| Breaking News | `breaking-news` | Use `llmResult.eventType` if available. If title contains "earnings"/"revenue"/"EPS" → earnings. Otherwise use LLM eventType or skip. **Note:** when querying earnings-related events, search both `earnings` AND `earnings_results` types (the 8-K bootstrap mapped Item 2.02 as `earnings_results`). |
-| StockTwits | `stocktwits` | **Skip** — trending data has no historical analog |
-| Reddit | `reddit` | Use `llmResult.eventType` if available, else skip |
-| Truth Social | `truth-social` | **Skip for now** — no political events in historical DB yet |
-| Analyst | `analyst` | **Skip for now** — no analyst rating events in historical DB yet |
-| Econ Calendar | `econ-calendar` | **Skip for now** — no macro events in historical DB yet |
-| FDA | `fda` | **Skip for now** — historical schema has `metrics_fda` but no bootstrapped data yet. TODO: Bootstrap FDA events in Phase 3. |
-| Congress | `congress` | **Skip for now** — no congressional trading events in historical DB yet |
-| DOJ | `doj-antitrust` | **Skip for now** — no antitrust events bootstrapped |
-| WhiteHouse | `whitehouse` | **Skip for now** — could map to political events in future |
-| Others | * | Use `llmResult.eventType` if it matches a known historical type, else skip |
+### Page 3: Historical Intelligence
 
-**Known historical event types** (from DB): `earnings`, `leadership_change`, `other_material`, `regulation_fd`, `earnings_results`, `contract_material`, `shareholder_vote`, `bankruptcy`, `acquisition_disposition`, `delisting`, `auditor_change`, `restructuring`, `off_balance_sheet`
+**Stats:**
+- Total historical events count
+- Enrichment hit rate
+- Market context (VIX, SPY, regime)
 
-**Ticker extraction:** `event.metadata?.ticker` (already extracted by most scanners). If missing, try to extract from title using the existing `ticker-extractor.ts`.
+**Recent Enriched Alerts:**
+- List of recent delivered events that had historical matches
+- Show confidence, match count, pattern summary
 
-**Sector lookup:** Query `companies` table by ticker. Use a simple in-memory `Map<string, string>` (no eviction needed — sectors don't change, and even 2,000 entries use trivial memory). Pre-warm with all tickers from `companies` table at startup.
+## Design Requirements
 
-### 1C. Historical Enricher (`pipeline/historical-enricher.ts`)
+- **Dark mode only** — dark background (#0a0a0a), muted borders, high contrast text
+- **Terminal/hacker aesthetic** — monospace numbers, subtle green accents for healthy, amber for warnings, red for errors
+- **Responsive** — works on 1440p+ monitors, no mobile needed
+- **Auto-refresh** — all data polls every 10s, no manual refresh needed
+- **No auth** — internal admin tool, no login needed
 
-The main integration point that ties everything together.
-
-```typescript
-export interface HistoricalContext {
-  matchCount: number;
-  confidence: 'insufficient' | 'low' | 'medium' | 'high';
-  avgAlphaT5: number;
-  avgAlphaT20: number;
-  winRateT20: number;        // percentage
-  medianAlphaT20: number;
-  bestCase?: { ticker: string; alphaT20: number; headline: string };  // nullable when few matches
-  worstCase?: { ticker: string; alphaT20: number; headline: string };  // nullable when few matches
-  topMatches: Array<{
-    ticker: string;
-    headline: string;
-    eventDate: string;
-    alphaT20: number;
-    score: number;
-  }>;  // top 3 most similar
-  patternSummary: string;  // human-readable 1-liner, e.g., "Tech earnings beat in bull market: +12% avg alpha T+20, 68% win rate (15 cases)"
-}
-
-export class HistoricalEnricher {
-  constructor(
-    private db: Database,
-    private marketCache: MarketContextCache,
-    private config?: { enabled?: boolean; minConfidence?: ConfidenceLevel; timeoutMs?: number },
-  );
-
-  /**
-   * Enrich a real-time event with historical context.
-   * Returns null if:
-   *   - Enricher is disabled
-   *   - Event cannot be mapped to a historical type
-   *   - Similarity search returns 'insufficient' confidence
-   *   - Timeout exceeded
-   */
-  async enrich(
-    event: RawEvent,
-    llmResult?: LlmClassificationResult,
-  ): Promise<HistoricalContext | null>;
-}
-```
-
-**Configuration:**
-- `HISTORICAL_ENRICHMENT_ENABLED` env var (default: `true`)
-- `HISTORICAL_MIN_CONFIDENCE` env var (default: `low` — skip 'insufficient')
-- `HISTORICAL_TIMEOUT_MS` env var (default: `2000` — don't slow down alerts)
-
-**Timeout implementation** — use `Promise.race` to enforce the timeout:
-```typescript
-async enrich(event: RawEvent, llmResult?: LlmClassificationResult): Promise<HistoricalContext | null> {
-  if (!this.config.enabled) return null;
-  try {
-    return await Promise.race([
-      this.doEnrich(event, llmResult),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), this.config.timeoutMs)),
-    ]);
-  } catch (err) {
-    console.error('[historical-enricher] Error:', err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-```
-Add a Prometheus counter `historical_enrichment_timeouts_total` to track timeout frequency.
-
-**Pattern summary generation** (in JS, not LLM — fast and free):
-```
-"{Sector} {eventType} {subtype} in {regime} market: {sign}{avgAlpha}% avg alpha T+20, {winRate}% win rate ({count} cases)"
-```
-Example: `"Technology earnings beat in correction: +8.3% avg alpha T+20, 62% win rate (18 cases)"`
-
-**Unit conventions (important!):**
-- `avgAlphaT5`, `avgAlphaT20`, `medianAlphaT20` are in **decimal form** (e.g., 0.083 = +8.3%). Multiply by 100 when displaying.
-- `winRateT20` is in **percentage form** (e.g., 62.0 = 62%). Display as-is.
-- Pattern summary and all display code must handle this correctly.
-
-### 1D. Extend AlertEvent Type (`packages/shared` or `packages/delivery`)
-
-Add `historicalContext?: HistoricalContext` to `AlertEvent` interface in `packages/delivery/src/types.ts`:
-
-```typescript
-export interface AlertEvent {
-  readonly event: RawEvent;
-  readonly severity: Severity;
-  readonly ticker?: string;
-  readonly enrichment?: LLMEnrichment;
-  readonly historicalContext?: HistoricalContext;  // NEW
-}
-```
-
-### 1E. Upgrade Discord Embed (`packages/delivery/src/discord-webhook.ts`)
-
-When `alert.historicalContext` is present and confidence is not 'insufficient':
-
-Add a new embed field after the existing fields:
-
-```typescript
-// Historical context field
-if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
-  const ctx = alert.historicalContext;
-  const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
-  
-  let historyText = `**${ctx.patternSummary}**\n`;
-  historyText += `Avg Alpha T+20: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% | `;
-  historyText += `Win Rate: ${ctx.winRateT20.toFixed(0)}%\n`;
-  
-  if (ctx.topMatches.length > 0) {
-    historyText += `Most Similar: ${ctx.topMatches[0].ticker} ${ctx.topMatches[0].headline}\n`;
-  }
-  if (ctx.worstCase) {
-    const ws = ctx.worstCase.alphaT20 >= 0 ? '+' : '';
-    historyText += `Worst Case: ${ctx.worstCase.ticker} (${ws}${(ctx.worstCase.alphaT20 * 100).toFixed(1)}%)`;
-  }
-
-  fields.push({
-    name: `📊 Historical Pattern (${ctx.matchCount} cases, ${ctx.confidence.toUpperCase()})`,
-    value: truncate(historyText, 1024),
-    inline: false,
-  });
-}
-```
-
-### 1F. Upgrade Telegram (`packages/delivery/src/telegram.ts`)
-
-Append historical context as markdown text (Telegram supports markdown):
-```
-📊 {matchCount} similar cases ({confidence}): avg alpha {avgAlphaT20}%, win rate {winRateT20}%
-```
-
-### 1G. Upgrade Bark Push (`packages/delivery/src/bark-pusher.ts`)
-
-Bark messages are short (iOS notification). Append pattern summary to body:
+## File Structure
 
 ```
-[existing title]
-[existing body]
-📊 18 similar cases: +12% avg alpha, 68% win rate
+packages/dashboard/
+  package.json
+  vite.config.ts
+  tsconfig.json
+  index.html
+  src/
+    main.tsx
+    App.tsx
+    api/         — API client functions
+    components/  — Reusable UI components
+    pages/       — Overview, Audit, Historical
+    hooks/       — useQuery hooks
+    lib/         — Utilities
 ```
 
-### 1H. Pipeline Integration (`packages/backend/src/app.ts`)
+## Docker Integration
 
-**IMPORTANT: The enricher goes AFTER the alert filter check AND after LLM enrichment, right before `alertRouter.route()`.** This ensures we only run the expensive DB query on events that will actually be delivered. Looking at the current app.ts flow:
+Add to `docker-compose.yml`:
+- Build dashboard: `pnpm --filter dashboard build`
+- Backend serves `packages/dashboard/dist/` as static files at `/`
+- OR: separate nginx container serving the built files
 
-```
-Step 6: store to DB
-Step 7: alert filter check → if blocked, return
-        LLM enrich
-        [NEW] Historical enrich ← INSERT HERE
-        alertRouter.route() → deliver
-```
+## Key Constraints
 
-```typescript
-// After LLM enrichment, before delivery:
-let historicalContext: HistoricalContext | undefined;
-if (historicalEnricher) {
-  historicalContext = await historicalEnricher.enrich(
-    event, llmResult?.ok ? llmResult.value : undefined
-  ) ?? undefined;
-  // enrich() handles its own errors and timeout internally — always returns null on failure
-}
+- Do NOT install a full UI framework (Material, Ant, Chakra). Use shadcn/ui only.
+- Do NOT use SSR. This is a pure SPA (Vite + React).
+- Do NOT add authentication. This is an internal tool.
+- DO use TypeScript strict mode.
+- DO make API base URL configurable via env var (default: same origin).
+- DO handle loading and error states gracefully.
+- DO use React Query for all data fetching with 10s refetch interval.
 
-const results = await alertRouter.route({
-  event,
-  severity: result.severity,
-  ticker,
-  enrichment,
-  historicalContext,  // NEW
-});
-```
+## Exit Criteria
 
-Initialize in `buildApp()`:
-```typescript
-const marketCache = new MarketContextCache({ refreshIntervalMs: 300_000 });
-// Non-blocking initial refresh — don't make buildApp() depend on Yahoo Finance being up
-marketCache.start();  // start() triggers first refresh internally, then repeats on interval
-
-const historicalEnricher = new HistoricalEnricher(db, marketCache, {
-  enabled: process.env.HISTORICAL_ENRICHMENT_ENABLED !== 'false',
-});
-```
-
-Add cleanup on shutdown:
-```typescript
-server.addHook('onClose', async () => {
-  marketCache.stop();
-});
-```
-
----
-
-## Tests
-
-### Unit Tests (`__tests__/historical-enricher.test.ts`)
-- Event type mapping: SEC EDGAR items → correct historical types
-- Event type mapping: earnings scanner → earnings beat/miss
-- Event type mapping: breaking-news with LLM result → correct type
-- Event type mapping: stocktwits → returns null (skipped)
-- Similarity query construction with full market context
-- Similarity query construction with missing fields (graceful)
-- Pattern summary generation
-- Timeout handling (enricher returns null, doesn't block)
-- Disabled enricher returns null
-
-### Unit Tests (`__tests__/market-context-cache.test.ts`)
-- Regime detection: bull, bear, correction, sideways
-- Cache returns null before first refresh
-- Cache refresh updates snapshot
-- Periodic refresh timer
-
-### Integration Test
-- Mock event → historical enricher → Discord embed contains pattern
-
----
-
-## Files to Create
-- `packages/backend/src/services/market-context-cache.ts`
-- `packages/backend/src/pipeline/event-type-mapper.ts`
-- `packages/backend/src/pipeline/historical-enricher.ts`
-- `packages/backend/src/__tests__/historical-enricher.test.ts`
-- `packages/backend/src/__tests__/market-context-cache.test.ts`
-
-## Files to Modify
-- `packages/delivery/src/types.ts` — add `historicalContext` to `AlertEvent`
-- `packages/delivery/src/discord-webhook.ts` — render historical context in embed
-- `packages/delivery/src/bark-pusher.ts` — append pattern summary
-- `packages/delivery/src/telegram.ts` — append pattern summary (markdown)
-- `packages/backend/src/app.ts` — initialize enricher + integrate into pipeline (AFTER alert filter, before delivery)
-- `packages/delivery/src/__tests__/discord-webhook.test.ts` — test new embed format
-
-## What NOT to Do
-- Do NOT use LLM for pattern summary (use string templates — fast and free)
-- Do NOT block the alert pipeline if similarity search is slow (timeout + catch)
-- Do NOT modify the historical DB schema
-- Do NOT modify the similarity engine itself
-- Do NOT add new event types to the historical DB (that's future bootstrap work)
-- Do NOT build a frontend
-
-## Verification
-
-```bash
-pnpm build
-pnpm --filter @event-radar/backend test
-pnpm --filter @event-radar/delivery test
-pnpm --filter @event-radar/backend lint
-```
-
-All must pass. Then create a PR.
+- Dashboard loads at `http://localhost:5173` (dev) or `http://localhost:3001/` (production)
+- All 3 pages functional with real API data
+- Pipeline funnel chart renders correctly
+- Audit trail table with working filters
+- Scanner status cards with color-coded health
+- Auto-refresh every 10s without flicker
+- All TypeScript, no errors, builds clean
