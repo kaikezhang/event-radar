@@ -1,165 +1,330 @@
-# TASK.md — Similarity Matching Engine + Query API
+# TASK.md — Historical Intelligence ↔ Real-time Pipeline Integration
 
 ## Goal
 
-Build the similarity matching engine and a query API that answers: **"What happened last time something like this occurred?"** This is the core product feature — finding historically similar events and showing their outcomes.
+Connect the historical similarity engine (2,400+ events) to the real-time event pipeline so that every alert pushed to users includes historical context: "What happened last time something like this occurred?"
 
-## What to Build
+## Architecture Overview
 
-### 1. Similarity Matching Service (`packages/backend/src/services/similarity.ts`)
+```
+Current pipeline (app.ts):
+Scanner → EventBus → classify → dedup → LLM classify → store → LLM enrich → AlertRouter → push
 
-Implement `findSimilarEvents(newEvent, options)` that:
+After this task:
+Scanner → EventBus → classify → dedup → LLM classify → store → LLM enrich
+  → [NEW] Historical Enricher → AlertRouter → push (with historical context)
+```
 
-1. **Retrieves candidates** from `historical_events` with the same `event_type` that have return data
-2. **Scores each candidate** on multiple dimensions:
+The Historical Enricher slots in between LLM enrichment and delivery. It:
+1. Maps the real-time event to a `SimilarityQuery`
+2. Calls `findSimilarEvents()` from `services/similarity.ts`
+3. Attaches `HistoricalContext` to the `AlertEvent`
+4. Delivery channels format the context into the alert message
 
-   | Factor | Points | Condition |
-   |--------|--------|-----------|
-   | Subtype match | +4 | `event_subtype` matches exactly |
-   | Same sector | +3 | Company sector matches |
-   | Same market cap tier | +2 | `market_cap_tier` matches (from `event_stock_context`) |
-   | Same market regime | +2 | `market_regime` matches (from `event_market_context`) |
-   | Similar VIX | +1 | `|vix_diff| < 5` |
-   | Similar momentum | +1 | Same sign on `return_30d` (both up or both down) |
-   | Recency bonus | +1 | Event within last 2 years |
-   | Metrics bonus | +1-3 | For earnings: similar surprise %, similar consecutive_beats |
+---
 
-3. **Returns top N** candidates sorted by score descending
+## PR 1: Market Context Cache + Historical Enricher + Delivery Upgrade
 
-4. **Computes confidence level:**
-   - `insufficient` — fewer than 3 results
-   - `low` — 3-4 results
-   - `medium` — 5+ results but `std_dev(alpha_t20) > 0.15`
-   - `high` — 5+ results and `std_dev(alpha_t20) <= 0.15`
+### 1A. Market Context Cache (`services/market-context-cache.ts`)
 
-5. **Computes aggregate stats:**
-   - Average return (T+1, T+5, T+20)
-   - Average alpha (T+1, T+5, T+20)
-   - Win rate (% of events with positive alpha_t20)
-   - Best case / worst case
-   - Median return
-
-#### Interface
+A cache that holds real-time market data needed for similarity queries.
 
 ```typescript
-interface SimilarityQuery {
-  eventType: string;          // e.g., 'earnings'
-  eventSubtype?: string;      // e.g., 'beat', 'miss'
-  ticker?: string;            // for same-company bonus
-  sector?: string;            // e.g., 'Technology'
-  severity?: string;          // filter: only same severity or higher
-  // Context at event time:
-  vixLevel?: number;
-  marketRegime?: string;      // 'bull', 'bear', 'sideways', 'correction'
-  return30d?: number;         // stock's 30d momentum
-  marketCapTier?: string;
-  // For earnings:
-  epsSurprisePct?: number;
-  consecutiveBeats?: number;
-  // Options:
-  limit?: number;             // default 10
-  minScore?: number;          // default 0
+export interface MarketSnapshot {
+  vixLevel: number;
+  spyClose: number;
+  spy50ma: number;
+  spy200ma: number;
+  marketRegime: 'bull' | 'bear' | 'sideways' | 'correction';
+  updatedAt: Date;
 }
 
-interface SimilarityResult {
-  events: SimilarEvent[];     // scored + sorted
-  confidence: 'insufficient' | 'low' | 'medium' | 'high';
-  stats: AggregateStats;
-  totalCandidates: number;
-}
+export class MarketContextCache {
+  private snapshot: MarketSnapshot | null = null;
+  private refreshIntervalMs: number; // default 300_000 (5 min)
+  private timer: NodeJS.Timeout | null = null;
 
-interface SimilarEvent {
-  eventId: string;
-  ticker: string;
-  headline: string;
-  eventDate: string;
-  score: number;
-  scoreBreakdown: Record<string, number>;  // which factors contributed
-  returnT1: number;
-  returnT5: number;
-  returnT20: number;
-  alphaT5: number;
-  alphaT20: number;
-}
+  constructor(config?: { refreshIntervalMs?: number });
 
-interface AggregateStats {
-  count: number;
-  avgReturnT1: number;
-  avgReturnT5: number;
-  avgReturnT20: number;
-  avgAlphaT5: number;
-  avgAlphaT20: number;
-  winRateT20: number;        // % with positive alpha
-  medianAlphaT20: number;
-  bestCase: { ticker: string; alphaT20: number; headline: string };
-  worstCase: { ticker: string; alphaT20: number; headline: string };
+  /** Start periodic refresh. Call once at app startup. */
+  start(): void;
+
+  /** Stop periodic refresh. Call on shutdown. */
+  stop(): void;
+
+  /** Get current snapshot (may be null if not yet loaded). */
+  get(): MarketSnapshot | null;
+
+  /** Force refresh now. */
+  refresh(): Promise<void>;
 }
 ```
 
-### 2. Query API Endpoints (`packages/backend/src/routes/historical.ts`)
+**Market regime logic:**
+- `bull`: SPY > 200MA AND SPY > 50MA
+- `bear`: SPY < 200MA AND SPY < 50MA
+- `correction`: SPY > 200MA AND SPY < 50MA (pullback in uptrend)
+- `sideways`: SPY < 200MA AND SPY > 50MA (recovery attempt)
 
-Add Fastify routes:
+**Data source:** Use the existing `price-service.ts` Yahoo Finance API to fetch SPY, ^VIX data. Compute 50MA and 200MA from last 200 daily bars of SPY.
 
-#### `GET /api/historical/similar`
-Query params map to `SimilarityQuery`. Returns `SimilarityResult`.
+### 1B. Event Type Mapper (`pipeline/event-type-mapper.ts`)
 
-Example: `GET /api/historical/similar?eventType=earnings&eventSubtype=beat&sector=Technology&vixLevel=20&limit=10`
+Maps real-time `RawEvent` + LLM classification into a `SimilarityQuery`.
 
-#### `GET /api/historical/events`
-List/search historical events with filters.
-- `?ticker=NVDA` — by ticker
-- `?eventType=earnings` — by type
-- `?from=2024-01-01&to=2025-01-01` — date range
-- `?severity=high,critical` — severity filter
-- `?limit=20&offset=0` — pagination
+```typescript
+export interface MappedEventContext {
+  eventType: string;          // mapped to historical event_type
+  eventSubtype?: string;      // e.g., 'beat', 'miss', '5.02'
+  ticker?: string;
+  sector?: string;
+  severity?: string;
+  // From market context cache:
+  vixLevel?: number;
+  marketRegime?: string;
+  // From event metadata (if available):
+  epsSurprisePct?: number;
+  consecutiveBeats?: number;
+}
 
-Returns: events with their stock context, market context, and returns.
+export function mapEventToSimilarityQuery(
+  event: RawEvent,
+  llmResult?: LlmClassificationResult,
+  marketSnapshot?: MarketSnapshot,
+): MappedEventContext | null;
+```
 
-#### `GET /api/historical/events/:id`
-Single event with all related data (context, returns, metrics, sources).
+**Mapping rules:**
 
-#### `GET /api/historical/patterns`
-List aggregated `event_type_patterns` — pre-computed pattern stats.
+| Real-time Source | `event.source` | Mapping Logic |
+|-----------------|----------------|---------------|
+| SEC EDGAR | `sec-edgar` | Map Item numbers to historical types (same as bootstrap-8k classification). Item 2.02→earnings, 5.02→leadership_change, 1.01→contract_material, etc. |
+| Earnings Scanner | `earnings` | `eventType: 'earnings'`, subtype from metadata (beat/miss/meet) |
+| Breaking News | `breaking-news` | Use `llmResult.eventType` if available. If title contains "earnings"/"revenue"/"EPS" → earnings. Otherwise use LLM eventType or skip. |
+| StockTwits | `stocktwits` | **Skip** — trending data has no historical analog |
+| Reddit | `reddit` | Use `llmResult.eventType` if available, else skip |
+| Truth Social | `truth-social` | **Skip for now** — no political events in historical DB yet |
+| Analyst | `analyst` | **Skip for now** — no analyst rating events in historical DB yet |
+| Econ Calendar | `econ-calendar` | **Skip for now** — no macro events in historical DB yet |
+| Others | * | Use `llmResult.eventType` if it matches a known historical type, else skip |
 
-#### `GET /api/historical/stats`
-Database summary: event counts by type, ticker, time range, coverage stats.
+**Known historical event types** (from DB): `earnings`, `leadership_change`, `other_material`, `regulation_fd`, `earnings_results`, `contract_material`, `shareholder_vote`, `bankruptcy`, `acquisition_disposition`, `delisting`, `auditor_change`, `restructuring`, `off_balance_sheet`
 
-### 3. Tests
+**Ticker extraction:** `event.metadata?.ticker` (already extracted by most scanners). If missing, try to extract from title using the existing `ticker-extractor.ts`.
 
-Write Vitest tests for:
-- Similarity scoring logic (unit tests with mock data)
-- Confidence level calculation
-- Aggregate stats computation
-- API endpoint integration tests (using test DB or mocked service)
+**Sector lookup:** Query `companies` table by ticker. Cache company→sector mapping in memory (50 tickers, static enough).
 
-## Technical Notes
+### 1C. Historical Enricher (`pipeline/historical-enricher.ts`)
 
-- Use drizzle-orm for queries (already set up)
-- The DB already has all the data populated — just query it
-- For performance: the similarity scoring runs in JS after fetching candidates from DB. With ~2,400 events this is fast enough. No need for vector DB or embedding-based search.
-- Use zod for request validation on API endpoints
-- Follow existing patterns in `packages/backend/src/routes/` for route structure
+The main integration point that ties everything together.
+
+```typescript
+export interface HistoricalContext {
+  matchCount: number;
+  confidence: 'insufficient' | 'low' | 'medium' | 'high';
+  avgAlphaT5: number;
+  avgAlphaT20: number;
+  winRateT20: number;        // percentage
+  medianAlphaT20: number;
+  bestCase: { ticker: string; alphaT20: number; headline: string };
+  worstCase: { ticker: string; alphaT20: number; headline: string };
+  topMatches: Array<{
+    ticker: string;
+    headline: string;
+    eventDate: string;
+    alphaT20: number;
+    score: number;
+  }>;  // top 3 most similar
+  patternSummary: string;  // human-readable 1-liner, e.g., "Tech earnings beat in bull market: +12% avg alpha T+20, 68% win rate (15 cases)"
+}
+
+export class HistoricalEnricher {
+  constructor(
+    private db: Database,
+    private marketCache: MarketContextCache,
+    private config?: { enabled?: boolean; minConfidence?: ConfidenceLevel; timeoutMs?: number },
+  );
+
+  /**
+   * Enrich a real-time event with historical context.
+   * Returns null if:
+   *   - Enricher is disabled
+   *   - Event cannot be mapped to a historical type
+   *   - Similarity search returns 'insufficient' confidence
+   *   - Timeout exceeded
+   */
+  async enrich(
+    event: RawEvent,
+    llmResult?: LlmClassificationResult,
+  ): Promise<HistoricalContext | null>;
+}
+```
+
+**Configuration:**
+- `HISTORICAL_ENRICHMENT_ENABLED` env var (default: `true`)
+- `HISTORICAL_MIN_CONFIDENCE` env var (default: `low` — skip 'insufficient')
+- `HISTORICAL_TIMEOUT_MS` env var (default: `2000` — don't slow down alerts)
+
+**Pattern summary generation** (in JS, not LLM — fast and free):
+```
+"{Sector} {eventType} {subtype} in {regime} market: {sign}{avgAlpha}% avg alpha T+20, {winRate}% win rate ({count} cases)"
+```
+Example: `"Technology earnings beat in correction: +8.3% avg alpha T+20, 62% win rate (18 cases)"`
+
+### 1D. Extend AlertEvent Type (`packages/shared` or `packages/delivery`)
+
+Add `historicalContext?: HistoricalContext` to `AlertEvent` interface in `packages/delivery/src/types.ts`:
+
+```typescript
+export interface AlertEvent {
+  readonly event: RawEvent;
+  readonly severity: Severity;
+  readonly ticker?: string;
+  readonly enrichment?: LLMEnrichment;
+  readonly historicalContext?: HistoricalContext;  // NEW
+}
+```
+
+### 1E. Upgrade Discord Embed (`packages/delivery/src/discord-webhook.ts`)
+
+When `alert.historicalContext` is present and confidence is not 'insufficient':
+
+Add a new embed field after the existing fields:
+
+```typescript
+// Historical context field
+if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
+  const ctx = alert.historicalContext;
+  const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
+  
+  let historyText = `**${ctx.patternSummary}**\n`;
+  historyText += `Avg Alpha T+20: ${sign}${(ctx.avgAlphaT20 * 100).toFixed(1)}% | `;
+  historyText += `Win Rate: ${ctx.winRateT20.toFixed(0)}%\n`;
+  
+  if (ctx.topMatches.length > 0) {
+    historyText += `Most Similar: ${ctx.topMatches[0].ticker} ${ctx.topMatches[0].headline}\n`;
+  }
+  if (ctx.worstCase) {
+    const ws = ctx.worstCase.alphaT20 >= 0 ? '+' : '';
+    historyText += `Worst Case: ${ctx.worstCase.ticker} (${ws}${(ctx.worstCase.alphaT20 * 100).toFixed(1)}%)`;
+  }
+
+  fields.push({
+    name: `📊 Historical Pattern (${ctx.matchCount} cases, ${ctx.confidence.toUpperCase()})`,
+    value: truncate(historyText, 1024),
+    inline: false,
+  });
+}
+```
+
+### 1F. Upgrade Bark Push (`packages/delivery/src/bark-pusher.ts`)
+
+Bark messages are short (iOS notification). Append pattern summary to body:
+
+```
+[existing title]
+[existing body]
+📊 18 similar cases: +12% avg alpha, 68% win rate
+```
+
+### 1G. Pipeline Integration (`packages/backend/src/app.ts`)
+
+In the `eventBus.subscribe` handler, between Step 6 (store) and Step 7 (alert filter + delivery):
+
+```typescript
+// Step 6.5: Historical context enrichment
+let historicalContext: HistoricalContext | undefined;
+if (historicalEnricher) {
+  try {
+    historicalContext = await historicalEnricher.enrich(event, llmResult?.ok ? llmResult.value : undefined) ?? undefined;
+  } catch (err) {
+    console.error('[historical-enricher] Error:', err instanceof Error ? err.message : err);
+    // Non-fatal — continue without historical context
+  }
+}
+
+// Then pass historicalContext to alertRouter.route():
+const results = await alertRouter.route({
+  event,
+  severity: result.severity,
+  ticker,
+  enrichment,
+  historicalContext,  // NEW
+});
+```
+
+Initialize in `buildApp()`:
+```typescript
+const marketCache = new MarketContextCache({ refreshIntervalMs: 300_000 });
+await marketCache.refresh(); // initial load
+marketCache.start();
+
+const historicalEnricher = new HistoricalEnricher(db, marketCache, {
+  enabled: process.env.HISTORICAL_ENRICHMENT_ENABLED !== 'false',
+});
+```
+
+Add cleanup on shutdown:
+```typescript
+server.addHook('onClose', async () => {
+  marketCache.stop();
+});
+```
+
+---
+
+## Tests
+
+### Unit Tests (`__tests__/historical-enricher.test.ts`)
+- Event type mapping: SEC EDGAR items → correct historical types
+- Event type mapping: earnings scanner → earnings beat/miss
+- Event type mapping: breaking-news with LLM result → correct type
+- Event type mapping: stocktwits → returns null (skipped)
+- Similarity query construction with full market context
+- Similarity query construction with missing fields (graceful)
+- Pattern summary generation
+- Timeout handling (enricher returns null, doesn't block)
+- Disabled enricher returns null
+
+### Unit Tests (`__tests__/market-context-cache.test.ts`)
+- Regime detection: bull, bear, correction, sideways
+- Cache returns null before first refresh
+- Cache refresh updates snapshot
+- Periodic refresh timer
+
+### Integration Test
+- Mock event → historical enricher → Discord embed contains pattern
+
+---
 
 ## Files to Create
-- `packages/backend/src/services/similarity.ts` — core matching engine
-- `packages/backend/src/routes/historical.ts` — API routes
-- `packages/backend/src/__tests__/similarity.test.ts` — unit tests
+- `packages/backend/src/services/market-context-cache.ts`
+- `packages/backend/src/pipeline/event-type-mapper.ts`
+- `packages/backend/src/pipeline/historical-enricher.ts`
+- `packages/backend/src/__tests__/historical-enricher.test.ts`
+- `packages/backend/src/__tests__/market-context-cache.test.ts`
 
 ## Files to Modify
-- `packages/backend/src/index.ts` or route registration — register new routes
+- `packages/delivery/src/types.ts` — add `historicalContext` to `AlertEvent`
+- `packages/delivery/src/discord-webhook.ts` — render historical context in embed
+- `packages/delivery/src/bark-pusher.ts` — append pattern summary
+- `packages/backend/src/app.ts` — initialize enricher + integrate into pipeline
+- `packages/delivery/src/__tests__/discord-webhook.test.ts` — test new embed format
 
 ## What NOT to Do
-- Do NOT build a frontend — API only for now
-- Do NOT implement real-time event processing — this is historical query only
-- Do NOT add authentication (will come later)
-- Do NOT modify the database schema
-- Do NOT modify existing bootstrap scripts
+- Do NOT use LLM for pattern summary (use string templates — fast and free)
+- Do NOT block the alert pipeline if similarity search is slow (timeout + catch)
+- Do NOT modify the historical DB schema
+- Do NOT modify the similarity engine itself
+- Do NOT add new event types to the historical DB (that's future bootstrap work)
+- Do NOT build a frontend
 
 ## Verification
 
 ```bash
-pnpm --filter @event-radar/backend build
+pnpm build
 pnpm --filter @event-radar/backend test
+pnpm --filter @event-radar/delivery test
 pnpm --filter @event-radar/backend lint
 ```
 
