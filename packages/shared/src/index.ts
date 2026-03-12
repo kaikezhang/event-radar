@@ -223,3 +223,9 @@ export {
   type SectorAggregate,
   type SectorAggregateResponse,
 } from './schemas/history-types.js';
+export {
+  ImpactEventSchema,
+  ImpactResponseSchema,
+  type ImpactEvent,
+  type ImpactResponse,
+} from './schemas/impact-types.js';

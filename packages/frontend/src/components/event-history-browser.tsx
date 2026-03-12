@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -28,9 +28,9 @@ import { cn } from "@/lib/utils";
 
 type SortField = "timestamp" | "ticker" | "source" | "type" | "severity" | "headline";
 type SortOrder = "asc" | "desc";
-type SeverityFilter = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type SeverityFilter = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
-interface HistoryEvent {
+export interface HistoryEvent {
   id: string;
   timestamp: string;
   ticker: string | null;
@@ -81,6 +81,10 @@ interface EventHistoryBrowserProps {
     updates: Partial<HistoryDashboardQuery>,
     options?: HistoryQueryChangeOptions,
   ) => void;
+  selectedEventId?: string | null;
+  onEventSelect?: (event: HistoryEvent) => void;
+  onEventsLoaded?: (events: HistoryEvent[]) => void;
+  headerAction?: ReactNode;
 }
 
 const SEVERITY_OPTIONS: SeverityFilter[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
@@ -115,6 +119,7 @@ function buildDirection(direction: string | null) {
   switch (direction) {
     case "UP":
     case "BULLISH":
+    case "bullish":
       return (
         <span className="inline-flex items-center gap-1 text-emerald-300">
           <ArrowUp className="h-3.5 w-3.5" />
@@ -123,6 +128,7 @@ function buildDirection(direction: string | null) {
       );
     case "DOWN":
     case "BEARISH":
+    case "bearish":
       return (
         <span className="inline-flex items-center gap-1 text-red-300">
           <ArrowDown className="h-3.5 w-3.5" />
@@ -152,6 +158,10 @@ export function EventHistoryBrowser({
   apiUrl,
   query,
   onQueryChange,
+  selectedEventId,
+  onEventSelect,
+  onEventsLoaded,
+  headerAction,
 }: EventHistoryBrowserProps) {
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [pagination, setPagination] = useState<HistoryResponse["pagination"]>({
@@ -282,6 +292,7 @@ export function EventHistoryBrowser({
         if (!cancelled) {
           setEvents(payload.data);
           setPagination(payload.pagination);
+          onEventsLoaded?.(payload.data);
         }
       } catch (historyError) {
         if (!cancelled) {
@@ -297,6 +308,7 @@ export function EventHistoryBrowser({
             totalCount: 0,
             totalPages: 0,
           });
+          onEventsLoaded?.([]);
         }
       } finally {
         if (!cancelled) {
@@ -310,7 +322,7 @@ export function EventHistoryBrowser({
     return () => {
       cancelled = true;
     };
-  }, [apiKey, apiUrl, query]);
+  }, [apiKey, apiUrl, onEventsLoaded, query]);
 
   function toggleSeverity(value: SeverityFilter) {
     const nextSeverity = query.severity.includes(value)
@@ -359,13 +371,18 @@ export function EventHistoryBrowser({
   return (
     <Card className="border border-white/10 bg-card/90 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.85)] backdrop-blur">
       <CardHeader className="border-b border-white/8">
-        <CardTitle className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-cyan-300" />
-          Event History Browser
-        </CardTitle>
-        <CardDescription>
-          Search, slice, and review historical events with shareable URL filters.
-        </CardDescription>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-cyan-300" />
+              Event History Browser
+            </CardTitle>
+            <CardDescription>
+              Search, slice, and review historical events with shareable URL filters.
+            </CardDescription>
+          </div>
+          {headerAction}
+        </div>
       </CardHeader>
       <CardContent className="space-y-5 pt-5">
         <div className="grid gap-4 lg:grid-cols-[1.1fr_1.1fr_1.1fr_1fr]">
@@ -506,23 +523,23 @@ export function EventHistoryBrowser({
               Severity
             </span>
             <div className="grid gap-2 sm:grid-cols-2">
-              {SEVERITY_OPTIONS.map((severity) => (
+              {SEVERITY_OPTIONS.map((severityValue) => (
                 <label
-                  key={severity}
+                  key={severityValue}
                   className={cn(
                     "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
-                    query.severity.includes(severity)
+                    query.severity.includes(severityValue)
                       ? "border-white/20 bg-white/6"
                       : "border-white/8 bg-muted/20 text-muted-foreground",
                   )}
                 >
                   <input
                     type="checkbox"
-                    checked={query.severity.includes(severity)}
-                    onChange={() => toggleSeverity(severity)}
+                    checked={query.severity.includes(severityValue)}
+                    onChange={() => toggleSeverity(severityValue)}
                     className="h-4 w-4 rounded border-input bg-background"
                   />
-                  <span>{severity}</span>
+                  <span>{severityValue}</span>
                 </label>
               ))}
             </div>
@@ -574,68 +591,78 @@ export function EventHistoryBrowser({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {events.map((event) => (
-                  <Fragment key={event.id}>
-                    <TableRow
-                      className="cursor-pointer"
-                      onClick={() => toggleRow(event.id)}
-                    >
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {formatTimestamp(event.timestamp)}
-                      </TableCell>
-                      <TableCell className="font-medium">{event.ticker ?? "N/A"}</TableCell>
-                      <TableCell>{event.source}</TableCell>
-                      <TableCell>{event.type}</TableCell>
-                      <TableCell>
-                        {event.severity ? (
-                          <Badge
-                            variant="outline"
-                            className={cn("ring-1", severityTone[event.severity])}
-                          >
-                            {event.severity}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">N/A</span>
+                {events.map((event) => {
+                  const isSelected = selectedEventId === event.id;
+
+                  return (
+                    <Fragment key={event.id}>
+                      <TableRow
+                        className={cn(
+                          "cursor-pointer transition-colors hover:bg-muted/35",
+                          isSelected && "bg-cyan-500/10 hover:bg-cyan-500/10",
                         )}
-                      </TableCell>
-                      <TableCell className="max-w-[28rem]">
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="line-clamp-2">{event.headline}</span>
-                          {expandedRows[event.id] ? (
-                            <ChevronUp className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        onClick={() => {
+                          onEventSelect?.(event);
+                          toggleRow(event.id);
+                        }}
+                      >
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatTimestamp(event.timestamp)}
+                        </TableCell>
+                        <TableCell className="font-medium">{event.ticker ?? "N/A"}</TableCell>
+                        <TableCell>{event.source}</TableCell>
+                        <TableCell>{event.type}</TableCell>
+                        <TableCell>
+                          {event.severity ? (
+                            <Badge
+                              variant="outline"
+                              className={cn("ring-1", severityTone[event.severity])}
+                            >
+                              {event.severity}
+                            </Badge>
                           ) : (
-                            <ChevronDown className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">N/A</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{buildDirection(event.direction)}</TableCell>
-                    </TableRow>
-                    {expandedRows[event.id] && (
-                      <TableRow className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={7}>
-                          <div className="space-y-3 rounded-xl border border-white/8 bg-background/70 p-4">
-                            <div className="flex flex-wrap gap-2">
-                              {event.sector && (
-                                <Badge variant="outline">{event.sector}</Badge>
-                              )}
-                              {event.ticker && (
-                                <Badge variant="outline">{event.ticker}</Badge>
-                              )}
-                              <Badge variant="outline">{event.source}</Badge>
-                              <Badge variant="outline">{event.type}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {event.summary ?? "No additional summary available."}
-                            </p>
-                            <pre className="overflow-auto rounded-xl border border-white/8 bg-muted/25 p-3 text-xs text-muted-foreground">
-                              {JSON.stringify(event.metadata ?? {}, null, 2)}
-                            </pre>
+                        </TableCell>
+                        <TableCell className="max-w-[28rem]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="line-clamp-2">{event.headline}</span>
+                            {expandedRows[event.id] ? (
+                              <ChevronUp className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            )}
                           </div>
                         </TableCell>
+                        <TableCell>{buildDirection(event.direction)}</TableCell>
                       </TableRow>
-                    )}
-                  </Fragment>
-                ))}
+                      {expandedRows[event.id] && (
+                        <TableRow className="bg-muted/20 hover:bg-muted/20">
+                          <TableCell colSpan={7}>
+                            <div className="space-y-3 rounded-xl border border-white/8 bg-background/70 p-4">
+                              <div className="flex flex-wrap gap-2">
+                                {event.sector ? (
+                                  <Badge variant="outline">{event.sector}</Badge>
+                                ) : null}
+                                {event.ticker ? (
+                                  <Badge variant="outline">{event.ticker}</Badge>
+                                ) : null}
+                                <Badge variant="outline">{event.source}</Badge>
+                                <Badge variant="outline">{event.type}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {event.summary ?? "No additional summary available."}
+                              </p>
+                              <pre className="overflow-auto rounded-xl border border-white/8 bg-muted/25 p-3 text-xs text-muted-foreground">
+                                {JSON.stringify(event.metadata ?? {}, null, 2)}
+                              </pre>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
