@@ -157,10 +157,15 @@ CREATE TABLE historical_events (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- Precise timing
-  event_ts          TIMESTAMPTZ NOT NULL,            -- When event became public (UTC)
+  -- Precise timing (THE FOUNDATION — get this wrong, everything else is wrong)
+  event_ts          TIMESTAMPTZ NOT NULL,            -- When event FIRST became public (UTC)
   market_session    TEXT,                            -- 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'weekend'
   exchange_tz       TEXT DEFAULT 'America/New_York', -- For trading-day alignment
+
+  -- Timestamp provenance (critical for data integrity)
+  event_ts_precision TEXT NOT NULL DEFAULT 'day_only', -- 'second' | 'minute' | 'hour' | 'day_session' | 'day_only'
+  event_ts_source   TEXT,                            -- 'sec_edgar_filing_ts' | 'news_api_published_utc' | 'earnings_calendar' | 'llm_estimated'
+  event_ts_verified BOOLEAN DEFAULT FALSE,           -- Cross-verified against ≥2 independent sources?
 
   -- Classification
   event_category    TEXT NOT NULL,                   -- Top level: 'corporate', 'earnings', 'regulatory', 'macro', 'smart_money'
@@ -176,7 +181,8 @@ CREATE TABLE historical_events (
   tags              TEXT[] NOT NULL DEFAULT '{}',     -- ['mega_cap', 'first_time', 'repeat_offender', 'after_hours_surprise']
 
   CONSTRAINT valid_severity CHECK (severity IN ('critical', 'high', 'medium', 'low')),
-  CONSTRAINT valid_session CHECK (market_session IN ('pre_market', 'regular', 'after_hours', 'overnight', 'weekend'))
+  CONSTRAINT valid_session CHECK (market_session IN ('pre_market', 'regular', 'after_hours', 'overnight', 'weekend')),
+  CONSTRAINT valid_ts_precision CHECK (event_ts_precision IN ('second', 'minute', 'hour', 'day_session', 'day_only'))
 );
 
 CREATE INDEX idx_he_type ON historical_events(event_category, event_type);
@@ -666,6 +672,75 @@ Small-cap                    → IWM
 Store BOTH SPY alpha and sector alpha when available. SPY for cross-sector comparison, sector for within-sector accuracy.
 
 ---
+
+## Timestamp Verification (Critical Path)
+
+**The event timestamp is the single most important field in the database.** Every return calculation, every gap analysis, every reference price selection depends on it. A wrong timestamp by even a few hours can flip a +5% event into a -3% event.
+
+### Why This Is Hard
+
+The same event appears at different times across sources:
+```
+SEC 8-K filing:     2024-01-08 16:05:32 UTC  ← Authoritative
+Reuters wire:       2024-01-08 16:12:00 UTC
+CNBC article:       2024-01-08 17:30:00 UTC
+Twitter discussion: 2024-01-08 18:00:00 UTC
+```
+
+We want the **earliest public disclosure**, not the latest media report.
+
+### Timestamp Authority Hierarchy
+
+Use the most authoritative source available:
+
+| Priority | Source | Precision | Use For |
+|----------|--------|-----------|---------|
+| 1 | SEC EDGAR filing timestamp | second | All SEC filings (8-K, Form 4, 13F) |
+| 2 | FDA.gov announcement timestamp | second | FDA approvals/rejections |
+| 3 | Federal Register publication | day | Executive orders, regulations |
+| 4 | News wire (Reuters/AP) `published_utc` | second | Breaking news, corporate announcements |
+| 5 | Financial news API (Polygon/Benzinga) | second | General corporate events |
+| 6 | Earnings calendar + session tag | day_session | Earnings (know date + before/after market) |
+| 7 | Claude recall + search verification | day_only | Fallback when no API source available |
+
+### Verification Process During Bootstrap
+
+```
+For each event discovered by Claude:
+1. Claude provides: ticker, approximate date, event description
+2. VERIFY against authoritative source:
+   a. If SEC-related → query EDGAR for filing around that date
+   b. If news-related → query Polygon.io news API for ticker + date
+   c. If earnings → check yfinance earnings calendar
+   d. If macro → check FRED release calendar
+3. IF verified:
+   → event_ts = source timestamp
+   → event_ts_precision = 'second' or 'minute'
+   → event_ts_source = 'sec_edgar_filing_ts' / 'news_api_published_utc'
+   → event_ts_verified = TRUE
+4. IF date confirmed but time unknown:
+   → event_ts = date + estimated session time (16:00 for after-hours, 09:00 for pre-market)
+   → event_ts_precision = 'day_session'
+   → event_ts_verified = FALSE
+5. IF date cannot be verified:
+   → SKIP EVENT or mark as low-confidence
+   → event_ts_precision = 'day_only'
+   → event_ts_source = 'llm_estimated'
+```
+
+### Precision-Dependent Analysis Rules
+
+Not all events are usable for all analyses:
+
+| Precision | Can Calculate | Cannot Calculate |
+|-----------|--------------|-----------------|
+| `second` | Everything: gap, intraday reaction, T+0, T+1...T+60 | — |
+| `minute` | Everything (gap may be ±minutes off) | — |
+| `hour` | Daily returns T+0 through T+60, gap (approximate) | Precise intraday reaction |
+| `day_session` | Daily returns T+0 through T+60 | Precise gap timing |
+| `day_only` | T+1 through T+60 only | T+0 return, gap analysis |
+
+Events with `day_only` precision are still valuable for 1-week/1-month pattern analysis. They just can't be used for same-day reaction studies.
 
 ## Reference Price Rules
 
