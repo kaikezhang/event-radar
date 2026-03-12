@@ -24,14 +24,43 @@ const start = async () => {
   console.log(`Port: ${port}`);
   console.log('='.repeat(60));
 
-  const shutdown = async () => {
-    registry.stopAll();
-    await server.close();
-    await dbCtx?.pool.end();
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n[shutdown] Received ${signal}, shutting down gracefully...`);
+
+    try {
+      console.log('[shutdown] Stopping scanners...');
+      registry.stopAll();
+
+      console.log('[shutdown] Closing HTTP server...');
+      await server.close();
+
+      if (dbCtx?.pool) {
+        console.log('[shutdown] Closing database connection...');
+        await dbCtx.pool.end();
+      }
+
+      console.log('[shutdown] Clean shutdown complete.');
+      process.exit(0);
+    } catch (err) {
+      console.error('[shutdown] Error during shutdown:', err);
+      process.exit(1);
+    }
   };
 
-  process.on('SIGTERM', () => void shutdown());
-  process.on('SIGINT', () => void shutdown());
+  // Force exit after 10 seconds if graceful shutdown hangs
+  const forceExit = (signal: string) => {
+    setTimeout(() => {
+      console.error(`[shutdown] Forced exit after 10s timeout (${signal})`);
+      process.exit(1);
+    }, 10_000).unref();
+    void shutdown(signal);
+  };
+
+  process.on('SIGTERM', () => forceExit('SIGTERM'));
+  process.on('SIGINT', () => forceExit('SIGINT'));
 };
 
 start();
