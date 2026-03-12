@@ -4,7 +4,7 @@
  *
  * Usage: npx tsx src/scripts/bootstrap-earnings.ts
  *
- * Idempotent: safe to re-run. Uses bootstrap_batch + ticker_at_time to detect existing events.
+ * Idempotent: safe to re-run. Deduplicates earnings by company_id + ticker_at_time + event_ts.
  */
 
 import { execSync } from 'node:child_process';
@@ -59,6 +59,17 @@ interface TickerConfig {
   previousTickers?: readonly PreviousTicker[];
   earningsTicker?: string;
   historyTicker?: string;
+}
+
+interface TickerLoopLogger {
+  log: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+}
+
+interface ProcessTickerConfigsOptions {
+  delayMs?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+  logger?: TickerLoopLogger;
 }
 
 const TICKERS_CONFIG: readonly TickerConfig[] = [
@@ -607,6 +618,45 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function buildExistingEarningsDedupWhereClause(
+  companyId: string,
+  tickerAtTime: string,
+  barDate: string,
+) {
+  return and(
+    eq(hist.historicalEvents.companyId, companyId),
+    eq(hist.historicalEvents.tickerAtTime, tickerAtTime),
+    sql`DATE(${hist.historicalEvents.eventTs}) = ${barDate}`,
+  );
+}
+
+export async function processTickerConfigs<T extends { ticker: string; name: string }>(
+  configs: readonly T[],
+  processTicker: (cfg: T, index: number) => Promise<void>,
+  options: ProcessTickerConfigsOptions = {},
+): Promise<void> {
+  const { delayMs = TICKER_DELAY_MS, sleepFn = sleep, logger = console } = options;
+
+  for (const [index, cfg] of configs.entries()) {
+    logger.log(`\n[${index + 1}/${configs.length}] Processing ${cfg.ticker} (${cfg.name})...`);
+
+    try {
+      await processTicker(cfg, index);
+    } catch (err) {
+      logger.error(`  [ERROR] Failed to process ${cfg.ticker}:`, err);
+    } finally {
+      if (index < configs.length - 1) {
+        logger.log(`  Pausing ${delayMs / 1000}s to avoid yfinance rate limits...`);
+        await sleepFn(delayMs);
+      }
+    }
+  }
+}
+
+export function resolveCoverageDateTo(dates: readonly string[], now = new Date()): string {
+  return dates[dates.length - 1] ?? now.toISOString().slice(0, 10);
+}
+
 /** Find the previous trading day index (the bar before eventIdx). */
 function findPrevTradingDay(bars: PriceBar[], eventIdx: number): number {
   return eventIdx > 0 ? eventIdx - 1 : -1;
@@ -696,12 +746,9 @@ async function main() {
 
   const summary = { companies: 0, events: 0, skipped: 0 };
 
-  for (const [index, cfg] of TICKERS_CONFIG.entries()) {
-    console.log(
-      `\n[${index + 1}/${TICKERS_CONFIG.length}] Processing ${cfg.ticker} (${cfg.name})...`,
-    );
-
-    try {
+  await processTickerConfigs(
+    TICKERS_CONFIG,
+    async (cfg) => {
       const earningsTicker = cfg.earningsTicker ?? cfg.ticker;
       const historyTicker = cfg.historyTicker ?? cfg.ticker;
       if (earningsTicker !== cfg.ticker || historyTicker !== cfg.ticker) {
@@ -780,7 +827,7 @@ async function main() {
 
       if (stockBars.length === 0) {
         console.warn(`  [SKIP] No price data for ${cfg.ticker}`);
-        continue;
+        return;
       }
 
       // 5. Process each earnings event
@@ -806,14 +853,7 @@ async function main() {
         const existingEvent = await db
           .select({ id: hist.historicalEvents.id })
           .from(hist.historicalEvents)
-          .where(
-            and(
-              eq(hist.historicalEvents.companyId, companyId),
-              eq(hist.historicalEvents.eventType, 'earnings'),
-              eq(hist.historicalEvents.tickerAtTime, cfg.ticker),
-              sql`DATE(${hist.historicalEvents.eventTs}) = ${barDate}`,
-            ),
-          )
+          .where(buildExistingEarningsDedupWhereClause(companyId, cfg.ticker, barDate))
           .limit(1);
 
         if (existingEvent.length > 0) {
@@ -1151,7 +1191,7 @@ async function main() {
           ticker: cfg.ticker,
           sourceType: 'earnings',
           dateFrom: dates[0] ?? PRICE_HISTORY_START,
-          dateTo: dates[dates.length - 1] ?? new Date().toISOString().slice(0, 10),
+          dateTo: resolveCoverageDateTo(dates),
           scanCompleted: true,
           eventsFound: eventIds.length,
           notes: `Bootstrap batch: ${BOOTSTRAP_BATCH}`,
@@ -1159,15 +1199,13 @@ async function main() {
       }
 
       console.log(`  Done: ${eventIds.length} earnings events`);
-    } catch (err) {
-      console.error(`  [ERROR] Failed to process ${cfg.ticker}:`, err);
-    } finally {
-      if (index < TICKERS_CONFIG.length - 1) {
-        console.log(`  Pausing ${TICKER_DELAY_MS / 1000}s to avoid yfinance rate limits...`);
-        await sleep(TICKER_DELAY_MS);
-      }
-    }
-  }
+    },
+    {
+      delayMs: TICKER_DELAY_MS,
+      sleepFn: sleep,
+      logger: console,
+    },
+  );
 
   // 8. Compute event_type_patterns for earnings beats in tech
   console.log('\n--- Computing event_type_patterns ---');
@@ -1293,7 +1331,12 @@ function incrementDate(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-main().catch((err) => {
-  console.error('Bootstrap failed:', err);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] != null && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error('Bootstrap failed:', err);
+    process.exit(1);
+  });
+}
