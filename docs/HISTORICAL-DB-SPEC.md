@@ -1,227 +1,443 @@
-# Historical Event Database Specification
+# Historical Event Database — Specification v2
+
+> Revised after Codex review. Addresses: selection bias, look-ahead bias, point-in-time rigor, multi-entity events, precise timestamps, abnormal-return methodology, provenance, and taxonomy overlaps. Balances research-grade correctness with product-level pragmatism.
 
 ## Purpose
 
-Build a comprehensive historical event database that enables Event Radar to answer: **"When this type of event happened before, what happened to the stock, and why?"**
+Build a comprehensive historical event database that powers one question:  
+**"Something like this happened before — here's what usually happens next, and why."**
 
-This database is the core competitive advantage of the product. It powers:
-1. Historical pattern matching for new events
-2. AI-generated analysis grounded in real data
-3. Prediction accuracy tracking over time
-4. User-facing "similar events" comparisons
+This database enables:
+1. Pattern matching — find historically similar events with quantified outcomes
+2. AI analysis grounded in real data, not vibes
+3. Prediction tracking with automatic accuracy measurement
+4. User-facing "here's what happened last time" comparisons
 
 ---
 
 ## Design Principles
 
-1. **Data > Model** — The quality of AI analysis depends on the quality of data we feed it. Get the data structure right first.
-2. **Quantify everything** — Every claim must be backed by a number. "Restructurings are usually bullish" is useless. "Tech restructurings with >10% headcount reduction averaged +18% T+20 alpha with 72% win rate across 47 cases" is actionable.
-3. **Alpha over raw returns** — Always store market-adjusted returns (alpha). A stock dropping 2% when SPY drops 5% is actually outperforming.
-4. **Context is king** — The same event type can have opposite outcomes depending on macro environment, valuation, and market sentiment. Store the full context.
-5. **Events form chains** — M&A attempts lead to bidding wars, regulatory approvals, or withdrawals. Track the full lifecycle.
-6. **Automatically enrichable** — Most fields can be populated via free APIs (yfinance, FRED). Minimize manual work.
+1. **No selection bias.** Store ALL classifiable events, including ones where the stock didn't move. "The market shrugged off this FDA warning letter" is as valuable as "FDA rejection crashed the stock 40%."
+
+2. **Point-in-time or nothing.** Every data field must reflect what was knowable AT THE TIME of the event. If we can't get historical P/E, leave it NULL — don't use today's value. "Better missing than wrong."
+
+3. **Alpha needs a benchmark.** Raw return - SPY is a start, but a semiconductor stock should be measured against SOXX, not SPY. Store the benchmark alongside every return calculation.
+
+4. **Events have multiple actors.** An acquisition involves acquirer, target, and sometimes a competing bidder. A supply chain disruption hits the company and its customers. Model this explicitly.
+
+5. **Separate fact from opinion.** Raw data (prices, dates, filings) is immutable. AI analysis (causal narrative, predicted patterns) is versioned and labeled as derived.
+
+6. **Events form chains.** M&A sagas, earnings trends, regulatory processes — track the full lifecycle, not just isolated snapshots.
+
+7. **LLMs analyze, not discover.** Use deterministic sources (SEC EDGAR, news APIs, FRED) as ground truth. Use Claude for classification, summarization, and causal analysis — not as the event source itself.
 
 ---
 
-## Event Taxonomy
+## Architecture Layers
 
-### Tier 1: Single-Stock ±10% Events
+Professional event databases separate concerns into layers. We do the same, adapted for our scale:
 
-| Category | Types | Examples |
-|----------|-------|---------|
-| **M&A** | acquisition_announced, acquisition_completed, acquisition_rejected, bidding_war, hostile_takeover, merger_terminated, divestiture | Netflix acquires Roku, Paramount bidding war |
-| **Restructuring** | layoff, cost_restructuring, segment_exit, strategic_pivot, bankruptcy_filing, bankruptcy_exit | META 2022 layoffs, WeWork Chapter 11 |
-| **Leadership** | ceo_departure, ceo_appointment, cfo_departure, founder_return, board_shakeup | Disney CEO change, Apple Tim Cook succession |
-| **Product** | major_launch, product_failure, product_recall, breakthrough_tech, patent_win, patent_loss | iPhone launch, Boeing 737 MAX grounding |
-| **Partnerships** | major_contract, partnership_announced, contract_lost, government_contract | NVDA + cloud providers, MSFT + OpenAI |
-| **Earnings** | earnings_beat, earnings_miss, guidance_raise, guidance_cut, pre_announcement, revenue_surprise | NVDA Q4 2024 massive beat |
-| **Regulatory** | fda_approval, fda_rejection, antitrust_suit, antitrust_clearance, sec_investigation, fine_settlement | GOOGL antitrust ruling, biotech FDA decisions |
-| **Financial** | dividend_cut, dividend_initiate, buyback_announced, secondary_offering, stock_split, debt_downgrade | AAPL buyback, TSLA stock split |
+```
+┌─────────────────────────────────────────────┐
+│  Layer 1: Security Master                    │
+│  Companies, tickers, identifier mappings     │
+├─────────────────────────────────────────────┤
+│  Layer 2: Raw Events + Provenance           │
+│  Events, sources, documents, entities        │
+├─────────────────────────────────────────────┤
+│  Layer 3: Market Data (Point-in-Time)       │
+│  Prices, macro snapshots, stock context      │
+├─────────────────────────────────────────────┤
+│  Layer 4: Computed Returns                   │
+│  Raw returns, alpha (benchmark-adjusted)     │
+├─────────────────────────────────────────────┤
+│  Layer 5: AI Analysis (Derived, Versioned)  │
+│  Causal narratives, pattern labels, lessons  │
+├─────────────────────────────────────────────┤
+│  Layer 6: Aggregated Patterns               │
+│  Pre-computed stats per event type           │
+└─────────────────────────────────────────────┘
+```
 
-### Tier 2: Sector/Market ±3-5% Events
+---
 
-| Category | Types | Examples |
-|----------|-------|---------|
-| **Monetary Policy** | rate_hike, rate_cut, rate_hold_hawkish, rate_hold_dovish, qe_start, qt_start, dot_plot_shift | Fed pivot Dec 2023 |
-| **Macro Data** | cpi_hot, cpi_cool, nfp_strong, nfp_weak, gdp_beat, gdp_miss, retail_sales, jobless_claims | CPI prints 2022-2024 |
-| **Trade Policy** | tariff_imposed, tariff_removed, trade_deal, export_ban, sanctions | China tariffs, chip export controls |
-| **Geopolitical** | war_outbreak, ceasefire, election_result, regime_change, oil_shock | Russia-Ukraine, OPEC cuts |
-| **Executive Action** | executive_order, regulatory_proposal, industry_crackdown | AI executive order, crypto regulation |
+## Event Taxonomy v2
 
-### Tier 3: Smart Money Signals
+Reorganized to eliminate overlaps. Each event gets ONE primary type. Tags handle edge cases.
 
-| Category | Types | Examples |
-|----------|-------|---------|
-| **Insider** | insider_buy_large, insider_sell_large, cluster_buy, cluster_sell | Zuckerberg selling META shares |
-| **Congress** | congress_buy, congress_sell | Pelosi NVDA calls |
-| **Institutional** | 13f_new_position, 13f_exit, activist_stake, short_report | Hindenburg short reports |
-| **Options** | unusual_calls, unusual_puts, large_block_trade | Pre-earnings unusual activity |
+### Corporate Actions
+| Type | Subtypes |
+|------|----------|
+| `mna_acquisition` | announced, completed, terminated, hostile, competing_bid |
+| `mna_divestiture` | asset_sale, spinoff, carve_out |
+| `mna_merger` | merger_of_equals, reverse_merger, going_private, tender_offer |
+| `restructuring` | layoff, cost_reduction, segment_exit, strategic_pivot, bankruptcy_filing, bankruptcy_exit |
+| `leadership` | ceo_change, cfo_change, founder_return, board_shakeup, key_hire, key_departure |
+| `product` | major_launch, product_recall, breakthrough, platform_change |
+| `partnership` | strategic_alliance, major_contract, contract_lost, joint_venture |
+| `financial_action` | buyback, dividend_change, stock_split, secondary_offering, debt_issuance, credit_rating_change |
+| `legal` | lawsuit_filed, lawsuit_settled, ip_litigation, class_action, sec_investigation |
+| `operational` | cyber_incident, outage, supply_disruption, safety_incident |
+| `index_change` | index_addition, index_deletion |
+| `accounting` | restatement, auditor_change, material_weakness |
+
+### Earnings & Guidance
+| Type | Subtypes |
+|------|----------|
+| `earnings` | beat, miss, in_line |
+| `guidance` | raised, lowered, initiated, withdrawn, pre_announcement |
+| `analyst_action` | upgrade, downgrade, initiation, price_target_change |
+
+### Regulatory & Government
+| Type | Subtypes |
+|------|----------|
+| `fda` | approval, rejection, adcom_vote, warning_letter, clinical_hold, breakthrough_designation |
+| `antitrust` | investigation, lawsuit, clearance, blocked, consent_decree |
+| `government` | executive_order, regulation_proposed, regulation_finalized, sanction, export_control |
+| `congress_trade` | buy, sell, exercise |
+
+### Macro & Geopolitical
+| Type | Subtypes |
+|------|----------|
+| `monetary_policy` | rate_decision, dot_plot, qe_qt_change, emergency_action, fed_speech |
+| `economic_data` | inflation, employment, gdp, consumer, housing, manufacturing, trade_balance |
+| `geopolitical` | conflict, ceasefire, election, trade_war, oil_shock, pandemic |
+| `tariff` | imposed, removed, threatened, exemption |
+
+### Smart Money
+| Type | Subtypes |
+|------|----------|
+| `insider_trade` | cluster_buy, cluster_sell, large_buy, large_sell, 10b5_1_termination |
+| `institutional` | 13f_new_position, 13f_exit, activist_stake, activist_settlement, short_report |
+| `options_flow` | unusual_calls, unusual_puts, large_block, sweep |
 
 ---
 
 ## Database Schema
 
-### Table: `historical_events`
-
-The core event record.
+### Layer 1: Security Master
 
 ```sql
+-- Companies (the legal entity, survives ticker changes)
+CREATE TABLE companies (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  sector          TEXT,                              -- 'Technology', 'Healthcare', ...
+  industry        TEXT,                              -- 'Semiconductors', 'Biotech', ...
+  country         TEXT DEFAULT 'US',
+  cik             TEXT,                              -- SEC Central Index Key
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Tickers (can change over time: META was FB, GOOGL parent is Alphabet)
+CREATE TABLE security_identifiers (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id      UUID NOT NULL REFERENCES companies(id),
+  identifier_type TEXT NOT NULL,                     -- 'ticker', 'cusip', 'isin', 'cik'
+  identifier      TEXT NOT NULL,                     -- 'NVDA', '67066G104', ...
+  exchange        TEXT,                              -- 'NASDAQ', 'NYSE'
+  effective_from  DATE NOT NULL,
+  effective_to    DATE,                              -- NULL = current
+  is_primary      BOOLEAN DEFAULT TRUE,
+
+  CONSTRAINT valid_id_type CHECK (identifier_type IN ('ticker', 'cusip', 'isin', 'cik'))
+);
+
+CREATE INDEX idx_si_identifier ON security_identifiers(identifier_type, identifier);
+CREATE INDEX idx_si_company ON security_identifiers(company_id);
+```
+
+### Layer 2: Events + Provenance
+
+```sql
+-- Core event record
 CREATE TABLE historical_events (
-  -- Identity
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- Event basics
-  event_date        DATE NOT NULL,                    -- Date event became public
-  event_time        TEXT,                             -- 'pre_market' | 'market_hours' | 'after_hours' | 'overnight'
-  ticker            TEXT NOT NULL,                    -- Primary affected ticker
-  company_name      TEXT NOT NULL,
-  sector            TEXT,                             -- 'Technology' | 'Healthcare' | ...
-  industry          TEXT,                             -- More specific: 'Semiconductors'
+  -- Precise timing
+  event_ts          TIMESTAMPTZ NOT NULL,            -- When event became public (UTC)
+  market_session    TEXT,                            -- 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'weekend'
+  exchange_tz       TEXT DEFAULT 'America/New_York', -- For trading-day alignment
 
   -- Classification
-  event_category    TEXT NOT NULL,                    -- From taxonomy: 'restructuring', 'earnings', 'mna', ...
-  event_type        TEXT NOT NULL,                    -- Specific: 'layoff', 'earnings_beat', 'acquisition_announced'
-  severity          TEXT NOT NULL,                    -- 'critical' | 'high' | 'medium' | 'low'
+  event_category    TEXT NOT NULL,                   -- Top level: 'corporate', 'earnings', 'regulatory', 'macro', 'smart_money'
+  event_type        TEXT NOT NULL,                   -- From taxonomy: 'restructuring', 'earnings', 'mna_acquisition'
+  event_subtype     TEXT,                            -- Specific: 'layoff', 'beat', 'announced'
+  severity          TEXT NOT NULL DEFAULT 'medium',
 
   -- Content
-  headline          TEXT NOT NULL,                    -- One-line summary
-  description       TEXT NOT NULL,                    -- 2-3 paragraph AI-generated analysis
-  key_metrics       JSONB,                           -- Structured: {"headcount_reduction": "12%", "charge_amount": "$2.1B", ...}
-  source            TEXT,                             -- 'sec_8k' | 'news' | 'press_release' | 'social' | ...
-  source_url        TEXT,                             -- Link to original
-
-  -- Tags for matching
-  tags              TEXT[] NOT NULL DEFAULT '{}',     -- Freeform: ['mega_cap', 'first_time', 'repeat_event', 'ceo_driven']
+  headline          TEXT NOT NULL,                   -- Factual one-liner
+  description       TEXT,                            -- Factual multi-paragraph description (not AI opinion)
+  
+  -- Tags for flexible querying
+  tags              TEXT[] NOT NULL DEFAULT '{}',     -- ['mega_cap', 'first_time', 'repeat_offender', 'after_hours_surprise']
 
   CONSTRAINT valid_severity CHECK (severity IN ('critical', 'high', 'medium', 'low')),
-  CONSTRAINT valid_event_time CHECK (event_time IN ('pre_market', 'market_hours', 'after_hours', 'overnight'))
+  CONSTRAINT valid_session CHECK (market_session IN ('pre_market', 'regular', 'after_hours', 'overnight', 'weekend'))
 );
 
-CREATE INDEX idx_he_ticker ON historical_events(ticker);
-CREATE INDEX idx_he_event_type ON historical_events(event_type);
-CREATE INDEX idx_he_event_category ON historical_events(event_category);
-CREATE INDEX idx_he_event_date ON historical_events(event_date);
-CREATE INDEX idx_he_sector ON historical_events(sector);
+CREATE INDEX idx_he_type ON historical_events(event_category, event_type);
+CREATE INDEX idx_he_ts ON historical_events(event_ts);
 CREATE INDEX idx_he_tags ON historical_events USING GIN(tags);
+
+-- Multi-entity relationship (event ↔ companies)
+CREATE TABLE event_entities (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  company_id      UUID NOT NULL REFERENCES companies(id),
+  ticker_at_time  TEXT NOT NULL,                    -- Ticker as of event date (point-in-time)
+  role            TEXT NOT NULL,                    -- 'primary', 'acquirer', 'target', 'competitor', 'peer', 'customer', 'supplier'
+  is_primary      BOOLEAN DEFAULT FALSE,            -- The main stock this event is "about"
+
+  UNIQUE(event_id, company_id, role)
+);
+
+CREATE INDEX idx_ee_event ON event_entities(event_id);
+CREATE INDEX idx_ee_company ON event_entities(company_id);
+CREATE INDEX idx_ee_ticker ON event_entities(ticker_at_time);
+
+-- Data provenance (where did we learn about this event?)
+CREATE TABLE event_sources (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  source_type     TEXT NOT NULL,                    -- 'sec_filing', 'press_release', 'news_article', 'social_media', 'api', 'transcript'
+  source_name     TEXT,                             -- 'SEC EDGAR', 'Reuters', 'CNBC', ...
+  source_url      TEXT,
+  published_at    TIMESTAMPTZ,                      -- When source was published
+  ingested_at     TIMESTAMPTZ DEFAULT now(),         -- When we captured it
+  document_hash   TEXT,                              -- For dedup / change detection
+  
+  -- Extraction metadata
+  extraction_method TEXT,                            -- 'api_structured', 'scrape_html', 'llm_extract', 'manual'
+  extraction_model  TEXT,                            -- 'claude-sonnet-4-6' if LLM extracted
+  confidence        DECIMAL(3,2)                     -- 0.0-1.0 confidence in extraction
+);
+
+CREATE INDEX idx_es_event ON event_sources(event_id);
 ```
 
-### Table: `event_market_context`
+### Layer 2b: Typed Event Metrics
 
-Macro environment snapshot at time of event. Critical for "why did the market react this way?"
+Instead of dumping everything into `JSONB`, common event families get typed columns.
 
 ```sql
+-- Metrics specific to restructuring/layoff events
+CREATE TABLE metrics_restructuring (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  headcount_reduction_pct  DECIMAL(5,2),             -- e.g., 12.0 = 12%
+  headcount_reduction_abs  INT,                      -- Absolute number
+  restructuring_charge_m   DECIMAL(10,2),            -- Charge in $millions
+  segments_affected        TEXT[],                    -- ['Cloud', 'Devices']
+  guidance_maintained      BOOLEAN,                  -- Did they maintain forward guidance?
+  buyback_announced        BOOLEAN                   -- Paired with buyback?
+);
+
+-- Metrics specific to M&A events
+CREATE TABLE metrics_mna (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  deal_value_m    DECIMAL(12,2),                    -- Deal value in $millions
+  premium_pct     DECIMAL(6,2),                     -- Premium over pre-deal price
+  payment_type    TEXT,                              -- 'cash', 'stock', 'mixed'
+  expected_close  DATE,                              -- Expected closing date
+  synergies_m     DECIMAL(10,2),                    -- Projected synergies
+  competing_bids  INT DEFAULT 0,                     -- Number of competing bidders
+  regulatory_risk TEXT                               -- 'low', 'medium', 'high'
+);
+
+-- Metrics specific to earnings events
+CREATE TABLE metrics_earnings (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  fiscal_quarter  TEXT,                              -- 'Q4 2024'
+  eps_actual       DECIMAL(8,3),
+  eps_estimate     DECIMAL(8,3),
+  eps_surprise_pct DECIMAL(6,2),
+  revenue_actual_m DECIMAL(12,2),
+  revenue_estimate_m DECIMAL(12,2),
+  revenue_surprise_pct DECIMAL(6,2),
+  guidance_direction TEXT,                           -- 'raised', 'lowered', 'maintained', 'withdrawn'
+  guidance_detail    TEXT,                           -- Key guidance quote/number
+  consecutive_beats  INT,                            -- Streak count
+  yoy_revenue_growth DECIMAL(6,2),
+  yoy_eps_growth     DECIMAL(6,2)
+);
+
+-- Metrics specific to FDA events
+CREATE TABLE metrics_fda (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  drug_name       TEXT,
+  indication      TEXT,                              -- Disease/condition
+  action_type     TEXT,                              -- 'NDA', 'BLA', 'sNDA', '510k', 'EUA'
+  pdufa_date      DATE,
+  adcom_vote_for  INT,
+  adcom_vote_against INT,
+  market_size_est_m DECIMAL(10,2),                   -- Estimated addressable market
+  competition_level TEXT                              -- 'first_in_class', 'best_in_class', 'me_too'
+);
+
+-- Metrics specific to macro/economic data events
+CREATE TABLE metrics_macro (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  indicator       TEXT NOT NULL,                     -- 'CPI_YOY', 'NFP', 'FED_RATE', 'GDP_QOQ'
+  actual_value    DECIMAL(10,4),
+  forecast_value  DECIMAL(10,4),
+  previous_value  DECIMAL(10,4),
+  surprise_direction TEXT,                           -- 'hot', 'cool', 'in_line'
+  surprise_magnitude DECIMAL(6,3)                    -- Standard deviations from consensus
+);
+
+-- Flexible JSONB fallback for everything else
+CREATE TABLE metrics_other (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
+  metrics         JSONB NOT NULL DEFAULT '{}'
+);
+```
+
+### Layer 3: Market Data (Point-in-Time)
+
+```sql
+-- Macro environment snapshot at time of event
 CREATE TABLE event_market_context (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE UNIQUE,
 
-  -- Broad market
-  spy_close         DECIMAL(10,2),                   -- S&P 500 close on event date
-  spy_change_pct    DECIMAL(6,3),                    -- SPY daily return %
-  qqq_change_pct    DECIMAL(6,3),                    -- Nasdaq daily return %
-  iwm_change_pct    DECIMAL(6,3),                    -- Russell 2000 daily return %
+  -- Broad market (from yfinance — point-in-time safe, these are historical prices)
+  spy_close         DECIMAL(10,2),
+  spy_change_pct    DECIMAL(6,3),                    -- SPY return on event date
+  qqq_change_pct    DECIMAL(6,3),
+  iwm_change_pct    DECIMAL(6,3),
 
-  -- Volatility & fear
-  vix_close         DECIMAL(6,2),                    -- VIX level
-  vix_percentile    DECIMAL(5,2),                    -- VIX percentile vs trailing 1Y
+  -- Volatility (from CBOE historical — point-in-time safe)
+  vix_close         DECIMAL(6,2),
+  vix_percentile_1y DECIMAL(5,2),                    -- VIX rank vs trailing 1Y
 
-  -- Rates & monetary
-  treasury_10y      DECIMAL(5,3),                    -- 10Y yield
-  treasury_2y       DECIMAL(5,3),                    -- 2Y yield
-  yield_curve_2s10s DECIMAL(5,3),                    -- 2s10s spread (inversion indicator)
-  fed_funds_rate    DECIMAL(5,3),                    -- Current fed funds rate
-  days_to_next_fomc INT,                             -- Trading days until next FOMC
-  days_from_last_fomc INT,                           -- Trading days since last FOMC
+  -- Rates (from FRED — point-in-time safe)
+  treasury_10y      DECIMAL(5,3),
+  treasury_2y       DECIMAL(5,3),
+  yield_curve_2s10s DECIMAL(5,3),
+  fed_funds_rate    DECIMAL(5,3),
+  days_to_next_fomc INT,
+  days_from_last_fomc INT,
 
-  -- Inflation context
-  latest_cpi_yoy    DECIMAL(5,2),                    -- Most recent CPI YoY %
-  latest_core_cpi   DECIMAL(5,2),                    -- Core CPI YoY %
+  -- Inflation (from FRED — point-in-time safe, uses latest available at event date)
+  latest_cpi_yoy    DECIMAL(5,2),
+  latest_core_cpi   DECIMAL(5,2),
 
-  -- Sector context
-  sector_etf_ticker TEXT,                            -- e.g., 'XLK' for tech
-  sector_etf_change DECIMAL(6,3),                    -- Sector ETF daily return %
-  sector_etf_30d    DECIMAL(6,3),                    -- Sector 30-day return %
+  -- Sector (from sector ETF prices — point-in-time safe)
+  sector_etf_ticker TEXT,                            -- 'XLK', 'XLF', 'XBI', ...
+  sector_etf_change DECIMAL(6,3),
+  sector_etf_30d    DECIMAL(6,3),
 
-  -- Market regime (AI-labeled)
-  market_regime     TEXT,                             -- 'bull' | 'bear' | 'correction' | 'recovery' | 'range_bound'
-  sentiment_label   TEXT,                             -- 'risk_on' | 'risk_off' | 'mixed' | 'euphoric' | 'panic'
+  -- Market regime (AI-labeled, stored as derived)
+  market_regime     TEXT,                            -- 'bull', 'bear', 'correction', 'recovery', 'sideways'
+  sentiment_label   TEXT,                            -- 'risk_on', 'risk_off', 'mixed', 'euphoric', 'panic'
+  regime_confidence DECIMAL(3,2),                    -- How confident is the label
 
-  UNIQUE(event_id)
+  -- Data quality
+  pit_verified      BOOLEAN DEFAULT TRUE             -- All fields confirmed point-in-time
 );
-```
 
-### Table: `event_stock_context`
-
-Company-specific state at time of event.
-
-```sql
+-- Stock-specific context at time of event
 CREATE TABLE event_stock_context (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  company_id        UUID NOT NULL REFERENCES companies(id),
 
-  -- Price context
-  price_at_event    DECIMAL(10,2) NOT NULL,          -- Close price on event date (or pre-market ref)
-  market_cap_b      DECIMAL(10,2),                   -- Market cap in billions
-  price_30d_change  DECIMAL(6,3),                    -- 30-day return before event
-  price_90d_change  DECIMAL(6,3),                    -- 90-day return before event
-  price_ytd_change  DECIMAL(6,3),                    -- YTD return before event
-  distance_from_52w_high DECIMAL(6,3),               -- % below 52-week high
-  distance_from_52w_low  DECIMAL(6,3),               -- % above 52-week low
+  -- Price context (from yfinance historical — PIT safe)
+  price_at_event    DECIMAL(10,2) NOT NULL,
+  price_30d_ago     DECIMAL(10,2),                   -- For calculating 30d change
+  price_90d_ago     DECIMAL(10,2),
+  price_ytd_start   DECIMAL(10,2),
+  high_52w          DECIMAL(10,2),
+  low_52w           DECIMAL(10,2),
 
-  -- Valuation
-  pe_ratio          DECIMAL(8,2),                    -- Trailing P/E
-  forward_pe        DECIMAL(8,2),                    -- Forward P/E
-  ps_ratio          DECIMAL(8,2),                    -- Price/Sales
-  pb_ratio          DECIMAL(8,2),                    -- Price/Book
+  -- Derived from prices (PIT safe — computed from historical prices)
+  return_30d        DECIMAL(6,3),
+  return_90d        DECIMAL(6,3),
+  return_ytd        DECIMAL(6,3),
+  distance_from_52w_high DECIMAL(6,3),
+  distance_from_52w_low  DECIMAL(6,3),
 
-  -- Technicals
-  rsi_14            DECIMAL(5,2),                    -- 14-day RSI
-  above_50ma        BOOLEAN,                         -- Price above 50-day MA?
-  above_200ma       BOOLEAN,                         -- Price above 200-day MA?
-  pct_from_50ma     DECIMAL(6,3),                    -- % distance from 50MA
-  pct_from_200ma    DECIMAL(6,3),                    -- % distance from 200MA
+  -- Market cap (from historical prices × shares outstanding — approximately PIT)
+  market_cap_b      DECIMAL(10,2),
+  market_cap_tier   TEXT,                            -- 'mega' (>200B), 'large' (10-200B), 'mid' (2-10B), 'small' (<2B)
 
-  -- Earnings context
-  days_since_last_earnings INT,                      -- Days since last earnings report
-  days_to_next_earnings    INT,                      -- Days until next earnings
-  last_earnings_surprise   DECIMAL(6,3),             -- Last EPS surprise %
-  consecutive_beats        INT,                      -- Streak of earnings beats
+  -- Technicals (computed from price history — PIT safe)
+  rsi_14            DECIMAL(5,2),
+  above_50ma        BOOLEAN,
+  above_200ma       BOOLEAN,
+  pct_from_50ma     DECIMAL(6,3),
+  pct_from_200ma    DECIMAL(6,3),
+  avg_volume_20d    BIGINT,
 
-  -- Analyst sentiment
-  analyst_buy       INT,                             -- Number of buy ratings
-  analyst_hold      INT,                             -- Number of hold ratings
-  analyst_sell      INT,                             -- Number of sell ratings
-  avg_price_target  DECIMAL(10,2),                   -- Consensus price target
-  target_upside_pct DECIMAL(6,3),                    -- Price target upside %
+  -- Earnings context (from historical earnings calendar — PIT safe)
+  days_since_last_earnings INT,
+  days_to_next_earnings    INT,
+  last_earnings_surprise_pct DECIMAL(6,2),
+  consecutive_beats  INT,
 
-  -- Ownership signals
-  short_interest_pct DECIMAL(6,3),                   -- Short interest % of float
-  insider_net_30d    DECIMAL(15,2),                  -- Net insider buying $ in prior 30 days
+  -- Fields we CAN'T reliably get historically (flagged as non-PIT)
+  -- These are populated for NEW events (real-time) but NULL for bootstrap
+  pe_ratio          DECIMAL(8,2),                    -- ⚠️ Only reliable for recent events
+  forward_pe        DECIMAL(8,2),                    -- ⚠️ Requires consensus estimates
+  short_interest_pct DECIMAL(6,3),                   -- ⚠️ Historical SI hard to get
+  analyst_consensus  TEXT,                            -- ⚠️ 'strong_buy', 'buy', 'hold', 'sell'
+  
+  -- Data quality flag
+  pit_tier          TEXT DEFAULT 'full',              -- 'full' = all PIT, 'partial' = some non-PIT, 'estimated' = approximated
+  non_pit_fields    TEXT[],                           -- Which fields are non-PIT: ['pe_ratio', 'short_interest_pct']
 
-  UNIQUE(event_id)
+  UNIQUE(event_id, company_id)
 );
+
+CREATE INDEX idx_esc_event ON event_stock_context(event_id);
+CREATE INDEX idx_esc_company ON event_stock_context(company_id);
 ```
 
-### Table: `event_price_impact`
+### Layer 4: Computed Returns
 
-Quantitative price reaction measurement. The most important table for pattern matching.
+Separate from raw prices. Each return calculation is explicit about methodology.
 
 ```sql
-CREATE TABLE event_price_impact (
+CREATE TABLE event_returns (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  company_id        UUID NOT NULL REFERENCES companies(id),
+  ticker_at_time    TEXT NOT NULL,
 
-  -- Raw returns at key intervals (vs event date close)
-  return_t0         DECIMAL(6,3),                    -- Event day return (open to close, or gap)
-  return_t1         DECIMAL(6,3),                    -- T+1 cumulative
-  return_t3         DECIMAL(6,3),                    -- T+3 cumulative
-  return_t5         DECIMAL(6,3),                    -- T+5 (1 week)
-  return_t10        DECIMAL(6,3),                    -- T+10 (2 weeks)
-  return_t20        DECIMAL(6,3),                    -- T+20 (1 month)
-  return_t60        DECIMAL(6,3),                    -- T+60 (3 months)
+  -- Reference price (explicit, not ambiguous)
+  ref_price         DECIMAL(10,2) NOT NULL,          -- The baseline price
+  ref_price_type    TEXT NOT NULL,                   -- 'prev_close', 'event_day_open', 'pre_announcement_close'
+  ref_price_date    DATE NOT NULL,
 
-  -- Alpha (market-adjusted) at same intervals
+  -- Raw returns at key intervals
+  return_t0         DECIMAL(6,3),                    -- Event day (ref_price → event day close)
+  return_t1         DECIMAL(6,3),
+  return_t3         DECIMAL(6,3),
+  return_t5         DECIMAL(6,3),
+  return_t10        DECIMAL(6,3),
+  return_t20        DECIMAL(6,3),
+  return_t60        DECIMAL(6,3),
+
+  -- Benchmark returns (same intervals)
+  benchmark_ticker  TEXT NOT NULL DEFAULT 'SPY',     -- Primary benchmark
+  benchmark_return_t0  DECIMAL(6,3),
+  benchmark_return_t1  DECIMAL(6,3),
+  benchmark_return_t3  DECIMAL(6,3),
+  benchmark_return_t5  DECIMAL(6,3),
+  benchmark_return_t10 DECIMAL(6,3),
+  benchmark_return_t20 DECIMAL(6,3),
+  benchmark_return_t60 DECIMAL(6,3),
+
+  -- Alpha (stock return - benchmark return at each interval)
   alpha_t0          DECIMAL(6,3),
   alpha_t1          DECIMAL(6,3),
   alpha_t3          DECIMAL(6,3),
@@ -230,41 +446,54 @@ CREATE TABLE event_price_impact (
   alpha_t20         DECIMAL(6,3),
   alpha_t60         DECIMAL(6,3),
 
-  -- Extremes within 60-day window
-  max_drawdown      DECIMAL(6,3),                    -- Worst peak-to-trough
-  max_drawdown_day  INT,                             -- Day of max drawdown (T+?)
-  max_runup         DECIMAL(6,3),                    -- Best trough-to-peak
-  max_runup_day     INT,                             -- Day of max runup (T+?)
+  -- Sector-adjusted alpha (optional, more precise)
+  sector_benchmark  TEXT,                            -- 'XLK', 'XBI', 'SOXX', ...
+  sector_alpha_t5   DECIMAL(6,3),
+  sector_alpha_t20  DECIMAL(6,3),
 
-  -- Gap analysis (important for event timing)
-  overnight_gap_pct DECIMAL(6,3),                    -- Gap from prev close to next open
-  gap_fill_days     INT,                             -- Days to fill the gap (NULL if never)
+  -- Extremes within 60-day post-event window
+  max_drawdown_pct  DECIMAL(6,3),
+  max_drawdown_day  INT,                             -- Trading day of max drawdown
+  max_runup_pct     DECIMAL(6,3),
+  max_runup_day     INT,
+
+  -- Gap analysis
+  overnight_gap_pct DECIMAL(6,3),                    -- Gap from ref_price to next open
+  gap_filled        BOOLEAN,
+  gap_fill_days     INT,
 
   -- Volume
-  volume_event_day  BIGINT,                          -- Shares traded on event day
-  volume_avg_20d    BIGINT,                          -- 20-day average volume before event
-  volume_ratio      DECIMAL(6,2),                    -- event_day / avg_20d
+  volume_event_day  BIGINT,
+  volume_avg_20d    BIGINT,
+  volume_ratio      DECIMAL(6,2),
 
-  -- Outcome classification (AI-labeled based on T+20 alpha)
-  outcome_label     TEXT,                            -- 'strong_bull' | 'mild_bull' | 'neutral' | 'mild_bear' | 'strong_bear'
-  outcome_notes     TEXT,                            -- Brief note on the price action pattern
+  -- Outcome classification
+  outcome_t20       TEXT,                            -- 'strong_bull' (>10%), 'bull' (3-10%), 'neutral' (-3 to 3%), 'bear' (-10 to -3%), 'strong_bear' (<-10%)
+  outcome_t60       TEXT,
 
-  UNIQUE(event_id)
+  -- Methodology metadata
+  return_method     TEXT DEFAULT 'simple',           -- 'simple' (price ratio), 'log' (log return), 'bhar' (buy-and-hold abnormal return)
+  calc_version      INT DEFAULT 1,                   -- Bump when methodology changes
+  computed_at       TIMESTAMPTZ DEFAULT now(),
+
+  UNIQUE(event_id, company_id, benchmark_ticker, calc_version)
 );
+
+CREATE INDEX idx_er_event ON event_returns(event_id);
+CREATE INDEX idx_er_ticker ON event_returns(ticker_at_time);
+CREATE INDEX idx_er_outcome ON event_returns(outcome_t20);
 ```
 
-### Table: `event_peer_impact`
-
-How peers/sector reacted. Essential for contagion analysis.
+### Layer 4b: Peer/Contagion Impact
 
 ```sql
 CREATE TABLE event_peer_impact (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  peer_company_id   UUID REFERENCES companies(id),
   peer_ticker       TEXT NOT NULL,
-  peer_relationship TEXT,                            -- 'direct_competitor' | 'same_sector' | 'supply_chain' | 'customer'
+  relationship      TEXT,                            -- 'direct_competitor', 'same_sector', 'supply_chain', 'customer', 'etf'
 
-  -- Peer returns
   return_t0         DECIMAL(6,3),
   return_t5         DECIMAL(6,3),
   return_t20        DECIMAL(6,3),
@@ -276,330 +505,372 @@ CREATE TABLE event_peer_impact (
 );
 ```
 
-### Table: `event_chains`
+### Layer 5: AI Analysis (Derived, Versioned)
 
-Link related events into a narrative arc.
+Everything in this layer is **explicitly labeled as AI-generated opinion**, not fact.
+
+```sql
+CREATE TABLE event_analysis (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+
+  -- Versioning (re-generate analysis as models improve)
+  version           INT NOT NULL DEFAULT 1,
+  model_used        TEXT NOT NULL,                   -- 'claude-sonnet-4-6'
+  generated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Causal narrative (the core value)
+  market_reaction_why    TEXT NOT NULL,               -- Why did the market react this way?
+  what_was_priced_in     TEXT,                        -- What was the market already expecting?
+  what_surprised         TEXT,                        -- What caught the market off guard?
+  narrative_shift        TEXT,                        -- How did this change the stock's "story"?
+
+  -- Pattern classification
+  pattern_name           TEXT,                        -- 'buy_the_dip', 'sell_the_news', 'gap_and_go', 'slow_grind', 'dead_cat_bounce'
+  counter_intuitive      BOOLEAN DEFAULT FALSE,
+  counter_intuitive_why  TEXT,
+
+  -- Forward-looking lesson
+  key_variables          TEXT[],                      -- What determined the outcome: ['guidance_maintained', 'buyback_size', 'macro_regime']
+  lesson_learned         TEXT NOT NULL,               -- One-liner takeaway
+  advice_for_similar     TEXT,                        -- "If this happens again, watch for X before acting"
+
+  -- Hindsight analysis (CLEARLY LABELED as hindsight, not prediction)
+  hindsight_optimal_entry TEXT,                       -- "T+2 after panic selling subsided"
+  hindsight_optimal_exit  TEXT,                       -- "T+15 when momentum faded"
+  hindsight_common_mistake TEXT,                      -- "Chasing the gap was wrong because..."
+
+  -- Quality / confidence
+  analysis_confidence    TEXT,                        -- 'high', 'medium', 'low'
+  data_completeness      TEXT,                        -- 'full' (all context available), 'partial', 'minimal'
+
+  UNIQUE(event_id, version)
+);
+
+CREATE INDEX idx_ea_event ON event_analysis(event_id);
+CREATE INDEX idx_ea_pattern ON event_analysis(pattern_name);
+```
+
+### Layer 5b: Event Chains
 
 ```sql
 CREATE TABLE event_chains (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   chain_name        TEXT NOT NULL,                   -- "Paramount Acquisition Saga 2024"
-  chain_type        TEXT,                            -- 'mna_lifecycle' | 'regulatory_process' | 'earnings_trend' | 'crisis_recovery'
-  description       TEXT,                            -- AI summary of the full chain
-  outcome_summary   TEXT,                            -- How it ended
-  total_return      DECIMAL(6,3),                    -- Start-to-end return
-  total_alpha       DECIMAL(6,3),                    -- Start-to-end alpha
-  duration_days     INT,                             -- Total days from first to last event
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  chain_type        TEXT,                            -- 'mna_lifecycle', 'regulatory_process', 'earnings_trend', 'crisis_recovery'
+  status            TEXT DEFAULT 'active',           -- 'active', 'resolved'
+  
+  -- AI-generated summary (versioned)
+  description       TEXT,
+  outcome_summary   TEXT,                            -- How it ended (filled when resolved)
+  
+  -- Aggregate metrics
+  total_return      DECIMAL(6,3),
+  total_alpha       DECIMAL(6,3),
+  duration_days     INT,
+  
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE event_chain_members (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  chain_id          UUID NOT NULL REFERENCES event_chains(id) ON DELETE CASCADE,
-  event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
-  sequence_order    INT NOT NULL,                    -- 1, 2, 3... order in chain
-  role_in_chain     TEXT,                            -- 'trigger' | 'escalation' | 'pivot' | 'resolution'
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chain_id        UUID NOT NULL REFERENCES event_chains(id) ON DELETE CASCADE,
+  event_id        UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
+  sequence_order  INT NOT NULL,
+  role_in_chain   TEXT,                              -- 'trigger', 'escalation', 'pivot', 'resolution', 'aftermath'
 
   UNIQUE(chain_id, event_id)
 );
+
+CREATE INDEX idx_ecm_chain ON event_chain_members(chain_id);
+CREATE INDEX idx_ecm_event ON event_chain_members(event_id);
 ```
 
-### Table: `event_causal_analysis`
+### Layer 6: Aggregated Patterns
 
-The AI-generated "why" — the most valuable content in the database.
-
-```sql
-CREATE TABLE event_causal_analysis (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id          UUID NOT NULL REFERENCES historical_events(id) ON DELETE CASCADE,
-
-  -- Causal narrative
-  why_market_reacted   TEXT NOT NULL,                -- 2-3 paragraphs: why did the price move this way?
-  what_was_priced_in   TEXT,                         -- What the market already expected
-  what_was_surprise    TEXT,                         -- What caught the market off guard
-  narrative_shift      TEXT,                         -- How did this change the stock's "story"?
-
-  -- Actionable hindsight
-  optimal_entry        TEXT,                         -- "Buy at T+2 after initial panic selling"
-  optimal_exit         TEXT,                         -- "Sell at T+15 when momentum faded"
-  key_mistake          TEXT,                         -- "Buying the gap up was wrong because..."
-  lesson_learned       TEXT NOT NULL,                -- One-liner takeaway
-
-  -- Pattern classification
-  pattern_name         TEXT,                         -- 'buy_the_dip' | 'sell_the_news' | 'dead_cat_bounce' | 'gap_and_go' | 'slow_grind'
-  counter_intuitive    BOOLEAN DEFAULT FALSE,        -- Was the reaction opposite to naive expectation?
-  counter_intuitive_why TEXT,                        -- Why it went against intuition
-
-  -- Forward-looking (for matching new events)
-  key_variables        TEXT[],                       -- What factors determined the outcome: ['headcount_pct', 'guidance_maintained', 'buyback_announced']
-  similar_events_note  TEXT,                         -- "Compare to MSFT 2023 layoff, META 2022 layoff"
-
-  -- Quality
-  confidence           TEXT,                         -- 'high' | 'medium' | 'low'
-  analysis_model       TEXT,                         -- 'claude-sonnet-4-6' | 'claude-opus-4-6'
-  analysis_date        DATE,                         -- When this analysis was generated
-
-  UNIQUE(event_id)
-);
-```
-
-### Table: `event_type_patterns`
-
-Aggregated statistics per event type. Pre-computed for fast matching.
+Pre-computed for fast matching. Rebuilt periodically.
 
 ```sql
 CREATE TABLE event_type_patterns (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_type        TEXT NOT NULL,                   -- 'layoff', 'earnings_beat', etc.
-  filter_criteria   JSONB NOT NULL DEFAULT '{}',     -- {"sector": "Technology", "market_cap": ">100B"}
-  
-  -- Sample info
+
+  -- What this pattern covers
+  event_type        TEXT NOT NULL,
+  event_subtype     TEXT,                            -- NULL = all subtypes
+  sector            TEXT,                            -- NULL = all sectors
+  market_cap_tier   TEXT,                            -- NULL = all sizes
+  market_regime     TEXT,                            -- NULL = all regimes
+
+  -- Sample
   sample_size       INT NOT NULL,
   date_range_start  DATE,
   date_range_end    DATE,
+  min_sample_required INT DEFAULT 5,                 -- Don't show stats with <5 events
 
-  -- Statistical summary
-  avg_return_t1     DECIMAL(6,3),
-  avg_return_t5     DECIMAL(6,3),
-  avg_return_t20    DECIMAL(6,3),
-  avg_return_t60    DECIMAL(6,3),
+  -- Statistical summary (using SPY-adjusted alpha)
   avg_alpha_t1      DECIMAL(6,3),
   avg_alpha_t5      DECIMAL(6,3),
   avg_alpha_t20     DECIMAL(6,3),
   avg_alpha_t60     DECIMAL(6,3),
   median_alpha_t20  DECIMAL(6,3),
-  win_rate_t5       DECIMAL(5,3),                    -- % of cases with positive alpha at T+5
-  win_rate_t20      DECIMAL(5,3),                    -- % of cases with positive alpha at T+20
-  std_dev_t20       DECIMAL(6,3),                    -- Standard deviation of T+20 alpha
+  std_dev_alpha_t20 DECIMAL(6,3),
+  win_rate_t5       DECIMAL(5,3),                    -- % with positive alpha at T+5
+  win_rate_t20      DECIMAL(5,3),
+  win_rate_t60      DECIMAL(5,3),
 
-  -- Best/worst cases
+  -- Benchmark info
+  benchmark_used    TEXT DEFAULT 'SPY',
+  return_method     TEXT DEFAULT 'simple',
+
+  -- Best/worst for reference
   best_case_event_id  UUID REFERENCES historical_events(id),
   worst_case_event_id UUID REFERENCES historical_events(id),
 
-  -- Narrative
-  typical_pattern     TEXT,                          -- "Initial gap up, consolidation T+3-7, continuation to T+20"
-  key_differentiators TEXT,                          -- "Outcome depends on: guidance maintained, buyback size, market regime"
-  common_mistakes     TEXT,                          -- "Most common mistake: chasing the gap"
-
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Narrative (AI-generated, versioned)
+  typical_pattern     TEXT,                          -- "Initial gap, 3-day consolidation, continuation"
+  key_differentiators TEXT,                          -- "Outcome depends on: guidance, buyback, regime"
+  common_mistakes     TEXT,
   
-  UNIQUE(event_type, filter_criteria)
+  -- Metadata
+  calc_version      INT DEFAULT 1,
+  computed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE(event_type, event_subtype, sector, market_cap_tier, market_regime, calc_version)
 );
 ```
 
 ---
 
-## Data Population Strategy
+## Benchmark Selection Logic
 
-### Phase 1: Bootstrap (AI + Free APIs)
+Don't always use SPY. Match the benchmark to the stock:
 
-**Goal:** Populate 1500-2000 high-quality events for the top 50 tickers.
-
-#### Step 1: Event Discovery via Claude
-
-For each ticker, prompt Claude:
 ```
-List all significant market-moving events for {TICKER} ({COMPANY}) 
-from January 2020 to March 2026. Include:
-- Earnings surprises (beat/miss with specific EPS numbers)
-- M&A activity (acquisitions, divestitures, takeover attempts)
-- Restructuring (layoffs, cost cuts, strategic pivots)
-- Product launches/failures
-- Regulatory events (FDA, antitrust, SEC)
-- Leadership changes
-- Major partnerships/contract wins
-- Financial events (buybacks, splits, dividend changes)
-- Any event that moved the stock >3% in a day
-
-For each event, provide:
-1. Exact date
-2. Event type (from our taxonomy)
-3. One-line headline
-4. Key metrics (dollar amounts, percentages, headcounts)
-5. Source type (SEC filing, press release, news report)
-
-Return as JSON array.
+Technology / Semiconductors  → SOXX (or SMH)
+Technology / Software        → IGV
+Technology / General         → XLK
+Biotech / Pharma             → XBI
+Healthcare                   → XLV
+Financials / Banks           → XLF (or KBE for regional banks)
+Energy                       → XLE
+Consumer Discretionary       → XLY
+Consumer Staples             → XLP
+Industrials                  → XLI
+REITs                        → VNQ
+Crypto-related               → BITO
+Broad market (default)       → SPY
+Small-cap                    → IWM
 ```
 
-**Estimated cost:** 50 tickers × ~2000 tokens × $3/M = ~$0.30
+Store BOTH SPY alpha and sector alpha when available. SPY for cross-sector comparison, sector for within-sector accuracy.
 
-#### Step 2: Price Data via yfinance
+---
 
-For each event date:
-```python
-# Pull price data: T-30 to T+60
-ticker_data = yf.download(ticker, start=event_date - 30d, end=event_date + 60d)
-spy_data = yf.download('SPY', start=event_date - 30d, end=event_date + 60d)
+## Reference Price Rules
 
-# Calculate all return/alpha fields
-# Calculate technicals (RSI, MA distances)
-# Calculate volume ratios
+The `ref_price` in `event_returns` depends on when the event was published:
+
+| Event Timing | ref_price_type | ref_price |
+|-------------|----------------|-----------|
+| Before market open (pre-market news) | `prev_close` | Previous trading day close |
+| During market hours | `pre_announcement_close` | Last close before announcement (same day open if intraday) |
+| After market close | `event_day_close` | That day's closing price |
+| Weekend/holiday | `prev_close` | Friday close (or last trading day) |
+
+`return_t0` is ALWAYS: event day close ÷ ref_price - 1. No ambiguity.
+
+---
+
+## Data Population Strategy v2
+
+### Principle: Deterministic sources first, AI second
+
+```
+Step 1: Collect raw event data from structured sources
+Step 2: Validate dates and key facts
+Step 3: Pull price/macro data (all PIT-safe)
+Step 4: AI classifies, summarizes, and analyzes
 ```
 
-**Cost:** Free (yfinance)
+### Phase 1: Bootstrap Historical Data
 
-#### Step 3: Macro Context via FRED
-
-For each event date:
-```python
-# Pull from FRED API (free, requires key)
-fred.get_series('VIXCLS', event_date)          # VIX
-fred.get_series('DGS10', event_date)           # 10Y Treasury
-fred.get_series('DGS2', event_date)            # 2Y Treasury
-fred.get_series('FEDFUNDS', event_date)        # Fed funds rate
-fred.get_series('CPIAUCSL', event_date)        # CPI
-```
-
-**Cost:** Free (FRED API key is free)
-
-#### Step 4: Company Context via yfinance
+#### 1a. SEC EDGAR (free, structured, 10+ years)
 
 ```python
-info = yf.Ticker(ticker).info
-# Market cap, P/E, P/S, P/B, analyst ratings, short interest
-# Some fields may not have historical values — use current as best estimate for recent events
+# 8-K filings — the most important single source
+# EDGAR full-text search API: efts.sec.gov/LATEST/search-index
+# Filter by form type, date range, company
+# Parse Item numbers from 8-K body to classify event type
+
+# Form 4 (insider trades) — high volume, structured XML
+# 13F filings — quarterly institutional holdings
 ```
 
-#### Step 5: AI Causal Analysis via Claude
+**Coverage:** All SEC-required disclosures for US public companies.
 
-For each event, with all the data assembled:
+#### 1b. Financial News API (for non-SEC events)
+
+Options (ranked by value):
+1. **Polygon.io** — Free tier: 5 API calls/min, has ticker news endpoint with historical data
+2. **Alpha Vantage News** — Free tier: 25 requests/day, news by ticker
+3. **NewsAPI.org** — Free tier: 100 requests/day, 1-month lookback (limited history)
+4. **Benzinga** — Paid ($99/mo), best financial news API, 5+ year history
+
+**Bootstrap recommendation:** Start with Polygon.io free tier for news events. SEC EDGAR for regulatory events. FRED for macro. Supplement gaps with Claude extraction from known financial journalism archives.
+
+#### 1c. FRED (free, macro data, 30+ years)
+
+All macro indicators with exact historical values. Perfectly PIT-safe.
+
+#### 1d. yfinance (free, price data)
+
+Historical daily OHLCV for all tickers. PIT-safe for prices.
+**NOT PIT-safe for:** `.info` fields (P/E, market cap, analyst ratings). Use only for prices and computed metrics.
+
+#### 1e. Earnings Data
+
+yfinance has historical earnings dates + actual/estimate EPS. Reasonably PIT-safe for basic beat/miss classification.
+
+### Phase 2: AI Processing (after raw data collected)
+
+For each event with raw data assembled:
+
 ```
-Given this event and the surrounding data:
-[event details, price action, macro context, peer performance]
+Claude prompt:
+"Here is an SEC 8-K filing / news article / earnings report:
+[raw source text]
 
-Provide:
-1. Why the market reacted this way (2-3 paragraphs)
-2. What was already priced in vs. what surprised
-3. How this changed the stock's narrative
-4. Optimal entry/exit in hindsight
-5. Key lesson for future similar events
+And here is the market data around this event:
+[prices, macro context, volume]
+
+Please provide:
+1. Classification (event_type, event_subtype, severity)
+2. Factual headline (one sentence)
+3. Factual description (2-3 paragraphs, no opinion)
+4. Key metrics (structured: {headcount_reduction: 12, charge_amount_m: 2100, ...})
+5. Causal analysis: why did the market react this way?
 6. Pattern classification
-7. Was this counter-intuitive? Why?
-8. What key variables determined the outcome?
+7. Lesson learned
+8. Key variables that determined the outcome
+"
 ```
 
-**Estimated cost:** 2000 events × ~3000 tokens × $3/M = ~$18
+### Phase 3: Continuous Real-Time Enrichment
 
-#### Total Bootstrap Cost Estimate
+Once scanners are running:
+```
+T+0:    Event detected → classify → store → pull market context
+T+1:    Compute overnight gap + T+0 return
+T+5:    Compute 1-week returns + volume
+T+20:   Compute 1-month returns + generate AI causal analysis
+T+60:   Compute 3-month returns + final outcome label + update pattern stats
+```
 
-| Component | Cost |
-|-----------|------|
-| Event discovery (Claude) | ~$0.30 |
-| Price data (yfinance) | $0 |
-| Macro data (FRED) | $0 |
-| Causal analysis (Claude) | ~$18 |
-| Peer impact (yfinance) | $0 |
-| **Total** | **~$20** |
+### Phase 4: Pattern Aggregation (weekly cron)
 
-### Phase 2: Continuous Enrichment
-
-Once Event Radar's scanners are running:
-1. New event detected → auto-populate market context + stock context (real-time)
-2. T+1: populate overnight gap + initial reaction
-3. T+5: populate 1-week returns
-4. T+20: populate 1-month returns + generate causal analysis
-5. T+60: populate 3-month returns + update outcome label + compute final analysis
-
-### Phase 3: Pattern Aggregation
-
-Weekly cron job:
-1. Recalculate `event_type_patterns` for all types with sufficient sample size (≥5)
-2. Flag any new counter-intuitive patterns
-3. Update best/worst case references
+Recompute `event_type_patterns` for all types with sample_size ≥ 5.
 
 ---
 
-## Query Examples
+## Similarity Matching Algorithm
 
-### "What happens when mega-cap tech companies do layoffs?"
+When a new event arrives, find the most relevant historical comparisons:
 
-```sql
-SELECT 
-  he.ticker, he.company_name, he.event_date, he.headline,
-  epi.alpha_t5, epi.alpha_t20, epi.alpha_t60,
-  epi.outcome_label, epi.volume_ratio,
-  eca.lesson_learned, eca.pattern_name
-FROM historical_events he
-JOIN event_price_impact epi ON epi.event_id = he.id
-JOIN event_causal_analysis eca ON eca.event_id = he.id
-JOIN event_stock_context esc ON esc.event_id = he.id
-WHERE he.event_type = 'layoff'
-  AND he.sector = 'Technology'
-  AND esc.market_cap_b > 100
-ORDER BY he.event_date DESC;
-```
-
-### "When a new event comes in, find the top 10 most similar historical events"
-
-```sql
-SELECT he.*, epi.alpha_t20, eca.lesson_learned,
-  -- Similarity scoring: same type + same sector + similar market cap + similar macro
-  (CASE WHEN he.event_type = $event_type THEN 3 ELSE 0 END) +
-  (CASE WHEN he.sector = $sector THEN 2 ELSE 0 END) +
-  (CASE WHEN esc.market_cap_b BETWEEN $mcap * 0.3 AND $mcap * 3 THEN 1 ELSE 0 END) +
-  (CASE WHEN emc.market_regime = $current_regime THEN 1 ELSE 0 END) +
-  (CASE WHEN ABS(emc.vix_close - $current_vix) < 5 THEN 1 ELSE 0 END)
-  AS similarity_score
-FROM historical_events he
-JOIN event_price_impact epi ON epi.event_id = he.id
-JOIN event_causal_analysis eca ON eca.event_id = he.id
-JOIN event_stock_context esc ON esc.event_id = he.id
-JOIN event_market_context emc ON emc.event_id = he.id
-WHERE he.event_category = $event_category
-ORDER BY similarity_score DESC, he.event_date DESC
-LIMIT 10;
-```
-
-### "Generate aggregate stats for this event type"
-
-```sql
-SELECT 
-  COUNT(*) as sample_size,
-  ROUND(AVG(epi.alpha_t5), 3) as avg_alpha_t5,
-  ROUND(AVG(epi.alpha_t20), 3) as avg_alpha_t20,
-  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY epi.alpha_t20), 3) as median_alpha_t20,
-  ROUND(COUNT(*) FILTER (WHERE epi.alpha_t20 > 0)::DECIMAL / COUNT(*), 3) as win_rate_t20,
-  ROUND(STDDEV(epi.alpha_t20), 3) as std_dev_t20,
-  MIN(epi.alpha_t20) as worst_case,
-  MAX(epi.alpha_t20) as best_case
-FROM historical_events he
-JOIN event_price_impact epi ON epi.event_id = he.id
-WHERE he.event_type = $event_type
-  AND he.sector = $sector;
+```python
+def find_similar_events(new_event, limit=10):
+    """
+    Scoring: weighted combination of feature similarity.
+    Higher score = more similar.
+    """
+    candidates = db.query("""
+        SELECT he.*, er.alpha_t20, ea.lesson_learned
+        FROM historical_events he
+        JOIN event_returns er ON er.event_id = he.id AND er.calc_version = (latest)
+        JOIN event_analysis ea ON ea.event_id = he.id AND ea.version = (latest)
+        JOIN event_stock_context esc ON esc.event_id = he.id
+        JOIN event_market_context emc ON emc.event_id = he.id
+        WHERE he.event_type = :event_type          -- Must match type
+    """)
+    
+    for c in candidates:
+        score = 0
+        # Exact type match (required, already filtered)
+        score += 5
+        # Subtype match
+        if c.event_subtype == new_event.subtype: score += 3
+        # Same sector
+        if c.sector == new_event.sector: score += 3
+        # Similar market cap tier
+        if c.market_cap_tier == new_event.market_cap_tier: score += 2
+        # Similar macro regime
+        if c.market_regime == new_event.market_regime: score += 2
+        # Similar VIX environment (within 5 points)
+        if abs(c.vix - new_event.vix) < 5: score += 1
+        # Similar rate environment (within 0.5%)
+        if abs(c.treasury_10y - new_event.treasury_10y) < 0.5: score += 1
+        # Similar pre-event momentum (both up or both down in last 30d)
+        if same_sign(c.return_30d, new_event.return_30d): score += 1
+        # Recency bonus (more recent events slightly preferred)
+        if c.event_date > 2_years_ago: score += 1
+    
+    return sorted(candidates, key=lambda c: c.score, reverse=True)[:limit]
 ```
 
 ---
 
-## Target Tickers for Bootstrap
+## What Users See (Message Format)
 
-### Phase 1: Watchlist (15 tickers)
-NVDA, TSLA, AAPL, MSFT, AMZN, GOOG, META, AMD, PLTR, SMCI, ARM, AVGO, TSM, MSTR, COIN
+After the analysis pipeline runs, the user receives something like:
 
-### Phase 2: Expand to S&P 500 top 50
-Add: JPM, V, MA, UNH, JNJ, PG, HD, BAC, WMT, KO, PEP, MRK, PFE, ABBV, LLY, CRM, NFLX, DIS, BA, CAT, GS, GE, INTC, QCOM, MU, AMAT, LRCX, PANW, SNOW, NET, SQ, SHOP, UBER, ABNB, RIVN
+```
+🔴 NVDA — Restructuring: 12% Workforce Reduction
 
-### Phase 3: Full coverage
-All S&P 500 + top 100 mid-caps with high event frequency
+NVIDIA announced a $2.1B restructuring charge with 12% layoff.
+Forward guidance maintained. $15B buyback authorized.
+
+📊 Historical Pattern (47 similar events):
+• Tech mega-cap restructurings: +18% avg alpha over 20 days (72% win rate)
+• With maintained guidance + buyback: +24% avg (83% win rate)
+• Current setup closest to: META Nov 2022 (+89% in 6 months)
+
+⚡ Key insight: Market typically sells off T+0 (-3%), then reverses 
+as "efficiency narrative" takes hold. Best entry: T+2 to T+3 after 
+initial panic.
+
+⚠️ Watch for: Next earnings guidance confirmation. If guidance is 
+cut at next report, pattern breaks.
+
+Confidence: HIGH (based on 47 cases, strong sector match)
+```
+
+This is what separates us from "SEC 8-K filed" alerts.
 
 ---
 
-## Estimated Database Size
+## Estimated Scale
 
-| Phase | Events | Price Impact Records | Size |
-|-------|--------|---------------------|------|
-| Bootstrap (50 tickers) | ~2,000 | ~2,000 | ~50 MB |
-| 1 year running | ~5,000+ | ~5,000+ | ~150 MB |
-| 3 years running | ~15,000+ | ~15,000+ | ~500 MB |
+| Phase | Events | Tables Size | Timeline |
+|-------|--------|-------------|----------|
+| Bootstrap (50 tickers, 2020-2026) | ~2,000 | ~100 MB | 1-2 weeks |
+| +S&P 500 coverage | ~10,000 | ~500 MB | 1 month |
+| +1 year real-time | ~15,000 | ~750 MB | Ongoing |
+| +3 years real-time | ~30,000 | ~1.5 GB | Ongoing |
 
-Very small by database standards. No scaling concerns.
+Tiny by database standards. A single PostgreSQL instance handles this trivially.
 
 ---
 
 ## Open Questions
 
-1. **Historical options IV data** — Would be valuable for `event_stock_context` but expensive. Skip for now?
-2. **Intraday price data** — Should we store 5-min bars for event day? Useful for gap analysis but much more data.
-3. **Sentiment data** — Social media sentiment at time of event. Hard to get historically. Build forward only?
-4. **International events** — Geopolitical events often happen outside US market hours. How to handle timing?
-5. **Earnings transcript analysis** — Store key quotes from earnings calls? Very valuable but adds complexity.
-6. **Multiple tickers per event** — Some events affect multiple stocks (tariff announcement). Primary ticker + `event_peer_impact` sufficient?
+1. **Intraday data** — Store 5-min bars for event day? Useful for precise gap/reaction analysis but 10x more data. Defer to Phase 2?
+
+2. **Earnings transcripts** — Key quotes from earnings calls are incredibly valuable for "what guidance said" context. Store as `event_sources` or separate `transcript_excerpts` table?
+
+3. **Sentiment data** — Twitter/Reddit/StockTwits sentiment around event time. Hard to get historically. Build forward-only from our scanners?
+
+4. **Options IV** — Historical implied volatility is expensive (CBOE/IVolatility). Skip for bootstrap, add for real-time events?
+
+5. **Non-US events** — Geopolitical events happen outside US market hours. How to handle reference price when multiple sessions are involved?
+
+6. **Event dedup across sources** — Same event reported by SEC, Reuters, and CNBC. How aggressively do we deduplicate? Keep as separate sources linked to one event?
