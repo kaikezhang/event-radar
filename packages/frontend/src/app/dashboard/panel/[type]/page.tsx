@@ -13,7 +13,7 @@ import { EventImpactChart } from "@/components/event-impact-chart";
 import { HistoryEventDetail } from "@/components/history-event-detail";
 import { useBroadcastSync } from "@/lib/broadcast-sync";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "er-dev-2026";
 
 function parseCsv(value: string | null): string[] {

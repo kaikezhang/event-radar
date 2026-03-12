@@ -57,7 +57,10 @@ function buildWsUrl(apiUrl: string, apiKey: string): string {
     (typeof window !== 'undefined' && window.location.protocol === 'https:') ||
     apiUrl.startsWith('https');
   const wsProtocol = isSecure ? 'wss' : 'ws';
-  const baseUrl = apiUrl.replace(/^https?:\/\//, '');
+  // If apiUrl is empty/relative, use current page host (reverse proxy mode)
+  const baseUrl = apiUrl
+    ? apiUrl.replace(/^https?:\/\//, '')
+    : (typeof window !== 'undefined' ? window.location.host : 'localhost:3080');
   return `${wsProtocol}://${baseUrl}/ws/events?apiKey=${encodeURIComponent(apiKey)}`;
 }
 
