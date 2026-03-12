@@ -31,6 +31,7 @@ import { ShortInterestScanner } from './scanners/short-interest-scanner.js';
 import { FdaScanner } from './scanners/fda-scanner.js';
 import { WhiteHouseScanner } from './scanners/whitehouse-scanner.js';
 import { DojScanner } from './scanners/doj-scanner.js';
+import { FederalRegisterScanner } from './scanners/federal-register-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -312,6 +313,9 @@ export function buildApp(options?: {
   }
   if (process.env.EARNINGS_ENABLED === 'true') {
     registry.register(new EarningsScanner(eventBus));
+  }
+  if (process.env.FEDERAL_REGISTER_ENABLED !== 'false') {
+    registry.register(new FederalRegisterScanner(eventBus));
   }
 
   // Helper: truncate title for logs
