@@ -276,10 +276,13 @@ export function classify8kItems(items: string[]): Classified8kEvent | null {
 }
 
 export function format8kHeadline(ticker: string, item: string, eventType: string): string {
-  const headlineLabel = ITEM_CLASSIFICATIONS[item]?.headlineLabel ?? eventType
+  const fallbackHeadlineLabel = eventType
     .split('_')
-    .map((part) => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : ''))
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
     .join(' ');
+  const headlineLabel = (ITEM_CLASSIFICATIONS[item]?.headlineLabel ?? fallbackHeadlineLabel) || 'Other Event';
   return `${ticker} 8-K: ${headlineLabel} (Item ${item})`;
 }
 

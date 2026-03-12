@@ -47,6 +47,7 @@ import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
+import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { createLLMProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
@@ -440,6 +441,7 @@ export function buildApp(options?: {
     registerEventRoutes(server, db);
     registerEventsHistoryRoutes(server, db, { apiKey });
     registerEventImpactRoutes(server, db, { apiKey });
+    registerHistoricalRoutes(server, db, { apiKey });
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);

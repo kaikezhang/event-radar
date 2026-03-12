@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 async function loadBootstrap8kModule() {
-  return import('../scripts/bootstrap-8k.js').catch(() => null);
+  return import('../scripts/bootstrap-8k.ts')
+    .catch(() => import('../scripts/bootstrap-8k.js'))
+    .catch(() => null);
 }
 
 describe('bootstrap-8k helpers', () => {
@@ -145,7 +147,9 @@ describe('bootstrap-8k helpers', () => {
     expect(typeof formatHeadline).toBe('function');
     if (typeof formatHeadline !== 'function') return;
 
-    expect(formatHeadline('NVDA', '99.99', 'other_material_')).not.toContain('undefined');
+    expect(formatHeadline('NVDA', '99.99', 'other_material_')).toBe(
+      'NVDA 8-K: Other Material (Item 99.99)',
+    );
   });
 
   it('should identify Tier 1 tickers for the longer coverage window', async () => {
