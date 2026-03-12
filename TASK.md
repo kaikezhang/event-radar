@@ -1,61 +1,154 @@
-# TASK.md — Bootstrap Phase 1: Expand Earnings Coverage
+# TASK.md — Phase 1 Fix + Phase 2: SEC 8-K Bootstrap
 
-## Goal
+## Part 1: Fix Phase 1 Overflow Issues
 
-Expand the earnings bootstrap from 5 tickers / ~60 events to **all 50 Tier 1+2 tickers** with **full historical depth** (2020-2026). Fix the data coverage gaps from Phase 0 PoC.
+### Problem
+`eps_surprise_pct` column is `decimal(6,2)` which can't hold values like -10,883% (MSTR) or 18,282% (CRWD). Same issue may affect `revenue_surprise_pct`, `yoy_revenue_growth`, `yoy_eps_growth`.
 
-## Problems to Fix
+### Fix
+1. **Update schema** (`packages/backend/src/db/historical-schema.ts`):
+   - `eps_surprise_pct`: change from `decimal(6,2)` to `decimal(10,2)`
+   - `revenue_surprise_pct`: change from `decimal(6,2)` to `decimal(10,2)`
+   - `yoy_revenue_growth`: change from `decimal(6,2)` to `decimal(10,2)`
+   - `yoy_eps_growth`: change from `decimal(6,2)` to `decimal(10,2)`
 
-### 1. Insufficient Historical Depth
-The yfinance bridge currently uses `limit=20` for earnings dates and default period for price history (~3 years). This misses most pre-2023 earnings. We need:
-- `get_earnings_dates(limit=100)` to get all available history
-- Price history with `period="max"` or `start="2019-01-01"` to cover return calculations for events back to 2020
+2. **Generate ALTER TABLE migration** (`packages/backend/src/db/migrations/fix-decimal-precision.sql`):
+   ```sql
+   ALTER TABLE metrics_earnings ALTER COLUMN eps_surprise_pct TYPE decimal(10,2);
+   ALTER TABLE metrics_earnings ALTER COLUMN revenue_surprise_pct TYPE decimal(10,2);
+   ALTER TABLE metrics_earnings ALTER COLUMN yoy_revenue_growth TYPE decimal(10,2);
+   ALTER TABLE metrics_earnings ALTER COLUMN yoy_eps_growth TYPE decimal(10,2);
+   ```
 
-### 2. Only 5 Tickers
-Phase 0 only bootstraps NVDA, TSLA, META, AAPL, AMD. We need all 50 tickers from the spec.
+3. **Clamp surprise values** in `bootstrap-earnings.ts`: If `|eps_surprise_pct| > 99999999` (8 digits), clamp to ±99999999. This is a safety net; the wider column should handle it.
 
-### 3. Missing Fiscal Quarter in Headlines
-Headlines say "Q earnings beat" without the actual fiscal quarter (e.g., "Q3 FY2025"). The `metrics_earnings` table has `fiscal_quarter` and `fiscal_year` columns but they're not populated. yfinance earnings_dates doesn't directly provide this, so infer it from the date:
-- Q1 = Jan-Mar reporting, Q2 = Apr-Jun, Q3 = Jul-Sep, Q4 = Oct-Dec
-- Fiscal year = calendar year of the earnings date (approximate, good enough for display)
+## Part 2: SEC 8-K Bootstrap Script
 
-## What to Build
+Build a new bootstrap script that fetches SEC 8-K filings for all 50 tickers and populates the historical event database.
 
-### 1. Update `helpers/yfinance-bridge.py`
-- `get_earnings_dates()`: increase default limit to 100
-- `history` command: accept optional `start` date parameter, default to `"2019-01-01"` to get 6+ years of price data
-- Add error handling for tickers that don't exist or have no data
+### What to Build
 
-### 2. Update `bootstrap-earnings.ts`
-- **Expand TICKERS_CONFIG** to include all 50 tickers from spec:
-  
-  **Tier 1 (15):** NVDA, TSLA, AAPL, MSFT, AMZN, GOOG, META, AMD, PLTR, SMCI, ARM, AVGO, TSM, MSTR, COIN
-  
-  **Tier 2 (35):** NFLX, JPM, BA, LLY, PFE, JNJ, UNH, V, MA, WMT, HD, CRM, ORCL, ADBE, INTC, MU, QCOM, AMAT, LRCX, KLAC, PANW, CRWD, SNOW, NET, DDOG, SQ, SHOP, UBER, ABNB, RIVN, LCID, NIO, BABA, PDD, SE
-  
-  For each, include: name, sector, industry, CIK (look up real CIKs), sectorEtf, exchange. Include `previousTickers` where applicable (FB→META already done, GOOG had GOOGL).
+#### 1. Python Bridge Extension (`packages/backend/src/scripts/helpers/edgar-bridge.py`)
 
-- **Fetch more history**: Pass `start="2019-01-01"` to yfinance bridge for price data
-- **Fetch more earnings dates**: Use `limit=100`
-- **Add fiscal quarter inference**: From earnings date, compute fiscal quarter/year and populate `metrics_earnings.fiscal_quarter` and `metrics_earnings.fiscal_year`
-- **Improve headline**: Change from `"NVDA Q earnings beat"` to `"NVDA Q3 FY2025 earnings beat (+5.3% surprise)"`
-- **Rate limiting**: Add a 1-second delay between tickers to avoid yfinance rate limits
-- **Progress logging**: Print progress like `[12/50] Processing MSFT...`
-- **Idempotent**: Already handled — keep the existing dedup logic
+A Python script that uses `edgartools` to fetch 8-K filings:
 
-### 3. Update Benchmark Data Fetching
-- Fetch benchmark data (SPY, QQQ, VIX etc.) with `start="2019-01-01"` too, so market context works for older events
+```python
+# Commands:
+#   filings_8k — get 8-K filings for a company by CIK
+#     Input: {"command": "filings_8k", "cik": "1045810", "start_date": "2022-01-01", "end_date": "2026-12-31"}
+#     Output: {"data": [{"accession": "...", "filed": "2024-01-15", "form": "8-K", "items": ["2.02", "9.01"], "primary_doc_url": "...", "description": "..."}]}
+```
+
+For each 8-K filing, extract:
+- Filing date
+- Item numbers (e.g., "2.02", "1.01", "5.02")
+- Accession number (for dedup)
+- Primary document URL
+- Filing description/title
+
+**SEC EDGAR requires a User-Agent header.** Use: `Event-Radar/1.0 (takaikezhang@gmail.com)`
+
+Set this via environment variable before importing edgartools:
+```python
+import os
+os.environ['EDGAR_IDENTITY'] = 'Event-Radar/1.0 takaikezhang@gmail.com'
+```
+
+#### 2. Bootstrap Script (`packages/backend/src/scripts/bootstrap-8k.ts`)
+
+A standalone TypeScript script that:
+
+1. **Reads existing companies** from the database (created by earnings bootstrap)
+2. **For each company with a CIK:**
+   - Fetches 8-K filings via edgar-bridge.py
+   - Date range: Tier 1 tickers → 2022-01-01 to present, Tier 2 → 2024-01-01 to present
+   - Rate limit: 1 second between API calls (SEC rate limit is 10 req/s, but be conservative)
+
+3. **Classifies each 8-K by Item number** (rule-based, no AI):
+
+   | Item | Category | Event Type | Severity Default |
+   |------|----------|-----------|-----------------|
+   | 1.01 | corporate | contract_material | medium |
+   | 1.02 | corporate | bankruptcy | critical |
+   | 1.03 | corporate | mine_safety | low |
+   | 2.01 | corporate | acquisition_disposition | high |
+   | 2.02 | earnings | earnings_results | high |
+   | 2.03 | corporate | off_balance_sheet | medium |
+   | 2.04 | corporate | triggering_event | medium |
+   | 2.05 | restructuring | restructuring | high |
+   | 2.06 | corporate | impairment | high |
+   | 3.01 | corporate | delisting | critical |
+   | 3.02 | corporate | charter_amendment | low |
+   | 3.03 | corporate | ticker_change | medium |
+   | 4.01 | corporate | auditor_change | medium |
+   | 4.02 | corporate | financial_restatement | critical |
+   | 5.01 | corporate | strategy_update | medium |
+   | 5.02 | leadership | leadership_change | high |
+   | 5.03 | corporate | bylaw_amendment | low |
+   | 5.07 | corporate | shareholder_vote | medium |
+   | 7.01 | corporate | regulation_fd | medium |
+   | 8.01 | corporate | other_material | medium |
+   | 9.01 | corporate | financial_exhibit | low |
+
+   **Skip items 3.02, 3.03, 5.03, 9.01** — too routine, low value.
+
+   When a filing has multiple items (e.g., "2.02" + "9.01"), use the **highest-priority item** (lowest item number in category priority: earnings > restructuring > leadership > corporate).
+
+4. **For each classified event, creates:**
+   - `historical_events` record with:
+     - `event_ts` = filing date
+     - `event_ts_precision = 'day'`
+     - `event_ts_source = 'sec_filing'`
+     - `event_category`, `event_type` from classification table above
+     - `severity` from classification, upgraded if multiple significant items
+     - `headline` = e.g., "NVDA 8-K: Leadership Change (Item 5.02)"
+     - `collection_tier` = 'tier1' or 'tier2'
+     - `bootstrap_batch` = 'phase2_8k_v1'
+   - `event_sources` record with:
+     - `source_type = 'sec_edgar'`
+     - `source_url` = EDGAR filing URL
+     - `source_native_id` = accession number
+   - `event_stock_context` — reuse the same logic from bootstrap-earnings (price, RSI, MA, etc.)
+   - `event_market_context` — same as earnings bootstrap
+   - `event_returns` — same multi-horizon returns calculation
+
+5. **Dedup:**
+   - By `company_id + event_ts + event_type` (same as earnings)
+   - Also by accession number in `event_sources` to avoid re-processing the same filing
+   - **Skip 8-K filings with only item 2.02** — these are earnings results already covered by the earnings bootstrap. Only process if the 8-K has OTHER items besides 2.02.
+
+6. **Progress logging:** `[12/50] Processing MSFT 8-K filings... found 45 filings, 32 after dedup`
+
+7. **Error handling:** try/catch per ticker, continue on failure
+
+### Reuse
+- Import and reuse functions from `bootstrap-earnings.ts`:
+  - `computeRSI`, `computeSMA`, `compute52WeekRange`, etc. from `helpers/technical-indicators.ts`
+  - Market context computation logic
+  - Returns computation logic
+- **If the earnings bootstrap exports helper functions, import them. If not, extract shared logic into `helpers/` modules.**
+
+### Price Data
+- Reuse the same yfinance bridge for price data
+- Companies and price data should already be cached from earnings bootstrap
+- If a company doesn't exist in DB (shouldn't happen), skip it
+
+## Files to Create
+- `packages/backend/src/scripts/helpers/edgar-bridge.py` — NEW
+- `packages/backend/src/scripts/bootstrap-8k.ts` — NEW
+
+## Files to Modify
+- `packages/backend/src/db/historical-schema.ts` — decimal precision fix
+- `packages/backend/src/db/migrations/fix-decimal-precision.sql` — NEW migration
 
 ## What NOT to Do
-- Do NOT modify the database schema (historical-schema.ts) — it's already correct
-- Do NOT add AI analysis (that's a separate task)
-- Do NOT touch the real-time pipeline code
-- Do NOT modify existing tests that pass — only add new ones if needed
-- Do NOT change the migration file
+- Do NOT add Claude/LLM analysis — that's a separate task
+- Do NOT modify the real-time pipeline code
+- Do NOT parse the actual 8-K document text (just use item numbers + filing metadata)
+- Do NOT merge any PR
 
 ## Verification
 
-After making changes:
 ```bash
 pnpm --filter @event-radar/backend build
 pnpm --filter @event-radar/backend test
@@ -63,11 +156,3 @@ pnpm --filter @event-radar/backend lint
 ```
 
 All must pass. Then create a PR.
-
-## Files to Modify
-- `packages/backend/src/scripts/helpers/yfinance-bridge.py`
-- `packages/backend/src/scripts/bootstrap-earnings.ts`
-
-## Reference
-- Full spec: `docs/HISTORICAL-DB-SPEC.md` (v3), section "Tiered Collection Strategy" and "Bootstrap Plan > Phase 1"
-- Existing schema: `packages/backend/src/db/historical-schema.ts`
