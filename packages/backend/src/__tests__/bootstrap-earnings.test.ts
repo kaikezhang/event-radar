@@ -4,6 +4,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import * as hist from '../db/historical-schema.js';
 import {
   buildExistingEarningsDedupWhereClause,
+  buildMetricsEarningsInsertValues,
   processTickerConfigs,
   resolveCoverageDateTo,
 } from '../scripts/bootstrap-earnings.js';
@@ -137,6 +138,84 @@ describe('bootstrap-earnings helpers', () => {
 
     it('should fall back to the current UTC date when no events exist', () => {
       expect(resolveCoverageDateTo([], new Date('2026-03-12T15:45:00.000Z'))).toBe('2026-03-12');
+    });
+  });
+
+  describe('decimal precision safety', () => {
+    it('should widen eps_surprise_pct to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.epsSurprisePct.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen revenue_surprise_pct to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.revenueSurprisePct.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen yoy_revenue_growth to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.yoyRevenueGrowth.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should widen yoy_eps_growth to numeric(10, 2)', () => {
+      expect(hist.metricsEarnings.yoyEpsGrowth.getSQLType()).toBe('numeric(10, 2)');
+    });
+
+    it('should clamp null surprise values without changing them', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(null)).toBeNull();
+    });
+
+    it('should leave in-range surprise values unchanged', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(18282)).toBe(18282);
+    });
+
+    it('should clamp large positive surprise values to the storage ceiling', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(123456789)).toBe(99999999);
+    });
+
+    it('should clamp large negative surprise values to the storage floor', async () => {
+      const module = await import('../scripts/bootstrap-earnings.js');
+      const clamp = (module as Record<string, unknown>)['clampPercentageForDecimalStorage'];
+
+      expect(typeof clamp).toBe('function');
+      if (typeof clamp !== 'function') return;
+
+      expect(clamp(-123456789)).toBe(-99999999);
+    });
+
+    it('should clamp all percentage fields before inserting earnings metrics', () => {
+      const values = buildMetricsEarningsInsertValues('event-1', 'FY2026-Q1', {
+        date: '2026-03-12',
+        eps_estimate: 1.25,
+        eps_actual: 1.5,
+        surprise_pct: 123456789,
+        revenue_surprise_pct: -123456789,
+        yoy_revenue_growth: 123456789,
+        yoy_eps_growth: -123456789,
+      });
+
+      expect(values).toMatchObject({
+        eventId: 'event-1',
+        epsSurprisePct: '99999999',
+        revenueSurprisePct: '-99999999',
+        yoyRevenueGrowth: '99999999',
+        yoyEpsGrowth: '-99999999',
+      });
     });
   });
 });

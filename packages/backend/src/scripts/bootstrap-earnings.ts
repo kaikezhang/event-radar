@@ -7,7 +7,8 @@
  * Idempotent: safe to re-run. Deduplicates earnings by company_id + ticker_at_time + event_ts.
  */
 
-import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -27,28 +28,30 @@ import {
   classifyOutcome,
   type PriceBar,
 } from './helpers/technical-indicators.js';
+import { insertHistoricalEventBundle } from './helpers/historical-event-bundle.js';
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const BOOTSTRAP_BATCH = 'phase1_earnings_v1';
+export const BOOTSTRAP_BATCH = 'phase1_earnings_v1';
 const DB_URL = process.env.DATABASE_URL ?? 'postgresql://radar:radar@localhost:5432/event_radar';
 const EARNINGS_LIMIT = 100;
-const PRICE_HISTORY_START = '2019-01-01';
-const TICKER_DELAY_MS = 1_000;
+export const PRICE_HISTORY_START = '2019-01-01';
+export const TICKER_DELAY_MS = 1_000;
+const DECIMAL_PERCENT_MAX = 99_999_999;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PYTHON_BRIDGE = path.join(__dirname, 'helpers', 'yfinance-bridge.py');
+const PYTHON_BRIDGE = resolveScriptAssetPath('helpers', 'yfinance-bridge.py');
 
-interface PreviousTicker {
+export interface PreviousTicker {
   ticker: string;
   from: string;
   to: string;
   reason: string;
 }
 
-interface TickerConfig {
+export interface TickerConfig {
   ticker: string;
   name: string;
   sector: string;
@@ -72,7 +75,7 @@ interface ProcessTickerConfigsOptions {
   logger?: TickerLoopLogger;
 }
 
-const TICKERS_CONFIG: readonly TickerConfig[] = [
+export const TICKERS_CONFIG: readonly TickerConfig[] = [
   {
     ticker: 'NVDA',
     name: 'NVIDIA Corporation',
@@ -530,26 +533,16 @@ const TICKERS_CONFIG: readonly TickerConfig[] = [
 ] as const;
 
 // Return horizons in trading days
-const RETURN_HORIZONS = [0, 1, 3, 5, 10, 20, 60] as const;
+export const RETURN_HORIZONS = [0, 1, 3, 5, 10, 20, 60] as const;
 
-// ---------------------------------------------------------------------------
-// Python bridge
-// ---------------------------------------------------------------------------
-
-function callPython<T>(cmd: Record<string, unknown>): T {
-  const result = execSync(`python3 "${PYTHON_BRIDGE}" '${JSON.stringify(cmd)}'`, {
-    encoding: 'utf-8',
-    maxBuffer: 50 * 1024 * 1024,
-    timeout: 120_000,
-  });
-  return JSON.parse(result) as T;
-}
-
-interface EarningsDate {
+export interface EarningsDate {
   date: string;
   eps_estimate: number | null;
   eps_actual: number | null;
   surprise_pct: number | null;
+  revenue_surprise_pct?: number | null;
+  yoy_revenue_growth?: number | null;
+  yoy_eps_growth?: number | null;
 }
 
 interface YfResponse<T> {
@@ -557,8 +550,85 @@ interface YfResponse<T> {
   data: T[];
 }
 
-function fetchEarningsDates(ticker: string, limit = EARNINGS_LIMIT): EarningsDate[] {
-  const res = callPython<YfResponse<EarningsDate>>({
+export interface BenchmarkHistoryMap {
+  [ticker: string]: PriceBar[] | undefined;
+}
+
+interface EventStockContextValuesInput {
+  eventId: string;
+  companyId: string;
+  stockBars: PriceBar[];
+  eventIdx: number;
+}
+
+interface EventMarketContextValuesInput {
+  eventId: string;
+  pricingDate: string;
+  benchmarkData: BenchmarkHistoryMap;
+  sectorEtf: string;
+}
+
+interface EventReturnsValuesInput {
+  eventId: string;
+  companyId: string;
+  tickerAtTime: string;
+  pricingDate: string;
+  stockBars: PriceBar[];
+  eventIdx: number;
+  benchmarkData: BenchmarkHistoryMap;
+  sectorEtf: string;
+  t0Eligible?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Python bridge
+// ---------------------------------------------------------------------------
+
+export function resolveScriptAssetPath(...relativeSegments: string[]): string {
+  const directPath = path.join(__dirname, ...relativeSegments);
+  const packageRoot = path.join(__dirname, '..');
+  const repoRoot = path.join(packageRoot, '..', '..', '..');
+  const fallbackCandidates = [
+    directPath,
+    path.join(packageRoot, 'src', 'scripts', ...relativeSegments),
+    path.join(repoRoot, 'packages', 'backend', 'src', 'scripts', ...relativeSegments),
+    path.join(process.cwd(), 'src', 'scripts', ...relativeSegments),
+    path.join(process.cwd(), 'packages', 'backend', 'src', 'scripts', ...relativeSegments),
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return directPath;
+}
+
+function readScriptAsset(...relativeSegments: string[]): string {
+  return fs.readFileSync(resolveScriptAssetPath(...relativeSegments), 'utf-8');
+}
+
+function callPython<T>(bridgePath: string, cmd: Record<string, unknown>): T {
+  const result = execFileSync('python3', [bridgePath, JSON.stringify(cmd)], {
+    encoding: 'utf-8',
+    maxBuffer: 50 * 1024 * 1024,
+    timeout: 120_000,
+  });
+  return JSON.parse(result) as T;
+}
+
+export async function runHistoricalMigrations(pool: pg.Pool): Promise<void> {
+  const migrationFiles = ['historical-tables.sql', 'fix-decimal-precision.sql'];
+
+  for (const filename of migrationFiles) {
+    const sqlText = readScriptAsset('..', 'db', 'migrations', filename);
+    await pool.query(sqlText);
+  }
+}
+
+export function fetchEarningsDates(ticker: string, limit = EARNINGS_LIMIT): EarningsDate[] {
+  const res = callPython<YfResponse<EarningsDate>>(PYTHON_BRIDGE, {
     action: 'earnings_dates',
     ticker,
     limit,
@@ -570,8 +640,8 @@ function fetchEarningsDates(ticker: string, limit = EARNINGS_LIMIT): EarningsDat
   return res.data;
 }
 
-function fetchHistory(ticker: string, start = PRICE_HISTORY_START): PriceBar[] {
-  const res = callPython<YfResponse<PriceBar>>({
+export function fetchHistory(ticker: string, start = PRICE_HISTORY_START): PriceBar[] {
+  const res = callPython<YfResponse<PriceBar>>(PYTHON_BRIDGE, {
     action: 'history',
     ticker,
     start,
@@ -614,7 +684,39 @@ function inferFiscalQuarter(dateStr: string): string {
   return `Q4 FY${fiscalYear}`;
 }
 
-function sleep(ms: number): Promise<void> {
+export function clampPercentageForDecimalStorage(value: number | null): number | null {
+  if (value == null) return null;
+  if (value > DECIMAL_PERCENT_MAX) return DECIMAL_PERCENT_MAX;
+  if (value < -DECIMAL_PERCENT_MAX) return -DECIMAL_PERCENT_MAX;
+  return value;
+}
+
+export function buildMetricsEarningsInsertValues(
+  eventId: string,
+  fiscalQuarter: string,
+  earning: EarningsDate,
+): typeof hist.metricsEarnings.$inferInsert {
+  const clampedEpsSurprisePct = clampPercentageForDecimalStorage(earning.surprise_pct);
+  const clampedRevenueSurprisePct = clampPercentageForDecimalStorage(
+    earning.revenue_surprise_pct ?? null,
+  );
+  const clampedYoyRevenueGrowth = clampPercentageForDecimalStorage(earning.yoy_revenue_growth ?? null);
+  const clampedYoyEpsGrowth = clampPercentageForDecimalStorage(earning.yoy_eps_growth ?? null);
+
+  return {
+    eventId,
+    fiscalQuarter,
+    epsActual: earning.eps_actual != null ? String(earning.eps_actual) : null,
+    epsEstimate: earning.eps_estimate != null ? String(earning.eps_estimate) : null,
+    epsSurprisePct: clampedEpsSurprisePct != null ? String(clampedEpsSurprisePct) : null,
+    revenueSurprisePct:
+      clampedRevenueSurprisePct != null ? String(clampedRevenueSurprisePct) : null,
+    yoyRevenueGrowth: clampedYoyRevenueGrowth != null ? String(clampedYoyRevenueGrowth) : null,
+    yoyEpsGrowth: clampedYoyEpsGrowth != null ? String(clampedYoyEpsGrowth) : null,
+  };
+}
+
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -658,8 +760,15 @@ export function resolveCoverageDateTo(dates: readonly string[], now = new Date()
 }
 
 /** Find the previous trading day index (the bar before eventIdx). */
-function findPrevTradingDay(bars: PriceBar[], eventIdx: number): number {
+export function findPrevTradingDay(bars: PriceBar[], eventIdx: number): number {
   return eventIdx > 0 ? eventIdx - 1 : -1;
+}
+
+/** Find the first trading day on or after the provided date. */
+export function findBarIndexOnOrAfter(bars: PriceBar[], dateStr: string): number {
+  const exactIdx = findBarIndex(bars, dateStr);
+  if (exactIdx >= 0) return exactIdx;
+  return bars.findIndex((bar) => bar.date >= dateStr);
 }
 
 /** Convert earnings date to YYYY-MM-DD for bar matching. */
@@ -671,7 +780,7 @@ function earningsDateToBarDate(dateStr: string): string {
 /**
  * Compute returns at various horizons for both the stock and a benchmark.
  */
-function computeReturns(
+export function computeReturns(
   bars: PriceBar[],
   refPrice: number,
   eventIdx: number,
@@ -686,7 +795,7 @@ function computeReturns(
 }
 
 /** Get VIX percentile: what % of the past year's VIX closes were below current. */
-function computeVixPercentile(vixBars: PriceBar[], asOfIdx: number): number | null {
+export function computeVixPercentile(vixBars: PriceBar[], asOfIdx: number): number | null {
   const lookback = 252;
   const start = Math.max(0, asOfIdx - lookback);
   const slice = vixBars.slice(start, asOfIdx + 1);
@@ -702,6 +811,255 @@ function computeVixPercentile(vixBars: PriceBar[], asOfIdx: number): number | nu
   return +((below / slice.length) * 100).toFixed(1);
 }
 
+export async function loadBenchmarkHistory(
+  configs: readonly TickerConfig[],
+  options: { start?: string; delayMs?: number } = {},
+): Promise<Record<string, PriceBar[]>> {
+  const { start = PRICE_HISTORY_START, delayMs = 350 } = options;
+  const benchmarkTickers = [
+    ...new Set(['SPY', 'QQQ', 'IWM', '^VIX', '^TNX', ...configs.map((cfg) => cfg.sectorEtf)]),
+  ];
+  const benchmarkData: Record<string, PriceBar[]> = {};
+
+  for (const [index, ticker] of benchmarkTickers.entries()) {
+    console.log(`  Fetching ${ticker}...`);
+    benchmarkData[ticker] = fetchHistory(ticker, start);
+    if (index < benchmarkTickers.length - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return benchmarkData;
+}
+
+export function buildEventStockContextValues(
+  input: EventStockContextValuesInput,
+): typeof hist.eventStockContext.$inferInsert | null {
+  const { eventId, companyId, stockBars, eventIdx } = input;
+  const currentClose = stockBars[eventIdx]?.close;
+  if (currentClose == null) return null;
+
+  const closes = stockBars
+    .slice(0, eventIdx + 1)
+    .map((bar) => bar.close)
+    .filter((close): close is number => close != null);
+  const rsi = computeRSI(closes);
+  const sma50 = computeSMA(closes, 50);
+  const sma200 = computeSMA(closes, 200);
+  const { high: high52w, low: low52w } = compute52WeekRange(stockBars, eventIdx);
+  const avgVol = computeAvgVolume(stockBars, 20, eventIdx);
+
+  const price30dAgo = getCloseAtOffset(stockBars, eventIdx, -22);
+  const price90dAgo = getCloseAtOffset(stockBars, eventIdx, -63);
+
+  return {
+    eventId,
+    companyId,
+    priceAtEvent: String(currentClose),
+    price30dAgo: price30dAgo != null ? String(price30dAgo) : null,
+    price90dAgo: price90dAgo != null ? String(price90dAgo) : null,
+    high52w: high52w != null ? String(high52w) : null,
+    low52w: low52w != null ? String(low52w) : null,
+    return30d: price30dAgo != null ? String(computeReturn(price30dAgo, currentClose)) : null,
+    return90d: price90dAgo != null ? String(computeReturn(price90dAgo, currentClose)) : null,
+    distanceFrom52wHigh: high52w != null ? String(computeReturn(high52w, currentClose)) : null,
+    distanceFrom52wLow: low52w != null ? String(computeReturn(low52w, currentClose)) : null,
+    rsi14: rsi != null ? String(rsi) : null,
+    above50ma: sma50 != null ? currentClose > sma50 : null,
+    above200ma: sma200 != null ? currentClose > sma200 : null,
+    avgVolume20d: avgVol,
+    pitCompleteness: 'full',
+  };
+}
+
+export function buildEventMarketContextValues(
+  input: EventMarketContextValuesInput,
+): typeof hist.eventMarketContext.$inferInsert | null {
+  const { eventId, pricingDate, benchmarkData, sectorEtf } = input;
+  const spyBars = benchmarkData['SPY'] ?? [];
+  const vixBars = benchmarkData['^VIX'] ?? [];
+  const tnxBars = benchmarkData['^TNX'] ?? [];
+  const qqqBars = benchmarkData['QQQ'] ?? [];
+  const iwmBars = benchmarkData['IWM'] ?? [];
+  const sectorBars = benchmarkData[sectorEtf] ?? [];
+
+  const spyIdx = findBarIndex(spyBars, pricingDate);
+  const vixIdx = findBarIndex(vixBars, pricingDate);
+  const sectorIdx = findBarIndex(sectorBars, pricingDate);
+
+  if (spyIdx < 0) return null;
+
+  const spyClose = spyBars[spyIdx]?.close;
+  const spyPrevClose = spyIdx > 0 ? spyBars[spyIdx - 1]?.close : null;
+  const spyChange =
+    spyPrevClose != null && spyClose != null ? computeReturn(spyPrevClose, spyClose) : null;
+
+  const qqqIdx = findBarIndex(qqqBars, pricingDate);
+  const qqqPrevClose = qqqIdx > 0 ? qqqBars[qqqIdx - 1]?.close : null;
+  const qqqClose = qqqIdx >= 0 ? qqqBars[qqqIdx]?.close : null;
+  const qqqChange =
+    qqqPrevClose != null && qqqClose != null ? computeReturn(qqqPrevClose, qqqClose) : null;
+
+  const iwmIdx = findBarIndex(iwmBars, pricingDate);
+  const iwmPrevClose = iwmIdx > 0 ? iwmBars[iwmIdx - 1]?.close : null;
+  const iwmClose = iwmIdx >= 0 ? iwmBars[iwmIdx]?.close : null;
+  const iwmChange =
+    iwmPrevClose != null && iwmClose != null ? computeReturn(iwmPrevClose, iwmClose) : null;
+
+  const vixClose = vixIdx >= 0 ? vixBars[vixIdx]?.close : null;
+  const vixPercentile = vixIdx >= 0 ? computeVixPercentile(vixBars, vixIdx) : null;
+
+  const tnxIdx = findBarIndex(tnxBars, pricingDate);
+  const tnxClose = tnxIdx >= 0 ? tnxBars[tnxIdx]?.close : null;
+
+  const sectorClose = sectorIdx >= 0 ? sectorBars[sectorIdx]?.close : null;
+  const sectorPrevClose = sectorIdx > 0 ? sectorBars[sectorIdx - 1]?.close : null;
+  const sectorChange =
+    sectorPrevClose != null && sectorClose != null
+      ? computeReturn(sectorPrevClose, sectorClose)
+      : null;
+
+  const sector30dAgoIdx = sectorIdx >= 0 ? Math.max(0, sectorIdx - 22) : -1;
+  const sector30dAgoClose = sector30dAgoIdx >= 0 ? sectorBars[sector30dAgoIdx]?.close : null;
+  const sector30d =
+    sector30dAgoClose != null && sectorClose != null
+      ? computeReturn(sector30dAgoClose, sectorClose)
+      : null;
+
+  const spyCloses = spyBars
+    .slice(0, spyIdx + 1)
+    .map((bar) => bar.close)
+    .filter((close): close is number => close != null);
+  const spySma50 = computeSMA(spyCloses, 50);
+  const spySma200 = computeSMA(spyCloses, 200);
+  const regime = spyClose != null ? determineRegime(spyClose, spySma50, spySma200) : null;
+
+  return {
+    eventId,
+    spyClose: spyClose != null ? String(spyClose) : null,
+    spyChangePct: spyChange != null ? String(spyChange) : null,
+    qqqChangePct: qqqChange != null ? String(qqqChange) : null,
+    iwmChangePct: iwmChange != null ? String(iwmChange) : null,
+    vixClose: vixClose != null ? String(vixClose) : null,
+    vixPercentile1y: vixPercentile != null ? String(vixPercentile) : null,
+    treasury10y: tnxClose != null ? String(tnxClose) : null,
+    sectorEtfTicker: sectorEtf,
+    sectorEtfChange: sectorChange != null ? String(sectorChange) : null,
+    sectorEtf30d: sector30d != null ? String(sector30d) : null,
+    marketRegime: regime,
+  };
+}
+
+export function buildEventReturnsValues(
+  input: EventReturnsValuesInput,
+): typeof hist.eventReturns.$inferInsert | null {
+  const {
+    eventId,
+    companyId,
+    tickerAtTime,
+    pricingDate,
+    stockBars,
+    eventIdx,
+    benchmarkData,
+    sectorEtf,
+    t0Eligible = true,
+  } = input;
+  const spyBars = benchmarkData['SPY'] ?? [];
+  const sectorBars = benchmarkData[sectorEtf] ?? [];
+
+  const prevIdx = findPrevTradingDay(stockBars, eventIdx);
+  if (prevIdx < 0 || stockBars[prevIdx]?.close == null) return null;
+
+  const refPrice = stockBars[prevIdx]!.close!;
+  const refDate = stockBars[prevIdx]!.date;
+  const stockReturns = computeReturns(stockBars, refPrice, eventIdx);
+
+  const spyRefIdx = findBarIndex(spyBars, refDate);
+  const spyEventIdx = findBarIndex(spyBars, pricingDate);
+  const spyRefPrice = spyRefIdx >= 0 ? spyBars[spyRefIdx]?.close : null;
+  const spyReturns =
+    spyRefPrice != null && spyEventIdx >= 0 ? computeReturns(spyBars, spyRefPrice, spyEventIdx) : {};
+
+  const alpha: Record<string, number | null> = {};
+  for (const horizon of RETURN_HORIZONS) {
+    const stockReturn = stockReturns[`t${horizon}`];
+    const benchmarkReturn = spyReturns[`t${horizon}`];
+    alpha[`t${horizon}`] =
+      stockReturn != null && benchmarkReturn != null
+        ? +(stockReturn - benchmarkReturn).toFixed(4)
+        : null;
+  }
+
+  const sectorRefIdx = findBarIndex(sectorBars, refDate);
+  const sectorEventIdx = findBarIndex(sectorBars, pricingDate);
+  const sectorRefPrice = sectorRefIdx >= 0 ? sectorBars[sectorRefIdx]?.close : null;
+  const sectorReturns =
+    sectorRefPrice != null && sectorEventIdx >= 0
+      ? computeReturns(sectorBars, sectorRefPrice, sectorEventIdx)
+      : {};
+  const sectorAlphaT5 =
+    stockReturns['t5'] != null && sectorReturns['t5'] != null
+      ? +(stockReturns['t5'] - sectorReturns['t5']).toFixed(4)
+      : null;
+  const sectorAlphaT20 =
+    stockReturns['t20'] != null && sectorReturns['t20'] != null
+      ? +(stockReturns['t20'] - sectorReturns['t20']).toFixed(4)
+      : null;
+
+  const eventOpen = stockBars[eventIdx]?.open;
+  const overnightGap = eventOpen != null ? computeReturn(refPrice, eventOpen) : null;
+  const eventVol = stockBars[eventIdx]?.volume ?? null;
+  const avgVol20d = computeAvgVolume(stockBars, 20, eventIdx);
+  const volRatio =
+    eventVol != null && avgVol20d != null && avgVol20d > 0 ? +(eventVol / avgVol20d).toFixed(2) : null;
+
+  const extremes = computeExtremes(stockBars, refPrice, eventIdx, 60);
+  const outcomeT20 = classifyOutcome(alpha['t20']);
+
+  return {
+    eventId,
+    companyId,
+    tickerAtTime,
+    refPrice: String(refPrice),
+    refPriceType: 'prev_close',
+    refPriceDate: refDate,
+    returnT0: stockReturns['t0'] != null ? String(stockReturns['t0']) : null,
+    returnT1: stockReturns['t1'] != null ? String(stockReturns['t1']) : null,
+    returnT3: stockReturns['t3'] != null ? String(stockReturns['t3']) : null,
+    returnT5: stockReturns['t5'] != null ? String(stockReturns['t5']) : null,
+    returnT10: stockReturns['t10'] != null ? String(stockReturns['t10']) : null,
+    returnT20: stockReturns['t20'] != null ? String(stockReturns['t20']) : null,
+    returnT60: stockReturns['t60'] != null ? String(stockReturns['t60']) : null,
+    spyReturnT0: spyReturns['t0'] != null ? String(spyReturns['t0']) : null,
+    spyReturnT1: spyReturns['t1'] != null ? String(spyReturns['t1']) : null,
+    spyReturnT3: spyReturns['t3'] != null ? String(spyReturns['t3']) : null,
+    spyReturnT5: spyReturns['t5'] != null ? String(spyReturns['t5']) : null,
+    spyReturnT10: spyReturns['t10'] != null ? String(spyReturns['t10']) : null,
+    spyReturnT20: spyReturns['t20'] != null ? String(spyReturns['t20']) : null,
+    spyReturnT60: spyReturns['t60'] != null ? String(spyReturns['t60']) : null,
+    alphaT0: alpha['t0'] != null ? String(alpha['t0']) : null,
+    alphaT1: alpha['t1'] != null ? String(alpha['t1']) : null,
+    alphaT3: alpha['t3'] != null ? String(alpha['t3']) : null,
+    alphaT5: alpha['t5'] != null ? String(alpha['t5']) : null,
+    alphaT10: alpha['t10'] != null ? String(alpha['t10']) : null,
+    alphaT20: alpha['t20'] != null ? String(alpha['t20']) : null,
+    alphaT60: alpha['t60'] != null ? String(alpha['t60']) : null,
+    sectorBenchmark: sectorEtf,
+    sectorAlphaT5: sectorAlphaT5 != null ? String(sectorAlphaT5) : null,
+    sectorAlphaT20: sectorAlphaT20 != null ? String(sectorAlphaT20) : null,
+    overnightGapPct: overnightGap != null ? String(overnightGap) : null,
+    maxDrawdownPct: extremes.maxDrawdownPct != null ? String(extremes.maxDrawdownPct) : null,
+    maxDrawdownDay: extremes.maxDrawdownDay,
+    maxRunupPct: extremes.maxRunupPct != null ? String(extremes.maxRunupPct) : null,
+    maxRunupDay: extremes.maxRunupDay,
+    volumeEventDay: eventVol,
+    volumeAvg20d: avgVol20d,
+    volumeRatio: volRatio != null ? String(volRatio) : null,
+    outcomeT20,
+    t0Eligible,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -715,33 +1073,12 @@ async function main() {
 
   // Run migration
   console.log('Running migration...');
-  const migrationSql = (await import('node:fs')).readFileSync(
-    path.join(__dirname, '..', 'db', 'migrations', 'historical-tables.sql'),
-    'utf-8',
-  );
-  await pool.query(migrationSql);
+  await runHistoricalMigrations(pool);
   console.log('Migration complete.\n');
 
   // Fetch market data upfront (SPY, VIX, sector ETFs)
   console.log('Fetching market benchmark data...');
-  const benchmarkTickers = [
-    ...new Set([
-      'SPY',
-      'QQQ',
-      'IWM',
-      '^VIX',
-      '^TNX',
-      ...TICKERS_CONFIG.map((cfg) => cfg.sectorEtf),
-    ]),
-  ];
-  const benchmarkData: Record<string, PriceBar[]> = {};
-  for (const [i, t] of benchmarkTickers.entries()) {
-    console.log(`  Fetching ${t}...`);
-    benchmarkData[t] = fetchHistory(t, PRICE_HISTORY_START);
-    if (i < benchmarkTickers.length - 1) {
-      await sleep(350);
-    }
-  }
+  const benchmarkData = await loadBenchmarkHistory(TICKERS_CONFIG);
   console.log('Benchmark data loaded.\n');
 
   const summary = { companies: 0, events: 0, skipped: 0 };
@@ -831,13 +1168,6 @@ async function main() {
       }
 
       // 5. Process each earnings event
-      const spyBars = benchmarkData['SPY'] ?? [];
-      const vixBars = benchmarkData['^VIX'] ?? [];
-      const tnxBars = benchmarkData['^TNX'] ?? [];
-      const qqqBars = benchmarkData['QQQ'] ?? [];
-      const iwmBars = benchmarkData['IWM'] ?? [];
-      const sectorBars = benchmarkData[cfg.sectorEtf] ?? [];
-
       // Sort earnings chronologically (oldest first)
       const sortedEarnings = [...earningsDates].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
@@ -881,10 +1211,8 @@ async function main() {
             : '';
         const headline = `${cfg.ticker} ${fiscalQuarter} earnings ${subtype}${surpriseStr ? ` (${surpriseStr} surprise)` : ''}`;
 
-        // -- Insert historical_events --
-        const [event] = await db
-          .insert(hist.historicalEvents)
-          .values({
+        const event = await insertHistoricalEventBundle(db, {
+          eventValues: {
             eventTs: new Date(earning.date),
             marketSession: 'after_hours', // Most US earnings are after-hours
             eventTsPrecision: 'day_session',
@@ -898,243 +1226,44 @@ async function main() {
             tickerAtTime: cfg.ticker,
             collectionTier: 'full',
             bootstrapBatch: BOOTSTRAP_BATCH,
-          })
-          .returning({ id: hist.historicalEvents.id });
+          },
+          sourceValues: () => ({
+            sourceType: 'earnings_calendar',
+            sourceName: 'yfinance',
+            extractionMethod: 'api_structured',
+            confidence: '0.90',
+          }),
+          metricsEarningsValues: (eventId) =>
+            buildMetricsEarningsInsertValues(eventId, fiscalQuarter, earning),
+          stockContextValues: (eventId) =>
+            buildEventStockContextValues({
+              eventId,
+              companyId,
+              stockBars,
+              eventIdx,
+            }),
+          marketContextValues: (eventId) =>
+            buildEventMarketContextValues({
+              eventId,
+              pricingDate: barDate,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+            }),
+          returnsValues: (eventId) =>
+            buildEventReturnsValues({
+              eventId,
+              companyId,
+              tickerAtTime: cfg.ticker,
+              pricingDate: barDate,
+              stockBars,
+              eventIdx,
+              benchmarkData,
+              sectorEtf: cfg.sectorEtf,
+              t0Eligible: true,
+            }),
+        });
 
         eventIds.push({ id: event.id, date: barDate, subtype });
-
-        // -- Insert event_sources --
-        await db.insert(hist.eventSources).values({
-          eventId: event.id,
-          sourceType: 'earnings_calendar',
-          sourceName: 'yfinance',
-          extractionMethod: 'api_structured',
-          confidence: '0.90',
-        });
-
-        // -- Insert metrics_earnings --
-        await db.insert(hist.metricsEarnings).values({
-          eventId: event.id,
-          fiscalQuarter,
-          epsActual: earning.eps_actual != null ? String(earning.eps_actual) : null,
-          epsEstimate: earning.eps_estimate != null ? String(earning.eps_estimate) : null,
-          epsSurprisePct: earning.surprise_pct != null ? String(earning.surprise_pct) : null,
-        });
-
-        // -- Insert event_stock_context --
-        const currentClose = stockBars[eventIdx].close;
-        if (currentClose != null) {
-          const closes = stockBars
-            .slice(0, eventIdx + 1)
-            .map((b) => b.close)
-            .filter((c): c is number => c != null);
-          const rsi = computeRSI(closes);
-          const sma50 = computeSMA(closes, 50);
-          const sma200 = computeSMA(closes, 200);
-          const { high: high52w, low: low52w } = compute52WeekRange(stockBars, eventIdx);
-          const avgVol = computeAvgVolume(stockBars, 20, eventIdx);
-
-          const price30dAgo = getCloseAtOffset(stockBars, eventIdx, -22);
-          const price90dAgo = getCloseAtOffset(stockBars, eventIdx, -63);
-
-          await db.insert(hist.eventStockContext).values({
-            eventId: event.id,
-            companyId,
-            priceAtEvent: String(currentClose),
-            price30dAgo: price30dAgo != null ? String(price30dAgo) : null,
-            price90dAgo: price90dAgo != null ? String(price90dAgo) : null,
-            high52w: high52w != null ? String(high52w) : null,
-            low52w: low52w != null ? String(low52w) : null,
-            return30d:
-              price30dAgo != null ? String(computeReturn(price30dAgo, currentClose)) : null,
-            return90d:
-              price90dAgo != null ? String(computeReturn(price90dAgo, currentClose)) : null,
-            distanceFrom52wHigh:
-              high52w != null ? String(computeReturn(high52w, currentClose)) : null,
-            distanceFrom52wLow: low52w != null ? String(computeReturn(low52w, currentClose)) : null,
-            rsi14: rsi != null ? String(rsi) : null,
-            above50ma: sma50 != null ? currentClose > sma50 : null,
-            above200ma: sma200 != null ? currentClose > sma200 : null,
-            avgVolume20d: avgVol,
-            pitCompleteness: 'full',
-          });
-        }
-
-        // -- Insert event_market_context --
-        const spyIdx = findBarIndex(spyBars, barDate);
-        const vixIdx = findBarIndex(vixBars, barDate);
-        const sectorIdx = findBarIndex(sectorBars, barDate);
-
-        if (spyIdx >= 0) {
-          const spyClose = spyBars[spyIdx].close;
-          const spyPrevClose = spyIdx > 0 ? spyBars[spyIdx - 1].close : null;
-          const spyChange =
-            spyPrevClose != null && spyClose != null ? computeReturn(spyPrevClose, spyClose) : null;
-
-          const qqqIdx = findBarIndex(qqqBars, barDate);
-          const qqqPrevClose = qqqIdx > 0 ? qqqBars[qqqIdx - 1].close : null;
-          const qqqClose = qqqIdx >= 0 ? qqqBars[qqqIdx].close : null;
-          const qqqChange =
-            qqqPrevClose != null && qqqClose != null ? computeReturn(qqqPrevClose, qqqClose) : null;
-
-          const iwmIdx = findBarIndex(iwmBars, barDate);
-          const iwmPrevClose = iwmIdx > 0 ? iwmBars[iwmIdx - 1].close : null;
-          const iwmClose = iwmIdx >= 0 ? iwmBars[iwmIdx].close : null;
-          const iwmChange =
-            iwmPrevClose != null && iwmClose != null ? computeReturn(iwmPrevClose, iwmClose) : null;
-
-          const vixClose = vixIdx >= 0 ? vixBars[vixIdx].close : null;
-          const vixPercentile = vixIdx >= 0 ? computeVixPercentile(vixBars, vixIdx) : null;
-
-          const tnxIdx = findBarIndex(tnxBars, barDate);
-          const tnxClose = tnxIdx >= 0 ? tnxBars[tnxIdx].close : null;
-
-          const sectorClose = sectorIdx >= 0 ? sectorBars[sectorIdx].close : null;
-          const sectorPrevClose = sectorIdx > 0 ? sectorBars[sectorIdx - 1].close : null;
-          const sectorChange =
-            sectorPrevClose != null && sectorClose != null
-              ? computeReturn(sectorPrevClose, sectorClose)
-              : null;
-
-          // Sector 30d return
-          const sector30dAgoIdx = sectorIdx >= 0 ? Math.max(0, sectorIdx - 22) : -1;
-          const sector30dAgoClose = sector30dAgoIdx >= 0 ? sectorBars[sector30dAgoIdx].close : null;
-          const sector30d =
-            sector30dAgoClose != null && sectorClose != null
-              ? computeReturn(sector30dAgoClose, sectorClose)
-              : null;
-
-          // Market regime from SPY
-          const spyCloses = spyBars
-            .slice(0, spyIdx + 1)
-            .map((b) => b.close)
-            .filter((c): c is number => c != null);
-          const spySma50 = computeSMA(spyCloses, 50);
-          const spySma200 = computeSMA(spyCloses, 200);
-          const regime = spyClose != null ? determineRegime(spyClose, spySma50, spySma200) : null;
-
-          await db.insert(hist.eventMarketContext).values({
-            eventId: event.id,
-            spyClose: spyClose != null ? String(spyClose) : null,
-            spyChangePct: spyChange != null ? String(spyChange) : null,
-            qqqChangePct: qqqChange != null ? String(qqqChange) : null,
-            iwmChangePct: iwmChange != null ? String(iwmChange) : null,
-            vixClose: vixClose != null ? String(vixClose) : null,
-            vixPercentile1y: vixPercentile != null ? String(vixPercentile) : null,
-            treasury10y: tnxClose != null ? String(tnxClose) : null,
-            sectorEtfTicker: cfg.sectorEtf,
-            sectorEtfChange: sectorChange != null ? String(sectorChange) : null,
-            sectorEtf30d: sector30d != null ? String(sector30d) : null,
-            marketRegime: regime,
-          });
-        }
-
-        // -- Insert event_returns --
-        const prevIdx = findPrevTradingDay(stockBars, eventIdx);
-        if (prevIdx >= 0 && stockBars[prevIdx].close != null) {
-          const refPrice = stockBars[prevIdx].close!;
-          const refDate = stockBars[prevIdx].date;
-
-          const stockReturns = computeReturns(stockBars, refPrice, eventIdx);
-          const spyRefIdx = findBarIndex(spyBars, refDate);
-          const spyRefPrice = spyRefIdx >= 0 ? spyBars[spyRefIdx].close : null;
-          const spyReturns =
-            spyRefPrice != null
-              ? computeReturns(spyBars, spyRefPrice, findBarIndex(spyBars, barDate))
-              : {};
-
-          // Compute alpha = stock return - SPY return
-          const alpha: Record<string, number | null> = {};
-          for (const h of RETURN_HORIZONS) {
-            const sr = stockReturns[`t${h}`];
-            const br = spyReturns[`t${h}`];
-            alpha[`t${h}`] = sr != null && br != null ? +(sr - br).toFixed(4) : null;
-          }
-
-          // Sector alpha
-          const sectorRefIdx = findBarIndex(sectorBars, refDate);
-          const sectorRefPrice = sectorRefIdx >= 0 ? sectorBars[sectorRefIdx].close : null;
-          const sectorReturns =
-            sectorRefPrice != null
-              ? computeReturns(sectorBars, sectorRefPrice, findBarIndex(sectorBars, barDate))
-              : {};
-          const sectorAlphaT5 =
-            stockReturns['t5'] != null && sectorReturns['t5'] != null
-              ? +(stockReturns['t5'] - sectorReturns['t5']).toFixed(4)
-              : null;
-          const sectorAlphaT20 =
-            stockReturns['t20'] != null && sectorReturns['t20'] != null
-              ? +(stockReturns['t20'] - sectorReturns['t20']).toFixed(4)
-              : null;
-
-          // Overnight gap
-          const eventOpen = stockBars[eventIdx].open;
-          const overnightGap = eventOpen != null ? computeReturn(refPrice, eventOpen) : null;
-
-          // Volume
-          const eventVol = stockBars[eventIdx].volume;
-          const avgVol20d = computeAvgVolume(stockBars, 20, eventIdx);
-          const volRatio =
-            eventVol != null && avgVol20d != null && avgVol20d > 0
-              ? +(eventVol / avgVol20d).toFixed(2)
-              : null;
-
-          // Extremes
-          const extremes = computeExtremes(stockBars, refPrice, eventIdx, 60);
-
-          const outcomeT20 = classifyOutcome(alpha['t20']);
-
-          await db.insert(hist.eventReturns).values({
-            eventId: event.id,
-            companyId,
-            tickerAtTime: cfg.ticker,
-            refPrice: String(refPrice),
-            refPriceType: 'prev_close',
-            refPriceDate: refDate,
-
-            returnT0: stockReturns['t0'] != null ? String(stockReturns['t0']) : null,
-            returnT1: stockReturns['t1'] != null ? String(stockReturns['t1']) : null,
-            returnT3: stockReturns['t3'] != null ? String(stockReturns['t3']) : null,
-            returnT5: stockReturns['t5'] != null ? String(stockReturns['t5']) : null,
-            returnT10: stockReturns['t10'] != null ? String(stockReturns['t10']) : null,
-            returnT20: stockReturns['t20'] != null ? String(stockReturns['t20']) : null,
-            returnT60: stockReturns['t60'] != null ? String(stockReturns['t60']) : null,
-
-            spyReturnT0: spyReturns['t0'] != null ? String(spyReturns['t0']) : null,
-            spyReturnT1: spyReturns['t1'] != null ? String(spyReturns['t1']) : null,
-            spyReturnT3: spyReturns['t3'] != null ? String(spyReturns['t3']) : null,
-            spyReturnT5: spyReturns['t5'] != null ? String(spyReturns['t5']) : null,
-            spyReturnT10: spyReturns['t10'] != null ? String(spyReturns['t10']) : null,
-            spyReturnT20: spyReturns['t20'] != null ? String(spyReturns['t20']) : null,
-            spyReturnT60: spyReturns['t60'] != null ? String(spyReturns['t60']) : null,
-
-            alphaT0: alpha['t0'] != null ? String(alpha['t0']) : null,
-            alphaT1: alpha['t1'] != null ? String(alpha['t1']) : null,
-            alphaT3: alpha['t3'] != null ? String(alpha['t3']) : null,
-            alphaT5: alpha['t5'] != null ? String(alpha['t5']) : null,
-            alphaT10: alpha['t10'] != null ? String(alpha['t10']) : null,
-            alphaT20: alpha['t20'] != null ? String(alpha['t20']) : null,
-            alphaT60: alpha['t60'] != null ? String(alpha['t60']) : null,
-
-            sectorBenchmark: cfg.sectorEtf,
-            sectorAlphaT5: sectorAlphaT5 != null ? String(sectorAlphaT5) : null,
-            sectorAlphaT20: sectorAlphaT20 != null ? String(sectorAlphaT20) : null,
-
-            overnightGapPct: overnightGap != null ? String(overnightGap) : null,
-            maxDrawdownPct:
-              extremes.maxDrawdownPct != null ? String(extremes.maxDrawdownPct) : null,
-            maxDrawdownDay: extremes.maxDrawdownDay,
-            maxRunupPct: extremes.maxRunupPct != null ? String(extremes.maxRunupPct) : null,
-            maxRunupDay: extremes.maxRunupDay,
-
-            volumeEventDay: eventVol,
-            volumeAvg20d: avgVol20d,
-            volumeRatio: volRatio != null ? String(volRatio) : null,
-
-            outcomeT20,
-            t0Eligible: true,
-          });
-        }
 
         summary.events++;
         process.stdout.write('.');

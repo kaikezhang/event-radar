@@ -141,15 +141,15 @@ CREATE TABLE IF NOT EXISTS metrics_earnings (
   fiscal_quarter    TEXT,
   eps_actual        DECIMAL(8,3),
   eps_estimate      DECIMAL(8,3),
-  eps_surprise_pct  DECIMAL(6,2),
+  eps_surprise_pct  DECIMAL(10,2),
   revenue_actual_m  DECIMAL(12,2),
   revenue_estimate_m DECIMAL(12,2),
-  revenue_surprise_pct DECIMAL(6,2),
+  revenue_surprise_pct DECIMAL(10,2),
   guidance_direction TEXT,
   guidance_detail   TEXT,
   consecutive_beats INT,
-  yoy_revenue_growth DECIMAL(6,2),
-  yoy_eps_growth    DECIMAL(6,2)
+  yoy_revenue_growth DECIMAL(10,2),
+  yoy_eps_growth    DECIMAL(10,2)
 );
 
 CREATE TABLE IF NOT EXISTS metrics_restructuring (

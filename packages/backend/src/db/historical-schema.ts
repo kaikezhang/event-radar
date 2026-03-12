@@ -172,15 +172,15 @@ export const metricsEarnings = pgTable('metrics_earnings', {
   fiscalQuarter: text('fiscal_quarter'),
   epsActual: decimal('eps_actual', { precision: 8, scale: 3 }),
   epsEstimate: decimal('eps_estimate', { precision: 8, scale: 3 }),
-  epsSurprisePct: decimal('eps_surprise_pct', { precision: 6, scale: 2 }),
+  epsSurprisePct: decimal('eps_surprise_pct', { precision: 10, scale: 2 }),
   revenueActualM: decimal('revenue_actual_m', { precision: 12, scale: 2 }),
   revenueEstimateM: decimal('revenue_estimate_m', { precision: 12, scale: 2 }),
-  revenueSurprisePct: decimal('revenue_surprise_pct', { precision: 6, scale: 2 }),
+  revenueSurprisePct: decimal('revenue_surprise_pct', { precision: 10, scale: 2 }),
   guidanceDirection: text('guidance_direction'),
   guidanceDetail: text('guidance_detail'),
   consecutiveBeats: integer('consecutive_beats'),
-  yoyRevenueGrowth: decimal('yoy_revenue_growth', { precision: 6, scale: 2 }),
-  yoyEpsGrowth: decimal('yoy_eps_growth', { precision: 6, scale: 2 }),
+  yoyRevenueGrowth: decimal('yoy_revenue_growth', { precision: 10, scale: 2 }),
+  yoyEpsGrowth: decimal('yoy_eps_growth', { precision: 10, scale: 2 }),
 });
 
 export const metricsRestructuring = pgTable('metrics_restructuring', {
