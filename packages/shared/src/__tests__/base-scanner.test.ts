@@ -301,4 +301,216 @@ describe('BaseScanner', () => {
       expect(scanner.health().scanner).toBe('test-success');
     });
   });
+
+  describe('backoff on consecutive errors', () => {
+    it('should not be in backoff with fewer than 5 consecutive errors', async () => {
+      const scanner = makeFailScanner();
+      for (let i = 0; i < 4; i++) {
+        await scanner.scan();
+      }
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(4);
+      expect(h.inBackoff).toBe(false);
+      expect(h.currentIntervalMs).toBe(1000);
+    });
+
+    it('should enter backoff after 5 consecutive errors', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const scanner = makeFailScanner();
+      for (let i = 0; i < 5; i++) {
+        await scanner.scan();
+      }
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(5);
+      expect(h.inBackoff).toBe(true);
+      expect(h.currentIntervalMs).toBe(2000); // 1000 * 2^1
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[test-fail] Entering backoff: 5 consecutive errors'),
+      );
+      logSpy.mockRestore();
+    });
+
+    it('should double interval with each additional error after backoff threshold', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const scanner = makeFailScanner();
+      // 5 errors => 2x, 6 => 4x, 7 => 8x
+      for (let i = 0; i < 7; i++) {
+        await scanner.scan();
+      }
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(7);
+      // doublings = 7 - 5 + 1 = 3 => 1000 * 2^3 = 8000
+      expect(h.currentIntervalMs).toBe(8000);
+      vi.restoreAllMocks();
+    });
+
+    it('should cap backoff at 30 minutes', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const scanner = makeFailScanner();
+      // Enough errors to exceed 30 minutes
+      for (let i = 0; i < 30; i++) {
+        await scanner.scan();
+      }
+      const h = scanner.health();
+      expect(h.currentIntervalMs).toBe(1_800_000);
+      vi.restoreAllMocks();
+    });
+
+    it('should reset backoff after successful poll', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      let shouldFail = true;
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          if (shouldFail) return err(new Error('fail'));
+          return ok([makeEvent()]);
+        }
+      })({
+        name: 'backoff-reset',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      // Trigger backoff
+      for (let i = 0; i < 6; i++) {
+        await scanner.scan();
+      }
+      expect(scanner.health().inBackoff).toBe(true);
+
+      // Succeed once
+      shouldFail = false;
+      await scanner.scan();
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(0);
+      expect(h.inBackoff).toBe(false);
+      expect(h.currentIntervalMs).toBe(1000);
+      expect(logSpy).toHaveBeenCalledWith(
+        '[backoff-reset] Backoff reset after successful poll',
+      );
+      logSpy.mockRestore();
+    });
+
+    it('should use backoff interval in timer scheduling', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      let calls = 0;
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          calls++;
+          return err(new Error('always fail'));
+        }
+      })({
+        name: 'timer-backoff',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      scanner.start();
+
+      // First 5 polls at 1000ms each
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(calls).toBe(5);
+      expect(scanner.health().inBackoff).toBe(true);
+
+      // 6th poll should be at 2000ms (1000 * 2^1)
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toBe(5); // not yet
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toBe(6);
+
+      scanner.stop();
+      vi.restoreAllMocks();
+    });
+
+    it('should reset timer to normal interval after backoff recovery', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      let shouldFail = true;
+      let calls = 0;
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          calls++;
+          if (shouldFail) return err(new Error('fail'));
+          return ok([makeEvent()]);
+        }
+      })({
+        name: 'recovery',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      scanner.start();
+
+      // 5 failures at normal interval
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      expect(calls).toBe(5);
+      expect(scanner.health().inBackoff).toBe(true);
+
+      // Next poll at 2000ms - make it succeed
+      shouldFail = false;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(calls).toBe(6);
+      expect(scanner.health().inBackoff).toBe(false);
+
+      // Next poll should be back to 1000ms
+      const callsBefore = calls;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toBe(callsBefore + 1);
+
+      scanner.stop();
+      vi.restoreAllMocks();
+    });
+
+    it('should track consecutiveErrors separately from errorCount', async () => {
+      let shouldFail = false;
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          if (shouldFail) return err(new Error('fail'));
+          return ok([makeEvent()]);
+        }
+      })({
+        name: 'tracking',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      // Success resets both
+      await scanner.scan();
+      expect(scanner.health().errorCount).toBe(0);
+      expect(scanner.health().consecutiveErrors).toBe(0);
+
+      // Errors increment both
+      shouldFail = true;
+      await scanner.scan();
+      await scanner.scan();
+      expect(scanner.health().errorCount).toBe(2);
+      expect(scanner.health().consecutiveErrors).toBe(2);
+
+      // Success resets both
+      shouldFail = false;
+      await scanner.scan();
+      expect(scanner.health().errorCount).toBe(0);
+      expect(scanner.health().consecutiveErrors).toBe(0);
+    });
+
+    it('should log backoff entry only once', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const scanner = makeFailScanner();
+
+      for (let i = 0; i < 10; i++) {
+        await scanner.scan();
+      }
+
+      const backoffLogs = logSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('Entering backoff'),
+      );
+      expect(backoffLogs).toHaveLength(1);
+      logSpy.mockRestore();
+    });
+  });
 });
