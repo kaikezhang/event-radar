@@ -1,19 +1,28 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
-import { useAudit } from '../hooks/queries.js';
+import { useAudit, useDashboard } from '../hooks/queries.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { LoadingSpinner, ErrorDisplay } from '../components/LoadingSpinner.js';
+import {
+  buildAuditSourceOptions,
+  formatDeliveryChannels,
+  normalizeSeverity,
+} from '../lib/dashboard.js';
 import { cn, timeAgo } from '../lib/utils.js';
 import type { AuditEvent, AuditQueryParams } from '../types/api.js';
 
 const OUTCOMES = ['', 'delivered', 'filtered', 'deduped', 'grace_period', 'error'] as const;
-const SOURCES = ['', 'breaking-news', 'stocktwits', 'whitehouse', 'sec-filings', 'reddit', 'twitter'] as const;
 
 export function AuditTrail() {
   const [filters, setFilters] = useState<AuditQueryParams>({ limit: 50 });
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const { data, isLoading, error } = useAudit(filters);
+  const { data: dashboardData } = useDashboard();
+  const sourceOptions = [
+    '',
+    ...buildAuditSourceOptions(data?.events ?? [], dashboardData?.scanners.details ?? []),
+  ];
 
   const updateFilter = (key: keyof AuditQueryParams, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value || undefined }));
@@ -32,7 +41,7 @@ export function AuditTrail() {
         <SelectFilter
           label="Source"
           value={filters.source ?? ''}
-          options={SOURCES}
+          options={sourceOptions}
           onChange={(v) => updateFilter('source', v)}
         />
         <div className="relative">
@@ -121,6 +130,7 @@ function EventRow({
     medium: 'text-radar-blue',
     low: 'text-radar-text-muted',
   };
+  const severityKey = normalizeSeverity(event.severity);
 
   return (
     <>
@@ -141,7 +151,7 @@ function EventRow({
           <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono">{event.source}</span>
         </td>
         <td className="max-w-xs truncate px-3 py-2.5">{event.title}</td>
-        <td className={cn('px-3 py-2.5 font-mono', severityColor[event.severity ?? ''] ?? 'text-radar-text-muted')}>
+        <td className={cn('px-3 py-2.5 font-mono', severityColor[severityKey ?? ''] ?? 'text-radar-text-muted')}>
           {event.severity ?? '—'}
         </td>
         <td className="px-3 py-2.5 font-mono font-medium text-radar-amber">
@@ -175,7 +185,7 @@ function ExpandedDetails({ event }: { event: AuditEvent }) {
       <DetailItem label="Timestamp" value={new Date(event.at).toLocaleString()} />
       <DetailItem
         label="Delivery Channels"
-        value={Array.isArray(event.delivery_channels) ? event.delivery_channels.join(', ') : '—'}
+        value={formatDeliveryChannels(event.delivery_channels)}
       />
       <DetailItem
         label="Historical Match"

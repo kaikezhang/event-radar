@@ -568,7 +568,6 @@ export function buildApp(options?: {
 
       pipelineFunnelTotal.inc({ stage: 'delivered' });
 
-      const totalPipelineMs = Date.now() - event.timestamp.getTime();
       server.log.info({
         pipeline: true,
         stage: 'delivery',

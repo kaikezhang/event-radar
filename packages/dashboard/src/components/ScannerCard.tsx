@@ -1,4 +1,5 @@
 import type { ScannerDetail } from '../types/api.js';
+import { formatPollInterval } from '../lib/dashboard.js';
 import { cn } from '../lib/utils.js';
 
 interface ScannerCardProps {
@@ -18,6 +19,8 @@ const borderColor: Record<string, string> = {
 };
 
 export function ScannerCard({ scanner }: ScannerCardProps) {
+  const cadence = formatPollInterval(scanner.poll_interval_ms);
+
   return (
     <div
       className={cn(
@@ -53,6 +56,9 @@ export function ScannerCard({ scanner }: ScannerCardProps) {
           )}
         </span>
       </div>
+      {cadence && (
+        <div className="mt-1 text-xs text-radar-text-muted">Expected: {cadence}</div>
+      )}
       {scanner.in_backoff && (
         <div className="mt-1 text-xs font-medium text-radar-amber">⚠ In backoff</div>
       )}

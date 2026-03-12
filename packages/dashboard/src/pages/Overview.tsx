@@ -7,23 +7,34 @@ import {
   Send,
   TrendingUp,
 } from 'lucide-react';
-import { useDashboard } from '../hooks/queries.js';
+import { useDashboard, useHealth } from '../hooks/queries.js';
 import { Card } from '../components/Card.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { ScannerCard } from '../components/ScannerCard.js';
 import { FunnelChart } from '../components/FunnelChart.js';
 import { FilterBreakdownChart } from '../components/FilterBreakdownChart.js';
 import { LoadingSpinner, ErrorDisplay } from '../components/LoadingSpinner.js';
+import { buildScannerAlerts, buildScannerCards } from '../lib/dashboard.js';
 import { formatNumber } from '../lib/utils.js';
 
 export function Overview() {
   const { data, isLoading, error } = useDashboard();
+  const { data: healthData } = useHealth();
 
   if (isLoading && !data) return <LoadingSpinner />;
   if (error && !data) return <ErrorDisplay message={error.message} />;
   if (!data) return null;
 
   const { system, scanners, pipeline, delivery, alerts, db } = data;
+  const scannerCards = buildScannerCards(scanners.details, healthData?.scanners);
+  const healthyScannerCount = scannerCards.filter((scanner) => scanner.status === 'healthy').length;
+  const activeAlerts = healthData
+    ? buildScannerAlerts(scannerCards, {
+        gracePeriodActive: system.grace_period_active,
+        gracePeriodRemainingSeconds: 90 - system.uptime_seconds,
+      })
+    : alerts;
+  const systemStatus = activeAlerts.some((alert) => alert.level === 'error') ? 'degraded' : 'healthy';
 
   return (
     <div className="space-y-6">
@@ -32,7 +43,7 @@ export function Overview() {
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-radar-green" />
           <span className="text-sm font-medium">System</span>
-          <StatusBadge status={system.status} />
+          <StatusBadge status={systemStatus} />
         </div>
         <Separator />
         <Stat icon={Clock} label="Uptime" value={formatUptime(system.uptime_seconds)} />
@@ -54,10 +65,10 @@ export function Overview() {
       </div>
 
       {/* Active Alerts */}
-      {alerts.length > 0 && (
+      {activeAlerts.length > 0 && (
         <Card title="Active Alerts">
           <div className="space-y-2">
-            {alerts.map((alert, i) => (
+            {activeAlerts.map((alert, i) => (
               <div
                 key={i}
                 className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
@@ -79,9 +90,9 @@ export function Overview() {
       {/* Main Grid */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Scanner Grid */}
-        <Card title={`Scanners (${scanners.healthy}/${scanners.total} healthy)`}>
+        <Card title={`Scanners (${healthyScannerCount}/${scanners.total} healthy)`}>
           <div className="grid grid-cols-2 gap-2">
-            {scanners.details.map((s) => (
+            {scannerCards.map((s) => (
               <ScannerCard key={s.name} scanner={s} />
             ))}
           </div>
@@ -104,7 +115,10 @@ export function Overview() {
         <Card title="Delivery Channels">
           {Object.keys(delivery).length === 0 ? (
             <div className="py-4 text-center text-sm text-radar-text-muted">
-              No delivery channels configured
+              <div>No delivery activity recorded yet</div>
+              <div className="mt-1 text-xs">
+                Configured channels appear here after the first send
+              </div>
             </div>
           ) : (
             <div className="space-y-2">

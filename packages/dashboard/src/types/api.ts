@@ -47,6 +47,8 @@ export interface ScannerDetail {
   error_count: number;
   consecutive_errors?: number;
   in_backoff?: boolean;
+  poll_interval_ms?: number;
+  message?: string;
 }
 
 export interface PipelineFunnel {
@@ -81,17 +83,24 @@ export interface AuditEvent {
   event_id: string;
   source: string;
   title: string;
-  severity: string | null;
+  severity: AuditSeverity | null;
   ticker: string | null;
   outcome: string;
   stopped_at: string;
   reason: string | null;
   reason_category: string | null;
-  delivery_channels: string[] | null;
+  delivery_channels: AuditDeliveryChannel[] | null;
   historical_match: boolean | null;
   historical_confidence: string | null;
   duration_ms: number | null;
   at: string;
+}
+
+export type AuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+
+export interface AuditDeliveryChannel {
+  channel: string;
+  ok: boolean;
 }
 
 // GET /api/v1/audit/stats

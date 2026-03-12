@@ -254,34 +254,6 @@ export function registerDashboardRoutes(
     const limit = Math.min(Number(request.query.limit) || 50, 200);
     const { outcome, source, ticker, search } = request.query;
 
-    let whereClause = '';
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    let paramIdx = 1;
-
-    if (outcome) {
-      conditions.push(`outcome = $${paramIdx++}`);
-      params.push(outcome);
-    }
-    if (source) {
-      conditions.push(`source = $${paramIdx++}`);
-      params.push(source);
-    }
-    if (ticker) {
-      conditions.push(`ticker = $${paramIdx++}`);
-      params.push(ticker.toUpperCase());
-    }
-    if (search) {
-      conditions.push(`title ILIKE $${paramIdx++}`);
-      params.push(`%${search}%`);
-    }
-
-    if (conditions.length > 0) {
-      whereClause = `WHERE ${conditions.join(' AND ')}`;
-    }
-
-    params.push(limit);
-
     try {
       const { sql: sqlTag } = await import('drizzle-orm');
 
@@ -364,7 +336,7 @@ export function registerDashboardRoutes(
           count: Number(r.count),
         })),
       });
-    } catch (err) {
+    } catch {
       return reply.code(500).send({ error: 'Failed to query audit stats' });
     }
   });
