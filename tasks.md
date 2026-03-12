@@ -5,9 +5,9 @@
 ---
 
 ## 当前任务
-**Phase 4 — P4.5.3+P4.5.4 事件影响图表 + 多窗口支持** (待启动)
+**Phase 4 全部完成！** 🎉
 
-P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4 ✅ P4.5.1+2 ✅
+P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4 ✅ P4.5 ✅
 
 ---
 
@@ -111,14 +111,10 @@ P4.1 ✅ P4.2 ✅ P4.3 ✅ P4.4 ✅ P4.5.1+2 ✅
   - 板块热力图: CSS grid、severity 着色、点击联动浏览器
   - GICS 板块映射、backend 聚合 API
   - 713 backend tests passed
-- [ ] **P4.5.3** 事件影响图表
-  - 事件标记在 K 线图上
-  - Hover 显示事件详情
-  - T+1h/d/w/m 价格变化标注
-- [ ] **P4.5.4** 多窗口支持
-  - BroadcastChannel API
-  - 可detach的面板
-  - 窗口状态同步
+- [x] **P4.5.3+P4.5.4** 事件影响图表 + 多窗口支持 ✅ PR #40
+  - TradingView lightweight-charts K 线图 + 事件标记
+  - BroadcastChannel 多窗口同步、可 detach 面板
+  - 2516 行, 725 tests, 晚晚手动修复 3 个 TS build errors
 
 ---
 
