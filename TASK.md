@@ -1,95 +1,109 @@
-# Current Task: P4.5.3+P4.5.4 — 事件影响图表 & 多窗口支持
+# Current Task: P1B.1 — LLM 分类引擎 (Stage 2)
 
 ## Goal
-实现事件在 K 线图上的标注可视化，以及通过 BroadcastChannel 支持多窗口同步。
+用 LLM (Claude/GPT) 对低置信度事件进行智能分类，补充现有规则引擎。规则引擎快但粗，LLM 慢但准，两者协作。
 
 ## Requirements
 
-### 1. Backend: Event Impact API (`packages/backend/src/routes/event-impact.ts`)
-- `GET /api/v1/events/impact` — 获取带价格影响的事件数据
-  - Query params: `ticker` (required), `dateFrom` (ISO), `dateTo` (ISO), `severity`
-  - Response: `{ events: Array<{ eventId, timestamp, ticker, headline, severity, direction, priceAtEvent, priceChange1h, priceChange1d, priceChange1w }> }`
-  - 从 `events` + `classification_outcomes` 表联查
+### 1. LLM Classification Service (`packages/backend/src/services/llm-classifier.ts`)
+- `LLMClassifierService` class
+- `classify(event: RawEvent): Promise<Result<ClassificationResult, ClassificationError>>`
+  - 构造 prompt: 事件标题 + 内容摘要 + source + ticker（如有）
+  - 调用 LLM API 获取分类结果
+  - Parse LLM 响应为结构化 `ClassificationResult`
+- `shouldUseLLM(event: RawEvent, ruleResult: RuleClassification): boolean`
+  - 规则引擎 confidence < 0.6 → 用 LLM
+  - 事件来自 P4.3.4 reclassification queue → 用 LLM
+  - 规则引擎返回 UNKNOWN type → 用 LLM
+- 支持多 provider: `openai` | `anthropic`（通过 env var 配置）
+- Rate limiting: 最多 10 req/min（防费用爆炸）
+- Timeout: 单次请求 15s
+- Fallback: LLM 失败 → 降级到规则引擎结果
+
+### 2. LLM Provider Abstraction (`packages/backend/src/services/llm-provider.ts`)
+- `LLMProvider` interface:
+  ```typescript
+  interface LLMProvider {
+    name: string;
+    classify(prompt: string): Promise<Result<string, LLMError>>;
+  }
+  ```
+- `OpenAIProvider`: 用 GPT-4o-mini（便宜快）
+- `AnthropicProvider`: 用 Claude Haiku（备选）
+- `MockProvider`: 测试用，返回预设结果
+- Provider 通过 env var `LLM_PROVIDER` 选择，默认 `mock`
+
+### 3. Classification Prompt (`packages/backend/src/services/classification-prompt.ts`)
+- 构造分类 prompt，要求 LLM 返回 JSON：
+  ```json
+  {
+    "eventType": "filing|earnings|insider|macro|political|analyst|social",
+    "severity": "LOW|MEDIUM|HIGH|CRITICAL",
+    "direction": "bullish|bearish|neutral",
+    "confidence": 0.0-1.0,
+    "reasoning": "one sentence explanation"
+  }
+  ```
+- 包含 few-shot examples（3-5 个典型事件）
+- 限制 token 使用（max_tokens: 200）
+
+### 4. Pipeline Integration
+- 在 classification pipeline 中：
+  1. 先跑规则引擎
+  2. `shouldUseLLM()` → true → 调用 LLM
+  3. LLM 结果覆盖规则引擎结果（但保留两者记录）
+- 记录 `classification_method: 'rule' | 'llm'` 到 events 表
+
+### 5. Types (`packages/shared/src/schemas/llm-types.ts`)
+```typescript
+export const LLMClassificationSchema = z.object({
+  eventType: EventTypeSchema,
+  severity: SeveritySchema,
+  direction: DirectionSchema,
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string(),
+});
+
+export const ClassificationMethodSchema = z.enum(['rule', 'llm', 'hybrid']);
+```
+
+### 6. API Endpoint
+- `POST /api/v1/classify` — 手动触发分类（调试用）
+  - Body: `{ headline: string, content?: string, source?: string, ticker?: string }`
+  - Response: `{ rule: ClassificationResult, llm?: ClassificationResult, final: ClassificationResult, method: 'rule' | 'llm' }`
   - 需要 API key auth
 
-### 2. Frontend: Event Impact Chart (`packages/frontend/src/components/event-impact-chart.tsx`)
-- 使用已安装的 `lightweight-charts` (TradingView) — 检查 package.json，如果没有则用 recharts 或自定义 SVG
-- 显示 K 线图（如果有价格数据）或简单的事件时间线
-- 事件标记:
-  - 红色标记 = bearish/negative direction
-  - 绿色标记 = bullish/positive direction
-  - 灰色标记 = neutral/unknown
-  - 标记大小 = severity（CRITICAL 最大）
-- Hover 事件标记 → tooltip 显示:
-  - Headline
-  - Severity + Direction
-  - T+1h, T+1d, T+1w 价格变化
-- Ticker 选择器（文本输入，默认 AAPL）
-- 日期范围联动（如果在 history 页面，复用日期选择器）
-- 空数据状态处理
+### 7. Tests (≥12 tests)
+- shouldUseLLM: low confidence → true
+- shouldUseLLM: high confidence → false
+- shouldUseLLM: UNKNOWN type → true
+- LLM classify: valid response → parsed correctly
+- LLM classify: invalid JSON → fallback to rule
+- LLM classify: timeout → fallback to rule
+- LLM classify: rate limit → queue or skip
+- MockProvider: returns preset results
+- Prompt construction: includes few-shot examples
+- Pipeline: rule high confidence → skip LLM
+- Pipeline: rule low confidence → use LLM
+- API: classify endpoint returns correct format
 
-### 3. Frontend: Multi-Window Support (`packages/frontend/src/lib/broadcast-sync.ts`)
-- 使用 BroadcastChannel API 实现跨窗口/tab 同步
-- Channel name: `event-radar-sync`
-- 同步内容:
-  - 当前选中的 ticker
-  - 当前日期范围
-  - 当前筛选条件
-  - 当前选中的事件 ID
-- Message 类型:
-  ```typescript
-  type SyncMessage =
-    | { type: 'ticker-changed'; ticker: string }
-    | { type: 'date-range-changed'; dateFrom: string; dateTo: string }
-    | { type: 'event-selected'; eventId: string }
-    | { type: 'filters-changed'; filters: Record<string, unknown> }
-    | { type: 'ping'; windowId: string }
-    | { type: 'pong'; windowId: string }
-  ```
-- React hook: `useBroadcastSync(options)` — 发送和接收同步消息
-- 窗口发现: ping/pong 机制检测活跃窗口数量
-- 显示活跃窗口数量在状态栏
-
-### 4. Frontend: Detachable Panel (`packages/frontend/src/components/detachable-panel.tsx`)
-- "Pop Out" 按钮，打开新窗口显示特定面板
-- `window.open()` + BroadcastChannel 保持同步
-- 面板类型: 图表、事件列表、事件详情
-- 新窗口 URL: `/dashboard/panel/:type?ticker=X&eventId=Y`
-- 新页面: `packages/frontend/src/app/dashboard/panel/[type]/page.tsx`
-
-### 5. Dashboard Integration
-- 在 `/dashboard/history` 页面添加事件影响图表（在热力图和事件浏览器之间）
-- 在状态栏/header 显示同步窗口数量
-- 每个面板添加 "Pop Out" 按钮
-
-### 6. Tests (≥6 tests)
-- Backend: event impact API 返回正确结构
-- Backend: ticker 参数必填验证
-- Backend: 日期范围筛选
-- Backend: API auth
-- Backend: 无匹配事件返回空数组
-- Backend: severity 筛选
-
-## Files to create/modify
-- `packages/backend/src/routes/event-impact.ts` — impact API
-- `packages/backend/src/app.ts` — 注册 routes
-- `packages/backend/src/__tests__/event-impact.test.ts`
-- `packages/shared/src/schemas/impact-types.ts` — 类型定义（可选）
+### Files to create/modify
+- `packages/shared/src/schemas/llm-types.ts`
 - `packages/shared/src/index.ts` — export
-- `packages/frontend/src/components/event-impact-chart.tsx`
-- `packages/frontend/src/lib/broadcast-sync.ts` — BroadcastChannel 工具
-- `packages/frontend/src/components/detachable-panel.tsx`
-- `packages/frontend/src/app/dashboard/panel/[type]/page.tsx`
-- `packages/frontend/src/app/dashboard/history/page.tsx` — 集成图表
+- `packages/backend/src/services/llm-provider.ts`
+- `packages/backend/src/services/llm-classifier.ts`
+- `packages/backend/src/services/classification-prompt.ts`
+- `packages/backend/src/routes/classify.ts`
+- `packages/backend/src/app.ts` — register route
+- `packages/backend/src/__tests__/llm-classifier.test.ts`
 
-## Key Constraints
-- 不要引入新的图表库，优先复用已安装的（检查 package.json）
-- 如果没有 lightweight-charts，用 CSS + SVG 自己画简单时间线
-- BroadcastChannel 不是所有浏览器都支持，要有 fallback（降级为不同步）
-- 多窗口功能是增强体验，不是必须的，核心是事件影响图表
+### Key Constraints
+- 不依赖真实 API key 跑测试 — 全用 MockProvider
+- Rate limit 用 sliding window（不是 token bucket）
+- Prompt 要短（省 token），few-shot 用最典型的 3 个例子
 
 ## Verification
-- `pnpm build && pnpm --filter @event-radar/backend lint` must pass
+- `pnpm build && pnpm --filter @event-radar/backend lint` passes
 - All tests pass
-- Create branch `feat/event-impact`, commit, push, create PR to main
-- **DO NOT merge the PR. DO NOT run gh pr merge.**
+- Branch `feat/llm-classifier`, create PR to main
+- **DO NOT merge. DO NOT run gh pr merge.**
