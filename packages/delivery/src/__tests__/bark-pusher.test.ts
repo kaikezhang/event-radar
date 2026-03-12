@@ -123,6 +123,34 @@ describe('BarkPusher', () => {
     expect(body.level).toBe('passive');
   });
 
+  it('should append historical pattern context to the Bark body', async () => {
+    const pusher = new BarkPusher({ key: 'k' });
+
+    await pusher.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 18,
+          confidence: 'medium',
+          avgAlphaT5: 0.03,
+          avgAlphaT20: 0.12,
+          winRateT20: 68,
+          medianAlphaT20: 0.1,
+          bestCase: null,
+          worstCase: null,
+          topMatches: [],
+          patternSummary:
+            'Technology earnings beat in correction market: +12.0% avg alpha T+20, 68% win rate (18 cases)',
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+
+    expect(body.body).toContain('Item 5.02 Departure of CEO');
+    expect(body.body).toContain('📊 18 similar cases: +12.0% avg alpha, 68% win rate');
+  });
+
   it('should throw on non-ok response', async () => {
     fetchSpy.mockResolvedValue({
       ok: false,
@@ -146,5 +174,31 @@ describe('BarkPusher', () => {
 
     const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://bark.example.com/k');
+  });
+
+  it('appends a short historical pattern summary to the body', async () => {
+    const pusher = new BarkPusher({ key: 'k' });
+
+    await pusher.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 18,
+          confidence: 'medium',
+          avgAlphaT5: 0.05,
+          avgAlphaT20: 0.12,
+          winRateT20: 68,
+          medianAlphaT20: 0.1,
+          bestCase: null,
+          worstCase: null,
+          topMatches: [],
+          patternSummary: 'Technology earnings beat in correction: +12.0% avg alpha T+20, 68% win rate (18 cases)',
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+
+    expect(body.body).toContain('📊 18 similar cases: +12.0% avg alpha, 68% win rate');
   });
 });

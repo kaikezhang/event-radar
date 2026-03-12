@@ -143,6 +143,54 @@ describe('DiscordWebhook', () => {
     expect(embed.description).toMatch(/\.\.\.$/);
   });
 
+  it('renders a historical context field when historical matches are present', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 8,
+          confidence: 'high',
+          avgAlphaT5: 0.024,
+          avgAlphaT20: 0.083,
+          winRateT20: 62,
+          medianAlphaT20: 0.071,
+          bestCase: {
+            ticker: 'NVDA',
+            alphaT20: 0.22,
+            headline: 'Nvidia beat and raised guidance',
+          },
+          worstCase: {
+            ticker: 'INTC',
+            alphaT20: -0.12,
+            headline: 'Intel beat but guided down',
+          },
+          topMatches: [
+            {
+              ticker: 'NVDA',
+              headline: 'Nvidia beat and raised guidance',
+              eventDate: '2025-02-21T21:00:00.000Z',
+              alphaT20: 0.16,
+              score: 11,
+            },
+          ],
+          patternSummary: 'Technology earnings beat in bull market: +8.3% avg alpha T+20, 62% win rate (8 cases)',
+        },
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const embed = JSON.parse(options.body as string).embeds[0];
+    const historyField = embed.fields.find(
+      (field: { name: string }) => field.name.includes('Historical Pattern'),
+    );
+
+    expect(historyField).toBeDefined();
+    expect(historyField.value).toContain('Technology earnings beat in bull market');
+    expect(historyField.value).toContain('Win Rate: 62%');
+    expect(historyField.value).toContain('Worst Case: INTC (-12.0%)');
+  });
+
   it('should throw on non-ok response', async () => {
     fetchSpy.mockResolvedValue({
       ok: false,

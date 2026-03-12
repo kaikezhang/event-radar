@@ -70,9 +70,12 @@ import {
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
+import { HistoricalEnricher } from './pipeline/historical-enricher.js';
+import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 // WebSocket removed
 import { OutcomeTracker } from './services/outcome-tracker.js';
+import { MarketContextCache } from './services/market-context-cache.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import type {
@@ -94,7 +97,10 @@ export interface AppContext {
   deduplicator: EventDeduplicator;
   alertFilter: AlertFilter;
   llmEnricher: LLMEnricher;
+  historicalEnricher?: Pick<HistoricalEnricher, 'enrich'>;
 }
+
+type HistoricalEnricherLike = Pick<HistoricalEnricher, 'enrich'>;
 
 function buildAlertRouter(): AlertRouterType {
   const barkKey = process.env.BARK_KEY;
@@ -142,6 +148,8 @@ export function buildApp(options?: {
   apiKey?: string;
   alertFilterConfig?: AlertFilterConfig;
   llmEnricherConfig?: LLMEnricherConfig;
+  historicalEnricherConfig?: ConstructorParameters<typeof HistoricalEnricher>[2];
+  historicalEnricher?: HistoricalEnricherLike;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -167,6 +175,30 @@ export function buildApp(options?: {
     db != null
       ? new OutcomeTracker(db, undefined, accuracyService)
       : undefined;
+
+  const marketCache = db
+    ? new MarketContextCache({ refreshIntervalMs: 300_000 })
+    : undefined;
+  const historicalEnricher = options?.historicalEnricher
+    ?? (db && marketCache
+      ? new HistoricalEnricher(db, marketCache, options?.historicalEnricherConfig)
+      : undefined);
+  const shouldWarmHistoricalResources =
+    db != null &&
+    marketCache != null &&
+    historicalEnricher instanceof HistoricalEnricher &&
+    process.env.VITEST !== 'true' &&
+    process.env.NODE_ENV !== 'test';
+
+  if (shouldWarmHistoricalResources) {
+    marketCache.start();
+    void prewarmSectorCache(db).catch((error) => {
+      console.error(
+        '[event-type-mapper] Failed to prewarm sector cache:',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
 
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
@@ -332,12 +364,22 @@ export function buildApp(options?: {
         }
       }
 
+      // Historical enrichment (only after filter passes, before delivery)
+      let historicalContext: import('@event-radar/delivery').HistoricalContext | undefined;
+      if (historicalEnricher) {
+        historicalContext = await historicalEnricher.enrich(
+          event,
+          llmResult?.ok ? llmResult.value : undefined,
+        ) ?? undefined;
+      }
+
       const deliveryStart = Date.now();
       const results = await alertRouter.route({
         event,
         severity: result.severity,
         ticker,
         enrichment,
+        historicalContext,
       });
       const deliveryMs = Date.now() - deliveryStart;
 
@@ -462,7 +504,23 @@ export function buildApp(options?: {
   // Register scanner health routes
   registerScannerRoutes(server, registry);
 
-  return { server, eventBus, registry, alertRouter, ruleEngine, llmClassifier, deduplicator, alertFilter, llmEnricher };
+  // Cleanup on shutdown
+  server.addHook('onClose', async () => {
+    marketCache?.stop();
+  });
+
+  return {
+    server,
+    eventBus,
+    registry,
+    alertRouter,
+    ruleEngine,
+    llmClassifier,
+    deduplicator,
+    alertFilter,
+    llmEnricher,
+    historicalEnricher,
+  };
 }
 
 async function buildPredictionPayload(
