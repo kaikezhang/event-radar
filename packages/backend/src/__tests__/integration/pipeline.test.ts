@@ -352,6 +352,8 @@ describe('Integration: error scenarios', () => {
     });
     await ctx.server.ready();
     resetMetrics();
+    ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
 
     const res = await ctx.server.inject({
       method: 'POST',
@@ -383,6 +385,8 @@ describe('Integration: error scenarios', () => {
     });
     await ctx.server.ready();
     resetMetrics();
+    ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
 
     const res = await ctx.server.inject({
       method: 'POST',
@@ -496,6 +500,8 @@ describe('Integration: error scenarios', () => {
     });
     await ctx.server.ready();
     resetMetrics();
+    ctx.deduplicator.reset();
+    ctx.alertFilter.resetCooldowns();
 
     // CRITICAL → bark + discord (2 deliveries)
     await ctx.server.inject({
