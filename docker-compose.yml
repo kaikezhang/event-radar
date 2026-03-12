@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:3001:3001"
+    volumes:
+      - seen-ids:/tmp/event-radar-seen
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
@@ -85,3 +87,4 @@ networks:
 
 volumes:
   pgdata:
+  seen-ids:

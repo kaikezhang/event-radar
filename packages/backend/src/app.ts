@@ -344,6 +344,14 @@ export function buildApp(options?: {
     }
 
     // Step 7: Alert filter + delivery (if alertRouter enabled)
+    // Grace period: suppress delivery for first 90s after startup to let scanners
+    // populate their seenIds buffers (prevents duplicate flood on restart)
+    const uptimeMs = Date.now() - startTime;
+    const DELIVERY_GRACE_MS = 90_000;
+    if (uptimeMs < DELIVERY_GRACE_MS) {
+      return; // Still in startup grace period — store to DB but don't deliver
+    }
+
     if (alertRouter.enabled) {
       const ticker =
         event.metadata && typeof event.metadata['ticker'] === 'string'
