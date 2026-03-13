@@ -1,160 +1,128 @@
-# TASK.md — Evolution Phase 3: 扩展数据源
+# TASK.md — Admin Dashboard Observability
 
 ## Overview
 
-Phase 2 已完成（Rich Delivery + Market Regime + Golden Test Set + Health Check）。Phase 3 目标是补齐 review 中反复提到的关键缺失数据源，尤其是二进制事件（halt）和高优先级信号。
+增强 Admin Dashboard 的可观测性。现有 dashboard 已有 Overview（Scanner Grid + Pipeline Funnel + Filter Breakdown）、Audit Trail、Historical 三个页面。本次增强的核心目标：**让管理员一眼看清系统在干什么、为什么 block、怎么操控**。
 
-参考文档：
-- `docs/EVOLUTION-STRATEGY.md` — Phase 3 规划
-- `docs/SOURCES.md` — 完整数据源愿景
+Dashboard 前端在 `packages/dashboard/`，使用 React + TanStack Query + Recharts + Tailwind CSS + Lucide icons。
+后端在 `packages/backend/`。
 
----
-
-## Task A: NYSE/Nasdaq Trading Halt Feed (Codex)
-
-实现交易所停牌/恢复 scanner。这是二进制事件（停牌/恢复），不需要 AI 分类。
-
-### Backend — Halt Scanner
-
-1. **新文件**: `packages/backend/src/scanners/halt-scanner.ts`
-   - 继承 `BaseScanner`
-   - 数据源: Nasdaq Trading Halts RSS/JSON feed
-     - URL: `https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts` (RSS)
-     - 备用: `https://www.nasdaqtrader.com/dynamic/symdir/shorthalts/shorthalts.json`
-     - 或 scrape `https://www.nasdaqtrader.com/trader.aspx?id=TradeHalts` 页面
-   - 轮询间隔: 15 秒（halt 时效性极强）
-   - 解析字段: ticker, halt time, resume time, halt reason code, market (NYSE/NASDAQ/etc)
-
-2. **Halt Reason Codes** (自动映射 severity):
-   - `T1` (News Pending) → CRITICAL
-   - `T2` (News Dissemination) → HIGH  
-   - `T5` (Single Stock Circuit Breaker - LULD) → CRITICAL
-   - `T6` (Extraordinary Market Volatility) → CRITICAL
-   - `T8` (ETF Halt) → HIGH
-   - `T12` (IPO Not Yet Trading) → MEDIUM
-   - `M` (Volatility Trading Pause - MWCB) → CRITICAL
-   - `H4` (Non-compliance) → MEDIUM
-   - Other → LOW
-
-3. **事件格式**:
-   ```ts
-   {
-     source: 'trading-halt',
-     type: 'halt' | 'resume',
-     title: `${ticker} trading HALTED — ${reasonDescription}` | `${ticker} trading RESUMED`,
-     severity: /* mapped from reason code */,
-     direction: 'bearish', // halts are generally bearish, resumes neutral
-     tickers: [ticker],
-     metadata: { haltReasonCode, market, haltTime, resumeTime, isLULD: boolean }
-   }
-   ```
-
-4. **不需要 LLM 分类** — halt 是结构化二进制事件，直接映射 severity
-
-5. **去重**: 用 `ticker + haltTime + reasonCode` 作为 dedup key
-
-6. **注册**: 在 `app.ts` 注册 scanner，用 env var `HALT_SCANNER_ENABLED` 控制
-
-7. **Tests**: ≥10 个测试 — RSS 解析、reason code mapping、dedup、halt/resume 对、LULD detection
+设计风格：保持现有 dark theme（`radar-bg`, `radar-surface`, `radar-border`, `radar-green`, `radar-red`, `radar-amber`, `radar-blue`, `radar-text`, `radar-text-muted`）。
 
 ---
 
-## Task B: Company IR Website Monitor (Codex)
+## Task A: LLM Judge Transparency Panel (Codex)
 
-监控上市公司 Investor Relations 页面的新闻发布，这通常比 PR Newswire 更快。
+让管理员看到 LLM Judge 在干什么 — 通过/拒绝了哪些事件、为什么。
 
-### Backend — IR Monitor Scanner
+### Backend
 
-1. **新文件**: `packages/backend/src/scanners/ir-monitor-scanner.ts`
-   - 继承 `BaseScanner`
-   - 监控策略: 轮询公司 IR 页面的 RSS/press release feeds
-   - 初始支持的公司（高影响力）:
-     - AAPL: `https://investor.apple.com/sec-filings/default.aspx`
-     - NVDA: `https://investor.nvidia.com/news/press-release-details/`
-     - TSLA: `https://ir.tesla.com/press-release`
-     - META: `https://investor.fb.com/press-releases/`
-     - MSFT: `https://www.microsoft.com/en-us/investor/earnings/fy-2026-q2/press-release`
-     - GOOGL: `https://abc.xyz/investor/`
-   - 实际实现: 很多 IR 页面提供 RSS feed，优先用 RSS；没有 RSS 的用 page diff detection
+1. **新 API**: `GET /api/v1/judge/recent?limit=50`
+   - 从 `pipeline_audit` 表查询 `stopped_at = 'llm_judge'` 的记录
+   - 返回: `{ events: [{ id, title, source, severity, decision, confidence, reason, ticker, at }] }`
+   - 也包含 `outcome = 'delivered'` 且经过 LLM Judge 的事件（judge passed）
+   - 按时间倒序
 
-2. **Page Diff Detection** (for pages without RSS):
-   - 存储上次 fetch 的 page content hash
-   - 每 5 分钟 fetch 一次，对比 hash
-   - 有变化 → 提取新内容 → 生成事件
-   - 用 `cheerio` 解析 HTML，提取 press release 标题 + 链接
+2. **新 API**: `GET /api/v1/judge/stats`
+   - 统计 by source 的通过/拒绝数量
+   - 返回: `{ bySource: { "breaking-news": { passed: 2, blocked: 5 }, ... }, total: { passed: 10, blocked: 30 } }`
+   - 可选 `?since=1h|24h|7d` 时间范围
 
-3. **配置**:
-   - `IR_MONITOR_COMPANIES` env var: 逗号分隔的 JSON 配置
-   - 默认监控 Mag 7 + 高频新闻公司
-   - 每个公司配置: `{ ticker, name, feedUrl?, pageUrl, selector? }`
+3. **增强 Audit Trail 数据**: 在 `/api/v1/audit` 的返回中增加 `llm_enrichment` 字段（如果事件有 AI enrichment），包含：
+   - `analysis` (AI 分析全文)
+   - `action` (建议 action)
+   - `tickers` (提取的 ticker 列表)
+   - `regimeContext` (regime 上下文)
+   - `confidence` (LLM judge confidence)
 
-4. **事件格式**:
-   ```ts
-   {
-     source: 'company-ir',
-     type: 'press-release',
-     title: `[${ticker}] ${pressReleaseTitle}`,
-     body: pressReleaseSnippet,
-     tickers: [ticker],
-     metadata: { companyName, url, detectedAt }
-   }
-   ```
+### Frontend (`packages/dashboard/`)
 
-5. **Tests**: ≥8 个测试 — RSS 解析、page diff detection、配置解析、dedup
+1. **Overview 新增 LLM Judge Card**:
+   - 通过/拒绝比例 donut chart（用 Recharts PieChart）
+   - By source 的通过率 bar chart
+   - 最近 5 个判定：title + source + decision badge (PASS 绿 / BLOCK 红) + confidence + reason 摘要
+
+2. **Audit Trail 增强**:
+   - 展开详情里增加 LLM Enrichment 区域
+   - 如果事件有 AI 分析：显示完整 analysis + action + tickers + regime context
+   - LLM Judge confidence 用 progress bar 展示
+
+3. **新 hooks**: `useJudgeRecent()`, `useJudgeStats()`
 
 ---
 
-## Task C: Dilution Event Scanner (Codex)
+## Task B: Market Regime + Delivery Control Panel (Codex)
 
-监控稀释事件（ATM offerings、可转债、增发），这些对股价有直接负面影响。
+### Backend
 
-### Backend — Dilution Scanner
+1. **新 API**: `GET /api/v1/regime/history?hours=24`
+   - 返回 regime score 时序数据（从内存 cache 或 DB）
+   - 格式: `{ snapshots: [{ at, score, vix, spy, regime, factors: { rsi, ma_cross, yield_curve, ... } }] }`
+   - 如果没有历史数据，从当前 snapshot 开始累积（每次 regime 更新时存一个点）
 
-1. **新文件**: `packages/backend/src/scanners/dilution-scanner.ts`
-   - 继承 `BaseScanner`
-   - 数据源: SEC EDGAR ATOM feed + 关键词过滤
-     - 监控 Form S-3 (shelf registration), Form 424B (prospectus supplement), 8-K Item 8.01
-     - URL: `https://efts.sec.gov/LATEST/search-index?q=%22at-the-market%22+OR+%22ATM+offering%22+OR+%22convertible+notes%22&dateRange=custom&startdt=YYYY-MM-DD&enddt=YYYY-MM-DD&forms=S-3,424B2,424B5,8-K`
-   - 轮询间隔: 60 秒
+2. **增强 `/api/v1/dashboard`**: 在返回中增加:
+   - `regime` 字段: 完整 regime snapshot（不只是 vix/spy/regime，还要 score + 所有因子）
+   - `delivery_control` 字段: kill switch 状态 + 最后操作时间 + 操作者
 
-2. **Detection Patterns**:
-   - **ATM Offering**: S-3/424B filings containing "at-the-market", "ATM"
-   - **Convertible Notes**: 8-K/424B containing "convertible", "conversion price"
-   - **Secondary Offering**: S-1/424B containing "secondary offering", "selling stockholders"
-   - **Shelf Registration**: S-3 "shelf registration statement"
-   - **PIPE**: 8-K containing "private investment in public equity", "PIPE"
+### Frontend (`packages/dashboard/`)
 
-3. **Severity Mapping**:
-   - ATM Offering announced → HIGH (immediate dilution)
-   - Convertible Notes → MEDIUM (future dilution)
-   - Secondary Offering → HIGH (immediate selling pressure)
-   - Shelf Registration filed → LOW (potential future dilution)
-   - PIPE → MEDIUM
+1. **Overview 新增 Market Regime Card**:
+   - 当前 regime badge（BULL 🟢 / BEAR 🔴 / CORRECTION 🟡 / NEUTRAL ⚪）
+   - Regime score gauge（-100 到 +100 的仪表盘）
+   - 关键因子一行：VIX | SPY RSI | MA Cross | Yield Curve
+   - 点击展开 → 所有因子详细值
 
-4. **事件格式**:
-   ```ts
-   {
-     source: 'dilution-monitor',
-     type: 'dilution',
-     title: `${ticker} — ${dilutionType} detected`,
-     body: filingSnippet,
-     severity: /* mapped */,
-     direction: 'bearish',
-     tickers: [ticker],
-     metadata: { dilutionType, formType, filingUrl, estimatedAmount? }
-   }
-   ```
+2. **Overview 新增 Delivery Control Card**:
+   - Kill Switch 状态灯 + 一键 toggle 按钮（POST `/api/admin/delivery/kill` 或 `/resume`）
+   - 每个 delivery channel 的统计：sent / errors / last success time
+   - 需要 API_KEY 鉴权（从 Settings 或 env 读取）
 
-5. **Tests**: ≥8 个测试 — 各种 dilution pattern 检测、severity mapping、false positive filtering
+3. **全局 Auto-refresh**: 所有 useQuery 加 `refetchInterval: 15_000`（15 秒刷新）
+
+---
+
+## Task C: Scanner Deep Dive + Alert Feed Page (Codex)
+
+### Backend
+
+1. **新 API**: `GET /api/v1/scanners/:name/events?limit=10`
+   - 返回指定 scanner 最近产出的事件
+   - 从 `events` 表按 source 查询
+
+2. **新 API**: `GET /api/v1/delivery/feed?limit=20`
+   - 只返回 delivered 事件 + 完整 enrichment
+   - 包含：title, source, severity, tickers, AI analysis, action, regime context, delivery channels, delivered_at
+   - Cursor pagination
+
+### Frontend (`packages/dashboard/`)
+
+1. **Scanner Card 可展开**:
+   - 点击 scanner card → 展开 drawer 或 modal
+   - 显示：最近 10 个事件列表、最近错误详情、events/hour 产出率
+   - 用 ScannerCard.tsx 改造
+
+2. **新页面: Alert Feed** (`pages/AlertFeed.tsx`):
+   - 在 App.tsx 导航加新 tab（Bell icon + "Alerts" label）
+   - 卡片式布局，每个 delivered alert 一张卡：
+     - 标题（粗体）+ source badge + severity badge
+     - AI 分析摘要（前 200 字）
+     - Tickers（黄色 mono）
+     - Delivery channels（Discord ✅ / Bark ✅）
+     - 送达时间
+   - 空状态：友好提示 "No alerts delivered yet"
+   - Cursor 分页（Load More 按钮）
+
+3. **新 hooks**: `useScannerEvents(name)`, `useDeliveryFeed()`
 
 ---
 
 ## General Rules
 
 - TypeScript strict mode, ESM with `.js` extensions in imports
-- Follow existing scanner patterns (BaseScanner, EventBus, SeenIdBuffer)
-- Run `pnpm test` — all tests must pass
-- Run `pnpm lint` — no lint errors
-- Create feature branch + PR. Do NOT push to main.
-- Do NOT merge PRs.
-- ALL coding by Codex. CC only reviews.
+- 保持现有设计风格（dark theme, radar-* colors）
+- 新组件用现有 Card, StatusBadge, LoadingSpinner 组件
+- Charts 用 Recharts（已在依赖中）
+- 后端新 route 需要注册到 app.ts
+- Run `pnpm build` + `pnpm test` + `pnpm lint` — 全部通过
+- Create feature branch + PR. Do NOT push to main. Do NOT merge PRs.
+- 新增的前端页面/组件需要有 test 文件
