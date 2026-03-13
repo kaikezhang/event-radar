@@ -9,6 +9,13 @@ export function validateApiKeyValue(
   providedKey: string | undefined,
   apiKey?: string,
 ): ApiKeyValidationResult {
+  if (!apiKey) {
+    return {
+      ok: false,
+      message: 'API key not configured',
+    };
+  }
+
   if (!providedKey) {
     return {
       ok: false,

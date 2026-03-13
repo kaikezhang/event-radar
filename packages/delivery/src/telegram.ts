@@ -57,7 +57,7 @@ export class TelegramDelivery implements DeliveryService {
     const body: Record<string, unknown> = {
       chat_id: this.chatId,
       text,
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
     };
     if (replyMarkup) {
       body.reply_markup = replyMarkup;

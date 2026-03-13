@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildPrompt } from '../pipeline/llm-enricher.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildPrompt, LLMEnricher } from '../pipeline/llm-enricher.js';
 import { MockMarketRegimeService, createNeutralSnapshot } from '../services/mock-market-regime.js';
 import type { RawEvent, RegimeSnapshot } from '@event-radar/shared';
 
@@ -114,5 +114,129 @@ describe('MockMarketRegimeService', () => {
     const snapshot = await service.getRegimeSnapshot();
     expect(snapshot.label).toBe('extreme_overbought');
     expect(snapshot.score).toBe(80);
+  });
+});
+
+describe('LLMEnricher.enrich', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('injects market context into the user prompt when regime data is available', async () => {
+    const regimeService = new MockMarketRegimeService({
+      ...createNeutralSnapshot(),
+      score: 65,
+      label: 'overbought',
+    });
+    const enricher = new LLMEnricher(
+      { enabled: true, apiKey: 'test-key', timeoutMs: 100 },
+      regimeService,
+    );
+    const create = vi.fn().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              summary: 'Summary',
+              impact: 'Impact',
+              action: '🟡 持续观察',
+              tickers: [],
+            }),
+          },
+        },
+      ],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+      },
+    });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    (enricher as { client: unknown }).client = {
+      chat: {
+        completions: {
+          create,
+        },
+      },
+    };
+
+    await enricher.enrich(makeEvent());
+
+    expect(create).toHaveBeenCalledOnce();
+    const request = create.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(request.messages[1]?.content).toContain('## Market Context');
+    expect(request.messages[1]?.content).toContain('Current regime: overbought');
+  });
+
+  it('normalizes null tickers to an empty array and falls back invalid actions', async () => {
+    const enricher = new LLMEnricher({ enabled: true, apiKey: 'test-key', timeoutMs: 100 });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    (enricher as { client: unknown }).client = {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: 'AI summary',
+                    impact: 'AI impact',
+                    action: 'INVALID',
+                    tickers: null,
+                    regimeContext: 'Regime note',
+                  }),
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 5,
+              completion_tokens: 5,
+            },
+          }),
+        },
+      },
+    };
+
+    const result = await enricher.enrich(makeEvent());
+
+    expect(result).toEqual({
+      summary: 'AI summary',
+      impact: 'AI impact',
+      action: '🟢 仅供参考',
+      tickers: [],
+      regimeContext: 'Regime note',
+    });
+  });
+
+  it('returns null when the llm payload fails runtime validation', async () => {
+    const enricher = new LLMEnricher({ enabled: true, apiKey: 'test-key', timeoutMs: 100 });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (enricher as { client: unknown }).client = {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: null,
+                    impact: 'AI impact',
+                    action: '🔴 立即关注',
+                    tickers: [],
+                  }),
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 5,
+              completion_tokens: 5,
+            },
+          }),
+        },
+      },
+    };
+
+    await expect(enricher.enrich(makeEvent())).resolves.toBeNull();
   });
 });

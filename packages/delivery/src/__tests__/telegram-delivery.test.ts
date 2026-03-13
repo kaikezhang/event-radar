@@ -36,7 +36,7 @@ describe('TelegramDelivery', () => {
     retryDelays: [0, 0, 0],
   };
 
-  it('should format message with Markdown and correct emoji for CRITICAL', async () => {
+  it('should format message with MarkdownV2 and correct emoji for CRITICAL', async () => {
     const telegram = new TelegramDelivery(defaultConfig);
 
     await telegram.send(makeAlert({ severity: 'CRITICAL' }));
@@ -44,7 +44,7 @@ describe('TelegramDelivery', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const payload = JSON.parse(options.body as string);
 
-    expect(payload.parse_mode).toBe('Markdown');
+    expect(payload.parse_mode).toBe('MarkdownV2');
     expect(payload.text).toContain('\u{1F534}'); // 🔴
     expect(payload.text).toContain('*CRITICAL*');
   });

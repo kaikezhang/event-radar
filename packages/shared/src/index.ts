@@ -232,11 +232,17 @@ export {
 export {
   LLMClassificationSchema,
   LLMClassificationMethodSchema,
+  LLMEnrichmentActionSchema,
+  LLMEnrichmentSchema,
+  LLMEnrichmentTickerSchema,
   LLMEventTypeSchema,
   LLMDirectionSchema,
   LLMSeveritySchema,
   type LLMClassification,
   type LLMClassificationMethod,
+  type LLMEnrichment,
+  type LLMEnrichmentAction,
+  type LLMEnrichmentTicker,
   type LLMEventType,
   type LLMDirection,
 } from './schemas/llm-types.js';

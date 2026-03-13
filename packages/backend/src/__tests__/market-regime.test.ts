@@ -7,6 +7,7 @@ import {
   calculateCompositeRegimeScore,
   calculateRsi,
 } from '../services/market-regime.js';
+import { validateApiKeyValue } from '../routes/auth-middleware.js';
 import { safeCloseServer } from './helpers/test-db.js';
 
 interface HistoricalRow {
@@ -91,6 +92,22 @@ describe('market regime helpers', () => {
 
     expect(calculateRsi(closes, 14)).toBe(0);
   });
+
+  it('uses the documented simplified RSI average for mixed gains and losses', () => {
+    const closes = [
+      100, 102, 101, 105, 103, 104, 102, 106,
+      104, 108, 107, 110, 108, 109, 107,
+    ];
+
+    expect(calculateRsi(closes, 14)).toBe(61.29);
+  });
+
+  it('rejects requests when no configured api key exists', () => {
+    expect(validateApiKeyValue('provided-key', undefined)).toEqual({
+      ok: false,
+      message: 'API key not configured',
+    });
+  });
 });
 
 describe('MarketRegimeService', () => {
@@ -106,10 +123,10 @@ describe('MarketRegimeService', () => {
 
   it('builds an extreme overbought snapshot from bullish trend data', async () => {
     const yahooFinance = createYahooFinanceMock({
-      SPY: buildHistory(buildLinearSeries(400, 520, 252)),
-      '^VIX': buildHistory(buildLinearSeries(13, 12, 30)),
-      '^TNX': buildHistory(buildLinearSeries(4.1, 4.8, 30)),
-      '^IRX': buildHistory(buildLinearSeries(3.6, 3.7, 30)),
+      SPY: buildHistory(buildLinearSeries(400, 560, 252)),
+      '^VIX': buildHistory(buildLinearSeries(11, 10, 30)),
+      '^TNX': buildHistory(buildLinearSeries(4.5, 6.0, 30)),
+      '^IRX': buildHistory(buildLinearSeries(3.0, 3.1, 30)),
     });
     const service = new MarketRegimeService({ yahooFinance });
 
@@ -176,6 +193,15 @@ describe('MarketRegimeService', () => {
     expect(yahooFinance.historical).toHaveBeenCalledTimes(8);
   });
 
+  it('returns a neutral amplification factor before the first snapshot is loaded', () => {
+    const yahooFinance = createYahooFinanceMock({});
+    const service = new MarketRegimeService({ yahooFinance });
+
+    expect(service.getAmplificationFactor('bullish')).toBe(1);
+    expect(service.getAmplificationFactor('bearish')).toBe(1);
+    expect(service.getAmplificationFactor('neutral')).toBe(1);
+  });
+
   it('falls back to a neutral snapshot when market data is incomplete', async () => {
     const yahooFinance = createYahooFinanceMock({
       SPY: buildHistory(buildLinearSeries(400, 520, 10)),
@@ -195,6 +221,23 @@ describe('MarketRegimeService', () => {
         bearish: 1,
       },
     });
+  });
+
+  it('uses the last 252 closes for 52-week high and low calculations', async () => {
+    const staleHighs = Array.from({ length: 28 }, () => 700);
+    const recentTradingYear = buildLinearSeries(400, 520, 252);
+    const yahooFinance = createYahooFinanceMock({
+      SPY: buildHistory([...staleHighs, ...recentTradingYear]),
+      '^VIX': buildHistory(buildLinearSeries(18, 17, 30)),
+      '^TNX': buildHistory(buildLinearSeries(4.0, 5.0, 30)),
+      '^IRX': buildHistory(buildLinearSeries(3.5, 4.0, 30)),
+    });
+    const service = new MarketRegimeService({ yahooFinance });
+
+    const snapshot = await service.getRegimeSnapshot();
+
+    expect(snapshot.factors.spy52wPosition.pctFromHigh).toBe(0);
+    expect(snapshot.factors.spy52wPosition.pctFromLow).toBe(30);
   });
 
   it('coalesces concurrent snapshot requests into a single market data fetch', async () => {
@@ -219,6 +262,20 @@ describe('MarketRegimeService', () => {
       service.getRegimeSnapshot(),
     ]);
 
+    expect(second).toBe(first);
+    expect(yahooFinance.historical).toHaveBeenCalledTimes(4);
+  });
+
+  it('caches a neutral fallback after yahoo finance failures to prevent retry flapping', async () => {
+    const yahooFinance = {
+      historical: vi.fn().mockRejectedValue(new Error('Yahoo failure')),
+    };
+    const service = new MarketRegimeService({ yahooFinance, cacheTtlMs: 300_000 });
+
+    const first = await service.getRegimeSnapshot();
+    const second = await service.getRegimeSnapshot();
+
+    expect(first.label).toBe('neutral');
     expect(second).toBe(first);
     expect(yahooFinance.historical).toHaveBeenCalledTimes(4);
   });

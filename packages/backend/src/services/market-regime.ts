@@ -1,5 +1,10 @@
 import YahooFinance from 'yahoo-finance2';
-import type { RegimeDirection, RegimeLabel, RegimeSnapshot } from '@event-radar/shared';
+import type {
+  IMarketRegimeService,
+  RegimeDirection,
+  RegimeLabel,
+  RegimeSnapshot,
+} from '@event-radar/shared';
 
 interface HistoricalRow {
   date: Date;
@@ -29,14 +34,11 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-export interface IMarketRegimeService {
-  getRegimeSnapshot(): Promise<RegimeSnapshot>;
-  getAmplificationFactor(direction: RegimeDirection): number;
-}
-
 const DEFAULT_CACHE_TTL_MS = 300_000;
 const SPY_HISTORY_DAYS = 400;
 const AUX_HISTORY_DAYS = 60;
+const TRADING_DAYS_IN_YEAR = 252;
+const YIELD_CURVE_SCALE_PCT = 2.0;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -75,6 +77,9 @@ export function calculateRsi(values: number[], period = 14): number {
     return 50;
   }
 
+  // This intentionally uses a simple rolling average over the last `period`
+  // closes instead of Wilder smoothing. The goal is a stable sentiment signal,
+  // not a chart-trading indicator that depends on recursive state.
   let gains = 0;
   let losses = 0;
 
@@ -176,7 +181,7 @@ export function calculateAmplificationFactor(
   }
 
   if (direction === 'bullish') {
-    return roundTo(2 + (Math.abs(clamp(score, -100, -80)) - 80) / 20);
+    return roundTo(2 + (clamp(-score, 80, 100) - 80) / 20);
   }
 
   return 0.5;
@@ -276,7 +281,7 @@ function normalizeMovingAverage(sma20: number, sma50: number): number {
 }
 
 function normalizeYieldCurve(spread: number): number {
-  return clamp(spread / 1, -1, 1);
+  return clamp(spread / YIELD_CURVE_SCALE_PCT, -1, 1);
 }
 
 export class MarketRegimeService implements IMarketRegimeService {
@@ -315,14 +320,6 @@ export class MarketRegimeService implements IMarketRegimeService {
     }
 
     this.inFlightSnapshot = this.fetchSnapshot(now)
-      .then((snapshot) => {
-        this.cache = {
-          snapshot,
-          expiresAt: now.getTime() + this.cacheTtlMs,
-        };
-        this.lastSnapshot = snapshot;
-        return snapshot;
-      })
       .catch((error) => {
         console.error(
           '[market-regime] Failed to refresh snapshot:',
@@ -330,6 +327,14 @@ export class MarketRegimeService implements IMarketRegimeService {
         );
 
         return this.lastSnapshot ?? createNeutralSnapshot(now);
+      })
+      .then((snapshot) => {
+        this.cache = {
+          snapshot,
+          expiresAt: now.getTime() + this.cacheTtlMs,
+        };
+        this.lastSnapshot = snapshot;
+        return snapshot;
       })
       .finally(() => {
         this.inFlightSnapshot = null;
@@ -373,8 +378,9 @@ export class MarketRegimeService implements IMarketRegimeService {
     const currentVix = vixCloses.at(-1) ?? 20;
     const currentTenYear = tenYearCloses.at(-1) ?? 0;
     const currentShortRate = shortRateCloses.at(-1) ?? 0;
-    const high52Week = Math.max(...spyCloses);
-    const low52Week = Math.min(...spyCloses);
+    const trailing52WeekCloses = spyCloses.slice(-TRADING_DAYS_IN_YEAR);
+    const high52Week = Math.max(...trailing52WeekCloses);
+    const low52Week = Math.min(...trailing52WeekCloses);
     const rsi = calculateRsi(spyCloses, 14);
     const sma20 = roundTo(calculateSimpleMovingAverage(spyCloses, 20));
     const sma50 = roundTo(calculateSimpleMovingAverage(spyCloses, 50));
