@@ -60,6 +60,9 @@ import {
   type IMarketRegimeService,
 } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
+import { DeliveryKillSwitch, type IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
+import { HealthMonitorService } from './services/health-monitor.js';
+import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { createLLMProvider, OpenAIProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -142,6 +145,8 @@ export interface AppContext {
   alertFilter: AlertFilter;
   llmEnricher: LLMEnricher;
   historicalEnricher?: Pick<HistoricalEnricher, 'enrich'>;
+  killSwitch?: IDeliveryKillSwitch;
+  healthMonitor?: HealthMonitorService;
 }
 
 type HistoricalEnricherLike = Pick<HistoricalEnricher, 'enrich'>;
@@ -196,6 +201,7 @@ export function buildApp(options?: {
   historicalEnricher?: HistoricalEnricherLike;
   priceChartService?: PriceChartService;
   marketRegimeService?: IMarketRegimeService;
+  killSwitch?: IDeliveryKillSwitch;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -239,6 +245,9 @@ export function buildApp(options?: {
     ?? (db && marketCache
       ? new HistoricalEnricher(db, marketCache, options?.historicalEnricherConfig)
       : undefined);
+  const killSwitch = options?.killSwitch ?? (db ? new DeliveryKillSwitch(db) : undefined);
+  const healthMonitor = db ? new HealthMonitorService(db, eventBus, { killSwitch }) : undefined;
+
   const websocketClientState = { count: 0 };
   const shouldWarmHistoricalResources =
     db != null &&
@@ -272,6 +281,7 @@ export function buildApp(options?: {
         '/api/v1/feed',
         '/api/v1/audit',
         '/api/v1/audit/stats',
+        '/api/health/delivery-stats',
       ],
     });
   });
@@ -623,6 +633,27 @@ export function buildApp(options?: {
 
       pipelineFunnelTotal.inc({ stage: 'enriched' });
 
+      // Kill switch — skip delivery when active
+      if (killSwitch && await killSwitch.isActive()) {
+        pipelineFunnelTotal.inc({ stage: 'kill_switch_skipped' });
+        server.log.info({
+          pipeline: true,
+          stage: 'kill_switch',
+          source: event.source,
+          title: logTitle(event.title),
+          severity: result.severity,
+          reason: 'delivery kill switch is active',
+        });
+        auditLog.record({
+          eventId: event.id, source: event.source, title: event.title,
+          severity: result.severity, ticker,
+          outcome: 'filtered', stoppedAt: 'kill_switch',
+          reason: 'delivery kill switch is active',
+          reasonCategory: 'kill_switch',
+        });
+        return; // Event was processed and stored, just not delivered
+      }
+
       const deliveryStart = Date.now();
       const results = await alertRouter.route({
         event,
@@ -728,6 +759,15 @@ export function buildApp(options?: {
       }
     }
 
+    let killSwitchActive: boolean | null = null;
+    if (killSwitch) {
+      try {
+        killSwitchActive = await killSwitch.isActive();
+      } catch {
+        killSwitchActive = null;
+      }
+    }
+
     return reply.send({
       status: dbStatus === 'connected' ? 'ok' : 'degraded',
       version: backendPackage.version,
@@ -742,6 +782,7 @@ export function buildApp(options?: {
       },
       lastEventTime,
       uptime: process.uptime(),
+      deliveryKillSwitch: killSwitchActive,
     });
   });
 
@@ -788,6 +829,13 @@ export function buildApp(options?: {
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
     registerWatchlistRoutes(server, db, { apiKey });
+    if (killSwitch && healthMonitor) {
+      registerAdminDeliveryRoutes(server, {
+        apiKey,
+        killSwitch,
+        healthMonitor,
+      });
+    }
   }
 
   // Register classify debug route (works without DB)
@@ -809,9 +857,15 @@ export function buildApp(options?: {
     version: backendPackage.version,
   });
 
+  // Start health monitor (production only)
+  if (healthMonitor && process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+    healthMonitor.start();
+  }
+
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
     marketCache?.stop();
+    healthMonitor?.stop();
   });
 
   return {
@@ -825,6 +879,8 @@ export function buildApp(options?: {
     alertFilter,
     llmEnricher,
     historicalEnricher,
+    killSwitch,
+    healthMonitor,
   };
 }
 

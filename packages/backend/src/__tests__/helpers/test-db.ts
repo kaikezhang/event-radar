@@ -25,6 +25,8 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM delivery_kill_switch`);
+  await db.execute(sql`DELETE FROM pipeline_audit`);
   await db.execute(sql`DELETE FROM watchlist`);
   await db.execute(sql`DELETE FROM severity_changes`);
   await db.execute(sql`DELETE FROM severity_overrides`);
@@ -233,6 +235,36 @@ export async function createTestDb(): Promise<{
       ticker VARCHAR(10) NOT NULL UNIQUE,
       added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       notes TEXT
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS pipeline_audit (
+      id SERIAL PRIMARY KEY,
+      event_id VARCHAR(100) NOT NULL,
+      source VARCHAR(100) NOT NULL,
+      title TEXT NOT NULL,
+      severity VARCHAR(20),
+      ticker VARCHAR(20),
+      outcome VARCHAR(30) NOT NULL,
+      stopped_at VARCHAR(30) NOT NULL,
+      reason TEXT,
+      reason_category VARCHAR(30),
+      delivery_channels JSONB,
+      historical_match BOOLEAN,
+      historical_confidence VARCHAR(20),
+      duration_ms INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS delivery_kill_switch (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      activated_at TIMESTAMPTZ,
+      reason TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
