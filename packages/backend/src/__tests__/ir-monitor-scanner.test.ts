@@ -62,6 +62,15 @@ describe('IrMonitorScanner', () => {
       expect(companies).toHaveLength(6);
     });
 
+    it('uses a stable Microsoft press release index URL in the default config', () => {
+      const companies = parseIrMonitorCompaniesEnv();
+      const microsoft = companies.find((company) => company.ticker === 'MSFT');
+
+      expect(microsoft?.pageUrl).toBe(
+        'https://www.microsoft.com/en-us/investor/press-releases-and-news/press-releases/default.aspx',
+      );
+    });
+
     it('parses a JSON array from IR_MONITOR_COMPANIES', () => {
       process.env.IR_MONITOR_COMPANIES = JSON.stringify([
         {
@@ -95,6 +104,18 @@ describe('IrMonitorScanner', () => {
       expect(companies.map((company) => company.ticker)).toEqual(['AMD', 'AMZN']);
       expect(companies[0]?.selector).toBe('.press-release a');
     });
+
+    it('returns an empty config when IR_MONITOR_COMPANIES is invalid JSON', () => {
+      process.env.IR_MONITOR_COMPANIES = '{"ticker":"BROKEN"';
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const companies = parseIrMonitorCompaniesEnv();
+
+      expect(companies).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid IR_MONITOR_COMPANIES config'),
+      );
+    });
   });
 
   describe('helpers', () => {
@@ -123,6 +144,10 @@ describe('IrMonitorScanner', () => {
       ).toBe(
         'TSLA:https://ir.tesla.com/news/tesla-updates-deliveries-guidance',
       );
+    });
+
+    it('normalizes whitespace before hashing content', () => {
+      expect(hashContent(' hello   world ')).toBe(hashContent('hello world'));
     });
   });
 
@@ -157,6 +182,24 @@ describe('IrMonitorScanner', () => {
       expect(result.value[0]?.title).toBe('[AAPL] Apple Reports First Quarter Results');
       expect(result.value[0]?.metadata?.['companyName']).toBe('Apple');
       expect(result.value[0]?.metadata?.['tickers']).toEqual(['AAPL']);
+    });
+
+    it('rejects direct RSS polling without a feed URL before calling fetch', async () => {
+      const scanner = new IrMonitorScanner(new InMemoryEventBus(), []);
+      const fetchFn = vi.fn<typeof fetch>();
+      scanner.fetchFn = fetchFn;
+
+      await expect(
+        (scanner as unknown as {
+          pollRssCompany: (company: IrMonitorCompanyConfig) => Promise<unknown>;
+        }).pollRssCompany({
+          ticker: 'AAPL',
+          name: 'Apple',
+          pageUrl: 'https://investor.apple.com/news',
+        }),
+      ).rejects.toThrow('RSS feed URL is required');
+
+      expect(fetchFn).not.toHaveBeenCalled();
     });
 
     it('deduplicates RSS items across scans', async () => {
@@ -259,6 +302,79 @@ describe('IrMonitorScanner', () => {
       expect(third.ok).toBe(true);
       if (!third.ok) return;
       expect(third.value).toHaveLength(0);
+    });
+
+    it('continues polling other companies when one RSS request returns an HTTP error', async () => {
+      const scanner = new IrMonitorScanner(new InMemoryEventBus(), [
+        {
+          ticker: 'AAPL',
+          name: 'Apple',
+          feedUrl: 'https://investor.apple.com/rss',
+          pageUrl: 'https://investor.apple.com/news',
+        },
+        {
+          ticker: 'TSLA',
+          name: 'Tesla',
+          pageUrl: 'https://ir.tesla.com/press-release',
+          selector: '.press-release',
+        },
+      ]);
+
+      scanner.fetchFn = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response('', { status: 503 }))
+        .mockResolvedValueOnce(new Response(pageBeforeHtml, { status: 200 }));
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual([]);
+      expect(scanner.fetchFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('continues polling other companies when one request throws a network error', async () => {
+      const scanner = new IrMonitorScanner(new InMemoryEventBus(), [
+        {
+          ticker: 'AAPL',
+          name: 'Apple',
+          feedUrl: 'https://investor.apple.com/rss',
+          pageUrl: 'https://investor.apple.com/news',
+        },
+        {
+          ticker: 'TSLA',
+          name: 'Tesla',
+          pageUrl: 'https://ir.tesla.com/press-release',
+          selector: '.press-release',
+        },
+      ]);
+
+      scanner.fetchFn = vi.fn<typeof fetch>()
+        .mockRejectedValueOnce(new Error('socket hang up'))
+        .mockResolvedValueOnce(new Response(pageBeforeHtml, { status: 200 }));
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual([]);
+      expect(scanner.fetchFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('health', () => {
+    it('reports the initial healthy state before any scans run', () => {
+      const scanner = new IrMonitorScanner(new InMemoryEventBus(), []);
+      const health = scanner.health();
+
+      expect(health).toMatchObject({
+        scanner: 'ir-monitor',
+        status: 'healthy',
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: IR_MONITOR_POLL_INTERVAL_MS,
+        inBackoff: false,
+      });
+      expect(health.lastScanAt).toBeNull();
     });
   });
 

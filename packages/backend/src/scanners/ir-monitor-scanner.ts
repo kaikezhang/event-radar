@@ -24,6 +24,7 @@ const IrMonitorCompanyConfigSchema = z.object({
 });
 
 export type IrMonitorCompanyConfig = z.infer<typeof IrMonitorCompanyConfigSchema>;
+type IrMonitorRssCompanyConfig = IrMonitorCompanyConfig & { feedUrl: string };
 
 export interface IrPressRelease {
   title: string;
@@ -59,7 +60,7 @@ export const DEFAULT_IR_MONITOR_COMPANIES: IrMonitorCompanyConfig[] = [
   {
     ticker: 'MSFT',
     name: 'Microsoft',
-    pageUrl: 'https://www.microsoft.com/en-us/investor/earnings/fy-2026-q2/press-release',
+    pageUrl: 'https://www.microsoft.com/en-us/investor/press-releases-and-news/press-releases/default.aspx',
     selector: 'article, main a[href]',
   },
   {
@@ -115,10 +116,10 @@ export function parseIrMonitorCompaniesEnv(
   }
 
   console.log(
-    `[ir-monitor] Invalid IR_MONITOR_COMPANIES config: ${parsed.error.message}. Falling back to defaults.`,
+    `[ir-monitor] Invalid IR_MONITOR_COMPANIES config: ${parsed.error.message}. Scanner companies disabled until the config is fixed.`,
   );
 
-  return DEFAULT_IR_MONITOR_COMPANIES.map(normalizeCompanyConfig);
+  return [];
 }
 
 export function hashContent(content: string): string {
@@ -130,8 +131,12 @@ export function buildIrMonitorEventId(ticker: string, sourceId: string): string 
   return `${ticker}:${sourceId}`;
 }
 
+const decodeEntityRoot = load('<div id="entity-decoder"></div>');
+
 function decodeHtmlEntities(text: string): string {
-  return load(`<div>${text}</div>`)('div').text();
+  const root = decodeEntityRoot('#entity-decoder');
+  root.html(text);
+  return root.text();
 }
 
 function normalizeText(text: string): string {
@@ -219,6 +224,7 @@ export function extractPressReleasesFromHtml(
 
 function buildPageHashSource(
   html: string,
+  pageUrl: string,
   selector?: string,
 ): string {
   const $ = load(html);
@@ -231,7 +237,16 @@ function buildPageHashSource(
     if (scopedHtml.trim()) return scopedHtml;
   }
 
-  return $('body').html() ?? html;
+  const extractedReleases = extractPressReleasesFromHtml(html, pageUrl);
+  if (extractedReleases.length > 0) {
+    return extractedReleases
+      .map((release) => `${release.url}\n${release.title}\n${release.snippet}`)
+      .join('\n---\n');
+  }
+
+  // JS-rendered IR pages may not expose meaningful static content in the body.
+  // Fall back to the full document so head/script changes still affect the hash.
+  return html;
 }
 
 function mapRssItemToEvent(
@@ -315,7 +330,7 @@ export class IrMonitorScanner extends BaseScanner {
       for (const company of this.companies) {
         try {
           const companyEvents = company.feedUrl
-            ? await this.pollRssCompany(company)
+            ? await this.pollRssCompany({ ...company, feedUrl: company.feedUrl })
             : await this.pollPageCompany(company);
 
           events.push(...companyEvents);
@@ -332,9 +347,13 @@ export class IrMonitorScanner extends BaseScanner {
   }
 
   private async pollRssCompany(
-    company: IrMonitorCompanyConfig,
+    company: IrMonitorRssCompanyConfig,
   ): Promise<RawEvent[]> {
-    const response = await this.fetchFn(company.feedUrl!, {
+    if (!company.feedUrl) {
+      throw new Error(`RSS feed URL is required for ${company.ticker}`);
+    }
+
+    const response = await this.fetchFn(company.feedUrl, {
       headers: {
         'User-Agent': 'event-radar/1.0',
         Accept: 'application/rss+xml, application/xml, text/xml',
@@ -378,7 +397,7 @@ export class IrMonitorScanner extends BaseScanner {
     }
 
     const html = await response.text();
-    const pageHash = hashContent(buildPageHashSource(html, company.selector));
+    const pageHash = hashContent(buildPageHashSource(html, company.pageUrl, company.selector));
     const releases = extractPressReleasesFromHtml(html, company.pageUrl, company.selector);
     const currentIds = new Set(
       releases.map((release) => buildIrMonitorEventId(company.ticker, release.url)),
