@@ -7,12 +7,12 @@ import { SourceBadge } from './SourceBadge.js';
 import { TickerChip } from './TickerChip.js';
 
 const severityBarClassName = {
-  CRITICAL: 'bg-severity-critical',
+  CRITICAL: 'w-[3px] bg-severity-critical',
   HIGH:
-    'bg-[length:5px_5px] bg-[repeating-linear-gradient(180deg,var(--severity-high)_0,var(--severity-high)_2px,transparent_2px,transparent_5px)]',
+    'w-[3px] bg-[length:5px_5px] bg-[repeating-linear-gradient(180deg,var(--severity-high)_0,var(--severity-high)_2px,transparent_2px,transparent_5px)]',
   MEDIUM:
-    'bg-[length:5px_8px] bg-[radial-gradient(circle,var(--severity-medium)_1.2px,transparent_1.5px)]',
-  LOW: 'bg-severity-low',
+    'w-[3px] bg-[length:5px_8px] bg-[radial-gradient(circle,var(--severity-medium)_1.2px,transparent_1.5px)]',
+  LOW: 'w-px bg-severity-low',
 };
 
 export function AlertCard({ alert }: { alert: AlertSummary }) {
@@ -23,7 +23,7 @@ export function AlertCard({ alert }: { alert: AlertSummary }) {
     >
       <div
         className={cn(
-          'absolute inset-y-4 left-0 w-[3px] rounded-full',
+          'absolute inset-y-4 left-0 rounded-full',
           severityBarClassName[alert.severity],
         )}
         aria-hidden="true"
@@ -34,7 +34,7 @@ export function AlertCard({ alert }: { alert: AlertSummary }) {
         <SourceBadge source={alert.source} />
         <div className="flex flex-wrap gap-2">
           {alert.tickers.map((ticker) => (
-            <TickerChip key={ticker} symbol={ticker} className="min-h-9 px-2.5 py-1.5 text-xs" />
+            <TickerChip key={ticker} symbol={ticker} className="px-2.5 py-1.5 text-xs" />
           ))}
         </div>
         <span className="ml-auto font-mono text-xs text-text-secondary">

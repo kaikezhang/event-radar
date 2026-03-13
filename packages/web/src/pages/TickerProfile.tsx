@@ -77,7 +77,7 @@ export function TickerProfile() {
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">Recent radar for {data.symbol}</h2>
+            <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Recent radar for {data.symbol}</h2>
             <p className="mt-1 text-sm text-text-secondary">
               Latest alerts tied to this ticker from filings, news, and social sources.
             </p>

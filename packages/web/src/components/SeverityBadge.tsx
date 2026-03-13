@@ -65,7 +65,6 @@ export function SeverityBadge({
       />
       {config.icon}
       <span>{severity}</span>
-      <span className="sr-only">{config.label}</span>
     </span>
   );
 }

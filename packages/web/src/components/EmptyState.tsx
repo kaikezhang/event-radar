@@ -18,7 +18,7 @@ export function EmptyState({
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/6 text-2xl">
         <span aria-hidden="true">{icon}</span>
       </div>
-      <h2 className="mb-2 text-lg font-semibold text-text-primary">{title}</h2>
+      <h2 className="mb-2 text-[17px] font-semibold leading-[1.4] text-text-primary">{title}</h2>
       <p className="mx-auto mb-5 max-w-sm text-[15px] leading-6 text-text-secondary">
         {description}
       </p>

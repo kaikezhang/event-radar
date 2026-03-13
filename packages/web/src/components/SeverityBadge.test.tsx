@@ -3,10 +3,10 @@ import { SeverityBadge } from './SeverityBadge.js';
 
 describe('SeverityBadge', () => {
   it('renders the label and icon for critical alerts', () => {
-    const { getByText } = renderWithQuery(<SeverityBadge severity="CRITICAL" />);
+    const { getByText, getByLabelText } = renderWithQuery(<SeverityBadge severity="CRITICAL" />);
 
     expect(getByText('CRITICAL')).toBeInTheDocument();
-    expect(getByText('Critical')).toBeInTheDocument();
+    expect(getByLabelText('Critical severity alert')).toBeInTheDocument();
   });
 
   it('renders accessible text for low severity alerts', () => {

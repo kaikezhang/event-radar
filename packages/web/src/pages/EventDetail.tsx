@@ -1,6 +1,6 @@
 import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { SeverityBadge } from '../components/SeverityBadge.js';
 import { SimilarEventRow } from '../components/SimilarEventRow.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
@@ -97,19 +97,19 @@ export function EventDetail() {
           <span>{data.source}</span>
           <span>·</span>
           {data.tickers.map((ticker) => (
-            <TickerChip key={ticker} symbol={ticker} className="min-h-9 px-2.5 py-1.5 text-xs" />
+            <TickerChip key={ticker} symbol={ticker} className="px-2.5 py-1.5 text-xs" />
           ))}
           <span className="font-mono">{formatRelativeTime(data.publishedAt)}</span>
         </div>
       </section>
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <h2 className="text-lg font-semibold text-text-primary">Summary</h2>
+        <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Summary</h2>
         <p className="mt-3 text-[15px] leading-7 text-text-secondary">{data.aiSummary}</p>
       </section>
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <h2 className="text-lg font-semibold text-text-primary">Market Context</h2>
+        <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Market Context</h2>
         <div className="mt-4 space-y-3">
           {data.marketContext.map((context) => (
             <div
@@ -138,7 +138,7 @@ export function EventDetail() {
       {data.historicalPattern ? (
         <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-text-primary">Historical Pattern</h2>
+            <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Historical Pattern</h2>
             <div className="rounded-full bg-white/6 px-3 py-1 text-sm font-medium text-text-primary">
               {data.historicalPattern.matchRate}% match
             </div>
@@ -154,7 +154,7 @@ export function EventDetail() {
       ) : null}
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <h2 className="text-lg font-semibold text-text-primary">Similar Events</h2>
+        <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Similar Events</h2>
         <div className="mt-4 space-y-3">
           {visibleSimilarEvents.length > 0 ? (
             visibleSimilarEvents.map((event) => <SimilarEventRow key={event.id} event={event} />)
@@ -174,14 +174,14 @@ export function EventDetail() {
       </section>
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <Link
-          to={data.sourceUrl}
+        <a
+          href={data.sourceUrl}
           target="_blank"
           rel="noreferrer"
           className="inline-flex min-h-11 items-center gap-2 text-[15px] font-semibold text-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
         >
           View original source <ExternalLink className="h-4 w-4" />
-        </Link>
+        </a>
       </section>
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
