@@ -4,6 +4,7 @@ import { InMemoryEventBus } from '@event-radar/shared';
 import { createTestDb, safeClose } from './helpers/test-db.js';
 import { HealthMonitorService, isTradingHours } from '../services/health-monitor.js';
 import { DeliveryKillSwitch } from '../services/delivery-kill-switch.js';
+import type { IDeliveryKillSwitch } from '../services/delivery-kill-switch.js';
 import type { Database } from '../db/connection.js';
 import type { PGlite } from '@electric-sql/pglite';
 
@@ -119,6 +120,34 @@ describe('HealthMonitorService', () => {
     expect(alerts).toHaveLength(0);
   });
 
+  it('does NOT alert when kill switch is active during trading hours', async () => {
+    eventBus = new InMemoryEventBus();
+
+    const alerts: unknown[] = [];
+    eventBus.subscribeTopic('system:health:alert', (payload) => {
+      alerts.push(payload);
+    });
+
+    // Create a mock kill switch that reports active
+    const mockKillSwitch: IDeliveryKillSwitch = {
+      isActive: async () => true,
+      activate: async () => ({ enabled: true, activatedAt: null, reason: null, updatedAt: '' }),
+      deactivate: async () => ({ enabled: false, activatedAt: null, reason: null, updatedAt: '' }),
+      getStatus: async () => ({ enabled: true, activatedAt: null, reason: null, updatedAt: '' }),
+    };
+
+    // Wednesday 10:00 AM ET during trading hours, 0 deliveries, but kill switch active
+    const monitor = new HealthMonitorService(db, eventBus, {
+      now: () => new Date('2026-03-11T14:00:00.000Z'),
+      killSwitch: mockKillSwitch,
+    });
+
+    const result = await monitor.check();
+    expect(result.count).toBe(0);
+    expect(result.alerted).toBe(false);
+    expect(alerts).toHaveLength(0);
+  });
+
   it('getDeliveryStats returns 24h and 7d counts grouped by source', async () => {
     eventBus = new InMemoryEventBus();
     const now = new Date('2026-03-11T14:00:00.000Z');
@@ -183,12 +212,13 @@ describe('DeliveryKillSwitch', () => {
     expect(status.activatedAt).toBeTruthy();
   });
 
-  it('deactivate resets to inactive', async () => {
+  it('deactivate resets to inactive and nulls activatedAt', async () => {
     const ks = new DeliveryKillSwitch(db);
     await ks.activate('test');
     const status = await ks.deactivate();
     expect(status.enabled).toBe(false);
     expect(status.reason).toBeNull();
+    expect(status.activatedAt).toBeNull();
   });
 
   it('getStatus returns current state', async () => {

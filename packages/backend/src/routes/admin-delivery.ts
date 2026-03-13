@@ -1,7 +1,12 @@
+import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { requireApiKey } from './auth-middleware.js';
 import type { IDeliveryKillSwitch } from '../services/delivery-kill-switch.js';
 import type { HealthMonitorService } from '../services/health-monitor.js';
+
+const KillRequestSchema = z.object({
+  reason: z.string().trim().min(1).max(500).optional(),
+});
 
 export interface AdminDeliveryRouteOptions {
   apiKey?: string;
@@ -22,8 +27,11 @@ export function registerAdminDeliveryRoutes(
 
   // Kill switch endpoints
   server.post('/api/admin/delivery/kill', { preHandler: withAuth }, async (request, reply) => {
-    const body = request.body as { reason?: string } | undefined;
-    const status = await killSwitch.activate(body?.reason);
+    const parsed = KillRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Bad Request', details: parsed.error.issues });
+    }
+    const status = await killSwitch.activate(parsed.data.reason);
     return reply.send(status);
   });
 

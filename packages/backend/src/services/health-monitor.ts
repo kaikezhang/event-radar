@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import type { EventBus } from '@event-radar/shared';
+import type { IDeliveryKillSwitch } from './delivery-kill-switch.js';
 
 export interface DeliveryStats {
   last24h: { total: number; bySource: Record<string, number> };
@@ -12,6 +13,8 @@ export interface HealthMonitorOptions {
   checkIntervalMs?: number;
   /** Function to get current time — injectable for testing */
   now?: () => Date;
+  /** Kill switch — alerts are suppressed while active */
+  killSwitch?: IDeliveryKillSwitch;
 }
 
 /**
@@ -36,6 +39,7 @@ export class HealthMonitorService {
   private readonly eventBus: EventBus;
   private readonly checkIntervalMs: number;
   private readonly now: () => Date;
+  private readonly killSwitch?: IDeliveryKillSwitch;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(db: Database, eventBus: EventBus, options?: HealthMonitorOptions) {
@@ -43,6 +47,7 @@ export class HealthMonitorService {
     this.eventBus = eventBus;
     this.checkIntervalMs = options?.checkIntervalMs ?? 60 * 60 * 1000; // 1 hour
     this.now = options?.now ?? (() => new Date());
+    this.killSwitch = options?.killSwitch;
   }
 
   start(): void {
@@ -79,8 +84,9 @@ export class HealthMonitorService {
     const count = Number((rowArr[0] as Record<string, unknown>)?.['cnt'] ?? 0);
 
     const trading = isTradingHours(now);
+    const killSwitchActive = this.killSwitch ? await this.killSwitch.isActive() : false;
 
-    if (trading && count === 0) {
+    if (trading && count === 0 && !killSwitchActive) {
       await this.eventBus.publishTopic?.('system:health:alert', {
         type: 'zero_deliveries',
         message: 'No deliveries in the past 24 hours during trading hours',

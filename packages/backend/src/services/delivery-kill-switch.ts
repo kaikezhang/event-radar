@@ -50,6 +50,7 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
       .update(schema.deliveryKillSwitch)
       .set({
         enabled: false,
+        activatedAt: null,
         reason: null,
         updatedAt: now,
       })
@@ -74,18 +75,13 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
   }
 
   private async ensureRow(): Promise<void> {
-    const [existing] = await this.db
-      .select({ id: schema.deliveryKillSwitch.id })
-      .from(schema.deliveryKillSwitch)
-      .where(eq(schema.deliveryKillSwitch.id, 1))
-      .limit(1);
-
-    if (!existing) {
-      await this.db.insert(schema.deliveryKillSwitch).values({
+    await this.db
+      .insert(schema.deliveryKillSwitch)
+      .values({
         id: 1,
         enabled: false,
         updatedAt: new Date(),
-      });
-    }
+      })
+      .onConflictDoNothing({ target: schema.deliveryKillSwitch.id });
   }
 }

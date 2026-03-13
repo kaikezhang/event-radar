@@ -246,7 +246,7 @@ export function buildApp(options?: {
       ? new HistoricalEnricher(db, marketCache, options?.historicalEnricherConfig)
       : undefined);
   const killSwitch = options?.killSwitch ?? (db ? new DeliveryKillSwitch(db) : undefined);
-  const healthMonitor = db ? new HealthMonitorService(db, eventBus) : undefined;
+  const healthMonitor = db ? new HealthMonitorService(db, eventBus, { killSwitch }) : undefined;
 
   const websocketClientState = { count: 0 };
   const shouldWarmHistoricalResources =
