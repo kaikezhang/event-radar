@@ -11,8 +11,14 @@ import {
 import { z } from 'zod';
 import { LLMGatekeeper } from '../pipeline/llm-gatekeeper.js';
 import { LlmClassifier } from '../pipeline/llm-classifier.js';
-import { createLlmProvider, type LlmProvider as ClassificationProvider } from '../pipeline/llm-provider.js';
-import { createLLMProvider, type LLMProvider as GatekeeperProvider } from './llm-provider.js';
+import {
+  createLlmProvider as createClassificationProvider,
+  type LlmProvider as ClassificationProvider,
+} from '../pipeline/llm-provider.js';
+import {
+  createLLMProvider as createGatekeeperProvider,
+  type LLMProvider as GatekeeperProvider,
+} from './llm-provider.js';
 
 const CURRENT_FILE = fileURLToPath(import.meta.url);
 const SERVICE_DIR = path.dirname(CURRENT_FILE);
@@ -146,12 +152,18 @@ export interface RunGoldenJudgeOptions {
   fixturePath?: string;
   live?: boolean;
   thresholds?: GoldenJudgeThresholds;
+  mockProviders?: {
+    classifier?: (sample: GoldenEventSample, index: number) => ClassificationProvider;
+    gatekeeper?: (sample: GoldenEventSample, index: number) => GatekeeperProvider;
+  };
 }
 
 const SEVERITY_LABELS: Severity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const DIRECTION_LABELS: GoldenDirection[] = ['bullish', 'bearish', 'neutral', 'mixed'];
 const DELIVER_LABELS = ['deliver', 'filter'] as const;
 const MISSING_LABEL = '__missing__';
+const GOLDEN_REPORT_FILENAME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}(?:T\d{2}-\d{2}-\d{2}(?:\.\d{3})?Z)?\.json$/;
 
 function normalizeDirection(direction: string | null | undefined): GoldenDirection | null {
   if (!direction) {
@@ -332,13 +344,46 @@ function createLiveClients() {
   const providerName = resolveLiveProviderName();
 
   return {
-    classifier: new LlmClassifier({ provider: createLlmProvider() }),
+    classifier: new LlmClassifier({ provider: createClassificationProvider() }),
     gatekeeper: new LLMGatekeeper({
-      provider: createLLMProvider(providerName),
+      provider: createGatekeeperProvider(providerName),
       enabled: true,
       timeoutMs: 20_000,
     }),
   };
+}
+
+function buildExecutionFailureResult(
+  sample: GoldenEventSample,
+  message: string,
+): GoldenJudgeSampleResult {
+  return {
+    sampleId: sample.id,
+    source: sample.source,
+    expectedSeverity: sample.expectedSeverity,
+    actualSeverity: null,
+    expectedDirection: sample.expectedDirection,
+    actualDirection: null,
+    expectedEventType: sample.expectedEventType,
+    actualEventType: null,
+    expectedDeliver: sample.shouldDeliver,
+    actualDeliver: false,
+    classificationConfidence: 0,
+    gatekeeperConfidence: 0,
+    reasoning: sample.reasoning,
+    classificationReasoning: '',
+    gatekeeperReason: '',
+    errors: [message],
+  };
+}
+
+function toGoldenResultErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return `execution: ${message}`;
+}
+
+function buildReportTimestampFileName(date: Date): string {
+  return `${date.toISOString().replace(/:/g, '-')}.json`;
 }
 
 async function executeSample(
@@ -348,69 +393,79 @@ async function executeSample(
     live: boolean;
     classifier?: LlmClassifier;
     gatekeeper?: LLMGatekeeper;
+    mockProviders?: RunGoldenJudgeOptions['mockProviders'];
   },
 ): Promise<GoldenJudgeSampleResult> {
-  const event = buildFixtureEvent(sample, index);
-  const errors: string[] = [];
+  try {
+    const event = buildFixtureEvent(sample, index);
+    const errors: string[] = [];
 
-  const classifier = options.live
-    ? options.classifier
-    : new LlmClassifier({ provider: createMockClassifierProvider(sample) });
+    const classifier = options.live
+      ? options.classifier
+      : new LlmClassifier({
+        provider:
+          options.mockProviders?.classifier?.(sample, index) ??
+          createMockClassifierProvider(sample),
+      });
 
-  const gatekeeper = options.live
-    ? options.gatekeeper
-    : new LLMGatekeeper({
-      provider: createMockGatekeeperProvider(sample),
-      enabled: true,
-      timeoutMs: 5_000,
-    });
+    const gatekeeper = options.live
+      ? options.gatekeeper
+      : new LLMGatekeeper({
+        provider:
+          options.mockProviders?.gatekeeper?.(sample, index) ??
+          createMockGatekeeperProvider(sample),
+        enabled: true,
+        timeoutMs: 5_000,
+      });
 
-  if (!classifier || !gatekeeper) {
-    throw new Error('Golden judge clients were not initialized.');
+    if (!classifier || !gatekeeper) {
+      throw new Error('Golden judge clients were not initialized.');
+    }
+
+    const classification = await classifier.classify(event);
+    const gate = await gatekeeper.check(event);
+
+    let actualSeverity: Severity | null = null;
+    let actualDirection: GoldenDirection | null = null;
+    let actualEventType: string | null = null;
+    let classificationConfidence = 0;
+    let classificationReasoning = '';
+
+    if (classification.ok) {
+      actualSeverity = classification.value.severity;
+      actualDirection = normalizeDirection(classification.value.direction);
+      actualEventType = normalizeEventType(classification.value.eventType);
+      classificationConfidence = classification.value.confidence;
+      classificationReasoning = classification.value.reasoning;
+    } else {
+      errors.push(`classification: ${classification.error.message}`);
+    }
+
+    return {
+      sampleId: sample.id,
+      source: sample.source,
+      expectedSeverity: sample.expectedSeverity,
+      actualSeverity,
+      expectedDirection: sample.expectedDirection,
+      actualDirection,
+      expectedEventType: sample.expectedEventType,
+      actualEventType,
+      expectedDeliver: sample.shouldDeliver,
+      actualDeliver: gate.pass,
+      classificationConfidence,
+      gatekeeperConfidence: gate.confidence,
+      reasoning: sample.reasoning,
+      classificationReasoning,
+      gatekeeperReason: gate.reason,
+      errors,
+    };
+  } catch (error) {
+    if (!options.live) {
+      throw error;
+    }
+
+    return buildExecutionFailureResult(sample, toGoldenResultErrorMessage(error));
   }
-
-  const classification = await classifier.classify(event);
-  const gate = await gatekeeper.check(event);
-
-  let actualSeverity: Severity | null = null;
-  let actualDirection: GoldenDirection | null = null;
-  let actualEventType: string | null = null;
-  let classificationConfidence = 0;
-  let classificationReasoning = '';
-
-  if (classification.ok) {
-    actualSeverity = classification.value.severity;
-    actualDirection = normalizeDirection(classification.value.direction);
-    actualEventType = normalizeEventType(classification.value.eventType);
-    classificationConfidence = classification.value.confidence;
-    classificationReasoning = classification.value.reasoning;
-  } else {
-    errors.push(`classification: ${classification.error.message}`);
-  }
-
-  if (!classification.ok) {
-    actualDirection = null;
-    actualEventType = null;
-  }
-
-  return {
-    sampleId: sample.id,
-    source: sample.source,
-    expectedSeverity: sample.expectedSeverity,
-    actualSeverity,
-    expectedDirection: sample.expectedDirection,
-    actualDirection,
-    expectedEventType: sample.expectedEventType,
-    actualEventType,
-    expectedDeliver: sample.shouldDeliver,
-    actualDeliver: gate.pass,
-    classificationConfidence,
-    gatekeeperConfidence: gate.confidence,
-    reasoning: sample.reasoning,
-    classificationReasoning,
-    gatekeeperReason: gate.reason,
-    errors,
-  };
 }
 
 export function loadGoldenEventSamplesFromFile(fixturePath: string): GoldenEventSample[] {
@@ -587,6 +642,7 @@ export async function runGoldenJudgeSuite(
         live,
         classifier: liveClients?.classifier,
         gatekeeper: liveClients?.gatekeeper,
+        mockProviders: options.mockProviders,
       }),
     );
   }
@@ -632,9 +688,18 @@ export function saveGoldenJudgeReport(
 ): string {
   const directory = options?.directory ?? DEFAULT_GOLDEN_RESULTS_DIR;
   const date = options?.date ?? new Date(report.generatedAt);
-  const filePath = path.join(directory, `${date.toISOString().slice(0, 10)}.json`);
+  const defaultPath = path.join(directory, `${date.toISOString().slice(0, 10)}.json`);
 
   mkdirSync(directory, { recursive: true });
+  let filePath = defaultPath;
+
+  if (existsSync(defaultPath)) {
+    const existingReport = loadGoldenJudgeReport(defaultPath);
+    if (existingReport.generatedAt !== report.generatedAt) {
+      filePath = path.join(directory, buildReportTimestampFileName(date));
+    }
+  }
+
   writeFileSync(filePath, JSON.stringify(report, null, 2));
 
   return filePath;
@@ -655,21 +720,32 @@ export function findLatestGoldenJudgeBaseline(
     return null;
   }
 
-  const cutoff = (options?.beforeDate ?? new Date()).toISOString().slice(0, 10);
-  const files = readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /^\d{4}-\d{2}-\d{2}\.json$/.test(entry.name))
-    .map((entry) => entry.name)
-    .filter((name) => name.slice(0, 10) < cutoff)
-    .sort();
+  const cutoffTime = (options?.beforeDate ?? new Date()).getTime();
+  const candidates = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && GOLDEN_REPORT_FILENAME_PATTERN.test(entry.name))
+    .map((entry) => {
+      const reportPath = path.join(directory, entry.name);
+      return {
+        path: reportPath,
+        report: loadGoldenJudgeReport(reportPath),
+      };
+    })
+    .filter((candidate) => new Date(candidate.report.generatedAt).getTime() < cutoffTime)
+    .sort((left, right) => {
+      const timeDiff =
+        new Date(left.report.generatedAt).getTime() - new Date(right.report.generatedAt).getTime();
 
-  const latest = files.at(-1);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+
+      return left.path.localeCompare(right.path);
+    });
+
+  const latest = candidates.at(-1);
   if (!latest) {
     return null;
   }
 
-  const reportPath = path.join(directory, latest);
-  return {
-    path: reportPath,
-    report: loadGoldenJudgeReport(reportPath),
-  };
+  return latest;
 }

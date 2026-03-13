@@ -548,5 +548,27 @@
     "expectedEventType": "service_outage",
     "shouldDeliver": false,
     "reasoning": "A short-lived outage with unchanged guidance is too minor and self-limited for delivery."
+  },
+  {
+    "id": "golden-051",
+    "title": "Federal Reserve slows quantitative tightening while warning inflation remains sticky",
+    "body": "In updated policy guidance, the Federal Reserve said it will slow balance-sheet runoff next month to ease money-market stress, but officials also warned inflation progress has stalled and additional hikes remain possible if price pressures reaccelerate.",
+    "source": "fed",
+    "expectedSeverity": "HIGH",
+    "expectedDirection": "mixed",
+    "expectedEventType": "macro_policy",
+    "shouldDeliver": true,
+    "reasoning": "A policy shift that eases liquidity while signaling a still-hawkish inflation stance can create cross-currents across rates, financials and growth equities."
+  },
+  {
+    "id": "golden-052",
+    "title": "White House announces targeted steel tariffs with auto-sector exemptions",
+    "body": "The White House unveiled new tariffs on imported specialty steel from several countries while granting temporary exemptions for automotive manufacturers and domestic defense suppliers citing national-security needs.",
+    "source": "whitehouse",
+    "expectedSeverity": "HIGH",
+    "expectedDirection": "mixed",
+    "expectedEventType": "trade_policy",
+    "shouldDeliver": true,
+    "reasoning": "Targeted tariffs can benefit domestic steel producers while pressuring downstream manufacturers, making the market impact meaningful but directionally mixed."
   }
 ]
