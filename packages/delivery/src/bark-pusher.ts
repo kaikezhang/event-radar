@@ -37,6 +37,14 @@ const SOURCE_SHORT: Record<string, string> = {
   'econ-calendar': '📅Econ',
 };
 
+const REGIME_SHORT: Record<string, string> = {
+  extreme_overbought: '🔴OB+',
+  overbought: '🟠OB',
+  neutral: '🟡N',
+  oversold: '🟢OS',
+  extreme_oversold: '🟢OS+',
+};
+
 export class BarkPusher implements DeliveryService {
   readonly name = 'bark';
   private readonly key: string;
@@ -66,10 +74,16 @@ export class BarkPusher implements DeliveryService {
       title = `${sev}${ticker} ${sourceTag}`;
     }
 
-    // Body: summary + historical one-liner
+    // Body: AI summary + regime label + historical one-liner
     let bodyText = enrichment
       ? enrichment.summary
       : alert.event.title;
+
+    // Append regime label
+    if (alert.regimeSnapshot) {
+      const regimeTag = REGIME_SHORT[alert.regimeSnapshot.label] ?? alert.regimeSnapshot.label;
+      bodyText += `\n📈 Regime: ${regimeTag} (${alert.regimeSnapshot.score})`;
+    }
 
     if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
       const ctx = alert.historicalContext;

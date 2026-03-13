@@ -46,6 +46,14 @@ const SOURCE_BADGE: Record<string, string> = {
   'fedwatch': '📊 FedWatch',
 };
 
+const REGIME_LABEL_DISPLAY: Record<string, string> = {
+  extreme_overbought: '🔴 Extreme Overbought',
+  overbought: '🟠 Overbought',
+  neutral: '🟡 Neutral',
+  oversold: '🟢 Oversold',
+  extreme_oversold: '🟢 Extreme Oversold',
+};
+
 export class DiscordWebhook implements DeliveryService {
   readonly name = 'discord';
   private readonly webhookUrl: string;
@@ -79,15 +87,26 @@ export class DiscordWebhook implements DeliveryService {
       fields.push({ name: 'Ticker', value: `**${alert.ticker}**`, inline: true });
     }
 
-    // --- Action (LLM enrichment) ---
-    if (enrichment) {
-      fields.push({ name: 'Action', value: enrichment.action, inline: true });
-    }
-
     // --- Items (e.g., 8-K item types) ---
     const items = this.extractItems(alert);
     if (items) {
       fields.push({ name: 'Filing Items', value: items, inline: true });
+    }
+
+    // --- AI Analysis (enrichment summary + impact) ---
+    if (enrichment) {
+      let aiText = enrichment.summary;
+      if (enrichment.impact) {
+        aiText += `\n\n${enrichment.impact}`;
+      }
+      if (enrichment.regimeContext) {
+        aiText += `\n\n*${enrichment.regimeContext}*`;
+      }
+      fields.push({
+        name: '🤖 AI Analysis',
+        value: truncate(aiText, 1024),
+        inline: false,
+      });
     }
 
     // --- Historical context ---
@@ -130,6 +149,25 @@ export class DiscordWebhook implements DeliveryService {
       });
     }
 
+    // --- Market Regime ---
+    if (alert.regimeSnapshot) {
+      const rs = alert.regimeSnapshot;
+      const label = REGIME_LABEL_DISPLAY[rs.label] ?? rs.label;
+      let regimeText = `**${label}** (Score: ${rs.score})\n`;
+      regimeText += `VIX: ${rs.factors.vix.value.toFixed(1)} | `;
+      regimeText += `SPY RSI: ${rs.factors.spyRsi.value.toFixed(1)} | `;
+      regimeText += `Yield Curve: ${Math.round(rs.factors.yieldCurve.spread * 100)}bp`;
+      if (rs.factors.yieldCurve.inverted) {
+        regimeText += ' ⚠️ INVERTED';
+      }
+      regimeText += `\nBullish amp: ${rs.amplification.bullish}x | Bearish amp: ${rs.amplification.bearish}x`;
+      fields.push({
+        name: '📈 Market Regime',
+        value: regimeText,
+        inline: false,
+      });
+    }
+
     // --- Source link ---
     if (alert.event.url) {
       fields.push({
@@ -139,9 +177,18 @@ export class DiscordWebhook implements DeliveryService {
       });
     }
 
+    // --- Disclaimer ---
+    if (enrichment || alert.regimeSnapshot || alert.historicalContext) {
+      fields.push({
+        name: '⚖️ Disclaimer',
+        value: 'AI-generated analysis. Not financial advice.',
+        inline: false,
+      });
+    }
+
     // --- Build embed ---
     const title = enrichment
-      ? `${enrichment.action} ${enrichment.summary}`
+      ? `${SEVERITY_EMOJI[alert.severity]} ${alert.severity} — ${alert.ticker ?? ''} — ${enrichment.summary}`.trim()
       : `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;
 
     const description = enrichment

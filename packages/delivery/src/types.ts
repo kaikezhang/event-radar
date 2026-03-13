@@ -1,4 +1,4 @@
-import type { RawEvent, Severity } from '@event-radar/shared';
+import type { RawEvent, Severity, RegimeSnapshot } from '@event-radar/shared';
 
 /** LLM-generated enrichment for an event (Layer 2 of Smart Alert Filter). */
 export interface LLMEnrichment {
@@ -6,6 +6,8 @@ export interface LLMEnrichment {
   readonly impact: string;
   readonly action: '🔴 立即关注' | '🟡 持续观察' | '🟢 仅供参考';
   readonly tickers: ReadonlyArray<{ symbol: string; direction: 'bullish' | 'bearish' | 'neutral' }>;
+  /** AI analysis of how current market regime amplifies/dampens this event. */
+  readonly regimeContext?: string;
 }
 
 /** Historical context from the similarity engine. */
@@ -37,6 +39,8 @@ export interface AlertEvent {
   readonly enrichment?: LLMEnrichment;
   /** Historical pattern context from similarity engine. */
   readonly historicalContext?: HistoricalContext;
+  /** Current market regime snapshot. */
+  readonly regimeSnapshot?: RegimeSnapshot;
 }
 
 /** Common interface for all delivery channels. */

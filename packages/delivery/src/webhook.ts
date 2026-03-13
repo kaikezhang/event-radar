@@ -53,6 +53,36 @@ export class WebhookDelivery implements DeliveryService {
       },
       severity: alert.severity,
       ticker: alert.ticker,
+      enrichment: alert.enrichment
+        ? {
+            summary: alert.enrichment.summary,
+            impact: alert.enrichment.impact,
+            action: alert.enrichment.action,
+            tickers: alert.enrichment.tickers,
+            regimeContext: alert.enrichment.regimeContext,
+          }
+        : undefined,
+      historicalContext: alert.historicalContext
+        ? {
+            matchCount: alert.historicalContext.matchCount,
+            confidence: alert.historicalContext.confidence,
+            avgAlphaT5: alert.historicalContext.avgAlphaT5,
+            avgAlphaT20: alert.historicalContext.avgAlphaT20,
+            winRateT20: alert.historicalContext.winRateT20,
+            medianAlphaT20: alert.historicalContext.medianAlphaT20,
+            bestCase: alert.historicalContext.bestCase,
+            worstCase: alert.historicalContext.worstCase,
+            patternSummary: alert.historicalContext.patternSummary,
+          }
+        : undefined,
+      regimeSnapshot: alert.regimeSnapshot
+        ? {
+            score: alert.regimeSnapshot.score,
+            label: alert.regimeSnapshot.label,
+            amplification: alert.regimeSnapshot.amplification,
+            updatedAt: alert.regimeSnapshot.updatedAt,
+          }
+        : undefined,
       deliveredAt: new Date().toISOString(),
     });
 
