@@ -1,144 +1,133 @@
-# Current Task: User-Facing Web App (P0 + P1)
+# Current Task: Feed Quality — Hybrid L1/L2 Filter + LLM Judge Upgrade
 
-## Overview
-Build the user-facing mobile-first web app for Event Radar. This is a NEW package `packages/web/`.
+## Context
 
-**Read `docs/USER-APP-SPEC.md` carefully** — it has the full spec including design system, components, pages, and wireframes.
+The current alert pipeline filters too aggressively (0 events delivered ever). Two independent reviews (CC + Codex) agreed on a **hybrid L1 deterministic + L2 LLM** approach instead of the originally proposed "pure LLM Judge" strategy.
 
-## This Task: P0 (Design System) + P1 (Public Feed + Alert Detail)
+Reviews are at:
+- `docs/REVIEW-CC-FEED-STRATEGY.md`
+- `docs/REVIEW-CODEX-FEED-STRATEGY.md`
+- `docs/FEED-STRATEGY.md` (original proposal)
 
-### P0: Project Setup + Design System
+## Deliverables
 
-1. **Create `packages/web/`** with:
-   - React 19 + Vite + TypeScript (strict, ESM)
-   - Tailwind CSS v4
-   - TanStack Query v5
-   - React Router v7
-   - Package name: `@event-radar/web`
+### 1. Rewrite LLM Gatekeeper → LLM Judge (`packages/backend/src/pipeline/llm-gatekeeper.ts`)
 
-2. **Tailwind theme** — use CSS custom properties from spec:
-   ```
-   --bg-primary:    #0A0A0A
-   --bg-surface:    #141414
-   --bg-elevated:   #1C1C1C
-   --border:        #1F1F1F
-   --text-primary:  #FAFAFA
-   --text-secondary:#8A8A8A
-   --severity-critical: #EF4444
-   --severity-high:     #FB923C
-   --severity-medium:   #EAB308
-   --severity-low:      #6B7280
-   --accent:        #3B82F6
-   ```
+Transform the current simple PASS/BLOCK gatekeeper into a smarter LLM Judge:
 
-3. **Build these components** (see spec for details):
-   - `SeverityBadge` — color bar + text label + icon (CRITICAL/HIGH/MEDIUM/LOW)
-   - `SourceBadge` — SEC Filing, Breaking News, Federal Register, etc.
-   - `TickerChip` — tappable `$NVDA` pill, links to `/ticker/NVDA`
-   - `AlertCard` — compact 3-line card for feed (severity bar + source + tickers + time | title | truncated summary)
-   - `SkeletonCard` — loading placeholder
-   - `EmptyState` — icon + message + CTA template
-   - `BottomNav` — 4 tabs: Feed / Watchlist / Search / Settings
-   - `PillBanner` — "N new alerts" sticky notification at top
-   - `StatCard` — number + label for historical stats
-   - `SimilarEventRow` — compact row for similar events
+**New prompt requirements:**
+- Add **few-shot examples** (4-5: clear pass, clear block, edge cases)
+- Add **market session context** in the prompt: `RTH | PRE | POST | CLOSED` (derive from current ET time)
+- Add **source reliability tier**: primary/government vs secondary/aggregator
+- Add **event age** in minutes
+- Add **input sanitization**: wrap event content in XML tags with anti-injection instruction
+- Output remains simple `PASS|BLOCK <confidence> <reason>` format (don't overcomplicate with JSON scores)
 
-4. **Layout**: App shell with BottomNav, main content area, safe-area padding
+**New operational features:**
+- **Circuit breaker**: After 3 consecutive LLM failures, fall back to rule-based filter for 60s, then retry
+- **Per-source rate limiter**: Max 20 LLM calls per source per 10-minute window (prevents scanner bug cost spikes)
+- Log all decisions with full context for observability
 
-### P1: Public Feed + Alert Detail Pages
-
-5. **Feed page** (`/`):
-   - Fetch from `GET /api/v1/feed?limit=50` (TanStack Query, 30s refetch)
-   - Render `AlertCard` list
-   - Skeleton loading on initial load (5 cards)
-   - Pull-to-refresh (if possible in web)
-   - "N new alerts" pill when new data arrives (don't auto-insert)
-   - Empty state when no events
-   - **No auth required** — public feed
-
-6. **Alert Detail page** (`/event/:id`):
-   - Fetch from `GET /api/v1/feed/:id`
-   - Show: severity badge, title, metadata line (source + tickers + time)
-   - AI Summary section
-   - Market Context section (tickers with direction)
-   - Historical Pattern card (match count, avg move T+5/T+20, win rate)
-   - Similar Events list (top 3 + "Show all N →")
-   - Source link
-   - Feedback buttons (👍 / 👎)
-   - Legal disclaimer footer
-   - All sections expanded by default (no collapse)
-
-7. **Ticker Profile page** (`/ticker/:symbol`):
-   - Show ticker name at top
-   - List of events for this ticker (reuse AlertCard)
-   - Fetch from `GET /api/v1/ticker/:symbol`
-
-8. **Vite config**: proxy `/api` to `http://localhost:3001` for dev
-
-## Backend API Notes
-
-The feed API doesn't exist yet. For now, **mock the API responses** in the frontend using realistic fake data so the UI can be built and tested independently. Create a `src/mocks/` directory with sample data.
-
-Mock data should include:
-- 10-15 sample alerts with varying severities (2 CRITICAL, 3 HIGH, 5 MEDIUM, 5 LOW)
-- Various sources: SEC Filing, Breaking News, Federal Register, StockTwits, Reddit
-- Tickers: NVDA, TSLA, AAPL, AMZN, META, GOOG
-- At least 2 alerts with historical pattern data
-- At least 1 alert with AI enrichment (summary + impact + tickers with direction)
-
-## Constraints
-
-- Mobile-first: design for 375px width, responsive up
-- Dark theme only (use CSS vars for future light mode)
-- All text must meet WCAG AA contrast (4.5:1)
-- Touch targets ≥ 44px
-- System font stack, monospace for numbers
-- Severity: always show color + text label + icon (never color-only)
-- TypeScript strict mode
-- **Create a branch and PR — do NOT push to main**
-- Add basic tests for components (at least render tests)
-- Run `pnpm --filter @event-radar/web build` to verify before PR
-- Add lint script: `"lint": "eslint src/"`
-- Add eslint config (copy from `packages/dashboard/eslint.config.js`)
-
-## File Structure
+**Helper function needed:**
+```typescript
+function getMarketSession(): 'RTH' | 'PRE' | 'POST' | 'CLOSED' {
+  // Use America/New_York timezone
+  // RTH: Mon-Fri 9:30-16:00 ET
+  // PRE: Mon-Fri 4:00-9:30 ET  
+  // POST: Mon-Fri 16:00-20:00 ET
+  // CLOSED: weekends, holidays, overnight
+}
 ```
-packages/web/
-  package.json
-  tsconfig.json
-  vite.config.ts
-  eslint.config.js
-  index.html
-  src/
-    main.tsx
-    App.tsx
-    components/
-      AlertCard.tsx
-      SeverityBadge.tsx
-      SourceBadge.tsx
-      TickerChip.tsx
-      SkeletonCard.tsx
-      EmptyState.tsx
-      BottomNav.tsx
-      PillBanner.tsx
-      StatCard.tsx
-      SimilarEventRow.tsx
-    pages/
-      Feed.tsx
-      EventDetail.tsx
-      TickerProfile.tsx
-      Watchlist.tsx      (placeholder)
-      Search.tsx         (placeholder "Coming Soon")
-      Settings.tsx       (placeholder)
-    hooks/
-      useAlerts.ts
-      useEventDetail.ts
-    mocks/
-      alerts.ts
-      event-detail.ts
-    types/
-      index.ts
-    lib/
-      api.ts
-      format.ts          (relative time, number formatting)
+
+### 2. Modify Alert Filter — Remove Keyword Filter, Keep Useful Rules (`packages/backend/src/pipeline/alert-filter.ts`)
+
+**REMOVE:**
+- `BREAKING_KEYWORDS` array and the keyword-match check for breaking news
+- `PRIMARY_SOURCES` bypass (all sources now go through the same flow)
+
+**KEEP (these are cheap, fast, and accurate):**
+- `RETROSPECTIVE_PATTERNS` regex filter — catches "Why X stock dropped" etc. with ~0% false positive
+- `CLICKBAIT_PATTERNS` regex filter
+- Ticker cooldown (60 min per ticker)
+- Insider trade $1M minimum value filter
+- Social engagement thresholds (but raise them: upvotes 500→1000, comments 200→500)
+- Staleness check — but unify to 2h for all sources
+
+**MODIFY:**
+- Remove the primary/secondary source distinction for staleness
+  - Currently: primary 24h, secondary 1h
+  - New: all sources 2h during market hours, extend to "next tradable session" for overnight/weekend events
+- Make staleness session-aware using `getMarketSession()`
+
+### 3. Modify Pipeline to Route All Sources Through LLM Judge (`packages/backend/src/app.ts`)
+
+Currently the LLM gatekeeper only runs on secondary sources. Change to:
+- L1 deterministic filters run on ALL events (retrospective, clickbait, staleness, cooldown, social threshold)
+- Events that PASS L1 go to L2 LLM Judge (regardless of source)
+- If LLM Judge circuit breaker is open → fall back to conservative pass-through for primary sources, block for secondary
+
+The pipeline flow becomes:
 ```
+Scanner → Dedup → L1 Filter (fast rules) → L2 LLM Judge → Enrich → Deliver
+```
+
+### 4. Add `/api/v1/feed` Endpoint (`packages/backend/src/routes/dashboard.ts`)
+
+New public endpoint for the web app:
+- `GET /api/v1/feed?limit=50&before=<cursor>&ticker=<symbol>`
+- Returns events from `pipeline_audit` where `outcome = 'delivered'`
+- Join with `events` table for full event data
+- No API key required (public feed)
+- Response shape:
+```json
+{
+  "events": [
+    {
+      "id": "uuid",
+      "title": "...",
+      "source": "...",
+      "severity": "CRITICAL|HIGH|MEDIUM",
+      "tickers": ["NVDA"],
+      "summary": "...",
+      "url": "...",
+      "time": "ISO timestamp",
+      "category": "policy|macro|corporate|geopolitics|other",
+      "llmReason": "why this was pushed"
+    }
+  ],
+  "cursor": "next-page-cursor",
+  "total": 42
+}
+```
+
+### 5. Update Web App to Use `/api/v1/feed` (`packages/web/src/lib/api.ts`)
+
+Replace the current hacky `getFeed()` that fetches from `/api/events` with a clean call to `/api/v1/feed`.
+
+### 6. Tests
+
+- Unit tests for `getMarketSession()` — test all 4 sessions + edge cases (9:29 vs 9:30, 16:00 vs 16:01)
+- Unit tests for circuit breaker logic in LLM Judge
+- Unit tests for the new staleness rules (session-aware)
+- Update existing `alert-filter.test.ts` to reflect removed keyword filter and updated thresholds
+- Integration test for `/api/v1/feed` endpoint
+
+## Technical Notes
+
+- LLM provider: use existing `LLMProvider` interface and `OPENAI_DIRECT_API_KEY` env var
+- LLM model: `gpt-4o-mini` (fast, cheap, good enough for classification)
+- Existing tests: 904 tests across the project, all must continue passing
+- TypeScript strict mode, ESM with `.js` extensions
+- Run `pnpm test` before creating PR — all tests must pass
+- Create PR to main branch, do NOT merge
+
+## Files to Modify
+
+1. `packages/backend/src/pipeline/llm-gatekeeper.ts` — major rewrite
+2. `packages/backend/src/pipeline/alert-filter.ts` — remove keyword filter, update thresholds
+3. `packages/backend/src/app.ts` — route all sources through LLM Judge
+4. `packages/backend/src/routes/dashboard.ts` — add `/api/v1/feed`
+5. `packages/web/src/lib/api.ts` — use `/api/v1/feed`
+6. `packages/backend/src/__tests__/alert-filter.test.ts` — update for new rules
+7. New: `packages/backend/src/__tests__/llm-judge.test.ts`
+8. New: `packages/backend/src/__tests__/feed-api.test.ts`
