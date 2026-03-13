@@ -36,6 +36,7 @@ import { FederalRegisterScanner } from './scanners/federal-register-scanner.js';
 import { NewswireScanner } from './scanners/newswire-scanner.js';
 import { SecEdgarScanner } from './scanners/sec-edgar-scanner.js';
 import { IrMonitorScanner } from './scanners/ir-monitor-scanner.js';
+import { HaltScanner } from './scanners/halt-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -358,6 +359,9 @@ export function buildApp(options?: {
   }
   if (process.env.IR_MONITOR_ENABLED === 'true') {
     registry.register(new IrMonitorScanner(eventBus));
+  }
+  if (process.env.HALT_SCANNER_ENABLED === 'true') {
+    registry.register(new HaltScanner(eventBus));
   }
 
   // Helper: truncate title for logs
