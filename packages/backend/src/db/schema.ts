@@ -384,6 +384,14 @@ export const watchlist = pgTable(
   (table) => [index('idx_watchlist_ticker').on(table.ticker)],
 );
 
+export const deliveryKillSwitch = pgTable('delivery_kill_switch', {
+  id: integer('id').primaryKey().default(1),
+  enabled: boolean('enabled').notNull().default(false),
+  activatedAt: timestamp('activated_at', { withTimezone: true }),
+  reason: text('reason'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const severityChanges = pgTable(
   'severity_changes',
   {
