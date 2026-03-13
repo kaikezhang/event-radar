@@ -1,238 +1,450 @@
-# Event Radar — User App 设计方案
+# Event Radar — User App Spec (V1)
 
-## 产品定位
+> Consolidated from PM + UX design reviews. This is the implementation spec.
 
-**一句话**：你的 AI 股市情报员 — 重大事件秒级推送，历史 pattern 辅助决策。
+## Product Positioning
 
-**不是什么**：不是 Bloomberg、不是交易平台、不是 K 线图工具。
-**是什么**：极简的移动端 alert feed — 像 Twitter timeline 一样刷事件，每条都有 AI 解读 + 历史背景。
+**One line**: AI stock market radar — catch market-moving events before mainstream media, with historical context that tells you what happened last time.
 
----
+**Target user**: Active retail traders who currently rely on Twitter/X, Discord, and StockTwits. They want speed + context, can't afford Bloomberg ($24k/yr), tired of noise.
 
-## 核心功能（V1 MVP）
+**Differentiator**: Speed + AI enrichment + historical pattern matching in one card. No competitor does all three.
 
-### 1. 📱 Alert Feed（首页）
-- 实时 alert 瀑布流，新事件置顶
-- 每条 card 显示：severity 颜色条 | source badge | 标题 | ticker | AI summary | 时间
-- 点击展开详情：完整 AI analysis、historical pattern、similar events、source link
-- Pull-to-refresh + 自动轮询（30s）
-- 按 severity / source / ticker 筛选
-
-### 2. 🔔 Alert 详情页
-- AI Enrichment 完整展示：
-  - 🔴/🟡/🟢 Action badge
-  - Summary（一段话说明发生了什么）
-  - Impact（对市场的影响分析）
-  - Affected tickers + direction arrows
-- Historical Pattern 卡片：
-  - Match count + confidence level
-  - Avg Alpha T+5 / T+20
-  - Win Rate
-  - Best/Worst case
-  - Top 3 similar events（可点击）
-- Source 原文链接
-- 用户操作：⭐ Save / 👍👎 Feedback / 🔗 Share
-
-### 3. 👤 用户系统
-- 注册 / 登录（Email + password，或 Google OAuth）
-- JWT token 认证
-- 个人设置页
-
-### 4. 📋 Watchlist 管理
-- 添加 / 删除 ticker（搜索 + 自动补全）
-- Watchlist tickers 的 alert 优先显示 / 高亮
-- 可设置每个 ticker 的通知偏好（all / high+ / critical only）
-
-### 5. ⚙️ 通知设置
-- Push notification 开关（需要 service worker）
-- Email digest 频率（实时 / 每日摘要 / 关闭）
-- Severity 阈值（只推 HIGH+ / 全部）
-- 静默时段（比如 23:00-07:00 不推送）
-
-### 6. 🔍 搜索
-- 按 ticker / 关键词搜索历史 events
-- 结果按时间排序
+**Not**: A trading platform, a Bloomberg replacement, or a charting tool.
 
 ---
 
-## 页面结构
+## Business Model — Freemium
+
+| | Free | Pro ($15/mo) |
+|--|------|-------------|
+| Feed | 15-min delayed | Real-time |
+| AI analysis | Summary only | Full (impact + action + historical) |
+| Historical patterns | Match count only | Full stats + similar events |
+| Watchlist | 5 tickers | Unlimited |
+| Push notifications | Critical only | All severity levels |
+| Sources | Gov + news | All (social, options flow) |
+
+---
+
+## Pages & Navigation
+
+### Sitemap
+```
+/                        → Alert Feed (public, delayed; real-time if logged in + Pro)
+/event/:id               → Alert Detail
+/ticker/:symbol          → Ticker Profile (event history for that ticker)
+/watchlist               → Watchlist management + Saved alerts
+/search                  → Search (V1.5, not MVP)
+/settings                → Account + Notification prefs
+/login                   → Login
+/register                → Register
+/onboarding              → First-run flow (ticker picker → push permission)
+```
+
+### Bottom Nav (4 tabs)
+```
+[ 🏠 Feed ]  [ 👁 Watchlist ]  [ 🔍 Search ]  [ ⚙️ Settings ]
+```
+
+Search tab shows "Coming Soon" in MVP. Keeps the nav stable for future.
+
+---
+
+## Core Features (MVP)
+
+### 1. 📱 Alert Feed (Home)
+
+**Public access**: Feed is browsable without login. Events delayed 15 min. Banner at top: "Sign up for real-time alerts →"
+
+**Card design (compact, 3 lines)**:
+```
+┌────────────────────────────────────┐
+│🔴 CRITICAL · SEC Filing  $NVDA  2m│
+│   NVDA 10-K Shows Revenue Decline  │
+│   Revenue dropped 12% YoY in...    │
+└────────────────────────────────────┘
+```
+
+- 3px left severity bar (color + pattern for a11y)
+- Line 1: severity label + source badge + ticker chip(s) + relative time
+- Line 2: title (bold)
+- Line 3: AI summary truncated to 1 line with ellipsis
+- Tap → navigate to `/event/:id`
+- ~5-6 cards visible per viewport on 375px
+
+**Severity indicators (accessible)**:
+| Level | Color | Icon | Bar Style |
+|-------|-------|------|-----------|
+| CRITICAL | Red #EF4444 | ⚠ | Solid 3px |
+| HIGH | Orange #F97316 | ▲ | Dashed 3px |
+| MEDIUM | Yellow #EAB308 | ● | Dotted 3px |
+| LOW | Gray #6B7280 | ▽ | Thin 1px |
+
+Always show text label + icon alongside color. Never color-only.
+
+**New events**: "3 new alerts" sticky pill at top. Tap to load. No auto-insertion (prevents layout shift).
+
+**Pull-to-refresh**: Standard pattern. Show existing cards during refresh.
+
+**Swipe gestures**:
+- Swipe right → ⭐ Save/Bookmark
+- Swipe left → ✓ Mark as read / Dismiss
+
+**Scroll position**: MUST restore on back navigation.
+
+**Filters**: Bottom sheet with severity / source pills. Tap filter icon in header.
+
+### 2. 🔔 Alert Detail (`/event/:id`)
+
+Scroll order: AI Analysis → Historical → Source → Feedback
 
 ```
-/                     → Alert Feed（首页，需登录）
-/event/:id            → Alert 详情页
-/login                → 登录
-/register             → 注册
-/settings             → 用户设置
-/settings/watchlist   → Watchlist 管理
-/settings/alerts      → 通知偏好
-/search               → 搜索
+┌─────────────────────────────────────┐
+│ ← Back                    ⭐ 🔗     │  sticky header
+├─────────────────────────────────────┤
+│ 🔴 CRITICAL                        │  action badge
+│                                     │
+│ NVDA 10-K Annual Filing Shows       │
+│ Revenue Decline                     │
+│ SEC Filing · $NVDA $AMD · 2m ago    │  metadata
+├─────────────────────────────────────┤
+│                                     │
+│ Summary                             │
+│ NVIDIA's annual filing reveals a    │
+│ 12% year-over-year revenue...       │
+│                                     │
+│ Market Context                      │  ← NOT "Market Impact" or "Action"
+│ ▼ $NVDA  Bearish context            │     (avoid investment advice framing)
+│ ▼ $AMD   Related exposure           │
+│ ▲ $INTC  Potential beneficiary      │
+│                                     │
+├─────────────────────────────────────┤
+│ Historical Pattern     87% match    │  ← Pro only (Free: match count only)
+│ ┌─────────────────────────────────┐ │
+│ │ 23 similar events found         │ │
+│ │ Avg move T+5:  -3.2%           │ │
+│ │ Avg move T+20: -1.8%           │ │
+│ │ Win rate: 74%                   │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ Similar Events (top 3)              │
+│ ┌ INTC 10-K Rev Decline  2024-01 ┐ │
+│ ┌ AMD Q3 Miss             2023-09 ┐ │
+│ ┌ NVDA Export Ban         2023-03 ┐ │
+│   Show all 23 →                     │
+├─────────────────────────────────────┤
+│ 📄 View original source →          │
+├─────────────────────────────────────┤
+│ Was this useful?                    │
+│    👍  Yes      👎  No              │
+├─────────────────────────────────────┤
+│ ⚖️ Not investment advice.          │
+│ Historical patterns are not         │
+│ predictions of future results.      │
+└─────────────────────────────────────┘
 ```
 
-移动端 bottom nav：
+Sections are NOT collapsed by default. "Similar Events" shows top 3 + "Show all N →" expansion.
+
+**Legal**: Every detail page shows disclaimer footer. AI outputs framed as "historical context" not "action recommendations".
+
+### 3. 📊 Ticker Profile (`/ticker/:symbol`)
+
+Accessed by tapping any ticker chip ($NVDA).
+
+- Ticker name + current price (if available)
+- Watchlist add/remove toggle
+- Recent events for this ticker (same card format as feed)
+- Quick stats: total events, avg severity, most common source
+
+### 4. 👁 Watchlist Tab
+
+Two views (segmented control toggle):
+- **My Tickers**: list of watched tickers with notification level per ticker
+- **Saved Alerts**: bookmarked alerts
+
+**Add ticker**: search input with autocomplete at top.
+
+**Per-ticker settings**: tap ticker → bottom sheet with:
+- Notification level: All / High+ / Critical only / Off
+- Remove from watchlist
+
+### 5. ⚙️ Settings
+
+- Account info (email, name)
+- Push notifications: on/off
+- Severity threshold: default HIGH+ (not ALL — prevent notification fatigue)
+- Sign out
+- About / Legal / Disclaimer
+
+### 6. 👤 Auth
+
+- Email + password (V1). Google OAuth in V1.1.
+- JWT tokens.
+- Registration → immediate redirect to onboarding flow.
+
+### 7. 🎓 Onboarding (first-run only)
+
+3 screens + 1 coach mark, <30 seconds total:
+
+**Screen 1: Value prop**
 ```
-[ 🏠 Feed ]  [ 🔍 Search ]  [ ⚙️ Settings ]
+⚡ Event Radar
+AI-powered stock alerts with historical context.
+Real events. Pattern match. Seconds, not hours.
+[ Get Started ]
+```
+
+**Screen 2: Pick tickers** (seeds watchlist)
+```
+What do you follow?
+Popular: [NVDA] [TSLA] [AAPL] [MSFT] [AMZN] [META] [GOOG] [SPY]
+🔍 Search for a ticker...
+Selected: NVDA, TSLA
+[ Continue → ]   Skip for now
+```
+
+**Screen 3: Push permission**
+```
+🔔 Stay ahead of the market
+Get push alerts for critical events on your watchlist.
+[ Enable Notifications ]   Maybe later
+```
+
+**Screen 4**: Drop into Feed with one-time coach mark on first card: "Tap any alert for AI analysis + historical patterns"
+
+---
+
+## Empty States
+
+Every empty screen has: icon + explanation + CTA.
+
+| Screen | Icon | Message | CTA |
+|--------|------|---------|-----|
+| Empty feed | 📡 | Scanning for events... We monitor SEC filings, news, and more. | Add tickers to watchlist |
+| Empty search | 🔍 | No events found for "XYZZ" | Try a different ticker |
+| Empty watchlist | 👁 | No tickers yet. Add tickers to get prioritized alerts. | + Add Ticker |
+| Empty saved | ⭐ | No saved alerts. Star alerts from the feed to review later. | Go to Feed |
+| Network error | ⚠️ | Can't reach the server. | Retry |
+| Market closed | 🌙 | Markets are closed. Here's today's summary: N events, top movers... | View today's recap |
+
+---
+
+## Loading States
+
+| State | Treatment |
+|-------|-----------|
+| Initial feed load | 5 skeleton cards |
+| Pull-to-refresh | Spinner in pull indicator, cards stay visible |
+| Load more (scroll) | Spinner at bottom |
+| Detail page | Skeleton for AI section, header visible immediately |
+| Watchlist save | Optimistic UI — add immediately, revert on error |
+| Save/feedback buttons | Instant icon fill + async POST |
+
+Skeleton cards:
+```
+┌─────────────────────────────────┐
+│ ▓▓▓▓  ░░░░░░░░░░░░░░░░░░░░░░  │
+│ ░░░░░░░░░░░░░░░  ░░░░░░░      │
+│ ░░░░░░░░░░░░░░░░░░░            │
+└─────────────────────────────────┘
 ```
 
 ---
 
-## 设计原则
+## Design System
 
-### 极简主义
-- **黑白为主 + 彩色 severity 条** — alert 唯一的颜色来自 severity
-- 大量留白，card 间距充裕
-- 字体清晰可读，无装饰性元素
-- 一眼看懂，不需要学习
-
-### Mobile-First
-- 所有页面先做 375px 宽度
-- 单列布局，无侧边栏
-- Bottom sheet 代替模态框
-- 手势操作（swipe to dismiss、pull to refresh）
-- 桌面端自适应放大但保持单列
-
-### 信息密度恰到好处
-- Feed card：4 行信息 — source + title + ticker + time
-- 详情页：滚动查看，信息分块（AI analysis → Historical → Source）
-- 不堆砌数据，每块信息都有明确用途
-
----
-
-## 技术方案
-
-### 前端
-- **React 19 + Vite**（复用 dashboard 的 monorepo 结构）
-- **Tailwind CSS**（极简设计 = utility class 最合适）
-- **TanStack Query**（数据获取 + 缓存）
-- **PWA**（Service Worker + Web Push Notification）
-- Package: `packages/web/`
-
-### 后端新增
-- **用户系统**：`users` table + bcrypt + JWT
-- **Watchlist**：`user_watchlists` table
-- **通知偏好**：`user_preferences` table
-- **新 API routes**：
-  - `POST /api/v1/auth/register`
-  - `POST /api/v1/auth/login`
-  - `GET /api/v1/auth/me`
-  - `GET /api/v1/feed` — 用户个性化 alert feed
-  - `GET /api/v1/feed/:id` — alert 详情 + enrichment + historical
-  - `CRUD /api/v1/watchlist`
-  - `GET/PUT /api/v1/preferences`
-  - `POST /api/v1/feedback/:eventId`（已有）
-
-### 部署
-- Vite build → static files
-- Backend serve static at `/`（生产模式）
-- 或独立 CDN 部署 + API proxy
-
----
-
-## 数据流
-
+### Color Palette (Dark theme, CSS vars for future light mode)
 ```
-用户打开 App
-  ↓
-GET /api/v1/feed?severity=HIGH&limit=50
-  ↓
-Backend 查 pipeline_audit (outcome=delivered) 
-  + JOIN events + enrichments + historical
-  + 按用户 watchlist 标记优先
-  ↓
-返回 alert cards
-  ↓
-用户点击一条
-  ↓
-GET /api/v1/feed/:id
-  ↓
-返回完整 enrichment + historical context + similar events
+--bg-primary:    #0A0A0A    (near black, not true black — avoids OLED halation)
+--bg-surface:    #141414    (cards, sheets)
+--bg-elevated:   #1C1C1C    (hover, active states)
+--border:        #1F1F1F
+--text-primary:  #FAFAFA
+--text-secondary:#8A8A8A    (bumped from #737373 for WCAG AA contrast)
+--severity-critical: #EF4444
+--severity-high:     #FB923C  (bumped from #F97316 for contrast)
+--severity-medium:   #EAB308
+--severity-low:      #6B7280
+--accent:        #3B82F6    (links, interactive)
 ```
 
+### Typography
+```
+--text-xs:    11px/1.4   → timestamps, metadata
+--text-sm:    13px/1.5   → source badges, secondary
+--text-base:  15px/1.5   → body, AI summaries
+--text-lg:    17px/1.4   → card titles
+--text-xl:    20px/1.3   → detail page title
+--text-2xl:   24px/1.2   → stat numbers
+```
+Font: System stack. Numbers: monospace (`SF Mono`, `Consolas`).
+
+### Spacing
+4px base: 4, 8, 12, 16, 20, 24, 32, 48.
+Card padding: 16px. Card gap: 12px. Section gap: 24px.
+
+### Touch targets
+Minimum 44×44pt for all tappable elements. 8px minimum between adjacent tap targets.
+
+### Components to build
+| Component | Description |
+|-----------|-------------|
+| `AlertCard` | Feed card. Props: severity, source, title, tickers, summary, time, saved |
+| `SeverityBadge` | Color bar + text label + icon |
+| `SourceBadge` | SEC Filing, Breaking News, etc. Chip style |
+| `TickerChip` | Tappable `$NVDA` pill → links to `/ticker/NVDA` |
+| `ActionBar` | Save / Feedback / Share buttons |
+| `BottomSheet` | Snap points: closed → half → full. Spring physics. |
+| `BottomNav` | 4-tab navigation |
+| `SkeletonCard` | Loading placeholder |
+| `EmptyState` | Icon + message + CTA template |
+| `FilterSheet` | Severity/source filter pills in bottom sheet |
+| `StatCard` | Number + label for historical stats |
+| `SimilarEventRow` | Compact row for similar events list |
+| `PillBanner` | "N new alerts" sticky notification |
+| `CoachMark` | Tooltip overlay for onboarding |
+| `ErrorBoundary` | Friendly error + retry |
+
 ---
 
-## DB Schema 新增
+## Tech Stack
 
+### Frontend (`packages/web/`)
+- React 19 + Vite
+- Tailwind CSS (with CSS custom properties for theming)
+- TanStack Query (data fetch + cache)
+- React Router (client-side routing)
+- PWA: Service Worker + Web Push via Push API
+- `prefers-color-scheme` + `prefers-reduced-motion` respected
+
+### Backend additions
+- **Auth**: `users` table + bcrypt + JWT (access + refresh tokens)
+- **Feed API**: `/api/v1/feed` — personalized, watchlist-aware, respects free/pro tier
+- **Watchlist**: `user_watchlists` table + CRUD API
+- **Preferences**: `user_preferences` table
+- **Ticker**: `/api/v1/ticker/:symbol` — events for a specific ticker
+
+### New DB Tables
 ```sql
--- 用户
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name TEXT,
+  tier TEXT DEFAULT 'free',  -- 'free' | 'pro'
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Watchlist
 CREATE TABLE user_watchlists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   ticker TEXT NOT NULL,
-  notify_level TEXT DEFAULT 'all', -- 'all' | 'high' | 'critical'
+  notify_level TEXT DEFAULT 'high',  -- 'all' | 'high' | 'critical' | 'off'
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, ticker)
 );
 
--- 通知偏好
 CREATE TABLE user_preferences (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   push_enabled BOOLEAN DEFAULT true,
-  email_digest TEXT DEFAULT 'daily', -- 'realtime' | 'daily' | 'off'
-  severity_threshold TEXT DEFAULT 'MEDIUM', -- 最低推送级别
-  quiet_start TIME, -- 静默开始 (用户本地时间)
-  quiet_end TIME,   -- 静默结束
-  timezone TEXT DEFAULT 'America/New_York'
+  severity_threshold TEXT DEFAULT 'HIGH',  -- default HIGH+, not ALL
+  timezone TEXT DEFAULT 'America/New_York',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 用户 feedback（已有，扩展）
--- 已有 feedback 路由，关联 user_id 即可
+CREATE TABLE user_saved_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  event_id UUID NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, event_id)
+);
+```
+
+### New API Routes
+```
+POST   /api/v1/auth/register
+POST   /api/v1/auth/login
+POST   /api/v1/auth/refresh
+GET    /api/v1/auth/me
+
+GET    /api/v1/feed              — alert feed (public delayed, auth real-time)
+GET    /api/v1/feed/:id          — alert detail + enrichment + historical
+
+GET    /api/v1/ticker/:symbol    — events for a ticker
+GET    /api/v1/ticker/search     — ticker autocomplete
+
+GET    /api/v1/watchlist
+POST   /api/v1/watchlist
+PUT    /api/v1/watchlist/:id
+DELETE /api/v1/watchlist/:id
+
+GET    /api/v1/saved
+POST   /api/v1/saved/:eventId
+DELETE /api/v1/saved/:eventId
+
+GET    /api/v1/preferences
+PUT    /api/v1/preferences
+
+POST   /api/v1/feedback/:eventId  (existing)
 ```
 
 ---
 
-## V1 开发顺序
+## Development Phases
 
-| Phase | 内容 | 预估 |
-|-------|------|------|
-| **P1** | Auth（register/login/JWT）+ users table | 1 天 |
-| **P2** | Alert Feed 页面 + `/api/v1/feed` endpoint | 1 天 |
-| **P3** | Alert 详情页（enrichment + historical） | 0.5 天 |
-| **P4** | Watchlist CRUD + 高亮 | 0.5 天 |
-| **P5** | 通知设置 + PWA push | 1 天 |
-| **P6** | 搜索 + 筛选 | 0.5 天 |
-| **P7** | 打磨 + 测试 + 部署 | 1 天 |
-| **总计** | | **~5.5 天** |
-
----
-
-## UI 参考风格
-
-极简 alert feed 参考：
-- **Linear** 的 issue list — 干净、信息密度高、severity 颜色编码
-- **Things 3** — 极简 todo，大量留白
-- **Artifact** (by Arc) — 新闻 feed，card 式，一屏看多条
-
-配色方案：
-```
-Background:  #0A0A0A (near black)
-Surface:     #141414
-Border:      #1F1F1F
-Text:        #FAFAFA
-Text Muted:  #737373
-Red:         #EF4444
-Orange:      #F97316
-Yellow:      #EAB308
-Green:       #22C55E
-Blue:        #3B82F6 (links)
-```
+| Phase | Scope | Notes |
+|-------|-------|-------|
+| **P0** | Design system: components + tokens + layout | Build primitives first |
+| **P1** | Public Feed (no auth) + Alert Detail | Core product, browsable immediately |
+| **P2** | Auth (register/login/JWT) + Onboarding | Unlock personalization |
+| **P3** | Watchlist + Ticker Profile + Saved | Retention features |
+| **P4** | Push notifications (PWA) | Engagement loop |
+| **P5** | Freemium gating + settings | Monetization |
+| **P6** | Polish: transitions, haptics, empty states, a11y | Production quality |
 
 ---
 
-## 未来扩展（V2+）
+## Accessibility Checklist
 
-- **Morning Briefing** — 每天开盘前自动推送摘要
-- **Portfolio Mode** — 连接券商 API 监控持仓
-- **Price Alert** — 股价达到目标触发通知
-- **Social Feed** — 用户讨论 / 评论区
-- **AI Chat** — 问 "NVDA 最近有什么事？" 自动总结
-- **历史回看** — 某个 ticker 的完整事件时间线
-- **多语言** — 中英文切换
+- [ ] Severity: color + text label + icon (never color-only)
+- [ ] All text meets WCAG AA contrast (4.5:1 normal, 3:1 large)
+- [ ] Touch targets ≥ 44×44pt
+- [ ] Focus indicators on all interactive elements
+- [ ] `<article>` tags with `aria-label` on cards
+- [ ] `aria-live="polite"` on new events region
+- [ ] `role="status"` on "N new alerts" pill
+- [ ] `prefers-reduced-motion` respected
+- [ ] Screen reader tested (VoiceOver + TalkBack)
+- [ ] Bottom sheet traps focus when open
+
+---
+
+## Legal
+
+- Every detail page: "Not investment advice. Historical patterns are not predictions of future results."
+- AI outputs framed as "historical context" — never "recommended action" or "suggested trade"
+- Terms of Service + Privacy Policy pages (V1.1)
+
+---
+
+## Competitive Position
+
+```
+                Depth of analysis
+                      ↑
+                      │
+          Seeking     │    EVENT RADAR
+          Alpha       │    (target quadrant)
+                      │
+  ────────────────────┼──────────────────→ Speed / Simplicity
+                      │
+          Bloomberg   │    Robinhood
+          StockTwits  │
+                      │
+```
+
+Deep analysis + Robinhood-level simplicity. The AI does the work; the user gets insight in 5 seconds.
