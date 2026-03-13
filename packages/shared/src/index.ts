@@ -248,3 +248,14 @@ export {
   type SocialPost,
   type Sentiment,
 } from './schemas/social-types.js';
+export {
+  RegimeLabelSchema,
+  RegimeDirectionSchema,
+  RegimeSnapshotSchema,
+  type RegimeLabel,
+  type RegimeDirection,
+  type RegimeSnapshot,
+} from './types/regime.js';
+export {
+  type IMarketRegimeService,
+} from './types/regime-types.js';
