@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "eslint src/",
+    "golden-check": "tsx src/scripts/golden-drift-check.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
