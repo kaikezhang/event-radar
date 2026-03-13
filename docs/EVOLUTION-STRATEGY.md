@@ -159,29 +159,42 @@
 
 ### Tier S（不做就没法用的）
 
-| Scanner | 预计 miss/week | 难度 | 数据源 |
-|---------|---------------|------|--------|
-| **SEC EDGAR 8-K/Form 4** | 10-20 | 中 | SEC EDGAR ATOM feed (free, no rate limit on RSS) |
-| **PR Newswire / BusinessWire** | 5-10 | 低 | RSS feeds (free, public) |
-| **Truth Social (Trump)** | 3-5 | 高 | 需要 scraping 或第三方 API |
+| Scanner | 预计 miss/week | 难度 | 数据源 | 成本 |
+|---------|---------------|------|--------|------|
+| **SEC EDGAR 8-K/Form 4** | 10-20 | 中 | SEC EDGAR ATOM feed (free, 10 req/s) | $0 |
+| **PR Newswire / BusinessWire** | 5-10 | 低 | RSS feeds (public) | $0 |
+| **Truth Social (Trump)** | 3-5 | **低** | 公开 profile 轮询（见下方方案） | $0 |
 
 ### Tier A（显著提升质量）
 
-| Scanner | 预计 miss/week | 难度 | 数据源 |
-|---------|---------------|------|--------|
-| **NYSE/Nasdaq Halt Feed** | 2-5 | 中 | Nasdaq halt API (free) |
-| **X/Twitter Key Figures** | 2-5 | 高 | 需要 X API ($200/月) 或 scraping |
-| **Credit Rating Actions** | 1-3 | 低 | Moody's/S&P RSS |
+| Scanner | 预计 miss/week | 难度 | 数据源 | 成本 |
+|---------|---------------|------|--------|------|
+| **NYSE/Nasdaq Halt Feed** | 2-5 | 中 | Nasdaq halt API (free) | $0 |
+| **X/Twitter Key Figures** | 2-5 | 高 | 需要 X API 或 scraping | $200/月 |
+| **Credit Rating Actions** | 1-3 | 低 | Moody's/S&P RSS | $0 |
 
 ### Tier B（锦上添花）
 
 | Scanner | 预计 miss/week | 难度 |
 |---------|---------------|------|
+| Company IR 网站监控 | 2-5 | 中 |
 | Exchange halt/LULD | 1-2 | 中 |
 | OFAC sanctions | <1 | 低 |
 | EIA petroleum | <1 | 低 |
 
-**建议顺序：SEC EDGAR → PR Newswire → Truth Social → NYSE Halt**
+**建议顺序：SEC EDGAR → PR Newswire → Truth Social → NYSE Halt → Company IR**
+
+### Truth Social 低成本方案（决策记录）
+
+原始评估 "难度高"，经研究发现有多条低成本路径：
+
+1. **公开 Profile 轮询（首选）** — Trump 的 profile 公开可见，无需 auth。Truth Social 基于 Mastodon，公开用户有标准 API endpoint。每 30s GET 一次 → 解析新帖 → 完成。成本 $0。
+2. **Stanford TruthBrush** — 斯坦福开源的 Python client（Apache 2.0），2025.1 确认仍可用。`pip install truthbrush`。
+3. **ProfileTracer.com** — 第三方 webhook 服务，免费试用，适合快速验证。
+
+法律风险评估：**低**。只监控公开页面的公开信息，不爬私有 API，不重新发布原文（只提取关键词生成 alert），等同于用浏览器查看。
+
+**决策：难度从"高"降为"低"，排在 PR Newswire 之后。**
 
 ---
 
@@ -335,20 +348,55 @@ as investors view cost-cutting favorably.
 
 ---
 
-## 实施优先级
+## 实施优先级（修订版 — 整合 CC/Codex review + Market Regime）
 
-| # | 战略 | 预计工作量 | 影响 | 优先级 |
-|---|------|-----------|------|--------|
-| 1 | 开启 LLM Enrichment | 1h（改 .env） | 🔴 巨大 — 从"通知"变"分析" | **P0** |
-| 2 | SEC EDGAR scanner | 2-3d | 🔴 巨大 — 最重要的一手数据源 | **P0** |
-| 3 | PR Newswire/BusinessWire RSS | 1d | 🟡 高 — 企业公告核心源 | **P1** |
-| 4 | Post-Market Review Bot | 2-3d | 🔴 巨大 — 自我进化引擎 | **P1** |
-| 5 | Backtest Framework | 3-5d | 🟡 高 — 数据驱动决策 | **P1** |
-| 6 | Price Service | 2d | 🟡 高 — backtest 和 review 的前提 | **P1** |
-| 7 | Delivery 进化（rich context） | 1-2d | 🟡 高 — 用户价值翻倍 | **P2** |
-| 8 | Alert Quality Feedback Loop | 2d | 🟢 中 — 自动调参 | **P2** |
-| 9 | Truth Social scanner | 3-5d | 🟡 高 — 但技术难度大 | **P2** |
-| 10 | NYSE Halt Feed | 1d | 🟢 中 | **P3** |
+> 原则：先让系统跑起来（≥1 delivered alert），再搭测量和进化基础设施。
+
+### Phase 1: 让系统跑起来（Week 1）
+
+| # | 任务 | 工作量 | 关键点 |
+|---|------|--------|--------|
+| 1 | 开启 LLM Enrichment | 1h | 改 .env，验证 ≥1 delivery |
+| 2 | SEC EDGAR 8-K RSS scanner | 2-3d | RSS-only v1，不深度解析 HTML。让 LLM Judge 读 filing summary |
+| 3 | PR Newswire + BusinessWire RSS | 0.5-1d | 纯 RSS 解析，低难度高收益 |
+
+### Phase 2: 让 Alert 有价值（Week 2）
+
+| # | 任务 | 工作量 | 关键点 |
+|---|------|--------|--------|
+| 4 | Rich delivery format | 1-2d | AI summary + 历史模式 + regime context |
+| 5 | Price Service（历史 batch） | 1-2d | yfinance 日频缓存（v1 够用）；生产用 Polygon/Databento（v2） |
+| 6 | Market Regime Service | 1-2d | VIX + RSI + yield curve → regime score → 注入 enrichment |
+| 7 | LLM Judge Golden Test Set | 1d | 50 个标注样本，防 model drift |
+
+### Phase 3: 扩展数据源（Week 3-4）
+
+| # | 任务 | 工作量 | 关键点 |
+|---|------|--------|--------|
+| 8 | Truth Social scanner | 0.5-1d | 公开 profile 轮询，低成本方案 |
+| 9 | NYSE/Nasdaq Halt Feed | 1d | 二进制事件，无需分类 |
+| 10 | Exchange halt/LULD | 1d | 与 #9 合并 |
+
+### Phase 4: 测量与进化（Month 2+）
+
+| # | 任务 | 工作量 | 关键点 |
+|---|------|--------|--------|
+| 11 | Post-Market Review（先手动跑 2 周）| 0.5d | SQL + 手动 review，验证概念 |
+| 12 | Post-Market Review Bot（自动化）| 5-7d | 确认手动有效后再自动化 |
+| 13 | Backtest Framework | 2-3w | 需要先积累 2 周 delivered data；先做 A/B 计数对比，不做时间模拟 |
+| 14 | Alert Quality Feedback Loop | 2d | 先 report-only 模式，不自动调参 |
+| 15 | Pipeline Clock 接口注入 | 1d | backtest 前提，越早越好 |
+
+### 重要决策记录（来自 CC/Codex review）
+
+- **不删除 rule-based filters** — 保留为 LLM fallback，不是替代
+- **Price Service 拆两个** — 历史 batch (yfinance) + 实时 quote (Finnhub/Polygon)
+- **自动调参至少 report-only 跑 2 个月** — 防止 feedback loop 振荡
+- **"Action" 字段改为信息性表述** — "Historical similar events saw initial dips lasting 1-3 days" 而不是 "Watch for entry"
+- **添加 delivered_count 健康检查** — 交易日 24h 内 0 delivery 则告警
+- **添加 kill switch** — API endpoint 一键停止所有 delivery
+- **yfinance v1 够用，v2 上 Polygon/Databento** — 不急着花 $5-20k/年
+- **Market Regime 因子注入 LLM enrichment prompt** — 让 AI 分析考虑市场状态放大效应
 
 ---
 
