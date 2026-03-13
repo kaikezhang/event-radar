@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MarketContextCache,
   deriveMarketRegime,
@@ -51,6 +51,11 @@ describe('deriveMarketRegime', () => {
 describe('MarketContextCache', () => {
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('returns null before the first refresh completes', () => {

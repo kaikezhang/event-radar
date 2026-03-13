@@ -55,6 +55,11 @@ import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
+import {
+  MarketRegimeService,
+  type IMarketRegimeService,
+} from './services/market-regime.js';
+import { registerRegimeRoutes } from './routes/regime.js';
 import { createLLMProvider, OpenAIProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -190,6 +195,7 @@ export function buildApp(options?: {
   historicalEnricherConfig?: ConstructorParameters<typeof HistoricalEnricher>[2];
   historicalEnricher?: HistoricalEnricherLike;
   priceChartService?: PriceChartService;
+  marketRegimeService?: IMarketRegimeService;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -202,6 +208,7 @@ export function buildApp(options?: {
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
+  const marketRegimeService = options?.marketRegimeService ?? new MarketRegimeService();
   const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const auditLog = new AuditLog(db);
@@ -745,6 +752,10 @@ export function buildApp(options?: {
   registerPriceRoutes(server, {
     apiKey,
     priceChartService: options?.priceChartService,
+  });
+  registerRegimeRoutes(server, {
+    apiKey,
+    marketRegimeService,
   });
 
   server.post('/api/events/ingest', async (request, reply) => {
