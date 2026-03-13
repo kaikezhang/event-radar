@@ -115,6 +115,7 @@ function categorizeFilterReason(reason: string): string {
   if (reason.includes('cooldown')) return 'cooldown';
   if (reason.includes('social')) return 'social_noise';
   if (reason.includes('dummy')) return 'dummy';
+  if (reason.includes('newswire')) return 'newswire_noise';
   if (reason.includes('insider')) return 'insider_threshold';
   if (reason.includes('primary source')) return 'primary_pass';
   if (reason.includes('calendar')) return 'calendar';

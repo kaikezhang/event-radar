@@ -21,10 +21,10 @@ export interface NewswireFeedConfig {
 
 const DEFAULT_FEEDS: NewswireFeedConfig[] = [
   {
-    name: 'PR Newswire',
+    name: 'PR Newswire Financial',
     url:
       process.env.PRNEWSWIRE_RSS_URL ??
-      'https://www.prnewswire.com/rss/news-releases-list.rss',
+      'https://www.prnewswire.com/rss/financial-services-news.xml',
     source: 'pr-newswire',
   },
   {

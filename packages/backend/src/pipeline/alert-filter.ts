@@ -157,7 +157,12 @@ export class AlertFilter {
       return { pass: false, reason: 'dummy event skipped', enrichWithLLM: false };
     }
 
-    // Rule 4: Insider trade value threshold (Form 4 from SEC)
+    // Rule 4: Newswire noise filter — require US-listed ticker or HIGH+ keyword
+    if (source === 'pr-newswire' || source === 'businesswire' || source === 'globenewswire') {
+      return this.checkNewswire(event, ticker);
+    }
+
+    // Rule 5: Insider trade value threshold (Form 4 from SEC)
     if (source === 'sec-edgar' && event.type === 'form-4') {
       const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
       if (value < this.insiderMinValue) {
@@ -165,12 +170,12 @@ export class AlertFilter {
       }
     }
 
-    // Rule 5: Social noise filter (Reddit / StockTwits)
+    // Rule 6: Social noise filter (Reddit / StockTwits)
     if (source === 'reddit' || source === 'stocktwits') {
       return this.checkSocial(event, ticker);
     }
 
-    // Rule 6: Calendar events — only if today or tomorrow
+    // Rule 7: Calendar events — only if today or tomorrow
     if (this.isCalendarEvent(event)) {
       return this.checkCalendarEvent(event, ticker);
     }
@@ -236,6 +241,67 @@ export class AlertFilter {
   }
 
   // --- Private helpers ---
+
+  /**
+   * Newswire noise filter.
+   * PR Newswire / BusinessWire / GlobeNewswire publish tons of irrelevant press releases.
+   * Only pass events that:
+   *  1. Have a recognized US-listed ticker, OR
+   *  2. Match HIGH/CRITICAL severity keyword patterns (M&A, FDA, bankruptcy, etc.)
+   * This prevents spam like "isinwheel launches spring promotions" from reaching delivery.
+   */
+  private checkNewswire(event: RawEvent, ticker: string | undefined): FilterResult {
+    const titleAndBody = `${event.title} ${event.body}`.toLowerCase();
+
+    // HIGH/CRITICAL keyword patterns that are always relevant
+    const NEWSWIRE_PASS_PATTERNS = [
+      'merger', 'acquisition', 'acquire', 'fda approv', 'fda reject',
+      'restructur', 'bankrupt', 'chapter 11', 'chapter 7',
+      'layoff', 'workforce reduction', 'earnings', 'revenue',
+      'guidance', 'ipo', 'initial public offering', 'delisted',
+      'sec investigation', 'fraud', 'settlement', 'recall',
+      'tariff', 'sanction', 'executive order', 'antitrust',
+      'hostile takeover', 'activist investor', 'stock buyback',
+      'dividend', 'stock split', 'share repurchase',
+    ];
+
+    const hasPassKeyword = NEWSWIRE_PASS_PATTERNS.some((kw) => titleAndBody.includes(kw));
+
+    // If we have a recognized ticker on watchlist → pass
+    if (ticker && this.watchlist.has(ticker)) {
+      return this.applyTickerCooldown(ticker, {
+        pass: true,
+        reason: `newswire watchlist ticker ${ticker}`,
+        enrichWithLLM: true,
+      });
+    }
+
+    // If there's a ticker AND a high-relevance keyword → pass
+    if (ticker && hasPassKeyword) {
+      return this.applyTickerCooldown(ticker, {
+        pass: true,
+        reason: `newswire ticker ${ticker} + keyword match`,
+        enrichWithLLM: true,
+      });
+    }
+
+    // No ticker but has a strong keyword → pass (LLM Judge will further filter)
+    if (!ticker && hasPassKeyword) {
+      return { pass: true, reason: 'newswire keyword match (no ticker)', enrichWithLLM: true };
+    }
+
+    // Has ticker but no keyword → pass with LLM enrichment (let LLM Judge decide)
+    if (ticker) {
+      return this.applyTickerCooldown(ticker, {
+        pass: true,
+        reason: `newswire ticker ${ticker} (no keyword)`,
+        enrichWithLLM: true,
+      });
+    }
+
+    // No ticker AND no keyword → block as noise
+    return { pass: false, reason: 'newswire noise: no US ticker and no relevance keyword', enrichWithLLM: false };
+  }
 
   private checkSocial(event: RawEvent, ticker: string | undefined): FilterResult {
     const upvotes = numMeta(event, 'upvotes') ?? numMeta(event, 'score') ?? 0;
