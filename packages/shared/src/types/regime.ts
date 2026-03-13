@@ -17,6 +17,7 @@ export type RegimeDirection = z.infer<typeof RegimeDirectionSchema>;
 export const RegimeSnapshotSchema = z.object({
   score: z.number().min(-100).max(100),
   label: RegimeLabelSchema,
+  spy: z.number().optional(),
   factors: z.object({
     vix: z.object({
       value: z.number(),
@@ -48,3 +49,22 @@ export const RegimeSnapshotSchema = z.object({
 });
 
 export type RegimeSnapshot = z.infer<typeof RegimeSnapshotSchema>;
+
+export const RegimeHistoryPointSchema = z.object({
+  at: z.string().datetime(),
+  score: z.number().min(-100).max(100),
+  vix: z.number(),
+  spy: z.number(),
+  regime: z.enum(['bull', 'bear', 'correction', 'neutral']),
+  factors: z.object({
+    label: RegimeLabelSchema,
+    rsi: z.number().min(0).max(100),
+    ma_cross: z.enum(['golden_cross', 'death_cross', 'neutral']),
+    yield_curve: z.number(),
+    vix_zscore: z.number(),
+    pct_from_high: z.number(),
+    pct_from_low: z.number(),
+  }),
+});
+
+export type RegimeHistoryPoint = z.infer<typeof RegimeHistoryPointSchema>;

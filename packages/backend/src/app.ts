@@ -217,7 +217,9 @@ export function buildApp(options?: {
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
-  const marketRegimeService = options?.marketRegimeService ?? new MarketRegimeService();
+  const marketRegimeService = options?.marketRegimeService ?? new MarketRegimeService({
+    logger: server.log,
+  });
   const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const auditLog = new AuditLog(db);
@@ -915,9 +917,12 @@ export function buildApp(options?: {
 
   // Register dashboard route
   registerDashboardRoutes(server, {
+    apiKey,
     db,
     scannerRegistry: registry,
     marketCache: marketCache ?? undefined,
+    marketRegimeService,
+    killSwitch,
     startTime,
     version: backendPackage.version,
   });

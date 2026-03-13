@@ -6,6 +6,7 @@ import {
   calculateAmplificationFactor,
   calculateCompositeRegimeScore,
   calculateRsi,
+  toDashboardMarketRegime,
 } from '../services/market-regime.js';
 import { validateApiKeyValue } from '../routes/auth-middleware.js';
 import { safeCloseServer } from './helpers/test-db.js';
@@ -100,6 +101,13 @@ describe('market regime helpers', () => {
     ];
 
     expect(calculateRsi(closes, 14)).toBe(61.29);
+  });
+
+  it('maps dashboard market regime buckets from score thresholds', () => {
+    expect(toDashboardMarketRegime(60)).toBe('bull');
+    expect(toDashboardMarketRegime(-60)).toBe('bear');
+    expect(toDashboardMarketRegime(-10)).toBe('correction');
+    expect(toDashboardMarketRegime(10)).toBe('neutral');
   });
 
   it('rejects requests when no configured api key exists', () => {
@@ -270,7 +278,10 @@ describe('MarketRegimeService', () => {
     const yahooFinance = {
       historical: vi.fn().mockRejectedValue(new Error('Yahoo failure')),
     };
-    const service = new MarketRegimeService({ yahooFinance, cacheTtlMs: 300_000 });
+    const logger = {
+      error: vi.fn(),
+    };
+    const service = new MarketRegimeService({ yahooFinance, cacheTtlMs: 300_000, logger });
 
     const first = await service.getRegimeSnapshot();
     const second = await service.getRegimeSnapshot();
@@ -278,6 +289,12 @@ describe('MarketRegimeService', () => {
     expect(first.label).toBe('neutral');
     expect(second).toBe(first);
     expect(yahooFinance.historical).toHaveBeenCalledTimes(4);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.any(Error),
+      }),
+      'failed to refresh market regime snapshot',
+    );
   });
 });
 
@@ -341,6 +358,69 @@ describe('GET /api/regime', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(snapshot);
     expect(marketRegimeService.getRegimeSnapshot).toHaveBeenCalledTimes(1);
+    await safeCloseServer(ctx.server);
+  });
+
+  it('returns compact history snapshots from /api/v1/regime/history', async () => {
+    const marketRegimeService = {
+      getRegimeSnapshot: vi.fn().mockResolvedValue(snapshot),
+      getRegimeHistory: vi.fn().mockResolvedValue([
+        {
+          at: '2026-03-13T12:00:00.000Z',
+          score: 72,
+          vix: 13.2,
+          spy: 604.8,
+          regime: 'bull',
+          factors: {
+            rsi: 68.4,
+            ma_cross: 'golden_cross',
+            yield_curve: 1.1,
+            vix_zscore: -0.85,
+            pct_from_high: -1.1,
+            pct_from_low: 23.7,
+            label: 'overbought',
+          },
+        },
+      ]),
+      getAmplificationFactor: vi.fn(),
+    };
+    const ctx = buildApp({
+      logger: false,
+      apiKey: TEST_API_KEY,
+      marketRegimeService: marketRegimeService as never,
+    });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/regime/history?hours=6',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      snapshots: [
+        {
+          at: '2026-03-13T12:00:00.000Z',
+          score: 72,
+          vix: 13.2,
+          spy: 604.8,
+          regime: 'bull',
+          factors: {
+            rsi: 68.4,
+            ma_cross: 'golden_cross',
+            yield_curve: 1.1,
+            vix_zscore: -0.85,
+            pct_from_high: -1.1,
+            pct_from_low: 23.7,
+            label: 'overbought',
+          },
+        },
+      ],
+    });
+    expect(marketRegimeService.getRegimeHistory).toHaveBeenCalledWith(6);
     await safeCloseServer(ctx.server);
   });
 });

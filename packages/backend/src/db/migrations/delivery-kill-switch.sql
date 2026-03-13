@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS delivery_kill_switch (
   enabled       BOOLEAN NOT NULL DEFAULT FALSE,
   activated_at  TIMESTAMPTZ,
   reason        TEXT,
+  updated_by    VARCHAR(50),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

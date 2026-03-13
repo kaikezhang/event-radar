@@ -6,13 +6,14 @@ export interface KillSwitchStatus {
   enabled: boolean;
   activatedAt: string | null;
   reason: string | null;
+  updatedBy: string | null;
   updatedAt: string;
 }
 
 export interface IDeliveryKillSwitch {
   isActive(): Promise<boolean>;
-  activate(reason?: string): Promise<KillSwitchStatus>;
-  deactivate(): Promise<KillSwitchStatus>;
+  activate(reason?: string, updatedBy?: string): Promise<KillSwitchStatus>;
+  deactivate(updatedBy?: string): Promise<KillSwitchStatus>;
   getStatus(): Promise<KillSwitchStatus>;
 }
 
@@ -28,7 +29,7 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
     return status.enabled;
   }
 
-  async activate(reason?: string): Promise<KillSwitchStatus> {
+  async activate(reason?: string, updatedBy?: string): Promise<KillSwitchStatus> {
     const now = new Date();
     await this.ensureRow();
     await this.db
@@ -37,13 +38,14 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
         enabled: true,
         activatedAt: now,
         reason: reason ?? 'Manual kill switch activation',
+        updatedBy: updatedBy ?? null,
         updatedAt: now,
       })
       .where(eq(schema.deliveryKillSwitch.id, 1));
     return this.getStatus();
   }
 
-  async deactivate(): Promise<KillSwitchStatus> {
+  async deactivate(updatedBy?: string): Promise<KillSwitchStatus> {
     const now = new Date();
     await this.ensureRow();
     await this.db
@@ -52,6 +54,7 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
         enabled: false,
         activatedAt: null,
         reason: null,
+        updatedBy: updatedBy ?? null,
         updatedAt: now,
       })
       .where(eq(schema.deliveryKillSwitch.id, 1));
@@ -66,11 +69,16 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
       .where(eq(schema.deliveryKillSwitch.id, 1))
       .limit(1);
 
+    if (!row) {
+      throw new Error('Kill switch row missing after ensureRow');
+    }
+
     return {
-      enabled: row!.enabled,
-      activatedAt: row!.activatedAt?.toISOString() ?? null,
-      reason: row!.reason,
-      updatedAt: row!.updatedAt.toISOString(),
+      enabled: row.enabled,
+      activatedAt: row.activatedAt?.toISOString() ?? null,
+      reason: row.reason,
+      updatedBy: row.updatedBy ?? null,
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 

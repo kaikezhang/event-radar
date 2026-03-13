@@ -9,7 +9,7 @@ const KillRequestSchema = z.object({
 });
 
 export interface AdminDeliveryRouteOptions {
-  apiKey?: string;
+  apiKey: string;
   killSwitch: IDeliveryKillSwitch;
   healthMonitor: HealthMonitorService;
 }
@@ -31,12 +31,12 @@ export function registerAdminDeliveryRoutes(
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Bad Request', details: parsed.error.issues });
     }
-    const status = await killSwitch.activate(parsed.data.reason);
+    const status = await killSwitch.activate(parsed.data.reason, 'api_key');
     return reply.send(status);
   });
 
   server.post('/api/admin/delivery/resume', { preHandler: withAuth }, async (_request, reply) => {
-    const status = await killSwitch.deactivate();
+    const status = await killSwitch.deactivate('api_key');
     return reply.send(status);
   });
 

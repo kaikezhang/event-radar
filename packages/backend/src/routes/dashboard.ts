@@ -1,14 +1,21 @@
 import type { FastifyInstance } from 'fastify';
-import type { ScannerRegistry } from '@event-radar/shared';
+import type { IMarketRegimeService, ScannerRegistry } from '@event-radar/shared';
+import { sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
+import type { IDeliveryKillSwitch } from '../services/delivery-kill-switch.js';
+import { toDashboardMarketRegime } from '../services/market-regime.js';
+import { validateApiKeyValue } from './auth-middleware.js';
 import { registry as metricsRegistry } from '../metrics.js';
 import { asRecord, parseConfidence, parseJsonValue } from './route-utils.js';
 
 export interface DashboardDeps {
+  apiKey: string;
   db?: Database;
   scannerRegistry: ScannerRegistry;
   marketCache?: MarketContextCache;
+  marketRegimeService?: IMarketRegimeService;
+  killSwitch?: IDeliveryKillSwitch;
   startTime: number;
   version: string;
 }
@@ -188,6 +195,27 @@ function buildAuditLlmEnrichment(metadataValue: unknown): {
   };
 }
 
+function asDeliveryChannels(value: unknown): Array<{ channel: string; ok: boolean }> {
+  const parsed = parseJsonValue(value);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.reduce<Array<{ channel: string; ok: boolean }>>((channels, entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return channels;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const channel = typeof record.channel === 'string' ? record.channel : null;
+    const ok = typeof record.ok === 'boolean' ? record.ok : null;
+
+    if (channel && ok !== null) {
+      channels.push({ channel, ok });
+    }
+
+    return channels;
+  }, []);
+}
+
 function getFeedTickers(metadata: Record<string, unknown>, fallbackTicker: string | null): string[] {
   const tickers = asStringArray(metadata['tickers']);
   if (tickers.length > 0) return tickers;
@@ -251,9 +279,17 @@ export function registerDashboardRoutes(
   server: FastifyInstance,
   deps: DashboardDeps,
 ): void {
-  server.get('/api/v1/dashboard', async (_request, reply) => {
+  server.get('/api/v1/dashboard', async (request, reply) => {
     const uptimeS = (Date.now() - deps.startTime) / 1000;
     const graceActive = uptimeS < 90;
+    const providedApiKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key']
+      : undefined;
+    const apiKeyAuthenticated = validateApiKeyValue(providedApiKey, deps.apiKey).ok;
+
+    if (apiKeyAuthenticated) {
+      request.apiKeyAuthenticated = true;
+    }
 
     // Parse all metrics at once
     const metricsText = await metricsRegistry.metrics();
@@ -312,6 +348,10 @@ export function registerDashboardRoutes(
 
     // Market context
     const marketCtx = deps.marketCache?.get?.();
+    const [regimeSnapshot, killSwitchStatus] = await Promise.all([
+      deps.marketRegimeService?.getRegimeSnapshot?.() ?? Promise.resolve(null),
+      deps.killSwitch?.getStatus?.() ?? Promise.resolve(null),
+    ]);
 
     // System alerts
     const alerts: Array<{ level: string; message: string }> = [];
@@ -324,6 +364,7 @@ export function registerDashboardRoutes(
     // DB stats
     let dbEventCount = 0;
     let lastEventTime: string | null = null;
+    const deliveryLastSuccessAt: Record<string, string | null> = {};
     if (deps.db) {
       try {
         const rows = await deps.db.execute('SELECT COUNT(*)::int as count, MAX(created_at) as last FROM events');
@@ -333,7 +374,65 @@ export function registerDashboardRoutes(
           lastEventTime = row.last;
         }
       } catch { /* ignore */ }
+
+      try {
+        const rows = await deps.db.execute(sql`
+          SELECT created_at, delivery_channels
+          FROM pipeline_audit
+          WHERE outcome = 'delivered'
+          ORDER BY created_at DESC
+          LIMIT 200
+        `);
+        const deliveredRows = (rows as unknown as {
+          rows: Array<{ created_at: string | Date; delivery_channels: unknown }>;
+        }).rows;
+
+        for (const row of deliveredRows) {
+          const deliveredAt = new Date(row.created_at).toISOString();
+          const channels = asDeliveryChannels(row.delivery_channels);
+          for (const channel of channels) {
+            if (channel.ok && !deliveryLastSuccessAt[channel.channel]) {
+              deliveryLastSuccessAt[channel.channel] = deliveredAt;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
+      try {
+        if (
+          Object.keys(deliveryLastSuccessAt).length === 0
+          && Object.values(deliveryChannels).some((stats) => stats.sent > 0)
+        ) {
+          const rows = await deps.db.execute(sql`
+            SELECT MAX(created_at) AS last
+            FROM pipeline_audit
+            WHERE outcome = 'delivered'
+          `);
+          const lastDeliveredAt = (rows as unknown as {
+            rows: Array<{ last: string | Date | null }>;
+          }).rows[0]?.last;
+
+          if (lastDeliveredAt) {
+            const fallbackTime = new Date(lastDeliveredAt).toISOString();
+            for (const [channel, stats] of Object.entries(deliveryChannels)) {
+              if (stats.sent > 0) {
+                deliveryLastSuccessAt[channel] = fallbackTime;
+              }
+            }
+          }
+        }
+      } catch { /* ignore */ }
     }
+
+    const deliveryWithSuccessTimes = Object.fromEntries(
+      Object.entries(deliveryChannels).map(([channel, stats]) => [
+        channel,
+        {
+          ...stats,
+          last_success_at: deliveryLastSuccessAt[channel] ?? null,
+        },
+      ]),
+    );
 
     return reply.send({
       system: {
@@ -380,7 +479,20 @@ export function registerDashboardRoutes(
           updated: timeAgo(marketCtx.updatedAt),
         } : null,
       },
-      delivery: deliveryChannels,
+      regime: regimeSnapshot ? {
+        ...regimeSnapshot,
+        market_regime: toDashboardMarketRegime(regimeSnapshot.score),
+      } : null,
+      ...(apiKeyAuthenticated
+        ? {
+            delivery_control: killSwitchStatus ? {
+              enabled: killSwitchStatus.enabled,
+              last_operation_at: killSwitchStatus.updatedAt,
+              operator: killSwitchStatus.updatedBy,
+            } : null,
+          }
+        : {}),
+      delivery: deliveryWithSuccessTimes,
       db: {
         total_events: dbEventCount,
         last_event: lastEventTime ? timeAgo(lastEventTime) : 'never',

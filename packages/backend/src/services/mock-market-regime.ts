@@ -31,6 +31,7 @@ export function createNeutralSnapshot(): RegimeSnapshot {
   return {
     score: 0,
     label: 'neutral',
+    spy: 450.0,
     factors: {
       vix: { value: 18.0, zscore: 0.0 },
       spyRsi: { value: 50.0, signal: 'neutral' },
