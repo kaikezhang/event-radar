@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { IMarketRegimeService } from '@event-radar/shared';
 import { requireApiKey } from './auth-middleware.js';
-import { MarketRegimeService, type IMarketRegimeService } from '../services/market-regime.js';
+import { MarketRegimeService } from '../services/market-regime.js';
 
 export interface RegimeRouteOptions {
   apiKey?: string;

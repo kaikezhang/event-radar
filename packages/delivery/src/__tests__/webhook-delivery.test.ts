@@ -91,6 +91,27 @@ describe('WebhookDelivery', () => {
     expect(headers['X-EventRadar-Signature']).toBeDefined();
   });
 
+  it('should not allow custom headers to overwrite the computed signature', async () => {
+    const webhook = new WebhookDelivery({
+      ...defaultConfig,
+      headers: {
+        'X-EventRadar-Signature': 'user-supplied-value',
+      },
+    });
+
+    await webhook.send(makeAlert());
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const headers = options.headers as Record<string, string>;
+    const body = options.body as string;
+
+    const expected = createHmac('sha256', 'test-secret-key')
+      .update(body)
+      .digest('hex');
+
+    expect(headers['X-EventRadar-Signature']).toBe(expected);
+  });
+
   it('should retry on 5xx errors', async () => {
     fetchSpy
       .mockResolvedValueOnce({

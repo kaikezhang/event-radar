@@ -40,6 +40,25 @@ describe('DiscordWebhook', () => {
     expect(url).toBe('https://discord.com/api/webhooks/123/abc');
   });
 
+  it('retries webhook sends after transient failures', async () => {
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => 'rate limited',
+      })
+      .mockResolvedValueOnce({ ok: true, text: async () => '' });
+
+    const webhook = new DiscordWebhook({
+      webhookUrl: 'https://discord.com/api/webhooks/123/abc',
+      retryDelays: [0],
+    } as never);
+
+    await webhook.send(makeAlert());
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it('should send an embed with correct structure', async () => {
     const webhook = new DiscordWebhook({
       webhookUrl: 'https://discord.com/api/webhooks/123/abc',
@@ -239,7 +258,10 @@ describe('DiscordWebhook', () => {
       status: 429,
       text: async () => 'rate limited',
     });
-    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+    const webhook = new DiscordWebhook({
+      webhookUrl: 'https://example.com',
+      retryDelays: [0, 0, 0],
+    });
 
     await expect(webhook.send(makeAlert())).rejects.toThrow(
       'Discord webhook failed (429): rate limited',

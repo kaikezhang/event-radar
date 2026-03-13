@@ -4,6 +4,7 @@ import type { AlertEvent, DeliveryService } from './types.js';
 export interface DiscordConfig {
   /** Discord webhook URL. */
   webhookUrl: string;
+  retryDelays?: number[];
 }
 
 const SEVERITY_COLOR: Record<Severity, number> = {
@@ -54,12 +55,16 @@ const REGIME_LABEL_DISPLAY: Record<string, string> = {
   extreme_oversold: '🟢 Extreme Oversold',
 };
 
+const DEFAULT_RETRY_DELAYS = [1_000, 5_000, 30_000];
+
 export class DiscordWebhook implements DeliveryService {
   readonly name = 'discord';
   private readonly webhookUrl: string;
+  private readonly retryDelays: number[];
 
   constructor(config: DiscordConfig) {
     this.webhookUrl = config.webhookUrl;
+    this.retryDelays = config.retryDelays ?? DEFAULT_RETRY_DELAYS;
   }
 
   async send(alert: AlertEvent): Promise<void> {
@@ -80,7 +85,7 @@ export class DiscordWebhook implements DeliveryService {
     // --- Tickers ---
     if (enrichment?.tickers?.length) {
       const tickerDisplay = enrichment.tickers
-        .map((t) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
+        .map((t: NonNullable<AlertEvent['enrichment']>['tickers'][number]) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
         .join('  ');
       fields.push({ name: 'Tickers', value: tickerDisplay, inline: true });
     } else if (alert.ticker) {
@@ -208,19 +213,10 @@ export class DiscordWebhook implements DeliveryService {
       },
     };
 
-    const response = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: 'Event Radar',
-        embeds: [embed],
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Discord webhook failed (${response.status}): ${text}`);
-    }
+    await this.sendWithRetry(JSON.stringify({
+      username: 'Event Radar',
+      embeds: [embed],
+    }));
   }
 
   private extractItems(alert: AlertEvent): string | undefined {
@@ -233,6 +229,38 @@ export class DiscordWebhook implements DeliveryService {
     }
     return undefined;
   }
+
+  private async sendWithRetry(payload: string): Promise<void> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= this.retryDelays.length; attempt += 1) {
+      try {
+        const response = await fetch(this.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Discord webhook failed (${response.status}): ${text}`);
+        }
+
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < this.retryDelays.length) {
+          await sleep(this.retryDelays[attempt]);
+        }
+      }
+    }
+
+    throw lastError!;
+  }
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function truncate(str: string, max: number): string {

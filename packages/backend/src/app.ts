@@ -5,6 +5,7 @@ import {
   ScannerRegistry,
   RawEventSchema,
   type EventBus,
+  type IMarketRegimeService,
   type Rule,
 } from '@event-radar/shared';
 import {
@@ -55,10 +56,7 @@ import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
-import {
-  MarketRegimeService,
-  type IMarketRegimeService,
-} from './services/market-regime.js';
+import { MarketRegimeService } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
 import { DeliveryKillSwitch, type IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
 import { HealthMonitorService } from './services/health-monitor.js';
@@ -631,6 +629,19 @@ export function buildApp(options?: {
         }
       }
 
+      let regimeSnapshot: import('@event-radar/shared').RegimeSnapshot | undefined;
+      try {
+        regimeSnapshot = await marketRegimeService.getRegimeSnapshot();
+      } catch (error) {
+        server.log.warn({
+          pipeline: true,
+          stage: 'market_regime',
+          source: event.source,
+          title: logTitle(event.title),
+          error: error instanceof Error ? error.message : error,
+        }, 'failed to load regime snapshot for delivery');
+      }
+
       pipelineFunnelTotal.inc({ stage: 'enriched' });
 
       // Kill switch — skip delivery when active
@@ -661,6 +672,7 @@ export function buildApp(options?: {
         ticker,
         enrichment,
         historicalContext,
+        regimeSnapshot,
       });
       const deliveryMs = Date.now() - deliveryStart;
 

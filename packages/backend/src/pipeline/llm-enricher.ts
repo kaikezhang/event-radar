@@ -1,13 +1,11 @@
 import OpenAI from 'openai';
-import type { RawEvent, IMarketRegimeService, RegimeSnapshot } from '@event-radar/shared';
-
-export interface LLMEnrichment {
-  summary: string;
-  impact: string;
-  action: '🔴 立即关注' | '🟡 持续观察' | '🟢 仅供参考';
-  tickers: Array<{ symbol: string; direction: 'bullish' | 'bearish' | 'neutral' }>;
-  regimeContext?: string;
-}
+import {
+  LLMEnrichmentSchema,
+  type RawEvent,
+  type IMarketRegimeService,
+  type LLMEnrichment,
+  type RegimeSnapshot,
+} from '@event-radar/shared';
 
 export interface LLMEnricherConfig {
   apiKey?: string;
@@ -81,17 +79,19 @@ export class LLMEnricher {
       const text = response.choices[0]?.message?.content ?? '';
       if (!text) return null;
 
-      const parsed = JSON.parse(text) as LLMEnrichment;
-
-      // Validate action value
-      const validActions = ['🔴 立即关注', '🟡 持续观察', '🟢 仅供参考'] as const;
-      if (!validActions.includes(parsed.action as typeof validActions[number])) {
-        parsed.action = '🟢 仅供参考';
+      const parsed = JSON.parse(text) as unknown;
+      const validation = LLMEnrichmentSchema.safeParse(parsed);
+      if (!validation.success) {
+        console.error(
+          `[llm-enricher] Invalid enrichment payload for event ${event.id}:`,
+          validation.error.flatten(),
+        );
+        return null;
       }
 
       const usage = response.usage;
-      console.log(`[llm-enricher] Enriched event ${event.id}: action=${parsed.action}, tokens=${usage?.prompt_tokens ?? '?'}+${usage?.completion_tokens ?? '?'}`);
-      return parsed;
+      console.log(`[llm-enricher] Enriched event ${event.id}: action=${validation.data.action}, tokens=${usage?.prompt_tokens ?? '?'}+${usage?.completion_tokens ?? '?'}`);
+      return validation.data;
     } catch (err) {
       console.error(`[llm-enricher] Failed to enrich event ${event.id}:`, err instanceof Error ? err.message : err);
       return null;

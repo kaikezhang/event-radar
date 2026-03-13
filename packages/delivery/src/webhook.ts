@@ -105,8 +105,8 @@ export class WebhookDelivery implements DeliveryService {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-EventRadar-Signature': signature,
             ...this.customHeaders,
+            'X-EventRadar-Signature': signature,
           },
           signal: AbortSignal.timeout(TIMEOUT_MS),
           body: payload,

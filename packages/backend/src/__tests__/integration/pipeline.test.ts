@@ -10,6 +10,7 @@ import {
   err,
   type EventBus,
   type RawEvent,
+  type RegimeSnapshot,
   type Result,
 } from '@event-radar/shared';
 import { safeCloseServer } from '../helpers/test-db.js';
@@ -18,6 +19,30 @@ import { safeCloseServer } from '../helpers/test-db.js';
 
 function mockService(name: string): DeliveryService & { send: ReturnType<typeof vi.fn> } {
   return { name, send: vi.fn().mockResolvedValue(undefined) };
+}
+
+function createMockMarketRegimeService() {
+  const snapshot: RegimeSnapshot = {
+    score: 0,
+    label: 'neutral',
+    factors: {
+      vix: { value: 18, zscore: 0 },
+      spyRsi: { value: 50, signal: 'neutral' },
+      spy52wPosition: { pctFromHigh: -2, pctFromLow: 18 },
+      maSignal: { sma20: 500, sma50: 498, signal: 'neutral' },
+      yieldCurve: { spread: 0.5, inverted: false },
+    },
+    amplification: {
+      bullish: 1,
+      bearish: 1,
+    },
+    updatedAt: '2026-03-13T12:00:00.000Z',
+  };
+
+  return {
+    getRegimeSnapshot: vi.fn().mockResolvedValue(snapshot),
+    getAmplificationFactor: vi.fn().mockReturnValue(1),
+  };
 }
 
 function make8KEvent(
@@ -72,6 +97,7 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
     ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
   });
@@ -177,6 +203,7 @@ describe('Integration: Form 4 → classify → delivery', () => {
     ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
   });
@@ -263,6 +290,7 @@ describe('Integration: metrics counters after pipeline', () => {
     ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
   });
@@ -349,6 +377,7 @@ describe('Integration: error scenarios', () => {
     const ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
     resetMetrics();
@@ -380,6 +409,7 @@ describe('Integration: error scenarios', () => {
     const ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
     resetMetrics();
@@ -493,6 +523,7 @@ describe('Integration: error scenarios', () => {
     const ctx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({ bark, discord }),
+      marketRegimeService: createMockMarketRegimeService() as never,
     });
     await ctx.server.ready();
     resetMetrics();
