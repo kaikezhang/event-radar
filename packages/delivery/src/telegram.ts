@@ -17,6 +17,14 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 
 const DEFAULT_RETRY_DELAYS = [1_000, 5_000, 30_000];
 
+const REGIME_LABEL_DISPLAY: Record<string, string> = {
+  extreme_overbought: 'Extreme Overbought',
+  overbought: 'Overbought',
+  neutral: 'Neutral',
+  oversold: 'Oversold',
+  extreme_oversold: 'Extreme Oversold',
+};
+
 export class TelegramDelivery implements DeliveryService {
   readonly name = 'telegram';
   private readonly botToken: string;
@@ -75,6 +83,22 @@ export class TelegramDelivery implements DeliveryService {
       `*Time:* ${alert.event.timestamp.toISOString()}`,
     );
 
+    // AI Analysis section
+    if (alert.enrichment) {
+      lines.push(
+        '',
+        escapeMarkdown('🤖 AI Analysis:'),
+        escapeMarkdown(alert.enrichment.summary),
+      );
+      if (alert.enrichment.impact) {
+        lines.push(escapeMarkdown(alert.enrichment.impact));
+      }
+      if (alert.enrichment.regimeContext) {
+        lines.push(escapeMarkdown(alert.enrichment.regimeContext));
+      }
+    }
+
+    // Historical context
     if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
       const ctx = alert.historicalContext;
       const sign = ctx.avgAlphaT20 >= 0 ? '+' : '';
@@ -85,6 +109,22 @@ export class TelegramDelivery implements DeliveryService {
         ),
         escapeMarkdown(ctx.patternSummary),
       );
+    }
+
+    // Market Regime section
+    if (alert.regimeSnapshot) {
+      const rs = alert.regimeSnapshot;
+      const label = REGIME_LABEL_DISPLAY[rs.label] ?? rs.label;
+      lines.push(
+        '',
+        escapeMarkdown(`📈 Market Regime: ${label} (Score: ${rs.score})`),
+        escapeMarkdown(`VIX: ${rs.factors.vix.value.toFixed(1)} | RSI: ${rs.factors.spyRsi.value.toFixed(1)} | Bull: ${rs.amplification.bullish}x | Bear: ${rs.amplification.bearish}x`),
+      );
+    }
+
+    // Disclaimer
+    if (alert.enrichment || alert.regimeSnapshot || alert.historicalContext) {
+      lines.push('', escapeMarkdown('⚖️ AI-generated analysis. Not financial advice.'));
     }
 
     return lines.join('\n');

@@ -220,7 +220,8 @@ describe('DiscordWebhook', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const embed = JSON.parse(options.body as string).embeds[0];
 
-    expect(embed.title).toContain('🔴 立即关注');
+    expect(embed.title).toContain('HIGH');
+    expect(embed.title).toContain('Apple CEO departure triggers uncertainty');
     expect(embed.description).toContain('Leadership vacuum');
     expect(embed.footer.text).toContain('AI Enhanced');
 

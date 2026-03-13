@@ -220,7 +220,7 @@ export function buildApp(options?: {
       : undefined,
     enabled: process.env.LLM_GATEKEEPER_ENABLED === 'true',
   });
-  const llmEnricher = new LLMEnricher(options?.llmEnricherConfig);
+  const llmEnricher = new LLMEnricher(options?.llmEnricherConfig, marketRegimeService);
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
     : undefined;
