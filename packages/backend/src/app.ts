@@ -58,6 +58,7 @@ import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
+import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
 import { MarketRegimeService } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
@@ -280,6 +281,8 @@ export function buildApp(options?: {
         '/api/events/ingest',
         '/api/v1/dashboard',
         '/api/v1/feed',
+        '/api/v1/delivery/feed',
+        '/api/v1/scanners/:name/events',
         '/api/v1/audit',
         '/api/v1/audit/stats',
         '/api/health/delivery-stats',
@@ -609,6 +612,18 @@ export function buildApp(options?: {
         const llmEnrichResult = await llmEnricher.enrich(event);
         if (llmEnrichResult) {
           enrichment = llmEnrichResult;
+          event.metadata = {
+            ...(event.metadata ?? {}),
+            llm_enrichment: llmEnrichResult,
+          };
+
+          if (db && eventId) {
+            await db.execute(sql`
+              UPDATE events
+              SET metadata = ${JSON.stringify(event.metadata)}::jsonb
+              WHERE id = ${eventId}
+            `);
+          }
         }
       }
 
@@ -870,7 +885,8 @@ export function buildApp(options?: {
   });
 
   // Register scanner health routes
-  registerScannerRoutes(server, registry);
+  registerScannerRoutes(server, registry, db);
+  registerDeliveryFeedRoutes(server, db);
 
   // Register dashboard route
   registerDashboardRoutes(server, {

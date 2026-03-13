@@ -1,9 +1,14 @@
 import type { FastifyInstance } from 'fastify';
+import { desc, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import type { ScannerRegistry } from '@event-radar/shared';
+import type { Database } from '../db/connection.js';
+import { events } from '../db/schema.js';
 
 export function registerScannerRoutes(
   server: FastifyInstance,
   registry: ScannerRegistry,
+  db?: Database,
 ): void {
   /**
    * GET /api/scanners/status
@@ -53,6 +58,64 @@ export function registerScannerRoutes(
         down: downCount,
         alert: downCount > 0,
       },
+    });
+  });
+
+  server.get<{
+    Params: { name: string };
+    Querystring: { limit?: string };
+  }>('/api/v1/scanners/:name/events', async (request, reply) => {
+    if (!db) {
+      return reply.code(503).send({ error: 'Database not configured' });
+    }
+
+    const paramsResult = z.object({ name: z.string().trim().min(1) }).safeParse(request.params);
+    const queryResult = z.object({
+      limit: z.coerce.number().int().min(1).max(50).default(10),
+    }).safeParse(request.query);
+
+    if (!paramsResult.success || !queryResult.success) {
+      return reply.code(400).send({ error: 'Invalid scanner request' });
+    }
+
+    const rows = await db
+      .select({
+        id: events.id,
+        title: events.title,
+        summary: events.summary,
+        severity: events.severity,
+        metadata: events.metadata,
+        receivedAt: events.receivedAt,
+        createdAt: events.createdAt,
+      })
+      .from(events)
+      .where(eq(events.source, paramsResult.data.name))
+      .orderBy(desc(events.receivedAt), desc(events.createdAt))
+      .limit(queryResult.data.limit);
+
+    return reply.send({
+      scanner: paramsResult.data.name,
+      count: rows.length,
+      events: rows.map((row) => {
+        const metadata =
+          row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+            ? row.metadata as Record<string, unknown>
+            : {};
+        const tickers = Array.isArray(metadata.tickers)
+          ? metadata.tickers.filter((ticker): ticker is string => typeof ticker === 'string')
+          : typeof metadata.ticker === 'string'
+            ? [metadata.ticker]
+            : [];
+
+        return {
+          id: row.id,
+          title: row.title,
+          summary: row.summary ?? '',
+          severity: row.severity ?? 'MEDIUM',
+          tickers,
+          received_at: row.receivedAt.toISOString(),
+        };
+      }),
     });
   });
 }

@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, ScrollText, History, Radio } from 'lucide-react';
+import { LayoutDashboard, ScrollText, History, Radio, Bell } from 'lucide-react';
 import { Overview } from './pages/Overview.js';
 import { AuditTrail } from './pages/AuditTrail.js';
 import { Historical } from './pages/Historical.js';
+import { AlertFeed } from './pages/AlertFeed.js';
 import { cn } from './lib/utils.js';
 
-type Page = 'overview' | 'audit' | 'historical';
+type Page = 'overview' | 'audit' | 'historical' | 'alerts';
 
 const tabs: { id: Page; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'alerts', label: 'Alerts', icon: Bell },
   { id: 'audit', label: 'Audit Trail', icon: ScrollText },
   { id: 'historical', label: 'Historical', icon: History },
 ];
@@ -64,6 +66,7 @@ export function App() {
       {/* Main Content */}
       <main className="mx-auto max-w-[1600px] px-6 py-6">
         {page === 'overview' && <Overview />}
+        {page === 'alerts' && <AlertFeed />}
         {page === 'audit' && <AuditTrail />}
         {page === 'historical' && <Historical />}
       </main>

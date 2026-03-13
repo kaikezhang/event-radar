@@ -69,6 +69,8 @@ async function seedDeliveredEvent(input: {
   eventTime: string;
   auditTime: string;
   llmReason?: string;
+  metadata?: Record<string, unknown>;
+  deliveryChannels?: Array<{ channel: string; ok: boolean }>;
 }): Promise<string> {
   const ticker = input.ticker ?? input.tickers?.[0] ?? 'AAPL';
   const eventId = await storeEvent(sharedDb, {
@@ -82,6 +84,7 @@ async function seedDeliveredEvent(input: {
         tickers: input.tickers ?? [ticker],
         category: input.category ?? 'corporate',
         url: input.url ?? `https://example.com/${input.title.toLowerCase().replace(/\s+/g, '-')}`,
+        ...input.metadata,
       },
     }),
     severity: input.severity ?? 'HIGH',
@@ -106,6 +109,7 @@ async function seedDeliveredEvent(input: {
       outcome,
       stopped_at,
       reason,
+      delivery_channels,
       created_at
     ) VALUES (
       ${eventId},
@@ -116,6 +120,7 @@ async function seedDeliveredEvent(input: {
       'delivered',
       'delivery',
       ${input.llmReason ?? `LLM approved ${input.title}`},
+      ${JSON.stringify(input.deliveryChannels ?? [{ channel: 'discord', ok: true }])}::jsonb,
       ${new Date(input.auditTime)}
     )
   `);
@@ -467,5 +472,142 @@ describe('GET /api/v1/feed', () => {
       cursor: null,
       total: 0,
     });
+  });
+});
+
+describe('GET /api/v1/delivery/feed', () => {
+  let ctx: AppContext;
+
+  beforeEach(async () => {
+    await cleanTestDb(sharedDb);
+    await sharedDb.execute(sql`DELETE FROM pipeline_audit`);
+
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterEach(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('returns delivered alerts with llm enrichment and delivery channel details', async () => {
+    const eventId = await seedDeliveredEvent({
+      title: 'Nvidia files material 8-K',
+      ticker: 'NVDA',
+      source: 'sec-edgar',
+      summary: 'Detailed filing summary',
+      severity: 'CRITICAL',
+      eventTime: '2026-03-13T10:00:00.000Z',
+      auditTime: '2026-03-13T10:01:00.000Z',
+      metadata: {
+        llm_enrichment: {
+          summary: 'AI summary',
+          impact: 'AI impact',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
+          regimeContext: 'Risk appetite is supportive.',
+        },
+      },
+      deliveryChannels: [
+        { channel: 'discord', ok: true },
+        { channel: 'bark', ok: true },
+      ],
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/delivery/feed',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      total: 1,
+      cursor: null,
+      events: [
+        {
+          id: eventId,
+          title: 'Nvidia files material 8-K',
+          source: 'sec-edgar',
+          severity: 'CRITICAL',
+          tickers: ['NVDA'],
+          analysis: 'AI summary',
+          impact: 'AI impact',
+          action: '🔴 立即关注',
+          regime_context: 'Risk appetite is supportive.',
+          delivery_channels: [
+            { channel: 'discord', ok: true },
+            { channel: 'bark', ok: true },
+          ],
+          delivered_at: '2026-03-13T10:01:00.000Z',
+        },
+      ],
+    });
+  });
+
+  it('falls back to event metadata tickers and empty enrichment when llm enrichment is missing', async () => {
+    await seedDeliveredEvent({
+      title: 'Apple headline',
+      ticker: 'AAPL',
+      summary: 'Summary only',
+      eventTime: '2026-03-13T09:00:00.000Z',
+      auditTime: '2026-03-13T09:01:00.000Z',
+      metadata: {
+        tickers: ['AAPL', 'QQQ'],
+      },
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/delivery/feed',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().events[0]).toMatchObject({
+      tickers: ['AAPL', 'QQQ'],
+      analysis: '',
+      impact: '',
+      action: null,
+      regime_context: null,
+    });
+  });
+
+  it('supports cursor pagination on the delivery feed', async () => {
+    await seedDeliveredEvent({
+      title: 'Oldest',
+      ticker: 'AAPL',
+      eventTime: '2026-03-13T07:00:00.000Z',
+      auditTime: '2026-03-13T07:01:00.000Z',
+    });
+    await seedDeliveredEvent({
+      title: 'Middle',
+      ticker: 'MSFT',
+      eventTime: '2026-03-13T08:00:00.000Z',
+      auditTime: '2026-03-13T08:01:00.000Z',
+    });
+    await seedDeliveredEvent({
+      title: 'Newest',
+      ticker: 'NVDA',
+      eventTime: '2026-03-13T09:00:00.000Z',
+      auditTime: '2026-03-13T09:01:00.000Z',
+    });
+
+    const pageOne = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/delivery/feed?limit=2',
+    });
+
+    expect(pageOne.statusCode).toBe(200);
+    expect(pageOne.json().events.map((event: { title: string }) => event.title)).toEqual([
+      'Newest',
+      'Middle',
+    ]);
+
+    const pageTwo = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/v1/delivery/feed?limit=2&before=${encodeURIComponent(pageOne.json().cursor as string)}`,
+    });
+
+    expect(pageTwo.statusCode).toBe(200);
+    expect(pageTwo.json().events.map((event: { title: string }) => event.title)).toEqual(['Oldest']);
   });
 });
