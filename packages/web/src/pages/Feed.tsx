@@ -8,6 +8,7 @@ import { useAlerts } from '../hooks/useAlerts.js';
 export function Feed() {
   const {
     alerts,
+    connectionStatus,
     error,
     isEmpty,
     isInitialLoading,
@@ -16,6 +17,20 @@ export function Feed() {
     applyPendingAlerts,
     refetch,
   } = useAlerts(50);
+  const connectionMeta = {
+    connected: {
+      icon: '🟢',
+      label: 'Connected',
+    },
+    reconnecting: {
+      icon: '🟡',
+      label: 'Reconnecting',
+    },
+    disconnected: {
+      icon: '🔴',
+      label: 'Disconnected',
+    },
+  }[connectionStatus];
 
   return (
     <div className="space-y-4">
@@ -28,6 +43,10 @@ export function Feed() {
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
               AI-powered market intelligence
+            </p>
+            <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-text-secondary">
+              <span aria-hidden="true">{connectionMeta.icon}</span>
+              <span>{connectionMeta.label}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">

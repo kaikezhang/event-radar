@@ -1,5 +1,31 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+interface ApiKeyValidationResult {
+  ok: boolean;
+  message?: string;
+}
+
+export function validateApiKeyValue(
+  providedKey: string | undefined,
+  apiKey?: string,
+): ApiKeyValidationResult {
+  if (!providedKey) {
+    return {
+      ok: false,
+      message: 'Missing API key',
+    };
+  }
+
+  if (apiKey && providedKey !== apiKey) {
+    return {
+      ok: false,
+      message: 'Invalid API key',
+    };
+  }
+
+  return { ok: true };
+}
+
 /**
  * Shared API key authentication middleware.
  * Checks X-API-Key header against the configured key.
@@ -14,8 +40,12 @@ export async function requireApiKey(
     return;
   }
 
-  const providedKey = request.headers['x-api-key'];
-  if (!providedKey) {
+  const providedKey = typeof request.headers['x-api-key'] === 'string'
+    ? request.headers['x-api-key']
+    : undefined;
+  const validation = validateApiKeyValue(providedKey, apiKey);
+
+  if (!validation.ok && validation.message === 'Missing API key') {
     await reply.status(401).send({
       error: 'Unauthorized',
       message: 'Missing X-API-Key header',
@@ -23,10 +53,10 @@ export async function requireApiKey(
     return;
   }
 
-  if (apiKey && providedKey !== apiKey) {
+  if (!validation.ok) {
     await reply.status(401).send({
       error: 'Unauthorized',
-      message: 'Invalid API key',
+      message: validation.message ?? 'Invalid API key',
     });
     return;
   }

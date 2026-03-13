@@ -1,7 +1,7 @@
 import type { AlertSummary, EventDetailData, TickerProfileData } from '../types/index.js';
 
 const API_BASE = '/api';
-const API_KEY = 'er-dev-2026';
+export const API_KEY = 'er-dev-2026';
 
 async function apiFetch(path: string, options?: { public?: boolean }) {
   const headers = options?.public ? undefined : { 'X-Api-Key': API_KEY };
