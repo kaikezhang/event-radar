@@ -69,12 +69,14 @@ export class HealthMonitorService {
     const now = this.now();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const rows = await this.db.execute<{ cnt: string }>(sql`
+    const rawRows = await this.db.execute(sql`
       SELECT COUNT(*) as cnt FROM pipeline_audit
       WHERE outcome = 'delivered'
         AND created_at >= ${twentyFourHoursAgo.toISOString()}
     `);
-    const count = Number(rows.rows?.[0]?.cnt ?? rows[0]?.cnt ?? 0);
+    const rowsResult = rawRows as unknown as { rows?: Array<{ cnt: string }> };
+    const rowArr = rowsResult.rows ?? (Array.isArray(rawRows) ? rawRows : []);
+    const count = Number((rowArr[0] as Record<string, unknown>)?.['cnt'] ?? 0);
 
     const trading = isTradingHours(now);
 
@@ -99,14 +101,14 @@ export class HealthMonitorService {
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [rows24h, rows7d] = await Promise.all([
-      this.db.execute<{ source: string; cnt: string }>(sql`
+    const [raw24h, raw7d] = await Promise.all([
+      this.db.execute(sql`
         SELECT source, COUNT(*) as cnt FROM pipeline_audit
         WHERE outcome = 'delivered'
           AND created_at >= ${twentyFourHoursAgo.toISOString()}
         GROUP BY source
       `),
-      this.db.execute<{ source: string; cnt: string }>(sql`
+      this.db.execute(sql`
         SELECT source, COUNT(*) as cnt FROM pipeline_audit
         WHERE outcome = 'delivered'
           AND created_at >= ${sevenDaysAgo.toISOString()}
@@ -114,8 +116,9 @@ export class HealthMonitorService {
       `),
     ]);
 
-    const parseRows = (result: { rows?: Array<{ source: string; cnt: string }>; [key: number]: { source: string; cnt: string } }) => {
-      const arr = result.rows ?? Object.values(result);
+    const parseRows = (raw: unknown) => {
+      const result = raw as unknown as { rows?: Array<{ source: string; cnt: string }> };
+      const arr = result.rows ?? (Array.isArray(raw) ? (raw as Array<{ source: string; cnt: string }>) : []);
       const bySource: Record<string, number> = {};
       let total = 0;
       for (const row of arr) {
@@ -127,8 +130,8 @@ export class HealthMonitorService {
     };
 
     return {
-      last24h: parseRows(rows24h),
-      last7d: parseRows(rows7d),
+      last24h: parseRows(raw24h),
+      last7d: parseRows(raw7d),
     };
   }
 }
