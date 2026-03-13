@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
+import { asRecord, parseConfidence } from './route-utils.js';
 
 interface JudgeRow {
   audit_id: number;
@@ -30,42 +32,8 @@ const StatsQuerySchema = z.object({
   since: z.enum(['1h', '24h', '7d']).optional(),
 });
 
-function parseJsonValue<T>(value: unknown): T | unknown {
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return value;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  const parsed = parseJsonValue<Record<string, unknown>>(value);
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    return parsed as Record<string, unknown>;
-  }
-
-  return {};
-}
-
 function asJudgeDecision(value: unknown): JudgeDecision | null {
   return value === 'PASS' || value === 'BLOCK' ? value : null;
-}
-
-function parseConfidence(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
 }
 
 function parseReasonFromAudit(auditReason: string | null): string | null {
@@ -132,7 +100,6 @@ async function queryJudgeRows(
     since?: '1h' | '24h' | '7d';
   } = {},
 ): Promise<JudgeRow[]> {
-  const { sql } = await import('drizzle-orm');
   const conditions: ReturnType<typeof sql>[] = [
     sql`(
       pa.stopped_at = 'llm_judge'
@@ -149,7 +116,8 @@ async function queryJudgeRows(
   }
 
   const whereClause = conditions.reduce((acc, condition) => sql`${acc} AND ${condition}`);
-  const limitClause = options.limit != null ? sql`LIMIT ${options.limit}` : sql``;
+  const queryLimit = options.limit ?? (options.since ? undefined : 10_000);
+  const limitClause = queryLimit != null ? sql`LIMIT ${queryLimit}` : sql``;
   const query = sql`
     SELECT
       pa.id AS audit_id,
@@ -189,7 +157,11 @@ export function registerJudgeRoutes(server: FastifyInstance, db?: Database): voi
     }
 
     const parsedQuery = RecentQuerySchema.safeParse(request.query);
-    const limit = parsedQuery.success ? (parsedQuery.data.limit ?? 50) : 50;
+    if (!parsedQuery.success) {
+      return reply.code(400).send({ error: 'Invalid limit' });
+    }
+
+    const limit = parsedQuery.data.limit ?? 50;
 
     try {
       const rows = await queryJudgeRows(db, { limit });

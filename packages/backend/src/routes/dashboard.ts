@@ -3,6 +3,7 @@ import type { ScannerRegistry } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
 import { registry as metricsRegistry } from '../metrics.js';
+import { asRecord, parseConfidence, parseJsonValue } from './route-utils.js';
 
 export interface DashboardDeps {
   db?: Database;
@@ -143,38 +144,10 @@ function decodeFeedCursor(value: string): FeedCursor | null {
   }
 }
 
-function parseJsonValue(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return value;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  const parsed = parseJsonValue(value);
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    return parsed as Record<string, unknown>;
-  }
-
-  return {};
-}
-
 function asStringArray(value: unknown): string[] {
   const parsed = parseJsonValue(value);
   if (!Array.isArray(parsed)) return [];
   return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
-}
-
-function parseConfidence(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
 
 function buildAuditLlmEnrichment(metadataValue: unknown): {

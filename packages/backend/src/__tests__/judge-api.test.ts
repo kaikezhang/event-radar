@@ -1,10 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import Fastify from 'fastify';
 import type { PGlite } from '@electric-sql/pglite';
 import type { RawEvent } from '@event-radar/shared';
 import { buildApp, type AppContext } from '../app.js';
 import type { Database } from '../db/connection.js';
 import { storeEvent } from '../db/event-store.js';
+import { registerJudgeRoutes } from '../routes/judge.js';
 import { cleanTestDb, createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 
 const TEST_API_KEY = 'judge-test-api-key';
@@ -165,6 +168,9 @@ describe('judge routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/judge/recent?limit=10',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -225,6 +231,9 @@ describe('judge routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/judge/recent?limit=1',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -273,6 +282,9 @@ describe('judge routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/judge/stats',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -320,6 +332,9 @@ describe('judge routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/judge/stats?since=1h',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -338,10 +353,38 @@ describe('judge routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/judge/stats?since=30m',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error: 'Invalid since window' });
+  });
+
+  it('rejects invalid recent limits instead of silently falling back', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/judge/recent?limit=abc',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'Invalid limit' });
+  });
+
+  it('requires an API key for judge routes', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/judge/recent',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: 'Unauthorized',
+    });
   });
 
   it('returns llm enrichment details on audit events when present', async () => {
@@ -398,10 +441,16 @@ describe('judge routes', () => {
       noDbCtx.server.inject({
         method: 'GET',
         url: '/api/v1/judge/recent',
+        headers: {
+          'x-api-key': TEST_API_KEY,
+        },
       }),
       noDbCtx.server.inject({
         method: 'GET',
         url: '/api/v1/judge/stats',
+        headers: {
+          'x-api-key': TEST_API_KEY,
+        },
       }),
     ]);
 
@@ -409,5 +458,48 @@ describe('judge routes', () => {
     expect(statsResponse.statusCode).toBe(503);
 
     await safeCloseServer(noDbCtx.server);
+  });
+
+  it('applies a default stats query cap when no since window is provided', async () => {
+    const dialect = new PgDialect();
+    const execute = async (query: {
+      toQuery: (config: {
+        casing: { getColumnCasing: (column: string) => string };
+        escapeName: (name: string) => string;
+        escapeParam: (num: number, value: unknown) => string;
+        escapeString: (value: string) => string;
+        prepareTyping: () => 'none';
+        inlineParams: boolean;
+        paramStartIndex: { value: number };
+      }) => { sql: string; params: unknown[] };
+    }) => {
+      const compiled = query.toQuery({
+        casing: { getColumnCasing: (column: string) => column },
+        escapeName: dialect.escapeName,
+        escapeParam: dialect.escapeParam,
+        escapeString: dialect.escapeString,
+        prepareTyping: () => 'none',
+        inlineParams: false,
+        paramStartIndex: { value: 0 },
+      });
+
+      expect(compiled.sql).toContain('LIMIT $1');
+      expect(compiled.params.at(-1)).toBe(10_000);
+
+      return { rows: [] };
+    };
+    const server = Fastify({ logger: false });
+
+    registerJudgeRoutes(server, { execute } as unknown as Database);
+    await server.ready();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/judge/stats',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    await safeCloseServer(server);
   });
 });

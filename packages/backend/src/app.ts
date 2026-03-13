@@ -277,6 +277,7 @@ export function buildApp(options?: {
       apiKey,
       publicRoutes: [
         '/health',
+        '/ws/events',
         '/api/health/ping',
         '/metrics',
         '/api/events/ingest',
