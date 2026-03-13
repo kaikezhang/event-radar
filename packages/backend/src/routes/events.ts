@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
-import { events } from '../db/schema.js';
+import { events, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
 
@@ -52,6 +52,10 @@ const ListEventsQuerySchema = {
     confirmed: {
       type: 'boolean',
       description: 'Filter for multi-source confirmed events (confirmation_count >= 2)',
+    },
+    watchlist: {
+      type: 'boolean',
+      description: 'Filter events to only watchlist tickers',
     },
   },
 } as const;
@@ -112,6 +116,7 @@ export interface ListEventsQuery {
   limit?: number;
   offset?: number;
   confirmed?: boolean;
+  watchlist?: boolean;
 }
 
 export interface EventParams {
@@ -176,6 +181,22 @@ export function registerEventRoutes(
       conditions.push(gte(events.confirmationCount, 2));
     }
 
+    // Filter by watchlist tickers
+    if (query.watchlist) {
+      const watchlistTickers = await db
+        .select({ ticker: watchlist.ticker })
+        .from(watchlist);
+      const tickers = watchlistTickers.map((w) => w.ticker);
+      if (tickers.length > 0) {
+        conditions.push(
+          sql`(${events.metadata}->>'ticker' IN (${sql.join(tickers.map(t => sql`${t}`), sql`, `)}) OR ${events.metadata}->'tickers' ?| array[${sql.join(tickers.map(t => sql`${t}`), sql`, `)}])`,
+        );
+      } else {
+        // No watchlist tickers — return empty
+        conditions.push(sql`false`);
+      }
+    }
+
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
@@ -190,6 +211,74 @@ export function registerEventRoutes(
     ]);
 
     return { data, total };
+  });
+
+  /**
+   * GET /api/events/search
+   * Full-text search across event title, body, and tickers
+   */
+  server.get('/api/events/search', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          q: { type: 'string', minLength: 1, description: 'Search query' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+        required: ['q'],
+      },
+    },
+  }, async (request) => {
+    const { q, limit: rawLimit } = request.query as { q: string; limit?: number };
+    const searchLimit = Math.min(rawLimit || 20, 100);
+
+    // Check if query is a ticker-like pattern (1-5 uppercase letters)
+    const isTickerQuery = /^[A-Z]{1,5}$/.test(q.trim());
+
+    if (isTickerQuery) {
+      // Ticker search: match metadata->>'ticker' or metadata->'tickers'
+      const ticker = q.trim();
+      const data = await db
+        .select()
+        .from(events)
+        .where(
+          sql`(${events.metadata}->>'ticker' = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`,
+        )
+        .orderBy(sql`${events.receivedAt} DESC`)
+        .limit(searchLimit);
+
+      return { data, total: data.length };
+    }
+
+    // Full-text search using to_tsvector / plainto_tsquery
+    const searchVector = sql`to_tsvector('english', coalesce(${events.title}, '') || ' ' || coalesce(${events.summary}, ''))`;
+    const tsQuery = sql`plainto_tsquery('english', ${q})`;
+
+    const data = await db
+      .select({
+        id: events.id,
+        source: events.source,
+        sourceEventId: events.sourceEventId,
+        title: events.title,
+        summary: events.summary,
+        rawPayload: events.rawPayload,
+        metadata: events.metadata,
+        severity: events.severity,
+        receivedAt: events.receivedAt,
+        createdAt: events.createdAt,
+        mergedFrom: events.mergedFrom,
+        sourceUrls: events.sourceUrls,
+        isDuplicate: events.isDuplicate,
+        confirmedSources: events.confirmedSources,
+        confirmationCount: events.confirmationCount,
+        rank: sql<number>`ts_rank(${searchVector}, ${tsQuery})`.as('rank'),
+      })
+      .from(events)
+      .where(sql`${searchVector} @@ ${tsQuery}`)
+      .orderBy(sql`ts_rank(${searchVector}, ${tsQuery}) DESC`, sql`${events.receivedAt} DESC`)
+      .limit(searchLimit);
+
+    return { data, total: data.length };
   });
 
   /**

@@ -52,3 +52,17 @@ export interface TickerProfileData {
   eventCount: number;
   recentAlerts: AlertSummary[];
 }
+
+export interface WatchlistItem {
+  id: string;
+  ticker: string;
+  addedAt: string;
+  notes?: string | null;
+}
+
+export interface FilterPreset {
+  name: string;
+  severities: string[];
+  sources: string[];
+  ticker?: string;
+}

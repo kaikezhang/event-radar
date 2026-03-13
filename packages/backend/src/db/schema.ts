@@ -371,6 +371,19 @@ export const severityOverrides = pgTable(
   ],
 );
 
+export const watchlist = pgTable(
+  'watchlist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ticker: varchar('ticker', { length: 10 }).notNull().unique(),
+    addedAt: timestamp('added_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    notes: text('notes'),
+  },
+  (table) => [index('idx_watchlist_ticker').on(table.ticker)],
+);
+
 export const severityChanges = pgTable(
   'severity_changes',
   {

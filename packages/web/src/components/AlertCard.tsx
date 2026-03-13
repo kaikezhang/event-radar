@@ -1,3 +1,4 @@
+import { Plus, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AlertSummary } from '../types/index.js';
 import { formatRelativeTime } from '../lib/format.js';
@@ -15,7 +16,16 @@ const severityBarClassName = {
   LOW: 'w-px bg-severity-low',
 };
 
-export function AlertCard({ alert }: { alert: AlertSummary }) {
+interface AlertCardProps {
+  alert: AlertSummary;
+  showWatchlistButton?: boolean;
+  isOnWatchlist?: boolean;
+  onToggleWatchlist?: (ticker: string) => void;
+}
+
+export function AlertCard({ alert, showWatchlistButton, isOnWatchlist, onToggleWatchlist }: AlertCardProps) {
+  const primaryTicker = alert.tickers[0];
+
   return (
     <article
       aria-label={alert.title}
@@ -37,6 +47,22 @@ export function AlertCard({ alert }: { alert: AlertSummary }) {
             <TickerChip key={ticker} symbol={ticker} className="px-2.5 py-1.5 text-xs" />
           ))}
         </div>
+        {showWatchlistButton && primaryTicker && onToggleWatchlist && (
+          <button
+            type="button"
+            onClick={() => onToggleWatchlist(primaryTicker)}
+            className={cn(
+              'inline-flex min-h-8 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition',
+              isOnWatchlist
+                ? 'border-green-500/30 bg-green-500/12 text-green-400'
+                : 'border-white/10 bg-white/6 text-text-secondary hover:bg-white/8',
+            )}
+            aria-label={isOnWatchlist ? `${primaryTicker} on watchlist` : `Add ${primaryTicker} to watchlist`}
+          >
+            {isOnWatchlist ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            {isOnWatchlist ? 'Watching' : 'Watch'}
+          </button>
+        )}
         <span className="ml-auto font-mono text-xs text-text-secondary">
           {formatRelativeTime(alert.time)}
         </span>

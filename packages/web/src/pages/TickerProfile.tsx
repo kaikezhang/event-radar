@@ -1,10 +1,11 @@
-import { Plus } from 'lucide-react';
+import { Plus, Check } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { AlertCard } from '../components/AlertCard.js';
 import { EmptyState } from '../components/EmptyState.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { StatCard } from '../components/StatCard.js';
 import { useTickerProfile } from '../hooks/useTickerProfile.js';
+import { useWatchlist } from '../hooks/useWatchlist.js';
 
 const SEVERITY_SCORE: Record<string, number> = {
   LOW: 1,
@@ -18,6 +19,18 @@ const SCORE_TO_SEVERITY = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export function TickerProfile() {
   const { symbol } = useParams();
   const { data, isLoading } = useTickerProfile(symbol);
+  const { isOnWatchlist, add, remove } = useWatchlist();
+
+  const upperSymbol = symbol?.toUpperCase() ?? '';
+  const onWatchlist = isOnWatchlist(upperSymbol);
+
+  const handleToggleWatchlist = () => {
+    if (onWatchlist) {
+      remove(upperSymbol);
+    } else {
+      add(upperSymbol);
+    }
+  };
 
   const totalEvents = data?.eventCount ?? 0;
   const averageSeverity = data
@@ -75,10 +88,16 @@ export function TickerProfile() {
 
           <button
             type="button"
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
+            onClick={handleToggleWatchlist}
+            className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
+              onWatchlist
+                ? 'border-green-500/30 bg-green-500/12 text-green-400'
+                : 'border-white/10 bg-white/6 text-text-primary hover:bg-white/8'
+            }`}
+            aria-label={onWatchlist ? `Remove ${data.symbol} from watchlist` : `Add ${data.symbol} to watchlist`}
           >
-            <Plus className="h-4 w-4" />
-            Watchlist
+            {onWatchlist ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {onWatchlist ? 'Watching' : 'Watchlist'}
           </button>
         </div>
       </section>

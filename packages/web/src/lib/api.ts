@@ -1,4 +1,4 @@
-import type { AlertSummary, EventDetailData, TickerProfileData } from '../types/index.js';
+import type { AlertSummary, EventDetailData, TickerProfileData, WatchlistItem } from '../types/index.js';
 
 const API_BASE = '/api';
 const API_KEY = 'er-dev-2026';
@@ -139,6 +139,60 @@ export async function getTickerProfile(symbol: string): Promise<TickerProfileDat
 export async function submitFeedback(_eventId: string, _helpful: boolean) {
   // TODO: integrate with real feedback API
   return { ok: true };
+}
+
+export async function searchEvents(q: string, limit = 20): Promise<AlertSummary[]> {
+  const data = await apiFetch(`/events/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  const events = data.data ?? [];
+  return events.map((e: Record<string, unknown>) => {
+    const meta = (e.metadata ?? {}) as Record<string, unknown>;
+    const tickers: string[] = (meta.tickers as string[]) ?? (meta.ticker ? [meta.ticker as string] : []);
+    return {
+      id: e.id as string,
+      severity: (e.severity as string) ?? 'MEDIUM',
+      source: mapSource((e.source as string) ?? 'unknown'),
+      title: (e.title as string) ?? '',
+      tickers,
+      summary: (e.summary as string) ?? '',
+      time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
+      saved: false,
+    };
+  });
+}
+
+export async function getWatchlist(): Promise<WatchlistItem[]> {
+  const data = await apiFetch('/watchlist');
+  return (data.data ?? []).map((w: Record<string, unknown>) => ({
+    id: w.id as string,
+    ticker: w.ticker as string,
+    addedAt: (w.addedAt as string) ?? (w.added_at as string) ?? new Date().toISOString(),
+    notes: (w.notes as string | null) ?? null,
+  }));
+}
+
+export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
+  const headers: Record<string, string> = { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' };
+  const res = await fetch(`${API_BASE}/watchlist`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ ticker: ticker.toUpperCase() }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function removeFromWatchlist(ticker: string): Promise<void> {
+  const headers: Record<string, string> = { 'X-Api-Key': API_KEY };
+  const res = await fetch(`${API_BASE}/watchlist/${ticker.toUpperCase()}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
+export async function getEventSources(): Promise<string[]> {
+  const data = await apiFetch('/events/sources');
+  return data.sources ?? [];
 }
 
 function mapSource(source: string): string {
