@@ -21,10 +21,11 @@ describe('AlertFilter', () => {
   beforeEach(() => {
     filter = new AlertFilter({
       watchlist: ['NVDA', 'TSLA', 'AAPL'],
-      socialMinUpvotes: 500,
-      socialMinComments: 200,
+      socialMinUpvotes: 1000,
+      socialMinComments: 500,
       tickerCooldownMinutes: 60,
       insiderMinValue: 1_000_000,
+      maxAgeMinutes: 120,
       enabled: true,
     });
   });
@@ -39,7 +40,7 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Rule 4: Dummy events', () => {
+  describe('Dummy events', () => {
     it('should skip events from dummy source', () => {
       const event = makeEvent({ source: 'dummy', type: 'heartbeat' });
       const result = filter.check(event);
@@ -54,26 +55,148 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Rule 6: Congress trades', () => {
-    it('should always pass congress trades', () => {
-      const event = makeEvent({ source: 'congress', type: 'congress-trade' });
-      const result = filter.check(event);
+  describe('Staleness — session-aware', () => {
+    it('should block stale events during market hours (>2h)', () => {
+      // Use a weekday during RTH for the nowFn
+      const rthNow = new Date('2026-03-11T14:00:00Z'); // ~10am ET on Wednesday
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => rthNow,
+      });
+      const event = makeEvent({
+        timestamp: new Date(rthNow.getTime() - 3 * 60 * 60_000), // 3h old
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('stale');
+    });
+
+    it('should pass fresh events during market hours', () => {
+      const rthNow = new Date('2026-03-11T14:00:00Z');
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => rthNow,
+      });
+      const event = makeEvent({
+        timestamp: new Date(rthNow.getTime() - 30 * 60_000), // 30min old
+      });
+      const result = staleFilter.check(event);
       expect(result.pass).toBe(true);
-      expect(result.enrichWithLLM).toBe(true);
-      expect(result.reason).toContain('congress');
+    });
+
+    it('should extend staleness window during CLOSED session (overnight/weekend)', () => {
+      // Saturday noon ET — CLOSED session, should use 16h window
+      const closedNow = new Date('2026-03-14T17:00:00Z'); // Saturday noon ET
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => closedNow,
+      });
+      // Event from 10h ago — should PASS during CLOSED (16h window)
+      const event = makeEvent({
+        timestamp: new Date(closedNow.getTime() - 10 * 60 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still block very old events during CLOSED session (>16h)', () => {
+      const closedNow = new Date('2026-03-14T17:00:00Z');
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => closedNow,
+      });
+      const event = makeEvent({
+        timestamp: new Date(closedNow.getTime() - 20 * 60 * 60_000), // 20h old
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('stale');
     });
   });
 
-  describe('Rule 8: Unusual options', () => {
-    it('should always pass unusual options activity', () => {
+  describe('Retrospective patterns', () => {
+    it('should block retrospective articles from any source', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: "Here's why AAPL stock dropped today",
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('retrospective');
+    });
+
+    it('should block retrospective articles even from primary sources', () => {
+      const event = makeEvent({
+        source: 'whitehouse',
+        title: "Here's why the market dropped today",
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('retrospective');
+    });
+
+    it('should block analyst opinion articles', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: 'Analyst says NVDA will soar to $200',
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('retrospective');
+    });
+  });
+
+  describe('Clickbait patterns', () => {
+    it('should block clickbait content', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: "Buy these stocks before it's too late",
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('clickbait');
+    });
+
+    it('should block "you need to know" patterns', () => {
+      const event = makeEvent({
+        source: 'reddit',
+        title: 'What you need to know about TSLA earnings',
+        metadata: { upvotes: 2000, comments: 600 },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('clickbait');
+    });
+  });
+
+  describe('Primary sources — no longer bypass filters', () => {
+    it('should pass congress trades through L1 (no bypass, but passes as default)', () => {
+      const event = makeEvent({ source: 'congress', type: 'congress-trade' });
+      const result = filter.check(event);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('L1 pass');
+      expect(result.enrichWithLLM).toBe(true);
+    });
+
+    it('should pass unusual options through L1', () => {
       const event = makeEvent({ source: 'unusual-options', type: 'unusual-options' });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
       expect(result.enrichWithLLM).toBe(true);
     });
+
+    it('should pass whitehouse events through L1', () => {
+      const event = makeEvent({ source: 'whitehouse', type: 'executive-order' });
+      const result = filter.check(event);
+      expect(result.pass).toBe(true);
+    });
   });
 
-  describe('Rule 7: Insider trades', () => {
+  describe('Insider trades', () => {
     it('should pass insider trades with value >= $1M', () => {
       const event = makeEvent({
         source: 'sec-edgar',
@@ -107,25 +230,46 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Rule 2: Social noise filter', () => {
-    it('should pass high-engagement reddit posts (upvotes)', () => {
+  describe('Social noise filter — updated thresholds', () => {
+    it('should pass high-engagement reddit posts (upvotes >= 1000)', () => {
+      const event = makeEvent({
+        source: 'reddit',
+        type: 'post',
+        metadata: { upvotes: 1200, comments: 50 },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should block reddit posts with old threshold (upvotes 600 < 1000)', () => {
       const event = makeEvent({
         source: 'reddit',
         type: 'post',
         metadata: { upvotes: 600, comments: 50 },
       });
       const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('social noise');
+    });
+
+    it('should pass high-engagement reddit posts (comments >= 500)', () => {
+      const event = makeEvent({
+        source: 'reddit',
+        type: 'post',
+        metadata: { upvotes: 100, comments: 600 },
+      });
+      const result = filter.check(event);
       expect(result.pass).toBe(true);
     });
 
-    it('should pass high-engagement reddit posts (comments)', () => {
+    it('should block reddit posts with old comment threshold (250 < 500)', () => {
       const event = makeEvent({
         source: 'reddit',
         type: 'post',
         metadata: { upvotes: 100, comments: 250 },
       });
       const result = filter.check(event);
-      expect(result.pass).toBe(true);
+      expect(result.pass).toBe(false);
     });
 
     it('should pass posts with high_engagement flag', () => {
@@ -171,20 +315,8 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Rule 3: Breaking news', () => {
-    it('should pass breaking news with explosive keyword', () => {
-      const event = makeEvent({
-        source: 'breaking-news',
-        type: 'breaking-news',
-        title: 'Market crash feared after tariff announcement',
-        body: 'Details about the crash...',
-      });
-      const result = filter.check(event);
-      expect(result.pass).toBe(true);
-      expect(result.reason).toContain('keyword');
-    });
-
-    it('should block breaking news with only a ticker (no keyword)', () => {
+  describe('Breaking news — no keyword filter (removed)', () => {
+    it('should pass breaking news through L1 without keyword requirement', () => {
       const event = makeEvent({
         source: 'breaking-news',
         type: 'breaking-news',
@@ -192,22 +324,24 @@ describe('AlertFilter', () => {
         metadata: { ticker: 'TSLA' },
       });
       const result = filter.check(event);
-      expect(result.pass).toBe(false);
+      // Now passes L1 — LLM Judge (L2) will decide relevance
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('L1 pass');
     });
 
-    it('should block breaking news without ticker or keyword', () => {
+    it('should pass breaking news without keywords through to L2', () => {
       const event = makeEvent({
         source: 'breaking-news',
         type: 'breaking-news',
-        title: 'Minor update on weather',
-        body: 'Nothing market-related',
+        title: 'Minor policy update from trade office',
+        body: 'Details about the update',
       });
       const result = filter.check(event);
-      expect(result.pass).toBe(false);
+      expect(result.pass).toBe(true);
     });
   });
 
-  describe('Rule 5: Calendar events', () => {
+  describe('Calendar events', () => {
     it('should pass earnings events for today', () => {
       const today = new Date().toISOString().split('T')[0];
       const event = makeEvent({
@@ -243,18 +377,9 @@ describe('AlertFilter', () => {
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('too far away');
     });
-
-    it('should pass FDA calendar events without date', () => {
-      const event = makeEvent({
-        source: 'fda',
-        type: 'fda-calendar',
-      });
-      const result = filter.check(event);
-      expect(result.pass).toBe(true);
-    });
   });
 
-  describe('Rule 1: Dedup cooldown', () => {
+  describe('Ticker cooldown', () => {
     it('should apply per-ticker cooldown', () => {
       const event1 = makeEvent({
         source: 'congress',
