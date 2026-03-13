@@ -5,106 +5,115 @@ import { safeCloseServer } from './helpers/test-db.js';
 import {
   DilutionScanner,
   detectDilutionType,
+  estimateAmount,
   mapDilutionSeverity,
   parseDilutionAtomFeed,
 } from '../scanners/dilution-scanner.js';
 
-const MOCK_S3_ATM_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>S-3 - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100001/0001193125-26-100001-index.htm"/>
-    <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100001 &lt;b&gt;Size:&lt;/b&gt; 210 KB
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) filed a shelf registration statement for an at-the-market offering program.
-    </summary>
-    <updated>2026-03-12T20:00:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="S-3"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100001</id>
-  </entry>
-</feed>`;
+interface AtomEntryOptions {
+  accessionNumber: string;
+  formType: string;
+  summaryLines: string[];
+  updatedAt?: string;
+}
 
-const MOCK_424B5_SECONDARY_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>424B5 - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100002/0001193125-26-100002-index.htm"/>
-    <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100002 &lt;b&gt;Size:&lt;/b&gt; 185 KB
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) filed a prospectus supplement relating to a secondary offering by selling stockholders.
-    </summary>
-    <updated>2026-03-12T20:01:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="424B5"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100002</id>
-  </entry>
-</feed>`;
+function buildAtomEntry({
+  accessionNumber,
+  formType,
+  summaryLines,
+  updatedAt = '2026-03-12T20:00:00-04:00',
+}: AtomEntryOptions): string {
+  const summaryHtml = [
+    `&lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; ${accessionNumber} &lt;b&gt;Size:&lt;/b&gt; 150 KB`,
+    ...summaryLines.map((line) => `&lt;br&gt;${line}`),
+  ].join('\n      ');
 
-const MOCK_424B2_CONVERTIBLE_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
-<feed xmlns="http://www.w3.org/2005/Atom">
+  return `
   <entry>
-    <title>424B2 - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100003/0001193125-26-100003-index.htm"/>
+    <title>${formType} - Example Corp (0000123456) (Filer)</title>
+    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/${accessionNumber.replace(/-/g, '')}/${accessionNumber}-index.htm"/>
     <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100003 &lt;b&gt;Size:&lt;/b&gt; 190 KB
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) filed a prospectus supplement for convertible senior notes with an initial conversion price of $12.50 per share.
+      ${summaryHtml}
     </summary>
-    <updated>2026-03-12T20:02:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="424B2"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100003</id>
-  </entry>
-</feed>`;
+    <updated>${updatedAt}</updated>
+    <category scheme="https://www.sec.gov/" label="form type" term="${formType}"/>
+    <id>urn:tag:sec.gov,2008:accession-number=${accessionNumber}</id>
+  </entry>`;
+}
 
-const MOCK_8K_PIPE_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
+function buildAtomFeed(...entries: string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8" ?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>8-K - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100004/0001193125-26-100004-index.htm"/>
-    <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100004 &lt;b&gt;Size:&lt;/b&gt; 130 KB
-      &lt;br&gt;Item 8.01: Other Events
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) announced a private investment in public equity (PIPE) financing.
-    </summary>
-    <updated>2026-03-12T20:03:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="8-K"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100004</id>
-  </entry>
+${entries.join('\n')}
 </feed>`;
+}
 
-const MOCK_8K_NON_801_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>8-K - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100005/0001193125-26-100005-index.htm"/>
-    <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100005 &lt;b&gt;Size:&lt;/b&gt; 120 KB
-      &lt;br&gt;Item 2.02: Results of Operations and Financial Condition
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) discussed private investment in public equity financing alternatives.
-    </summary>
-    <updated>2026-03-12T20:04:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="8-K"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100005</id>
-  </entry>
-</feed>`;
+const EMPTY_ATOM_FEED = buildAtomFeed();
 
-const MOCK_S3_PLAIN_ATOM = `<?xml version="1.0" encoding="UTF-8" ?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>S-3 - Example Corp (0000123456) (Filer)</title>
-    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/123456/000119312526100006/0001193125-26-100006-index.htm"/>
-    <summary type="html">
-      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0001193125-26-100006 &lt;b&gt;Size:&lt;/b&gt; 100 KB
-      &lt;br&gt;Summary: Example Corp (NASDAQ: EXMP) filed an update regarding general corporate matters.
-    </summary>
-    <updated>2026-03-12T20:05:00-04:00</updated>
-    <category scheme="https://www.sec.gov/" label="form type" term="S-3"/>
-    <id>urn:tag:sec.gov,2008:accession-number=0001193125-26-100006</id>
-  </entry>
-</feed>`;
+const ATM_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100001',
+  formType: 'S-3',
+  summaryLines: [
+    'Summary: Example Corp (NASDAQ: EXMP) filed an at-the-market offering program for up to $1.5 million of common stock.',
+  ],
+}));
+
+const SECONDARY_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100002',
+  formType: '424B5',
+  summaryLines: [
+    'Summary: Example Corp (NASDAQ: EXMP) filed a prospectus supplement relating to a secondary offering by selling stockholders.',
+  ],
+}));
+
+const CONVERTIBLE_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100003',
+  formType: '424B2',
+  summaryLines: [
+    'Summary: Example Corp (NASDAQ: EXMP) filed a prospectus supplement for convertible senior notes with a conversion price of $12.50 per share.',
+  ],
+}));
+
+const PIPE_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100004',
+  formType: '8-K',
+  summaryLines: [
+    'Item 8.01: Other Events',
+    'Summary: Example Corp (NASDAQ: EXMP) announced a private investment in public equity (PIPE) financing.',
+  ],
+}));
+
+const SHELF_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100005',
+  formType: 'S-3',
+  summaryLines: [
+    'Summary: Example Corp (NASDAQ: EXMP) filed a shelf registration statement covering future issuances.',
+  ],
+}));
+
+const NON_DILUTION_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100006',
+  formType: 'S-3',
+  summaryLines: [
+    'Summary: Example Corp (NASDAQ: EXMP) filed an update regarding general corporate matters.',
+  ],
+}));
+
+const NON_ITEM_801_CONVERTIBLE_ATOM = buildAtomFeed(buildAtomEntry({
+  accessionNumber: '0001193125-26-100007',
+  formType: '8-K',
+  summaryLines: [
+    'Item 2.02: Results of Operations and Financial Condition',
+    'Summary: Example Corp (NASDAQ: EXMP) disclosed convertible senior notes financing alternatives.',
+  ],
+}));
 
 describe('DilutionScanner', () => {
   const originalEnabled = process.env.DILUTION_SCANNER_ENABLED;
 
   afterEach(() => {
+    vi.restoreAllMocks();
+
     if (originalEnabled === undefined) {
       delete process.env.DILUTION_SCANNER_ENABLED;
     } else {
@@ -113,8 +122,8 @@ describe('DilutionScanner', () => {
   });
 
   describe('parseDilutionAtomFeed', () => {
-    it('parses SEC Atom entries with accession number, form type, and 8-K items', () => {
-      const entries = parseDilutionAtomFeed(MOCK_8K_PIPE_ATOM);
+    it('parses a minimal SEC Atom feed entry', () => {
+      const entries = parseDilutionAtomFeed(PIPE_ATOM);
 
       expect(entries).toHaveLength(1);
       expect(entries[0]).toMatchObject({
@@ -127,129 +136,111 @@ describe('DilutionScanner', () => {
     });
   });
 
-  describe('detection helpers', () => {
-    it('detects ATM offerings from S-3 filings', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_S3_ATM_ATOM);
-      expect(detectDilutionType(entry!)).toBe('ATM Offering');
-    });
-
-    it('detects secondary offerings from 424B filings', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_424B5_SECONDARY_ATOM);
-      expect(detectDilutionType(entry!)).toBe('Secondary Offering');
-    });
-
-    it('detects convertible notes from 424B filings', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_424B2_CONVERTIBLE_ATOM);
-      expect(detectDilutionType(entry!)).toBe('Convertible Notes');
-    });
-
-    it('detects PIPE financings from 8-K Item 8.01 filings', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_8K_PIPE_ATOM);
-      expect(detectDilutionType(entry!)).toBe('PIPE');
-    });
-
-    it('falls back to shelf registration for S-3 shelf filings without stronger keywords', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_S3_ATM_ATOM.replace('an at-the-market offering program', 'a shelf registration statement covering future issuances'));
-      expect(detectDilutionType(entry!)).toBe('Shelf Registration');
+  describe('detectDilutionType', () => {
+    it.each([
+      ['ATM Offering', ATM_ATOM],
+      ['Secondary Offering', SECONDARY_ATOM],
+      ['Convertible Notes', CONVERTIBLE_ATOM],
+      ['PIPE', PIPE_ATOM],
+      ['Shelf Registration', SHELF_ATOM],
+    ])('detects %s filings', (expectedType, xml) => {
+      const [entry] = parseDilutionAtomFeed(xml);
+      expect(detectDilutionType(entry!)).toBe(expectedType);
     });
 
     it('returns null for non-dilution filings', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_S3_PLAIN_ATOM);
+      const [entry] = parseDilutionAtomFeed(NON_DILUTION_ATOM);
       expect(detectDilutionType(entry!)).toBeNull();
     });
 
-    it('ignores 8-K dilution keywords outside Item 8.01', () => {
-      const [entry] = parseDilutionAtomFeed(MOCK_8K_NON_801_ATOM);
+    it('returns null for 8-K convertible language outside Item 8.01', () => {
+      const [entry] = parseDilutionAtomFeed(NON_ITEM_801_CONVERTIBLE_ATOM);
       expect(detectDilutionType(entry!)).toBeNull();
     });
   });
 
-  describe('severity helpers', () => {
-    it('maps dilution types to the expected severities', () => {
-      expect(mapDilutionSeverity('ATM Offering')).toBe('HIGH');
-      expect(mapDilutionSeverity('Secondary Offering')).toBe('HIGH');
-      expect(mapDilutionSeverity('Convertible Notes')).toBe('MEDIUM');
-      expect(mapDilutionSeverity('PIPE')).toBe('MEDIUM');
-      expect(mapDilutionSeverity('Shelf Registration')).toBe('LOW');
+  describe('mapDilutionSeverity', () => {
+    it.each([
+      ['ATM Offering', 'HIGH'],
+      ['Secondary Offering', 'HIGH'],
+      ['Convertible Notes', 'MEDIUM'],
+      ['PIPE', 'MEDIUM'],
+      ['Shelf Registration', 'LOW'],
+    ])('maps %s to %s', (dilutionType, severity) => {
+      expect(mapDilutionSeverity(dilutionType as Parameters<typeof mapDilutionSeverity>[0])).toBe(severity);
+    });
+  });
+
+  describe('estimateAmount', () => {
+    it.each([
+      ['Summary: registered up to $1.5 million of stock.', 1_500_000],
+      ['Summary: registered up to $2.3 billion of notes.', 2_300_000_000],
+      ['Summary: registered up to $750 thousand of warrants.', 750_000],
+      ['Summary: registered up to $125,000 of securities.', 125_000],
+      ['Summary: no amount disclosed.', undefined],
+    ])('parses amount from %p', (summary, expectedAmount) => {
+      expect(estimateAmount(summary)).toBe(expectedAmount);
     });
   });
 
   describe('scan', () => {
-    it('builds bearish dilution events from matching SEC filings with SEC-compliant headers', async () => {
+    it('builds dilution events on first scan and deduplicates the same filings on the second scan', async () => {
       const scanner = new DilutionScanner(new InMemoryEventBus());
-      const fetchFn = vi.fn<typeof fetch>()
-        .mockResolvedValueOnce(new Response(MOCK_S3_ATM_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response(MOCK_424B2_CONVERTIBLE_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response(MOCK_424B5_SECONDARY_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response(MOCK_8K_PIPE_ATOM, { status: 200 }));
+      scanner.fetchFn = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(ATM_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(CONVERTIBLE_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(SECONDARY_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(PIPE_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(ATM_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(CONVERTIBLE_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(SECONDARY_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(PIPE_ATOM, { status: 200 }));
 
-      scanner.fetchFn = fetchFn;
+      const first = await scanner.scan();
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
 
-      const result = await scanner.scan();
-
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-
-      expect(fetchFn).toHaveBeenCalledTimes(4);
-      expect(fetchFn.mock.calls[0]?.[1]).toMatchObject({
-        headers: expect.objectContaining({
-          'User-Agent': 'EventRadar/1.0 (contact@example.com)',
-          Accept: 'application/atom+xml, application/xml, text/xml',
-        }),
-      });
-
-      expect(result.value).toHaveLength(4);
-      expect(result.value[0]).toMatchObject({
+      expect(first.value).toHaveLength(4);
+      expect(first.value[0]).toMatchObject({
         source: 'dilution-monitor',
         type: 'dilution',
         title: 'EXMP — ATM Offering detected',
       });
-      expect(result.value[0]?.metadata).toMatchObject({
+      expect(first.value[0]?.metadata).toMatchObject({
         dilution_type: 'ATM Offering',
         severity: 'HIGH',
         direction: 'bearish',
         form_type: 'S-3',
         ticker: 'EXMP',
+        estimated_amount: 1_500_000,
       });
+
+      const second = await scanner.scan();
+      expect(second.ok).toBe(true);
+      if (!second.ok) return;
+
+      expect(second.value).toEqual([]);
     });
 
-    it('filters out filings that do not match dilution patterns', async () => {
+    it('continues scanning other feeds when one SEC feed returns an HTTP error', async () => {
       const scanner = new DilutionScanner(new InMemoryEventBus());
       scanner.fetchFn = vi.fn<typeof fetch>()
-        .mockResolvedValueOnce(new Response(MOCK_S3_PLAIN_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response(MOCK_8K_NON_801_ATOM, { status: 200 }));
+        .mockResolvedValueOnce(new Response('rate limited', { status: 503 }))
+        .mockResolvedValueOnce(new Response(CONVERTIBLE_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(SECONDARY_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(PIPE_ATOM, { status: 200 }));
 
       const result = await scanner.scan();
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value).toEqual([]);
-    });
-
-    it('deduplicates filings across scans by accession number and dilution type', async () => {
-      const scanner = new DilutionScanner(new InMemoryEventBus());
-      scanner.fetchFn = vi.fn<typeof fetch>()
-        .mockResolvedValueOnce(new Response(MOCK_S3_ATM_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response(MOCK_S3_ATM_ATOM, { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }))
-        .mockResolvedValueOnce(new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }));
-
-      const first = await scanner.scan();
-      expect(first.ok).toBe(true);
-      if (!first.ok) return;
-      expect(first.value).toHaveLength(1);
-
-      const second = await scanner.scan();
-      expect(second.ok).toBe(true);
-      if (!second.ok) return;
-      expect(second.value).toEqual([]);
+      expect(result.value).toHaveLength(3);
+      expect(result.value.map((event) => event.metadata?.dilution_type)).toEqual([
+        'Convertible Notes',
+        'Secondary Offering',
+        'PIPE',
+      ]);
     });
   });
 
@@ -266,6 +257,30 @@ describe('DilutionScanner', () => {
       await enabledCtx.server.ready();
       expect(enabledCtx.registry.getById('dilution-monitor')).toBeDefined();
       await safeCloseServer(enabledCtx.server);
+    });
+  });
+
+  describe('request headers', () => {
+    it('uses SEC-compliant Atom headers for each feed request', async () => {
+      const scanner = new DilutionScanner(new InMemoryEventBus());
+      const fetchFn = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(ATM_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(EMPTY_ATOM_FEED, { status: 200 }))
+        .mockResolvedValueOnce(new Response(EMPTY_ATOM_FEED, { status: 200 }))
+        .mockResolvedValueOnce(new Response(EMPTY_ATOM_FEED, { status: 200 }));
+
+      scanner.fetchFn = fetchFn;
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      expect(fetchFn).toHaveBeenCalledTimes(4);
+      expect(fetchFn.mock.calls[0]?.[1]).toMatchObject({
+        headers: expect.objectContaining({
+          'User-Agent': 'EventRadar/1.0 (contact@example.com)',
+          Accept: 'application/atom+xml, application/xml, text/xml',
+        }),
+      });
     });
   });
 });

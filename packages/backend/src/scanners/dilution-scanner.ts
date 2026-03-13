@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   BaseScanner,
   err,
@@ -9,11 +8,14 @@ import {
 } from '@event-radar/shared';
 import type { EdgarAtomEntry } from './sec-edgar-scanner.js';
 import { parseEdgarAtomFeed } from './sec-edgar-scanner.js';
+import {
+  deterministicScannerUuid,
+  SEC_USER_AGENT,
+  SEC_XML_ACCEPT,
+} from './sec-edgar-feed-utils.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 60_000;
-const SEC_USER_AGENT = 'EventRadar/1.0 (contact@example.com)';
-const SEC_XML_ACCEPT = 'application/atom+xml, application/xml, text/xml';
 
 const SEC_ATOM_FEEDS = [
   'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=S-3&dateb=&owner=include&count=40&search_text=&start=0&output=atom',
@@ -60,17 +62,7 @@ export type DilutionType =
   | 'PIPE';
 
 function accessionToUuid(accessionNumber: string, dilutionType: DilutionType): string {
-  const hex = createHash('sha256')
-    .update(`dilution:${accessionNumber}:${dilutionType}`)
-    .digest('hex');
-
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    `5${hex.slice(13, 16)}`,
-    `a${hex.slice(17, 20)}`,
-    hex.slice(20, 32),
-  ].join('-');
+  return deterministicScannerUuid(`dilution:${accessionNumber}:${dilutionType}`);
 }
 
 function includesPattern(text: string, patterns: readonly RegExp[]): boolean {
@@ -106,7 +98,7 @@ function buildBody(entry: EdgarAtomEntry, dilutionType: DilutionType): string {
   return parts.join('\n');
 }
 
-function estimateAmount(summaryText: string): number | undefined {
+export function estimateAmount(summaryText: string): number | undefined {
   const match = /\$([\d,.]+)\s*(million|billion|thousand)?/i.exec(summaryText);
   if (!match) return undefined;
 
@@ -132,9 +124,13 @@ export function detectDilutionType(entry: EdgarAtomEntry): DilutionType | null {
   }
 
   if (includesPattern(detectionText, CONVERTIBLE_PATTERNS)) {
-    return entry.formType === '8-K' && !isItem801Filing(entry)
-      ? null
-      : 'Convertible Notes';
+    // Convertible note mentions in 8-Ks are only treated as dilution signals when
+    // management surfaces them under Item 8.01 "Other Events".
+    if (entry.formType === '8-K' && !isItem801Filing(entry)) {
+      return null;
+    }
+
+    return 'Convertible Notes';
   }
 
   if (includesPattern(detectionText, SECONDARY_PATTERNS)) {
@@ -164,6 +160,8 @@ export function mapDilutionSeverity(
       return 'MEDIUM';
     case 'Shelf Registration':
       return 'LOW';
+    default:
+      return 'MEDIUM';
   }
 }
 
@@ -186,7 +184,20 @@ export class DilutionScanner extends BaseScanner {
       const events: RawEvent[] = [];
 
       for (const url of SEC_ATOM_FEEDS) {
-        const entries = await this.fetchFeed(url);
+        let entries: EdgarAtomEntry[];
+        try {
+          const feedResult = await this.fetchFeed(url);
+          if (!feedResult.ok) {
+            console.log(`[dilution-monitor] ${url} failed: ${feedResult.error.message}`);
+            continue;
+          }
+          entries = feedResult.value;
+        } catch (feedError) {
+          const message =
+            feedError instanceof Error ? feedError.message : String(feedError);
+          console.log(`[dilution-monitor] ${url} failed unexpectedly: ${message}`);
+          continue;
+        }
 
         for (const entry of entries) {
           const dilutionType = detectDilutionType(entry);
@@ -206,20 +217,24 @@ export class DilutionScanner extends BaseScanner {
     }
   }
 
-  private async fetchFeed(url: string): Promise<EdgarAtomEntry[]> {
-    const response = await this.fetchFn(url, {
-      headers: {
-        'User-Agent': SEC_USER_AGENT,
-        Accept: SEC_XML_ACCEPT,
-      },
-    });
+  private async fetchFeed(url: string): Promise<Result<EdgarAtomEntry[], Error>> {
+    try {
+      const response = await this.fetchFn(url, {
+        headers: {
+          'User-Agent': SEC_USER_AGENT,
+          Accept: SEC_XML_ACCEPT,
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`SEC dilution feed returned HTTP ${response.status}`);
+      if (!response.ok) {
+        return err(new Error(`SEC dilution feed returned HTTP ${response.status}`));
+      }
+
+      const xml = await response.text();
+      return ok(parseDilutionAtomFeed(xml));
+    } catch (error) {
+      return err(error instanceof Error ? error : new Error(String(error)));
     }
-
-    const xml = await response.text();
-    return parseDilutionAtomFeed(xml);
   }
 
   private toEvent(entry: EdgarAtomEntry, dilutionType: DilutionType): RawEvent {
