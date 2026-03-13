@@ -190,7 +190,7 @@ async function queryDeliveryFeed(
   const countQuery = sql`
     SELECT COUNT(*)::int AS total
     FROM pipeline_audit pa
-    INNER JOIN events e ON e.id::text = pa.event_id
+    INNER JOIN events e ON e.source_event_id = pa.event_id
     WHERE ${whereClause}
   `;
   const dataQuery = sql`
@@ -210,7 +210,7 @@ async function queryDeliveryFeed(
       e.received_at,
       e.created_at
     FROM pipeline_audit pa
-    INNER JOIN events e ON e.id::text = pa.event_id
+    INNER JOIN events e ON e.source_event_id = pa.event_id
     WHERE ${whereClause}
     ORDER BY pa.created_at DESC, pa.id DESC
     LIMIT ${limit + 1}

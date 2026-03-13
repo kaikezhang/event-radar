@@ -9,6 +9,10 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': 'http://localhost:3001',
+      '/ws': {
+        target: 'http://localhost:3001',
+        ws: true,
+      },
     },
   },
   build: {

@@ -130,13 +130,13 @@ async function queryJudgeRows(
       pa.outcome AS audit_outcome,
       pa.stopped_at AS audit_stopped_at,
       pa.reason AS audit_reason,
-      e.id::text AS event_id,
+      pa.event_id AS event_id,
       e.source AS event_source,
       e.title AS event_title,
       e.severity AS event_severity,
       e.metadata AS event_metadata
     FROM pipeline_audit pa
-    LEFT JOIN events e ON e.id::text = pa.event_id
+    LEFT JOIN events e ON e.source_event_id = pa.event_id
     WHERE ${whereClause}
     ORDER BY pa.created_at DESC, pa.id DESC
     ${limitClause}

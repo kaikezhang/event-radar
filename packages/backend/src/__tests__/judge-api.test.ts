@@ -60,10 +60,9 @@ async function seedJudgeAudit(input: {
   };
 }): Promise<string> {
   const ticker = input.ticker ?? 'AAPL';
-  const eventId = await storeEvent(sharedDb, {
-    event: makeEvent({
-      source: input.source,
-      title: input.title,
+  const rawEvent = makeEvent({
+    source: input.source,
+    title: input.title,
       body: `${input.title} body`,
       timestamp: new Date(input.eventTime),
       metadata: {
@@ -80,7 +79,9 @@ async function seedJudgeAudit(input: {
           : {}),
         ...(input.llmEnrichment ? { llm_enrichment: input.llmEnrichment } : {}),
       },
-    }),
+  });
+  const eventId = await storeEvent(sharedDb, {
+    event: rawEvent,
     severity: input.severity,
   });
 
@@ -105,7 +106,7 @@ async function seedJudgeAudit(input: {
       reason_category,
       created_at
     ) VALUES (
-      ${eventId},
+      ${rawEvent.id},
       ${input.source},
       ${input.title},
       ${input.severity},
@@ -120,7 +121,7 @@ async function seedJudgeAudit(input: {
     )
   `);
 
-  return eventId;
+  return rawEvent.id;
 }
 
 describe('judge routes', () => {
