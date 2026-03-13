@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getFeed } from '../lib/api.js';
 import type { AlertSummary } from '../types/index.js';
@@ -20,9 +20,16 @@ interface UseAlertsResult {
 
 function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertSummary[] {
   const merged = [...incoming, ...existing];
-  return merged.filter(
-    (alert, index) => merged.findIndex((candidate) => candidate.id === alert.id) === index,
-  );
+  const seen = new Set<string>();
+
+  return merged.filter((alert) => {
+    if (seen.has(alert.id)) {
+      return false;
+    }
+
+    seen.add(alert.id);
+    return true;
+  });
 }
 
 export function useAlerts(limit = 50): UseAlertsResult {
@@ -35,16 +42,22 @@ export function useAlerts(limit = 50): UseAlertsResult {
   const [visibleAlerts, setVisibleAlerts] = useState<AlertSummary[]>([]);
   const [pendingAlerts, setPendingAlerts] = useState<AlertSummary[]>([]);
   const [isAtTop, setIsAtTop] = useState(true);
+  const seenAlertIdsRef = useRef<Set<string>>(new Set());
   const { playForSeverity } = useAlertSound();
+
+  const rememberAlerts = (alerts: AlertSummary[]) => {
+    for (const alert of alerts) {
+      seenAlertIdsRef.current.add(alert.id);
+    }
+  };
+
   const { status: connectionStatus } = useWebSocket<AlertSummary>({
     onEvent: (alert) => {
-      const alreadyVisible = visibleAlerts.some((candidate) => candidate.id === alert.id);
-      const alreadyPending = pendingAlerts.some((candidate) => candidate.id === alert.id);
-
-      if (alreadyVisible || alreadyPending) {
+      if (seenAlertIdsRef.current.has(alert.id)) {
         return;
       }
 
+      seenAlertIdsRef.current.add(alert.id);
       void playForSeverity(alert.severity);
 
       if (isAtTop) {
@@ -67,11 +80,18 @@ export function useAlerts(limit = 50): UseAlertsResult {
   }, []);
 
   useEffect(() => {
+    seenAlertIdsRef.current = new Set(
+      [...visibleAlerts, ...pendingAlerts].map((alert) => alert.id),
+    );
+  }, [pendingAlerts, visibleAlerts]);
+
+  useEffect(() => {
     if (!query.data?.alerts) {
       return;
     }
 
     if (visibleAlerts.length === 0) {
+      rememberAlerts(query.data.alerts);
       setVisibleAlerts((current) => mergeAlerts(query.data.alerts, current));
       return;
     }
@@ -80,6 +100,7 @@ export function useAlerts(limit = 50): UseAlertsResult {
     const incoming = query.data.alerts.filter((alert) => !currentIds.has(alert.id));
 
     if (incoming.length > 0) {
+      rememberAlerts(incoming);
       if (isAtTop) {
         setVisibleAlerts((current) => mergeAlerts(incoming, current));
       } else {

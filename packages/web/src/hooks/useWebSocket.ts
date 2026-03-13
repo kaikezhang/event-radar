@@ -12,6 +12,8 @@ function buildWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = new URL(`${protocol}//${window.location.host}/ws/events`);
   if (API_KEY) {
+    // Browser WebSocket upgrades cannot send custom auth headers, so the dev/internal
+    // API key has to ride in the query string for now.
     url.searchParams.set('apiKey', API_KEY);
   }
   return url.toString();
@@ -56,6 +58,11 @@ export function useWebSocket<TEvent = unknown>(
         } catch {
           // Ignore malformed messages and keep the connection alive.
         }
+      });
+
+      socket.addEventListener('error', () => {
+        // Browsers emit `error` before `close` on failed sockets. The `close` handler owns
+        // reconnect scheduling; this listener prevents the error from being unhandled.
       });
 
       socket.addEventListener('close', () => {

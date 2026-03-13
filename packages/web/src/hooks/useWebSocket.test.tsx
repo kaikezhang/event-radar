@@ -29,6 +29,10 @@ class MockWebSocket {
     this.listeners.get(type)?.delete(listener);
   }
 
+  listenerCount(type: string): number {
+    return this.listeners.get(type)?.size ?? 0;
+  }
+
   close(): void {
     this.readyState = MockWebSocket.CLOSED;
   }
@@ -47,6 +51,10 @@ class MockWebSocket {
   emitClose(): void {
     this.readyState = MockWebSocket.CLOSED;
     this.listeners.get('close')?.forEach((listener) => listener());
+  }
+
+  emitError(payload?: unknown): void {
+    this.listeners.get('error')?.forEach((listener) => listener(payload));
   }
 }
 
@@ -114,5 +122,11 @@ describe('useWebSocket', () => {
       vi.advanceTimersByTime(2000);
     });
     expect(MockWebSocket.instances).toHaveLength(3);
+  });
+
+  it('registers an error listener on the websocket connection', () => {
+    renderHook(() => useWebSocket());
+
+    expect(MockWebSocket.instances[0]?.listenerCount('error')).toBe(1);
   });
 });

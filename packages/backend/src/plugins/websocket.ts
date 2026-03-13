@@ -174,6 +174,8 @@ export async function registerWebsocketPlugin(
     '/ws/events',
     { websocket: true },
     async (socket, request) => {
+      // Browser WebSocket upgrades cannot attach custom headers, so authenticated clients
+      // currently send the API key in the query string. Keep this limited to dev/internal use.
       const queryApiKey = typeof request.query.apiKey === 'string'
         ? request.query.apiKey
         : undefined;

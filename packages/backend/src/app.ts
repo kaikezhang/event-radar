@@ -393,8 +393,10 @@ export function buildApp(options?: {
     }
 
     // Step 6: Store to DB (if available)
+    let eventId: string | undefined;
+
     if (db) {
-      const eventId = await storeEvent(db, { event, severity: result.severity });
+      eventId = await storeEvent(db, { event, severity: result.severity });
 
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
@@ -420,35 +422,21 @@ export function buildApp(options?: {
       if (outcomeTracker) {
         await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
       }
-
-      await eventBus.publishTopic?.(
-        'event:classified',
-        toLiveFeedEvent({
-          id: eventId,
-          source: event.source,
-          title: event.title,
-          summary: event.body,
-          severity: result.severity,
-          metadata: event.metadata,
-          time: event.timestamp,
-          llmReason: llmResult?.ok ? llmResult.value.reasoning : undefined,
-        }),
-      );
-    } else {
-      await eventBus.publishTopic?.(
-        'event:classified',
-        toLiveFeedEvent({
-          id: event.id,
-          source: event.source,
-          title: event.title,
-          summary: event.body,
-          severity: result.severity,
-          metadata: event.metadata,
-          time: event.timestamp,
-          llmReason: llmResult?.ok ? llmResult.value.reasoning : undefined,
-        }),
-      );
     }
+
+    await eventBus.publishTopic?.(
+      'event:classified',
+      toLiveFeedEvent({
+        id: eventId ?? event.id,
+        source: event.source,
+        title: event.title,
+        summary: event.body,
+        severity: result.severity,
+        metadata: event.metadata,
+        time: event.timestamp,
+        llmReason: llmResult?.ok ? llmResult.value.reasoning : undefined,
+      }),
+    );
 
     pipelineFunnelTotal.inc({ stage: 'stored' });
 
