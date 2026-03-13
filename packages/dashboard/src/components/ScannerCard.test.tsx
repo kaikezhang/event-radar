@@ -29,6 +29,7 @@ describe('ScannerCard', () => {
     );
 
     expect(screen.queryByText('Recent Events')).toBeNull();
+    expect(screen.queryByText(/1h rate:/i)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: /sec-edgar/i }));
 
@@ -37,6 +38,7 @@ describe('ScannerCard', () => {
 
   it('renders recent scanner events when expanded', async () => {
     const user = userEvent.setup();
+    const now = Date.now();
     useScannerEventsMock.mockReturnValue({
       data: {
         scanner: 'sec-edgar',
@@ -48,7 +50,7 @@ describe('ScannerCard', () => {
             summary: 'Material agreement filed',
             severity: 'HIGH',
             tickers: ['NVDA'],
-            received_at: '2026-03-13T12:00:00.000Z',
+            received_at: new Date(now - 15 * 60_000).toISOString(),
           },
           {
             id: 'evt-2',
@@ -56,7 +58,7 @@ describe('ScannerCard', () => {
             summary: 'Second filing summary',
             severity: 'MEDIUM',
             tickers: ['AMD'],
-            received_at: '2026-03-13T11:00:00.000Z',
+            received_at: new Date(now - 30 * 60_000).toISOString(),
           },
         ],
       },
@@ -75,6 +77,7 @@ describe('ScannerCard', () => {
     expect(screen.getByText('8-K filed')).toBeTruthy();
     expect(screen.getByText('Follow-up filing')).toBeTruthy();
     expect(screen.getByText('NVDA')).toBeTruthy();
+    expect(screen.getByText('1h rate: 2/hr')).toBeTruthy();
   });
 
   it('shows scanner error details and cadence metadata in the expanded state', async () => {

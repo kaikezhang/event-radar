@@ -31,6 +31,7 @@ export function ScannerCard({ scanner }: ScannerCardProps) {
   const events = data?.events ?? [];
   const oneHourAgo = Date.now() - 3_600_000;
   const hourlyRate = `${events.filter((event) => new Date(event.received_at).getTime() >= oneHourAgo).length}/hr`;
+  const showHourlyRate = expanded && data != null;
 
   return (
     <Card
@@ -64,7 +65,9 @@ export function ScannerCard({ scanner }: ScannerCardProps) {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={scanner.status} />
               <span className="text-xs text-radar-text-muted">Last: {scanner.last_scan}</span>
-              <span className="text-xs text-radar-text-muted">1h rate: {hourlyRate}</span>
+              {showHourlyRate ? (
+                <span className="text-xs text-radar-text-muted">1h rate: {hourlyRate}</span>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-2">

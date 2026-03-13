@@ -50,6 +50,7 @@ export function useScannerEvents(name: string, enabled = true) {
     queryKey: ['scanner-events', name],
     queryFn: () => fetchScannerEvents(name),
     enabled: enabled && name.length > 0,
+    refetchInterval: 15_000,
   });
 }
 
@@ -59,5 +60,6 @@ export function useDeliveryFeed(limit = 20) {
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) => fetchDeliveryFeed({ limit, before: pageParam }),
     getNextPageParam: (lastPage) => lastPage.cursor ?? undefined,
+    refetchInterval: 15_000,
   });
 }

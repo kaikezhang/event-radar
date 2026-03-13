@@ -282,6 +282,7 @@ export function buildApp(options?: {
         '/api/v1/dashboard',
         '/api/v1/feed',
         '/api/v1/delivery/feed',
+        '/api/v1/scanners/:name/events',
         '/api/v1/audit',
         '/api/v1/audit/stats',
         '/api/health/delivery-stats',
