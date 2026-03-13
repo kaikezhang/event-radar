@@ -8,6 +8,7 @@ import {
   describeHaltReason,
   isLuldHaltCode,
   mapHaltReasonSeverity,
+  parseFeedTimestamp,
   parseNasdaqTradeHaltsJson,
   parseNasdaqTradeHaltsRss,
   type NasdaqTradeHaltRecord,
@@ -106,16 +107,25 @@ const JSON_FEED = {
   },
 };
 
-describe('HaltScanner', () => {
-  const originalHaltEnabled = process.env.HALT_SCANNER_ENABLED;
+const MALFORMED_TIMESTAMP_FEED = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:ndaq="http://www.nasdaqtrader.com/">
+  <channel>
+    <item>
+      <title>BADT</title>
+      <pubDate>Thu, 12 Mar 2026 15:15:00 GMT</pubDate>
+      <ndaq:HaltDate>2026-03-12</ndaq:HaltDate>
+      <ndaq:HaltTime>10:15:00.000</ndaq:HaltTime>
+      <ndaq:IssueSymbol>BADT</ndaq:IssueSymbol>
+      <ndaq:IssueName>Broken Timestamp Corp</ndaq:IssueName>
+      <ndaq:Market>NASDAQ</ndaq:Market>
+      <ndaq:ReasonCode>T1</ndaq:ReasonCode>
+    </item>
+  </channel>
+</rss>`;
 
+describe('HaltScanner', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    if (originalHaltEnabled === undefined) {
-      delete process.env.HALT_SCANNER_ENABLED;
-    } else {
-      process.env.HALT_SCANNER_ENABLED = originalHaltEnabled;
-    }
   });
 
   describe('parseNasdaqTradeHaltsRss', () => {
@@ -217,6 +227,70 @@ describe('HaltScanner', () => {
         }),
       ]);
     });
+
+    it('accepts flat array payloads', () => {
+      const records = parseNasdaqTradeHaltsJson(JSON_FEED.data.rows);
+
+      expect(records).toHaveLength(1);
+      expect(records[0]?.ticker).toBe('LMNO');
+    });
+
+    it('returns an empty list for null payloads', () => {
+      expect(parseNasdaqTradeHaltsJson(null)).toEqual([]);
+    });
+
+    it('parses deeply nested candidate keys without throwing', () => {
+      const payload = {
+        data: {
+          results: {
+            halts: JSON_FEED.data.rows,
+          },
+        },
+      };
+
+      const records = parseNasdaqTradeHaltsJson(payload);
+
+      expect(records).toHaveLength(1);
+      expect(records[0]?.ticker).toBe('LMNO');
+    });
+
+    it('ignores cyclic payloads instead of recursing forever', () => {
+      const payload: Record<string, unknown> = {};
+      payload['data'] = payload;
+
+      expect(parseNasdaqTradeHaltsJson(payload)).toEqual([]);
+    });
+  });
+
+  describe('parseFeedTimestamp', () => {
+    it('converts Eastern Time timestamps to UTC during DST', () => {
+      const timestamp = parseFeedTimestamp('03/12/2026', '09:35:00');
+
+      expect(timestamp?.toISOString()).toBe('2026-03-12T13:35:00.000Z');
+    });
+
+    it('converts Eastern Time timestamps to UTC during standard time', () => {
+      const timestamp = parseFeedTimestamp('01/12/2026', '09:35:00');
+
+      expect(timestamp?.toISOString()).toBe('2026-01-12T14:35:00.000Z');
+    });
+
+    it('rejects empty or malformed date strings', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(parseFeedTimestamp('', '09:35:00')).toBeNull();
+      expect(parseFeedTimestamp('2026-03-12', '09:35:00')).toBeNull();
+      expect(parseFeedTimestamp('03/12', '09:35:00')).toBeNull();
+      expect(warnSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('rejects malformed time strings', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(parseFeedTimestamp('03/12/2026', '9am')).toBeNull();
+      expect(parseFeedTimestamp('03/12/2026', '25:00:00')).toBeNull();
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('scan', () => {
@@ -315,6 +389,22 @@ describe('HaltScanner', () => {
       expect(result.value).toHaveLength(1);
       expect(result.value[0]?.metadata?.['ticker']).toBe('LMNO');
       expect(result.value[0]?.metadata?.['severity']).toBe('CRITICAL');
+    });
+
+    it('skips malformed timestamps and logs a warning instead of using current time', async () => {
+      const scanner = new HaltScanner(new InMemoryEventBus());
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      scanner.fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(MALFORMED_TIMESTAMP_FEED, { status: 200 }),
+      );
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toEqual([]);
+      expect(warnSpy).toHaveBeenCalled();
     });
 
     it('returns an error when all feed fetch attempts fail', async () => {

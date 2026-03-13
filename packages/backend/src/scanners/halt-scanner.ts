@@ -40,6 +40,28 @@ const HALT_REASON_DESCRIPTIONS: Record<string, string> = {
   H4: 'Non-compliance',
 };
 
+const EASTERN_TIME_ZONE = 'America/New_York';
+const FEED_DATE_PATTERN = /^(?<month>\d{1,2})\/(?<day>\d{1,2})\/(?<year>\d{4})$/;
+const FEED_TIME_PATTERN = /^(?<hour>\d{1,2}):(?<minute>\d{2})(?::(?<second>\d{2}))?$/;
+const EASTERN_OFFSET_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: EASTERN_TIME_ZONE,
+  timeZoneName: 'shortOffset',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+const EASTERN_PARTS_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: EASTERN_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
 export interface NasdaqTradeHaltRecord {
   ticker: string;
   issueName: string | null;
@@ -66,8 +88,9 @@ function extractAllItemBlocks(xml: string): string[] {
 }
 
 function extractTag(xml: string, tag: string): string {
+  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const cdataRegex = new RegExp(
-    `<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`,
+    `<${escapedTag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${escapedTag}>`,
     'i',
   );
   const cdataMatch = cdataRegex.exec(xml);
@@ -75,7 +98,10 @@ function extractTag(xml: string, tag: string): string {
     return cdataMatch[1]?.trim() ?? '';
   }
 
-  const plainRegex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i');
+  const plainRegex = new RegExp(
+    `<${escapedTag}[^>]*>([\\s\\S]*?)</${escapedTag}>`,
+    'i',
+  );
   const plainMatch = plainRegex.exec(xml);
   if (plainMatch) {
     return plainMatch[1]?.trim() ?? '';
@@ -157,7 +183,11 @@ export function parseNasdaqTradeHaltsRss(xml: string): NasdaqTradeHaltRecord[] {
   return records;
 }
 
-function extractJsonRows(payload: unknown): unknown[] {
+function extractJsonRows(
+  payload: unknown,
+  visited = new WeakSet<object>(),
+  depth = 0,
+): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -165,6 +195,12 @@ function extractJsonRows(payload: unknown): unknown[] {
   if (!payload || typeof payload !== 'object') {
     return [];
   }
+
+  if (depth > 10 || visited.has(payload)) {
+    return [];
+  }
+
+  visited.add(payload);
 
   const record = payload as Record<string, unknown>;
   const candidateKeys = ['rows', 'data', 'items', 'results', 'halts'];
@@ -175,7 +211,7 @@ function extractJsonRows(payload: unknown): unknown[] {
       return value;
     }
     if (value && typeof value === 'object') {
-      const nested = extractJsonRows(value);
+      const nested = extractJsonRows(value, visited, depth + 1);
       if (nested.length > 0) {
         return nested;
       }
@@ -214,15 +250,130 @@ export function buildHaltDedupKey(record: NasdaqTradeHaltRecord): string {
   return `${record.ticker}|${record.haltDate} ${record.haltTime}|${record.reasonCode}`;
 }
 
-function parseFeedTimestamp(date: string, time: string): Date {
-  const dateParts = date.split('/');
-  if (dateParts.length !== 3) {
-    return new Date();
+function getEasternOffsetMinutes(date: Date): number | null {
+  const timeZoneName = EASTERN_OFFSET_FORMATTER
+    .formatToParts(date)
+    .find((part) => part.type === 'timeZoneName')
+    ?.value;
+  const match = /^GMT(?:(?<sign>[+-])(?<hours>\d{1,2})(?::(?<minutes>\d{2}))?)?$/.exec(
+    timeZoneName ?? '',
+  );
+
+  if (!match?.groups) {
+    return null;
   }
 
-  const [month, day, year] = dateParts;
-  const normalizedTime = normalizeTime(time) ?? '00:00:00';
-  return new Date(`${year}-${month}-${day}T${normalizedTime}Z`);
+  if (!match.groups['sign']) {
+    return 0;
+  }
+
+  const hours = Number(match.groups['hours'] ?? '0');
+  const minutes = Number(match.groups['minutes'] ?? '0');
+  const direction = match.groups['sign'] === '+' ? 1 : -1;
+  return direction * (hours * 60 + minutes);
+}
+
+function easternPartsMatch(date: Date, expected: {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}): boolean {
+  const parts = EASTERN_PARTS_FORMATTER.formatToParts(date);
+  const lookup: Record<string, string> = {};
+
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      lookup[part.type] = part.value;
+    }
+  }
+
+  return (
+    lookup['year'] === String(expected.year)
+    && lookup['month'] === String(expected.month).padStart(2, '0')
+    && lookup['day'] === String(expected.day).padStart(2, '0')
+    && lookup['hour'] === String(expected.hour).padStart(2, '0')
+    && lookup['minute'] === String(expected.minute).padStart(2, '0')
+    && lookup['second'] === String(expected.second).padStart(2, '0')
+  );
+}
+
+export function parseFeedTimestamp(date: string, time: string): Date | null {
+  const normalizedDate = normalizeString(date) ?? '';
+  const normalizedTime = normalizeTime(time) ?? '';
+  const dateMatch = FEED_DATE_PATTERN.exec(normalizedDate);
+  const timeMatch = FEED_TIME_PATTERN.exec(normalizedTime);
+
+  if (!dateMatch?.groups || !timeMatch?.groups) {
+    console.warn(
+      `[trading-halt] Ignoring malformed feed timestamp date="${date}" time="${time}"`,
+    );
+    return null;
+  }
+
+  const month = Number(dateMatch.groups['month']);
+  const day = Number(dateMatch.groups['day']);
+  const year = Number(dateMatch.groups['year']);
+  const hour = Number(timeMatch.groups['hour']);
+  const minute = Number(timeMatch.groups['minute']);
+  const second = Number(timeMatch.groups['second'] ?? '0');
+
+  if (
+    month < 1
+    || month > 12
+    || day < 1
+    || day > 31
+    || hour > 23
+    || minute > 59
+    || second > 59
+  ) {
+    console.warn(
+      `[trading-halt] Ignoring malformed feed timestamp date="${date}" time="${time}"`,
+    );
+    return null;
+  }
+
+  const seed = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    seed.getUTCFullYear() !== year
+    || seed.getUTCMonth() !== month - 1
+    || seed.getUTCDate() !== day
+  ) {
+    console.warn(
+      `[trading-halt] Ignoring malformed feed timestamp date="${date}" time="${time}"`,
+    );
+    return null;
+  }
+
+  let utcMillis = Date.UTC(year, month - 1, day, hour, minute, second);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const offsetMinutes = getEasternOffsetMinutes(new Date(utcMillis));
+    if (offsetMinutes === null) {
+      console.warn(
+        `[trading-halt] Ignoring feed timestamp with unknown timezone offset date="${date}" time="${time}"`,
+      );
+      return null;
+    }
+
+    const adjustedMillis =
+      Date.UTC(year, month - 1, day, hour, minute, second) - offsetMinutes * 60_000;
+    if (adjustedMillis === utcMillis) {
+      break;
+    }
+    utcMillis = adjustedMillis;
+  }
+
+  const parsed = new Date(utcMillis);
+  if (!easternPartsMatch(parsed, { year, month, day, hour, minute, second })) {
+    console.warn(
+      `[trading-halt] Ignoring malformed feed timestamp date="${date}" time="${time}"`,
+    );
+    return null;
+  }
+
+  return parsed;
 }
 
 function formatEventTime(date: string, time: string | null): string | null {
@@ -239,8 +390,7 @@ function hasResumeInfo(record: NasdaqTradeHaltRecord): boolean {
 }
 
 export class HaltScanner extends BaseScanner {
-  private readonly seenHalts = new SeenIdBuffer(1_000, 'trading-halt-halts');
-  private readonly seenResumes = new SeenIdBuffer(1_000, 'trading-halt-resumes');
+  private readonly seenIds = new SeenIdBuffer(1_000, 'trading-halt');
   public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
 
   constructor(eventBus: EventBus) {
@@ -319,6 +469,7 @@ export class HaltScanner extends BaseScanner {
         record.resumptionDate ?? '',
         record.resumptionTradeTime ?? record.resumptionQuoteTime,
       );
+      const haltTimestamp = parseFeedTimestamp(record.haltDate, record.haltTime);
 
       const commonMetadata = {
         ticker: record.ticker,
@@ -335,8 +486,8 @@ export class HaltScanner extends BaseScanner {
         dedupKey,
       };
 
-      if (!this.seenHalts.has(dedupKey)) {
-        this.seenHalts.add(dedupKey);
+      if (haltTimestamp !== null && !this.seenIds.has(dedupKey)) {
+        this.seenIds.add(dedupKey);
         events.push({
           id: randomUUID(),
           source: 'trading-halt',
@@ -344,7 +495,7 @@ export class HaltScanner extends BaseScanner {
           title: `${record.ticker} trading HALTED — ${reasonDescription}`,
           body: `${record.issueName ?? record.ticker} on ${record.market ?? 'exchange'} was halted at ${haltTime ?? record.haltTime}. Reason: ${reasonDescription}.`,
           url: NASDAQ_TRADE_HALTS_PAGE_URL,
-          timestamp: parseFeedTimestamp(record.haltDate, record.haltTime),
+          timestamp: haltTimestamp,
           metadata: {
             ...commonMetadata,
             direction: 'bearish',
@@ -354,11 +505,16 @@ export class HaltScanner extends BaseScanner {
 
       if (hasResumeInfo(record)) {
         const resumeDedupKey = `${dedupKey}:resume`;
-        if (this.seenResumes.has(resumeDedupKey)) {
+        const resumeTimestamp = parseFeedTimestamp(
+          record.resumptionDate ?? record.haltDate,
+          record.resumptionTradeTime ?? record.resumptionQuoteTime ?? record.haltTime,
+        );
+
+        if (resumeTimestamp === null || this.seenIds.has(resumeDedupKey)) {
           continue;
         }
 
-        this.seenResumes.add(resumeDedupKey);
+        this.seenIds.add(resumeDedupKey);
         events.push({
           id: randomUUID(),
           source: 'trading-halt',
@@ -366,10 +522,7 @@ export class HaltScanner extends BaseScanner {
           title: `${record.ticker} trading RESUMED`,
           body: `${record.issueName ?? record.ticker} on ${record.market ?? 'exchange'} resumed trading at ${resumeTime ?? record.resumptionTradeTime}.`,
           url: NASDAQ_TRADE_HALTS_PAGE_URL,
-          timestamp: parseFeedTimestamp(
-            record.resumptionDate ?? record.haltDate,
-            record.resumptionTradeTime ?? record.resumptionQuoteTime ?? record.haltTime,
-          ),
+          timestamp: resumeTimestamp,
           metadata: {
             ...commonMetadata,
             direction: 'neutral',
