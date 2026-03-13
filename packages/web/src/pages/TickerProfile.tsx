@@ -2,6 +2,7 @@ import { Plus, Check } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { AlertCard } from '../components/AlertCard.js';
 import { EmptyState } from '../components/EmptyState.js';
+import { EventChart } from '../components/EventChart.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { StatCard } from '../components/StatCard.js';
 import { useTickerProfile } from '../hooks/useTickerProfile.js';
@@ -107,6 +108,8 @@ export function TickerProfile() {
         <StatCard value={averageSeverityLabel} label="Avg severity" />
         <StatCard value={topSource} label="Top source" />
       </section>
+
+      <EventChart symbol={data.symbol} events={data.recentAlerts} />
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
         <h2 className="mb-4 text-[17px] font-semibold leading-[1.4] text-text-primary">

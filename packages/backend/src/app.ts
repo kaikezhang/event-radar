@@ -54,6 +54,7 @@ import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
+import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
 import { createLLMProvider, OpenAIProvider } from './services/llm-provider.js';
 import { RuleEngine } from './pipeline/rule-engine.js';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -188,6 +189,7 @@ export function buildApp(options?: {
   llmEnricherConfig?: LLMEnricherConfig;
   historicalEnricherConfig?: ConstructorParameters<typeof HistoricalEnricher>[2];
   historicalEnricher?: HistoricalEnricherLike;
+  priceChartService?: PriceChartService;
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -738,6 +740,11 @@ export function buildApp(options?: {
 
   server.get('/api/health/ping', async () => {
     return { pong: true, timestamp: Date.now() };
+  });
+
+  registerPriceRoutes(server, {
+    apiKey,
+    priceChartService: options?.priceChartService,
   });
 
   server.post('/api/events/ingest', async (request, reply) => {

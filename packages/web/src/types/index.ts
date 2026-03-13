@@ -9,6 +9,7 @@ export interface AlertSummary {
   tickers: string[];
   time: string;
   saved?: boolean;
+  direction?: string;
 }
 
 export interface TickerDirection {
@@ -51,6 +52,23 @@ export interface TickerProfileData {
   name: string;
   eventCount: number;
   recentAlerts: AlertSummary[];
+}
+
+export type ChartRange = '1w' | '1m' | '3m' | '6m' | '1y';
+
+export interface PriceCandle {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface PriceChartData {
+  ticker: string;
+  range: ChartRange;
+  candles: PriceCandle[];
 }
 
 export interface WatchlistItem {
