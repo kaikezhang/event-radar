@@ -21,18 +21,24 @@ export interface NewswireFeedConfig {
 
 const DEFAULT_FEEDS: NewswireFeedConfig[] = [
   {
-    name: 'PR Newswire - Financial Services',
-    url: 'https://www.prnewswire.com/rss/financial-services-news.xml',
+    name: 'PR Newswire',
+    url:
+      process.env.PRNEWSWIRE_RSS_URL ??
+      'https://www.prnewswire.com/rss/news-releases-list.rss',
     source: 'pr-newswire',
   },
   {
     name: 'BusinessWire',
-    url: 'https://feed.businesswire.com/rss/home/?rss=G1QFDERJhkQ%3D',
+    url:
+      process.env.BUSINESSWIRE_RSS_URL ??
+      'https://www.businesswire.com/feed/home/20200101005000/en',
     source: 'businesswire',
   },
   {
     name: 'GlobeNewswire',
-    url: 'https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20Releases',
+    url:
+      process.env.GLOBENEWSWIRE_RSS_URL ??
+      'https://www.globenewswire.com/RssFeed/subjectcode/25-Earnings%20Releases%20and%20Operating%20Results/feedTitle/GlobeNewswire%20-%20Earnings%20Releases%20and%20Operating%20Results',
     source: 'globenewswire',
   },
 ];
@@ -139,7 +145,7 @@ export class NewswireScanner extends BaseScanner {
             this.seenIds.add(dedupKey);
 
             const fullText = `${item.title} ${item.description}`;
-            const tickers = extractTickers(fullText);
+            const tickers = extractTickers(fullText, item.categories);
             const severity = classifySeverity(fullText);
             const body = item.description
               ? item.description.slice(0, 500)
