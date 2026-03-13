@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { LLMGatekeeper, getMarketSession, getNextSessionOpenMs } from '../pipeline/llm-gatekeeper.js';
 import type { RawEvent } from '@event-radar/shared';
 import type { LLMProvider } from '../services/llm-provider.js';

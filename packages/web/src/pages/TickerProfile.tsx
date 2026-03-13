@@ -3,11 +3,39 @@ import { useParams } from 'react-router-dom';
 import { AlertCard } from '../components/AlertCard.js';
 import { EmptyState } from '../components/EmptyState.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
+import { StatCard } from '../components/StatCard.js';
 import { useTickerProfile } from '../hooks/useTickerProfile.js';
+
+const SEVERITY_SCORE: Record<string, number> = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4,
+};
+
+const SCORE_TO_SEVERITY = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
 export function TickerProfile() {
   const { symbol } = useParams();
   const { data, isLoading } = useTickerProfile(symbol);
+
+  const totalEvents = data?.eventCount ?? 0;
+  const averageSeverity = data
+    ? Math.round(
+      data.recentAlerts.reduce((sum, alert) => {
+        return sum + (SEVERITY_SCORE[alert.severity.toUpperCase()] ?? SEVERITY_SCORE['MEDIUM']);
+      }, 0) / Math.max(data.recentAlerts.length, 1),
+    )
+    : 0;
+  const averageSeverityLabel = SCORE_TO_SEVERITY[Math.max(averageSeverity - 1, 0)] ?? 'MEDIUM';
+  const topSource = data
+    ? Object.entries(
+      data.recentAlerts.reduce<Record<string, number>>((counts, alert) => {
+        counts[alert.source] = (counts[alert.source] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).sort((left, right) => right[1] - left[1])[0]?.[0] ?? 'Unknown'
+    : 'Unknown';
 
   if (isLoading) {
     return (
@@ -38,10 +66,10 @@ export function TickerProfile() {
               Ticker Profile
             </p>
             <h1 className="mt-2 text-[24px] font-semibold leading-8 text-text-primary">
-              ${data.symbol}
+              {data.name}
             </h1>
             <p className="mt-2 text-sm text-text-secondary">
-              {data.eventCount} events tracked
+              ${data.symbol} • {data.eventCount} events tracked
             </p>
           </div>
 
@@ -55,9 +83,15 @@ export function TickerProfile() {
         </div>
       </section>
 
+      <section className="grid grid-cols-3 gap-3">
+        <StatCard value={String(totalEvents)} label="Total events" />
+        <StatCard value={averageSeverityLabel} label="Avg severity" />
+        <StatCard value={topSource} label="Top source" />
+      </section>
+
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
         <h2 className="mb-4 text-[17px] font-semibold leading-[1.4] text-text-primary">
-          Recent events for ${data.symbol}
+          Recent radar for {data.symbol}
         </h2>
         <div className="space-y-3">
           {data.recentAlerts.map((event) => (

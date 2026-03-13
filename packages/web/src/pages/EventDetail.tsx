@@ -1,6 +1,6 @@
 import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { SeverityBadge } from '../components/SeverityBadge.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { StatCard } from '../components/StatCard.js';
@@ -236,7 +236,7 @@ export function EventDetail() {
         <p className="mt-1">
           Event Radar provides AI-processed market event notifications for informational purposes only. 
           Content may be generated or summarized by AI and could contain errors or inaccuracies. 
-          This is not financial advice, and should not be relied upon as the sole basis for any 
+          This is not investment advice or financial advice, and should not be relied upon as the sole basis for any 
           investment decision. Always verify information with official sources and consult a qualified 
           financial advisor before making investment decisions. Past performance and historical patterns 
           are not indicative of future results.

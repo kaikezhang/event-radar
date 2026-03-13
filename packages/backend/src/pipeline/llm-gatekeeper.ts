@@ -52,8 +52,6 @@ export function getNextSessionOpenMs(now: Date): number {
   if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(et)) {
     const target = new Date(et);
     target.setHours(9, 30, 0, 0);
-    // Convert back: offset = et - now in ms
-    const offsetMs = et.getTime() - now.getTime();
     return now.getTime() + (target.getTime() - et.getTime());
   }
 
@@ -67,8 +65,6 @@ export function getNextSessionOpenMs(now: Date): number {
   for (let i = 0; i < 10; i++) {
     const cDay = candidate.getDay();
     if (cDay >= 1 && cDay <= 5 && !isNYSEHoliday(candidate)) {
-      // Found the next trading day — convert back to real timestamp
-      const offsetMs = et.getTime() - now.getTime();
       return now.getTime() + (candidate.getTime() - et.getTime());
     }
     candidate.setDate(candidate.getDate() + 1);

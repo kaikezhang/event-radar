@@ -118,9 +118,16 @@ export async function getTickerProfile(symbol: string): Promise<TickerProfileDat
       };
     });
 
+    const firstMeta = ((events[0] as Record<string, unknown> | undefined)?.metadata ?? {}) as Record<string, unknown>;
+    const companyName =
+      (firstMeta.companyName as string | undefined)
+      ?? (firstMeta.company_name as string | undefined)
+      ?? (firstMeta.issuer_name as string | undefined)
+      ?? symbol.toUpperCase();
+
     return {
       symbol: symbol.toUpperCase(),
-      name: symbol.toUpperCase(),
+      name: companyName,
       eventCount: alerts.length,
       recentAlerts: alerts,
     };
