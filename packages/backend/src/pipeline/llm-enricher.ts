@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import type { RawEvent } from '@event-radar/shared';
 
 export interface LLMEnrichment {
@@ -24,17 +24,17 @@ const SYSTEM_PROMPT = `You are a stock market event analyst. Analyze events and 
 }`;
 
 export class LLMEnricher {
-  private readonly client: Anthropic | null;
+  private readonly client: OpenAI | null;
   private readonly model: string;
   private readonly timeoutMs: number;
   readonly enabled: boolean;
 
   constructor(config?: LLMEnricherConfig) {
-    const apiKey = config?.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    const apiKey = config?.apiKey ?? process.env.LLM_GATEKEEPER_API_KEY ?? process.env.OPENAI_API_KEY;
     this.enabled = (config?.enabled ?? process.env.LLM_ENRICHMENT_ENABLED === 'true') && !!apiKey;
-    this.model = config?.model ?? process.env.LLM_MODEL ?? 'claude-sonnet-4-20250514';
+    this.model = config?.model ?? process.env.LLM_ENRICHMENT_MODEL ?? 'gpt-4o-mini';
     this.timeoutMs = config?.timeoutMs ?? numEnv('LLM_TIMEOUT_MS', 10_000);
-    this.client = this.enabled && apiKey ? new Anthropic({ apiKey }) : null;
+    this.client = this.enabled && apiKey ? new OpenAI({ apiKey }) : null;
   }
 
   async enrich(event: RawEvent): Promise<LLMEnrichment | null> {
@@ -44,21 +44,21 @@ export class LLMEnricher {
 
     try {
       const response = await Promise.race([
-        this.client.messages.create({
+        this.client.chat.completions.create({
           model: this.model,
           max_tokens: 512,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: userPrompt }],
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
         }),
         timeout(this.timeoutMs),
       ]);
 
       if (!response) return null;
 
-      const text = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('');
+      const text = response.choices[0]?.message?.content ?? '';
+      if (!text) return null;
 
       const parsed = JSON.parse(text) as LLMEnrichment;
 
@@ -68,7 +68,8 @@ export class LLMEnricher {
         parsed.action = '🟢 仅供参考';
       }
 
-      console.log(`[llm-enricher] Enriched event ${event.id}: action=${parsed.action}, tokens=${response.usage.input_tokens}+${response.usage.output_tokens}`);
+      const usage = response.usage;
+      console.log(`[llm-enricher] Enriched event ${event.id}: action=${parsed.action}, tokens=${usage?.prompt_tokens ?? '?'}+${usage?.completion_tokens ?? '?'}`);
       return parsed;
     } catch (err) {
       console.error(`[llm-enricher] Failed to enrich event ${event.id}:`, err instanceof Error ? err.message : err);

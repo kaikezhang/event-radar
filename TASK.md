@@ -1,133 +1,101 @@
-# Current Task: Feed Quality — Hybrid L1/L2 Filter + LLM Judge Upgrade
+# TASK.md — Phase 1: Core Scanners
 
-## Context
+## Overview
 
-The current alert pipeline filters too aggressively (0 events delivered ever). Two independent reviews (CC + Codex) agreed on a **hybrid L1 deterministic + L2 LLM** approach instead of the originally proposed "pure LLM Judge" strategy.
+Two new scanners needed to fill the biggest source gaps. Follow existing scanner patterns (see `federal-register-scanner.ts`, `breaking-news-scanner.ts`).
 
-Reviews are at:
-- `docs/REVIEW-CC-FEED-STRATEGY.md`
-- `docs/REVIEW-CODEX-FEED-STRATEGY.md`
-- `docs/FEED-STRATEGY.md` (original proposal)
+## Task A: SEC EDGAR 8-K / Form 4 Scanner (Codex)
 
-## Deliverables
+Build `packages/backend/src/scanners/sec-edgar-scanner.ts` — a live scanner that polls SEC EDGAR for new 8-K and Form 4 filings.
 
-### 1. Rewrite LLM Gatekeeper → LLM Judge (`packages/backend/src/pipeline/llm-gatekeeper.ts`)
+### Data Sources
 
-Transform the current simple PASS/BLOCK gatekeeper into a smarter LLM Judge:
+1. **EDGAR Full-Text Search API**: `https://efts.sec.gov/LATEST/search-index?q="8-K"&dateRange=custom&startdt=TODAY&enddt=TODAY` — for 8-K filings
+2. **EDGAR RSS feeds**: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&dateb=&owner=include&count=40&search_text=&start=0&output=atom` — Atom feed for recent filings
+3. **Form 4 RSS**: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&search_text=&start=0&output=atom` — insider trades
 
-**New prompt requirements:**
-- Add **few-shot examples** (4-5: clear pass, clear block, edge cases)
-- Add **market session context** in the prompt: `RTH | PRE | POST | CLOSED` (derive from current ET time)
-- Add **source reliability tier**: primary/government vs secondary/aggregator
-- Add **event age** in minutes
-- Add **input sanitization**: wrap event content in XML tags with anti-injection instruction
-- Output remains simple `PASS|BLOCK <confidence> <reason>` format (don't overcomplicate with JSON scores)
+### Requirements
 
-**New operational features:**
-- **Circuit breaker**: After 3 consecutive LLM failures, fall back to rule-based filter for 60s, then retry
-- **Per-source rate limiter**: Max 20 LLM calls per source per 10-minute window (prevents scanner bug cost spikes)
-- Log all decisions with full context for observability
+1. **Scanner class**: Extend `BaseScanner` from `@event-radar/shared`
+2. **Polling**: Every 60s for 8-K, every 120s for Form 4 (within SEC's 10 req/s fair-access policy)
+3. **User-Agent**: Must set `User-Agent: EventRadar/1.0 (contact@example.com)` per SEC policy
+4. **SeenIdBuffer**: Use `SeenIdBuffer` from `./scraping/scrape-utils.js` for dedup (keyed on accession number)
+5. **Ticker extraction**: Use `extractTickers()` from `./ticker-extractor.js`
+6. **Event mapping**:
+   - `source`: `'sec-edgar'`
+   - `severity`: Map by 8-K item number (1.01, 2.05, 5.02 → HIGH; others → MEDIUM)
+   - `title`: `"SEC 8-K: {Company Name} — Item {number} ({description})"`
+   - `body`: Include filing summary, accession number, CIK, link to filing
+   - `sourceEventId`: Accession number (e.g., `0001193125-26-012345`)
+   - For Form 4: `severity` based on transaction value (>$1M → HIGH, >$10M → CRITICAL)
+   - For Form 4: `title`: `"SEC Form 4: {Officer} {bought/sold} ${amount} of {Ticker}"`
+7. **RSS-only v1**: Parse the Atom feed XML for filing metadata. Do NOT parse the HTML content of the filing itself.
+8. **Enable via env**: `SEC_EDGAR_ENABLED=true` (default false)
+9. **Tests**: At least 5 tests covering: RSS parsing, item severity mapping, Form 4 value thresholds, dedup, ticker extraction
+10. **Error handling**: Use auto-backoff from BaseScanner
 
-**Helper function needed:**
-```typescript
-function getMarketSession(): 'RTH' | 'PRE' | 'POST' | 'CLOSED' {
-  // Use America/New_York timezone
-  // RTH: Mon-Fri 9:30-16:00 ET
-  // PRE: Mon-Fri 4:00-9:30 ET  
-  // POST: Mon-Fri 16:00-20:00 ET
-  // CLOSED: weekends, holidays, overnight
-}
-```
+### Key 8-K Items (severity mapping)
 
-### 2. Modify Alert Filter — Remove Keyword Filter, Keep Useful Rules (`packages/backend/src/pipeline/alert-filter.ts`)
+| Item | Description | Severity |
+|------|-------------|----------|
+| 1.01 | Material Agreement (M&A) | HIGH |
+| 1.02 | Termination of Agreement | HIGH |
+| 2.01 | Completion of Acquisition | HIGH |
+| 2.05 | Restructuring / Layoffs | HIGH |
+| 2.06 | Material Impairments | HIGH |
+| 5.02 | Officer Change | HIGH |
+| 7.01 | Reg FD Disclosure | MEDIUM |
+| 8.01 | Other Events | MEDIUM |
+| Others | Various | LOW |
 
-**REMOVE:**
-- `BREAKING_KEYWORDS` array and the keyword-match check for breaking news
-- `PRIMARY_SOURCES` bypass (all sources now go through the same flow)
+### Registration
 
-**KEEP (these are cheap, fast, and accurate):**
-- `RETROSPECTIVE_PATTERNS` regex filter — catches "Why X stock dropped" etc. with ~0% false positive
-- `CLICKBAIT_PATTERNS` regex filter
-- Ticker cooldown (60 min per ticker)
-- Insider trade $1M minimum value filter
-- Social engagement thresholds (but raise them: upvotes 500→1000, comments 200→500)
-- Staleness check — but unify to 2h for all sources
+Register in `packages/backend/src/app.ts` alongside other scanners, gated by `SEC_EDGAR_ENABLED` env var.
 
-**MODIFY:**
-- Remove the primary/secondary source distinction for staleness
-  - Currently: primary 24h, secondary 1h
-  - New: all sources 2h during market hours, extend to "next tradable session" for overnight/weekend events
-- Make staleness session-aware using `getMarketSession()`
+---
 
-### 3. Modify Pipeline to Route All Sources Through LLM Judge (`packages/backend/src/app.ts`)
+## Task B: PR Newswire + BusinessWire RSS Scanner (CC)
 
-Currently the LLM gatekeeper only runs on secondary sources. Change to:
-- L1 deterministic filters run on ALL events (retrospective, clickbait, staleness, cooldown, social threshold)
-- Events that PASS L1 go to L2 LLM Judge (regardless of source)
-- If LLM Judge circuit breaker is open → fall back to conservative pass-through for primary sources, block for secondary
+Build `packages/backend/src/scanners/newswire-scanner.ts` — a scanner that monitors PR Newswire and BusinessWire RSS feeds for corporate press releases.
 
-The pipeline flow becomes:
-```
-Scanner → Dedup → L1 Filter (fast rules) → L2 LLM Judge → Enrich → Deliver
-```
+### Data Sources
 
-### 4. Add `/api/v1/feed` Endpoint (`packages/backend/src/routes/dashboard.ts`)
+1. **PR Newswire**: `https://www.prnewswire.com/rss/financial-services-news.xml` (and other category feeds)
+2. **BusinessWire**: `https://feed.businesswire.com/rss/home/?rss=G1QFDERJhkQ%3D` (all news) or category-specific feeds
+3. **GlobeNewswire**: `https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20Releases` (bonus)
 
-New public endpoint for the web app:
-- `GET /api/v1/feed?limit=50&before=<cursor>&ticker=<symbol>`
-- Returns events from `pipeline_audit` where `outcome = 'delivered'`
-- Join with `events` table for full event data
-- No API key required (public feed)
-- Response shape:
-```json
-{
-  "events": [
-    {
-      "id": "uuid",
-      "title": "...",
-      "source": "...",
-      "severity": "CRITICAL|HIGH|MEDIUM",
-      "tickers": ["NVDA"],
-      "summary": "...",
-      "url": "...",
-      "time": "ISO timestamp",
-      "category": "policy|macro|corporate|geopolitics|other",
-      "llmReason": "why this was pushed"
-    }
-  ],
-  "cursor": "next-page-cursor",
-  "total": 42
-}
-```
+### Requirements
 
-### 5. Update Web App to Use `/api/v1/feed` (`packages/web/src/lib/api.ts`)
+1. **Scanner class**: Extend `BaseScanner` from `@event-radar/shared`
+2. **Polling**: Every 120s (2 min) — newswires update frequently but not as urgently as SEC
+3. **RSS parsing**: Parse standard RSS/Atom XML feeds. Use built-in Node fetch + a lightweight XML parser (or regex for simple RSS)
+4. **SeenIdBuffer**: Dedup by article URL or guid
+5. **Ticker extraction**: Use `extractTickers()` — newswires often mention tickers in title/body
+6. **Event mapping**:
+   - `source`: `'pr-newswire'` | `'businesswire'` | `'globenewswire'`
+   - `severity`: Default MEDIUM; upgrade to HIGH if title contains key patterns (M&A, FDA approval, restructuring, bankruptcy, earnings pre-announcement)
+   - `title`: Original press release headline
+   - `body`: RSS description/summary text (first 500 chars)
+   - `sourceEventId`: Article guid or URL hash
+   - `publishedAt`: RSS pubDate parsed to Date
+7. **Keyword severity upgrade patterns** (case-insensitive):
+   - HIGH: `merger`, `acquisition`, `FDA approv`, `restructur`, `bankrupt`, `Chapter 11`, `layoff`, `workforce reduction`, `earnings pre-announcement`, `guidance`
+   - CRITICAL: `hostile takeover`, `delisted`, `SEC investigation`, `fraud`
+8. **Enable via env**: `NEWSWIRE_ENABLED=true` (default false)
+9. **Tests**: At least 5 tests covering: RSS XML parsing, severity keyword mapping, dedup, ticker extraction, multiple feed handling
+10. **Error handling**: Use auto-backoff from BaseScanner; individual feed failures should not crash the scanner
 
-Replace the current hacky `getFeed()` that fetches from `/api/events` with a clean call to `/api/v1/feed`.
+### Registration
 
-### 6. Tests
+Register in `packages/backend/src/app.ts` alongside other scanners, gated by `NEWSWIRE_ENABLED` env var.
 
-- Unit tests for `getMarketSession()` — test all 4 sessions + edge cases (9:29 vs 9:30, 16:00 vs 16:01)
-- Unit tests for circuit breaker logic in LLM Judge
-- Unit tests for the new staleness rules (session-aware)
-- Update existing `alert-filter.test.ts` to reflect removed keyword filter and updated thresholds
-- Integration test for `/api/v1/feed` endpoint
+---
 
-## Technical Notes
+## General Rules
 
-- LLM provider: use existing `LLMProvider` interface and `OPENAI_DIRECT_API_KEY` env var
-- LLM model: `gpt-4o-mini` (fast, cheap, good enough for classification)
-- Existing tests: 904 tests across the project, all must continue passing
-- TypeScript strict mode, ESM with `.js` extensions
-- Run `pnpm test` before creating PR — all tests must pass
-- Create PR to main branch, do NOT merge
-
-## Files to Modify
-
-1. `packages/backend/src/pipeline/llm-gatekeeper.ts` — major rewrite
-2. `packages/backend/src/pipeline/alert-filter.ts` — remove keyword filter, update thresholds
-3. `packages/backend/src/app.ts` — route all sources through LLM Judge
-4. `packages/backend/src/routes/dashboard.ts` — add `/api/v1/feed`
-5. `packages/web/src/lib/api.ts` — use `/api/v1/feed`
-6. `packages/backend/src/__tests__/alert-filter.test.ts` — update for new rules
-7. New: `packages/backend/src/__tests__/llm-judge.test.ts`
-8. New: `packages/backend/src/__tests__/feed-api.test.ts`
+- TypeScript strict mode, ESM with `.js` extensions in imports
+- Follow existing scanner patterns for consistency
+- Run `pnpm test` — all tests must pass
+- Run `pnpm lint` — no lint errors
+- Create feature branch + PR. Do NOT push to main.
+- Do NOT merge PRs.
