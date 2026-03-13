@@ -1,101 +1,161 @@
-# TASK.md — Phase 1: Core Scanners
+# TASK.md — Phase 2: Dashboard MVP Enhancement
 
 ## Overview
 
-Two new scanners needed to fill the biggest source gaps. Follow existing scanner patterns (see `federal-register-scanner.ts`, `breaking-news-scanner.ts`).
+Upgrade the existing web app (`packages/web`) from a basic feed into a full-featured dashboard with real-time updates, search, watchlist, charts, and filtering. The ops dashboard (`packages/dashboard`) is already functional — this phase focuses on the **user-facing** app.
 
-## Task A: SEC EDGAR 8-K / Form 4 Scanner (Codex)
+## Task A: WebSocket Real-Time Feed + Sound Alerts (Codex)
 
-Build `packages/backend/src/scanners/sec-edgar-scanner.ts` — a live scanner that polls SEC EDGAR for new 8-K and Form 4 filings.
+Add WebSocket support so the feed updates in real-time without manual refresh.
 
-### Data Sources
+### Backend — WebSocket Server
 
-1. **EDGAR Full-Text Search API**: `https://efts.sec.gov/LATEST/search-index?q="8-K"&dateRange=custom&startdt=TODAY&enddt=TODAY` — for 8-K filings
-2. **EDGAR RSS feeds**: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&dateb=&owner=include&count=40&search_text=&start=0&output=atom` — Atom feed for recent filings
-3. **Form 4 RSS**: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&search_text=&start=0&output=atom` — insider trades
+1. **Add WebSocket upgrade** to the existing Fastify server in `packages/backend/src/app.ts`
+   - Use `@fastify/websocket` plugin
+   - Endpoint: `GET /ws/events` — streams new events as they enter the pipeline
+   - Hook into `EventBus` — subscribe to `event:classified` (after classification, before delivery)
+   - Each WS message: JSON `{ type: "event", data: <Event> }` or `{ type: "ping" }`
+   - Server-side heartbeat ping every 30s to keep connections alive
+   - Auth: accept `?apiKey=xxx` query param (use existing auth-middleware logic)
+   - No backpressure needed for MVP — just broadcast to all connected clients
+   - Track connected client count in `/health` response
 
-### Requirements
+2. **File**: `packages/backend/src/plugins/websocket.ts` (Fastify plugin)
+3. **Tests**: At least 3 tests — connection, event broadcast, auth rejection
 
-1. **Scanner class**: Extend `BaseScanner` from `@event-radar/shared`
-2. **Polling**: Every 60s for 8-K, every 120s for Form 4 (within SEC's 10 req/s fair-access policy)
-3. **User-Agent**: Must set `User-Agent: EventRadar/1.0 (contact@example.com)` per SEC policy
-4. **SeenIdBuffer**: Use `SeenIdBuffer` from `./scraping/scrape-utils.js` for dedup (keyed on accession number)
-5. **Ticker extraction**: Use `extractTickers()` from `./ticker-extractor.js`
-6. **Event mapping**:
-   - `source`: `'sec-edgar'`
-   - `severity`: Map by 8-K item number (1.01, 2.05, 5.02 → HIGH; others → MEDIUM)
-   - `title`: `"SEC 8-K: {Company Name} — Item {number} ({description})"`
-   - `body`: Include filing summary, accession number, CIK, link to filing
-   - `sourceEventId`: Accession number (e.g., `0001193125-26-012345`)
-   - For Form 4: `severity` based on transaction value (>$1M → HIGH, >$10M → CRITICAL)
-   - For Form 4: `title`: `"SEC Form 4: {Officer} {bought/sold} ${amount} of {Ticker}"`
-7. **RSS-only v1**: Parse the Atom feed XML for filing metadata. Do NOT parse the HTML content of the filing itself.
-8. **Enable via env**: `SEC_EDGAR_ENABLED=true` (default false)
-9. **Tests**: At least 5 tests covering: RSS parsing, item severity mapping, Form 4 value thresholds, dedup, ticker extraction
-10. **Error handling**: Use auto-backoff from BaseScanner
+### Frontend — Real-Time Feed
 
-### Key 8-K Items (severity mapping)
+4. **WebSocket hook**: Create `packages/web/src/hooks/useWebSocket.ts`
+   - Connect to `ws://<host>/ws/events` on mount
+   - Auto-reconnect with exponential backoff (1s, 2s, 4s, max 30s)
+   - Connection status indicator in the header (🟢 connected / 🟡 reconnecting / 🔴 disconnected)
+   - Prepend new events to the existing alert list (don't replace — merge)
+   - Show `PillBanner` with count of new events since last scroll-to-top
 
-| Item | Description | Severity |
-|------|-------------|----------|
-| 1.01 | Material Agreement (M&A) | HIGH |
-| 1.02 | Termination of Agreement | HIGH |
-| 2.01 | Completion of Acquisition | HIGH |
-| 2.05 | Restructuring / Layoffs | HIGH |
-| 2.06 | Material Impairments | HIGH |
-| 5.02 | Officer Change | HIGH |
-| 7.01 | Reg FD Disclosure | MEDIUM |
-| 8.01 | Other Events | MEDIUM |
-| Others | Various | LOW |
+5. **Sound alerts**: Add `packages/web/src/hooks/useAlertSound.ts`
+   - Play a short notification sound when a new HIGH/CRITICAL event arrives via WS
+   - Use Web Audio API (no external audio files — generate a simple tone)
+   - Configurable in Settings page: on/off toggle + volume slider
+   - Store preference in localStorage
+   - Respect browser autoplay policy (require user interaction first)
+   - Quiet hours: disable sound between configurable hours (default 22:00-08:00 local time)
+
+6. **Tests**: At least 5 tests total for WS hook + sound
 
 ### Registration
 
-Register in `packages/backend/src/app.ts` alongside other scanners, gated by `SEC_EDGAR_ENABLED` env var.
+- Add `@fastify/websocket` to `packages/backend/package.json`
+- Register WS plugin in `app.ts`
 
 ---
 
-## Task B: PR Newswire + BusinessWire RSS Scanner (CC)
+## Task B: Search + Watchlist + Filter Presets (CC)
 
-Build `packages/backend/src/scanners/newswire-scanner.ts` — a scanner that monitors PR Newswire and BusinessWire RSS feeds for corporate press releases.
+Implement the Search, Watchlist, and saved filter presets features.
 
-### Data Sources
+### Backend — Search Endpoint
 
-1. **PR Newswire**: `https://www.prnewswire.com/rss/financial-services-news.xml` (and other category feeds)
-2. **BusinessWire**: `https://feed.businesswire.com/rss/home/?rss=G1QFDERJhkQ%3D` (all news) or category-specific feeds
-3. **GlobeNewswire**: `https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20Releases` (bonus)
+1. **Full-text search**: Add `GET /api/events/search?q=<query>&limit=20`
+   - Search across event `title`, `body`, and `tickers` columns
+   - Use PostgreSQL `tsvector` / `to_tsquery` for full-text search
+   - Add GIN index on a generated `search_vector` column
+   - Support ticker prefix search: if query matches `^[A-Z]{1,5}$`, also filter by ticker
+   - Return results sorted by relevance (ts_rank), with recency as tiebreaker
+   - File: add to existing `packages/backend/src/routes/events.ts`
 
-### Requirements
+2. **Watchlist endpoints**: Add to `packages/backend/src/routes/`
+   - `GET /api/watchlist` — list user's watchlist tickers
+   - `POST /api/watchlist` — add ticker `{ ticker: "AAPL" }`
+   - `DELETE /api/watchlist/:ticker` — remove ticker
+   - `GET /api/events?watchlist=true` — filter events to only watchlist tickers
+   - Storage: new `watchlist` table in `packages/backend/src/db/schema.ts`
+     ```
+     watchlist: { id, ticker (varchar 10), addedAt (timestamp), notes (text, nullable) }
+     ```
+   - For MVP, single-user (no user_id column needed — auth is API key based)
+   - File: `packages/backend/src/routes/watchlist.ts`
 
-1. **Scanner class**: Extend `BaseScanner` from `@event-radar/shared`
-2. **Polling**: Every 120s (2 min) — newswires update frequently but not as urgently as SEC
-3. **RSS parsing**: Parse standard RSS/Atom XML feeds. Use built-in Node fetch + a lightweight XML parser (or regex for simple RSS)
-4. **SeenIdBuffer**: Dedup by article URL or guid
-5. **Ticker extraction**: Use `extractTickers()` — newswires often mention tickers in title/body
-6. **Event mapping**:
-   - `source`: `'pr-newswire'` | `'businesswire'` | `'globenewswire'`
-   - `severity`: Default MEDIUM; upgrade to HIGH if title contains key patterns (M&A, FDA approval, restructuring, bankruptcy, earnings pre-announcement)
-   - `title`: Original press release headline
-   - `body`: RSS description/summary text (first 500 chars)
-   - `sourceEventId`: Article guid or URL hash
-   - `publishedAt`: RSS pubDate parsed to Date
-7. **Keyword severity upgrade patterns** (case-insensitive):
-   - HIGH: `merger`, `acquisition`, `FDA approv`, `restructur`, `bankrupt`, `Chapter 11`, `layoff`, `workforce reduction`, `earnings pre-announcement`, `guidance`
-   - CRITICAL: `hostile takeover`, `delisted`, `SEC investigation`, `fraud`
-8. **Enable via env**: `NEWSWIRE_ENABLED=true` (default false)
-9. **Tests**: At least 5 tests covering: RSS XML parsing, severity keyword mapping, dedup, ticker extraction, multiple feed handling
-10. **Error handling**: Use auto-backoff from BaseScanner; individual feed failures should not crash the scanner
+3. **DB migration**: Add search_vector column + watchlist table
+   - File: add to `packages/backend/src/db/schema.ts`
+   - Drizzle migration or `db:push`
 
-### Registration
+4. **Tests**: At least 8 tests — search relevance, ticker prefix, watchlist CRUD, watchlist filter
 
-Register in `packages/backend/src/app.ts` alongside other scanners, gated by `NEWSWIRE_ENABLED` env var.
+### Frontend — Search Page
+
+5. **Search page** (`packages/web/src/pages/Search.tsx`):
+   - Search input with debounced API calls (300ms)
+   - Results displayed as `AlertCard` list
+   - Ticker autocomplete: show matching tickers as pills below input
+   - Click ticker pill → navigate to `/ticker/:symbol`
+   - Recent searches stored in localStorage (last 10)
+   - Empty state with popular tickers suggestion
+
+### Frontend — Watchlist Page
+
+6. **Watchlist page** (`packages/web/src/pages/Watchlist.tsx`):
+   - List of watched tickers with latest event count (24h)
+   - Add ticker via input + button
+   - Remove ticker via swipe or ✕ button
+   - Click ticker → navigate to `/ticker/:symbol`
+   - Quick "Add to watchlist" button on `AlertCard` and `TickerProfile` pages
+   - Data persisted via API (not just localStorage)
+
+### Frontend — Filter Presets
+
+7. **Filter bar** on Feed page:
+   - Filter by: severity (multi-select), source (multi-select), ticker
+   - Saved presets: "My Watchlist", "High Conviction" (HIGH+CRITICAL), "Full Firehose" (no filter)
+   - Custom presets: save current filter as named preset
+   - Presets stored in localStorage
+   - Filter state reflected in URL query params (shareable links)
+   - Add filter chips below the header showing active filters
+
+8. **Tests**: At least 5 frontend tests
+
+---
+
+## Task C: TradingView Chart Panel (Codex)
+
+Add a candlestick chart with event markers to the TickerProfile page.
+
+### Implementation
+
+1. **Chart component**: `packages/web/src/components/EventChart.tsx`
+   - Use `lightweight-charts` package (TradingView's open-source library)
+   - Display candlestick chart for the selected ticker
+   - Price data source: use a free API — Yahoo Finance via `yfinance` proxy endpoint or Alpha Vantage
+   - Add backend proxy: `GET /api/price/:ticker?range=1m` → returns OHLCV data
+     - Use `yahoo-finance2` npm package for price data
+     - Cache responses for 5 minutes (in-memory)
+     - File: `packages/backend/src/routes/price.ts`
+
+2. **Event markers**: Overlay event markers on the chart
+   - Green triangle (▲) for bullish direction events
+   - Red triangle (▼) for bearish direction events  
+   - Gray circle (●) for neutral/unknown direction
+   - Click marker → show tooltip with event title + severity
+   - Click tooltip → navigate to `/event/:id`
+
+3. **Integration**: Add `EventChart` to `TickerProfile` page
+   - Show chart above the event list
+   - Chart height: 300px, responsive width
+   - Time range selector: 1W, 1M, 3M, 6M, 1Y
+   - Dark theme matching the app's color scheme
+
+4. **Dependencies**: Add `lightweight-charts` to `packages/web/package.json`, `yahoo-finance2` to `packages/backend/package.json`
+
+5. **Tests**: At least 3 tests — price endpoint, chart render, marker positioning
 
 ---
 
 ## General Rules
 
 - TypeScript strict mode, ESM with `.js` extensions in imports
-- Follow existing scanner patterns for consistency
-- Run `pnpm test` — all tests must pass
+- Follow existing patterns for consistency
+- Run `pnpm test` — all tests must pass (currently 951 tests across 61 files)
 - Run `pnpm lint` — no lint errors
 - Create feature branch + PR. Do NOT push to main.
 - Do NOT merge PRs.
+- Use existing UI patterns from `packages/web` — same color scheme, component style, Tailwind classes
+- Mobile-first responsive design (the web app is designed for phone-first viewing)
