@@ -45,6 +45,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
+      cheerio:
+        specifier: 1.0.0-rc.12
+        version: 1.0.0-rc.12
       crawlee:
         specifier: ^3.16.0
         version: 3.16.0(@types/node@22.19.15)(playwright@1.58.2)
