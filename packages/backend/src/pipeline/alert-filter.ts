@@ -1,6 +1,7 @@
 import type { RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { getMarketSession, getNextSessionOpenMs } from './llm-gatekeeper.js';
 
 const require = createRequire(import.meta.url);
 
@@ -13,9 +14,9 @@ export interface FilterResult {
 export interface AlertFilterConfig {
   /** Tickers to watch with lower engagement thresholds. */
   watchlist?: string[];
-  /** Minimum upvotes for social posts to pass (default 500). */
+  /** Minimum upvotes for social posts to pass (default 1000). */
   socialMinUpvotes?: number;
-  /** Minimum comments for social posts to pass (default 200). */
+  /** Minimum comments for social posts to pass (default 500). */
   socialMinComments?: number;
   /** Cooldown per ticker in minutes (default 60). */
   tickerCooldownMinutes?: number;
@@ -23,52 +24,11 @@ export interface AlertFilterConfig {
   insiderMinValue?: number;
   /** Whether the filter is enabled (default true). */
   enabled?: boolean;
-  /** Maximum age in minutes for an event to be considered fresh (default 60). */
+  /** Maximum age in minutes for an event to be considered fresh during market hours (default 120). */
   maxAgeMinutes?: number;
+  /** Override for current time (testing only) */
+  nowFn?: () => Date;
 }
-
-const BREAKING_KEYWORDS = [
-  'crash',
-  'surge',
-  'halt',
-  'fda approval',
-  'acquisition',
-  'bankruptcy',
-  'tariff',
-  'fed rate',
-  'investigation',
-  'indictment',
-  'sanctions',
-  'emergency',
-  'recall',
-  'delisted',
-  'default',
-];
-
-/**
- * Primary information sources — first-hand, original data.
- * These always pass the alert filter (subject to staleness + cooldown).
- * Filings, government actions, social posts from officials, etc.
- */
-const PRIMARY_SOURCES = new Set([
-  'whitehouse',       // Executive orders, presidential documents
-  'congress',         // Congressional trades (STOCK Act filings)
-  'sec-edgar',        // SEC filings (Form 4, 8-K, etc.)
-  'fda',              // FDA approvals, rejections, advisory committees
-  'doj-antitrust',    // DOJ antitrust actions
-  'unusual-options',  // Unusual options activity (exchange data)
-  'truth-social',     // Trump / official social posts
-  'x-scanner',        // Key official X/Twitter posts
-  'short-interest',   // Short interest data (exchange reported)
-  'warn',             // WARN Act layoff notices (government filings)
-  'federal-register', // Federal Register: rules, notices from gov agencies
-  'sec-regulatory',   // SEC regulatory actions via Federal Register
-  'ftc',              // FTC actions via Federal Register
-  'fed',              // Federal Reserve actions via Federal Register
-  'treasury',         // Treasury actions via Federal Register
-  'commerce',         // Commerce Dept actions via Federal Register
-  'cfpb',             // CFPB actions via Federal Register
-]);
 
 /**
  * Retrospective / analysis article patterns.
@@ -86,7 +46,12 @@ const RETROSPECTIVE_PATTERNS = [
   /\bhere (?:are|is) (?:what|why|how)\b/i,
   /\bhow to\b.+\b(?:invest|trade|buy|profit)\b/i,
   /\b(?:prediction|forecast|outlook)\b.+\b(?:2026|2027|next year)\b/i,
-  // Clickbait / opinion / advisory patterns
+];
+
+/**
+ * Clickbait / opinion / advisory patterns.
+ */
+const CLICKBAIT_PATTERNS = [
   /\bworried about\b/i,
   /\bthis \d+ (?:move|trick|strategy|step)\b/i,
   /\bmake or break\b/i,
@@ -98,7 +63,7 @@ const RETROSPECTIVE_PATTERNS = [
   /\bI'm buying\b/i,
   /\bmy portfolio\b/i,
   /\b(?:billionaire|millionaire|warren buffett|cathie wood)\b.+\b(?:buy|sell|load|dump)\b/i,
-  /\b(?:right now|today)\b.*[.!]$/i,  // ends with urgency
+  /\b(?:right now|today)\b.*[.!]$/i,
   /\byour portfolio\b/i,
 ];
 
@@ -110,6 +75,21 @@ function loadDefaultWatchlist(): string[] {
   }
 }
 
+/**
+ * L1 Deterministic Filter — fast, cheap, accurate pre-filter.
+ *
+ * Runs on ALL sources (no more primary/secondary distinction).
+ * Events that pass L1 go to L2 LLM Judge.
+ *
+ * Rules:
+ * - Staleness: 2h during market hours, extend to next tradable session for overnight/weekend
+ * - Retrospective article patterns (regex)
+ * - Clickbait patterns (regex)
+ * - Dummy event skip
+ * - Insider trade $1M minimum
+ * - Social engagement thresholds (upvotes >= 1000 or comments >= 500)
+ * - Per-ticker cooldown (60 min)
+ */
 export class AlertFilter {
   private readonly watchlist: Set<string>;
   private readonly socialMinUpvotes: number;
@@ -118,6 +98,7 @@ export class AlertFilter {
   private readonly insiderMinValue: number;
   private readonly maxAgeMs: number;
   readonly enabled: boolean;
+  private readonly nowFn: () => Date;
 
   /** ticker → last alert timestamp (persisted to disk) */
   private readonly cooldownMap = new Map<string, number>();
@@ -128,12 +109,13 @@ export class AlertFilter {
   constructor(config?: AlertFilterConfig) {
     const watchlistArr = config?.watchlist ?? loadDefaultWatchlist();
     this.watchlist = new Set(watchlistArr.map((t) => t.toUpperCase()));
-    this.socialMinUpvotes = config?.socialMinUpvotes ?? num('SOCIAL_MIN_UPVOTES', 500);
-    this.socialMinComments = config?.socialMinComments ?? num('SOCIAL_MIN_COMMENTS', 200);
+    this.socialMinUpvotes = config?.socialMinUpvotes ?? num('SOCIAL_MIN_UPVOTES', 1000);
+    this.socialMinComments = config?.socialMinComments ?? num('SOCIAL_MIN_COMMENTS', 500);
     this.tickerCooldownMs = (config?.tickerCooldownMinutes ?? num('TICKER_COOLDOWN_MINUTES', 60)) * 60_000;
     this.insiderMinValue = config?.insiderMinValue ?? num('INSIDER_MIN_VALUE', 1_000_000);
-    this.maxAgeMs = (config?.maxAgeMinutes ?? num('MAX_EVENT_AGE_MINUTES', 60)) * 60_000;
+    this.maxAgeMs = (config?.maxAgeMinutes ?? num('MAX_EVENT_AGE_MINUTES', 120)) * 60_000;
     this.enabled = config?.enabled ?? process.env.ALERT_FILTER_ENABLED !== 'false';
+    this.nowFn = config?.nowFn ?? (() => new Date());
     this.loadCooldowns();
   }
 
@@ -147,82 +129,54 @@ export class AlertFilter {
       ? (event.metadata['ticker'] as string).toUpperCase()
       : undefined;
 
-    // Rule 0a: Staleness — primary sources get 24h window, secondary gets maxAgeMs (default 1h)
-    const eventAge = Date.now() - event.timestamp.getTime();
-    const effectiveMaxAge = PRIMARY_SOURCES.has(source)
-      ? 24 * 60 * 60_000  // 24 hours for primary/government sources
-      : this.maxAgeMs;     // 1 hour for secondary sources
+    // Rule 0: Staleness — unified 2h during market hours, session-aware for off-hours
+    const now = this.nowFn();
+    const eventAge = now.getTime() - event.timestamp.getTime();
+    const effectiveMaxAge = this.getEffectiveMaxAge(now);
     if (eventAge > effectiveMaxAge) {
       return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(effectiveMaxAge / 60_000)}min)`, enrichWithLLM: false };
     }
 
-    // Rule 0b: Retrospective / analysis articles — only for secondary sources
-    // Primary sources (filings, gov actions) should never be filtered by title patterns
-    if (!PRIMARY_SOURCES.has(source)) {
-      const titleAndBody = `${event.title} ${event.body}`;
-      for (const pattern of RETROSPECTIVE_PATTERNS) {
-        if (pattern.test(titleAndBody)) {
-          return { pass: false, reason: `retrospective article: matched "${pattern.source}"`, enrichWithLLM: false };
-        }
+    // Rule 1: Retrospective article patterns — all sources
+    const titleAndBody = `${event.title} ${event.body}`;
+    for (const pattern of RETROSPECTIVE_PATTERNS) {
+      if (pattern.test(titleAndBody)) {
+        return { pass: false, reason: `retrospective article: matched "${pattern.source}"`, enrichWithLLM: false };
       }
     }
 
-    // Rule 1: Skip dummy scanner events entirely
+    // Rule 2: Clickbait patterns — all sources
+    for (const pattern of CLICKBAIT_PATTERNS) {
+      if (pattern.test(titleAndBody)) {
+        return { pass: false, reason: `clickbait: matched "${pattern.source}"`, enrichWithLLM: false };
+      }
+    }
+
+    // Rule 3: Skip dummy scanner events
     if (source === 'dummy' || event.type === 'dummy') {
       return { pass: false, reason: 'dummy event skipped', enrichWithLLM: false };
     }
 
-    // ============================================================
-    // PRIMARY SOURCES — first-hand, original information.
-    // These always pass (subject to staleness + ticker cooldown).
-    // ============================================================
-
-    if (PRIMARY_SOURCES.has(source)) {
-      // Special case: insider trades still need value threshold
-      if (source === 'sec-edgar' && event.type === 'form-4') {
-        const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
-        if (value < this.insiderMinValue) {
-          return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };
-        }
+    // Rule 4: Insider trade value threshold (Form 4 from SEC)
+    if (source === 'sec-edgar' && event.type === 'form-4') {
+      const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
+      if (value < this.insiderMinValue) {
+        return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };
       }
-
-      return this.applyTickerCooldown(ticker, {
-        pass: true,
-        reason: `primary source: ${source}`,
-        enrichWithLLM: true,
-      });
     }
 
-    // ============================================================
-    // SECONDARY SOURCES — commentary, aggregation, social chatter.
-    // Need keyword / engagement filters to cut noise.
-    // ============================================================
-
-    // Social noise filter (Reddit / StockTwits)
+    // Rule 5: Social noise filter (Reddit / StockTwits)
     if (source === 'reddit' || source === 'stocktwits') {
       return this.checkSocial(event, ticker);
     }
 
-    // Breaking news (RSS aggregation) — needs keyword + retrospective filter
-    if (source === 'breaking-news' || event.type === 'breaking-news') {
-      return this.checkBreakingNews(event, ticker);
-    }
-
-    // Analyst ratings — watchlist only, cooldown applies
-    if (source === 'analyst') {
-      if (ticker && this.watchlist.has(ticker)) {
-        return this.applyTickerCooldown(ticker, { pass: true, reason: `analyst rating for watchlist ticker ${ticker}`, enrichWithLLM: true });
-      }
-      return { pass: false, reason: 'analyst rating: not on watchlist', enrichWithLLM: false };
-    }
-
-    // Earnings/FDA calendar — only if today or tomorrow
+    // Rule 6: Calendar events — only if today or tomorrow
     if (this.isCalendarEvent(event)) {
       return this.checkCalendarEvent(event, ticker);
     }
 
-    // Default: pass through with LLM enrichment for non-trivial events
-    return this.applyTickerCooldown(ticker, { pass: true, reason: 'default pass', enrichWithLLM: true });
+    // Default: pass through to L2 LLM Judge with ticker cooldown
+    return this.applyTickerCooldown(ticker, { pass: true, reason: 'L1 pass', enrichWithLLM: true });
   }
 
   /** Reset cooldown map (useful for testing). */
@@ -230,8 +184,23 @@ export class AlertFilter {
     this.cooldownMap.clear();
   }
 
+  /**
+   * Session-aware max age calculation.
+   * During market hours (RTH/PRE/POST): 2 hours.
+   * During CLOSED: max(2h, nextSessionOpen - now) so events remain valid
+   * until the next trading session opens (handles weekends + holidays).
+   */
+  private getEffectiveMaxAge(now: Date): number {
+    const session = getMarketSession(now);
+    if (session === 'CLOSED') {
+      const nextOpenMs = getNextSessionOpenMs(now);
+      const msUntilOpen = nextOpenMs - now.getTime();
+      return Math.max(this.maxAgeMs, msUntilOpen);
+    }
+    return this.maxAgeMs; // 2h default
+  }
+
   private loadCooldowns(): void {
-    // Skip loading in test environment
     if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
     try {
       if (!existsSync(AlertFilter.COOLDOWN_PATH)) return;
@@ -248,7 +217,6 @@ export class AlertFilter {
   }
 
   private saveCooldowns(): void {
-    // Skip saving in test environment
     if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
     this.cooldownDirty = true;
     if (this.cooldownTimer) return;
@@ -276,10 +244,10 @@ export class AlertFilter {
 
     // High engagement flag set by scanner
     if (highEngagement) {
-      return this.applyTickerCooldown(ticker, { pass: true, reason: `social high_engagement flag`, enrichWithLLM: true });
+      return this.applyTickerCooldown(ticker, { pass: true, reason: 'social high_engagement flag', enrichWithLLM: true });
     }
 
-    // High engagement: >500 upvotes OR >200 comments
+    // High engagement: >=1000 upvotes OR >=500 comments
     if (upvotes >= this.socialMinUpvotes || comments >= this.socialMinComments) {
       return this.applyTickerCooldown(ticker, {
         pass: true,
@@ -300,30 +268,6 @@ export class AlertFilter {
     return { pass: false, reason: `social noise: ${upvotes} upvotes, ${comments} comments`, enrichWithLLM: false };
   }
 
-  private checkBreakingNews(event: RawEvent, ticker: string | undefined): FilterResult {
-    const text = `${event.title} ${event.body}`.toLowerCase();
-
-    // Must contain a breaking keyword to be considered explosive
-    let matchedKeyword: string | undefined;
-    for (const kw of BREAKING_KEYWORDS) {
-      if (text.includes(kw)) {
-        matchedKeyword = kw;
-        break;
-      }
-    }
-
-    if (!matchedKeyword) {
-      return { pass: false, reason: 'breaking news: no explosive keyword match', enrichWithLLM: false };
-    }
-
-    // Breaking keyword found — pass with or without ticker
-    return this.applyTickerCooldown(ticker, {
-      pass: true,
-      reason: `breaking news keyword: "${matchedKeyword}"${ticker ? ` (${ticker})` : ''}`,
-      enrichWithLLM: true,
-    });
-  }
-
   private isCalendarEvent(event: RawEvent): boolean {
     const type = event.type.toLowerCase();
     return type.includes('earnings') || type.includes('fda') || type.includes('calendar');
@@ -335,7 +279,7 @@ export class AlertFilter {
 
     if (eventDateStr) {
       const eventDate = new Date(eventDateStr);
-      const now = new Date();
+      const now = this.nowFn();
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(23, 59, 59, 999);

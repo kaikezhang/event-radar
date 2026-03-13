@@ -85,6 +85,147 @@ interface AuditRow {
   created_at: string;
 }
 
+type FeedCategory = 'policy' | 'macro' | 'corporate' | 'geopolitics' | 'other';
+
+interface FeedCursor {
+  auditId: number;
+  createdAt: string;
+}
+
+interface FeedRow {
+  audit_id: number;
+  audit_created_at: string;
+  llm_reason: string | null;
+  id: string;
+  title: string;
+  source: string;
+  severity: string | null;
+  summary: string | null;
+  metadata: unknown;
+  source_urls: unknown;
+  received_at: string | Date;
+  created_at: string | Date;
+  audit_ticker: string | null;
+}
+
+const FEED_CATEGORIES = new Set<FeedCategory>([
+  'policy',
+  'macro',
+  'corporate',
+  'geopolitics',
+  'other',
+]);
+
+function encodeFeedCursor(cursor: FeedCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+function decodeFeedCursor(value: string): FeedCursor | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<FeedCursor>;
+    if (
+      typeof parsed.auditId !== 'number'
+      || !Number.isInteger(parsed.auditId)
+      || parsed.auditId < 1
+      || typeof parsed.createdAt !== 'string'
+      || Number.isNaN(new Date(parsed.createdAt).getTime())
+    ) {
+      return null;
+    }
+
+    return {
+      auditId: parsed.auditId,
+      createdAt: new Date(parsed.createdAt).toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  const parsed = parseJsonValue(value);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    return parsed as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function asStringArray(value: unknown): string[] {
+  const parsed = parseJsonValue(value);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+function getFeedTickers(metadata: Record<string, unknown>, fallbackTicker: string | null): string[] {
+  const tickers = asStringArray(metadata['tickers']);
+  if (tickers.length > 0) return tickers;
+
+  const singleTicker = metadata['ticker'];
+  if (typeof singleTicker === 'string' && singleTicker.length > 0) {
+    return [singleTicker];
+  }
+
+  return fallbackTicker ? [fallbackTicker] : [];
+}
+
+function getFeedUrl(metadata: Record<string, unknown>, sourceUrls: unknown): string | null {
+  const urls = asStringArray(sourceUrls);
+  if (urls.length > 0) return urls[0] ?? null;
+
+  const metadataUrl = metadata['url'];
+  return typeof metadataUrl === 'string' && metadataUrl.length > 0 ? metadataUrl : null;
+}
+
+function inferFeedCategory(source: string, metadata: Record<string, unknown>): FeedCategory {
+  const explicitCategory = metadata['category'];
+  if (typeof explicitCategory === 'string' && FEED_CATEGORIES.has(explicitCategory as FeedCategory)) {
+    return explicitCategory as FeedCategory;
+  }
+
+  const eventType = metadata['eventType'];
+  if (typeof eventType === 'string') {
+    if (eventType === 'macro') return 'macro';
+    if (eventType === 'political') return 'policy';
+  }
+
+  const normalizedSource = source.toLowerCase();
+  if (['whitehouse', 'federal-register', 'congress', 'truth-social'].includes(normalizedSource)) {
+    return 'policy';
+  }
+  if (['econ-calendar', 'fedwatch', 'fed', 'bls'].includes(normalizedSource)) {
+    return 'macro';
+  }
+  if (['state-department', 'defense', 'geopolitics'].includes(normalizedSource)) {
+    return 'geopolitics';
+  }
+  if ([
+    'sec-edgar',
+    'earnings',
+    'analyst',
+    'fda',
+    'doj-antitrust',
+    'unusual-options',
+    'short-interest',
+    'warn',
+    'breaking-news',
+  ].includes(normalizedSource)) {
+    return 'corporate';
+  }
+
+  return 'other';
+}
+
 export function registerDashboardRoutes(
   server: FastifyInstance,
   deps: DashboardDeps,
@@ -225,6 +366,121 @@ export function registerDashboardRoutes(
       },
       alerts,
     });
+  });
+
+  server.get<{
+    Querystring: {
+      limit?: string;
+      before?: string;
+      ticker?: string;
+    };
+  }>('/api/v1/feed', async (request, reply) => {
+    if (!deps.db) {
+      return reply.code(503).send({ error: 'Database not configured' });
+    }
+
+    const rawLimit = Number(request.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), 200)
+      : 50;
+    const ticker = request.query.ticker?.trim().toUpperCase();
+    const cursor = request.query.before
+      ? decodeFeedCursor(request.query.before)
+      : null;
+
+    if (request.query.before && !cursor) {
+      return reply.code(400).send({ error: 'Invalid cursor' });
+    }
+
+    try {
+      const { sql: sqlTag } = await import('drizzle-orm');
+      const conds: ReturnType<typeof sqlTag>[] = [
+        sqlTag`pa.outcome = 'delivered'`,
+      ];
+
+      if (ticker) {
+        conds.push(sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${ticker}`);
+      }
+
+      if (cursor) {
+        conds.push(
+          sqlTag`(
+            pa.created_at < ${new Date(cursor.createdAt)}
+            OR (pa.created_at = ${new Date(cursor.createdAt)} AND pa.id < ${cursor.auditId})
+          )`,
+        );
+      }
+
+      const whereClause = conds.reduce((acc, condition) => sqlTag`${acc} AND ${condition}`);
+      const countQuery = sqlTag`
+        SELECT COUNT(*)::int AS total
+        FROM pipeline_audit pa
+        INNER JOIN events e ON e.id::text = pa.event_id
+        WHERE ${whereClause}
+      `;
+      const dataQuery = sqlTag`
+        SELECT
+          pa.id AS audit_id,
+          pa.created_at AS audit_created_at,
+          pa.reason AS llm_reason,
+          pa.ticker AS audit_ticker,
+          e.id,
+          e.title,
+          e.source,
+          e.severity,
+          e.summary,
+          e.metadata,
+          e.source_urls,
+          e.received_at,
+          e.created_at
+        FROM pipeline_audit pa
+        INNER JOIN events e ON e.id::text = pa.event_id
+        WHERE ${whereClause}
+        ORDER BY pa.created_at DESC, pa.id DESC
+        LIMIT ${limit + 1}
+      `;
+
+      const [countResult, dataResult] = await Promise.all([
+        deps.db.execute(countQuery),
+        deps.db.execute(dataQuery),
+      ]);
+
+      const total = (countResult as unknown as { rows: Array<{ total: number }> }).rows[0]?.total ?? 0;
+      const rows = (dataResult as unknown as { rows: FeedRow[] }).rows;
+      const hasMore = rows.length > limit;
+      const pageRows = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = pageRows[pageRows.length - 1];
+
+      return reply.send({
+        events: pageRows.map((row) => {
+          const metadata = asRecord(row.metadata);
+          const timeValue = row.received_at ?? row.created_at;
+
+          return {
+            id: row.id,
+            title: row.title,
+            source: row.source,
+            severity: row.severity ?? 'MEDIUM',
+            tickers: getFeedTickers(metadata, row.audit_ticker),
+            summary: row.summary ?? '',
+            url: getFeedUrl(metadata, row.source_urls),
+            time: new Date(timeValue).toISOString(),
+            category: inferFeedCategory(row.source, metadata),
+            llmReason: row.llm_reason ?? '',
+          };
+        }),
+        cursor: hasMore && lastRow
+          ? encodeFeedCursor({
+              auditId: lastRow.audit_id,
+              createdAt: new Date(lastRow.audit_created_at).toISOString(),
+            })
+          : null,
+        total,
+      });
+    } catch (err) {
+      server.log.error({ err, msg: 'feed query failed' });
+      return reply.code(500).send({ error: 'Feed query failed' });
+    }
   });
 
   /**

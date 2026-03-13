@@ -97,10 +97,12 @@ import type {
   RawEvent,
 } from '@event-radar/shared';
 
-/** Primary sources — mirror of alert-filter.ts PRIMARY_SOURCES for gatekeeper bypass */
+/** Primary sources — used for circuit breaker fallback (pass primary, block secondary) */
 const PRIMARY_SOURCES_SET = new Set([
   'whitehouse', 'congress', 'sec-edgar', 'fda', 'doj-antitrust',
   'unusual-options', 'truth-social', 'x-scanner', 'short-interest', 'warn',
+  'federal-register', 'sec-regulatory', 'ftc', 'fed', 'treasury',
+  'commerce', 'cfpb',
 ]);
 
 /** Categorize alert filter reason string into a metric-friendly bucket */
@@ -252,6 +254,7 @@ export function buildApp(options?: {
         '/metrics',
         '/api/events/ingest',
         '/api/v1/dashboard',
+        '/api/v1/feed',
         '/api/v1/audit',
         '/api/v1/audit/stats',
       ],
@@ -468,40 +471,73 @@ export function buildApp(options?: {
         ticker,
       });
 
-      // LLM Gatekeeper — quality check for secondary sources (breaking-news, etc.)
-      // Primary sources skip this (they're first-hand data, always trustworthy)
-      if (llmGatekeeper.enabled && !PRIMARY_SOURCES_SET.has(event.source.toLowerCase())) {
-        const gateResult = await llmGatekeeper.check(event.title, event.body);
-        if (!gateResult.pass) {
-          pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
-          alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_gatekeeper' });
+      // L2 LLM Judge — quality check for ALL sources that pass L1
+      if (llmGatekeeper.enabled) {
+        // Circuit breaker fallback: pass primary sources, block secondary
+        if (llmGatekeeper.isCircuitOpen) {
+          const isPrimary = PRIMARY_SOURCES_SET.has(event.source.toLowerCase());
+          if (!isPrimary) {
+            pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
+            alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_circuit_breaker' });
+            server.log.info({
+              pipeline: true,
+              stage: 'llm_judge',
+              source: event.source,
+              title: logTitle(event.title),
+              pass: false,
+              reason: 'circuit breaker open — secondary source blocked',
+            });
+            auditLog.record({
+              eventId: event.id, source: event.source, title: event.title,
+              severity: result.severity, ticker,
+              outcome: 'filtered', stoppedAt: 'llm_judge',
+              reason: 'circuit breaker open — secondary source blocked',
+              reasonCategory: 'llm_circuit_breaker',
+            });
+            return;
+          }
+          // Primary source: pass through during circuit break
           server.log.info({
             pipeline: true,
-            stage: 'llm_gatekeeper',
+            stage: 'llm_judge',
             source: event.source,
             title: logTitle(event.title),
-            pass: false,
+            pass: true,
+            reason: 'circuit breaker open — primary source pass-through',
+          });
+        } else {
+          const gateResult = await llmGatekeeper.check(event);
+          if (!gateResult.pass) {
+            pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
+            alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_judge' });
+            server.log.info({
+              pipeline: true,
+              stage: 'llm_judge',
+              source: event.source,
+              title: logTitle(event.title),
+              pass: false,
+              reason: gateResult.reason,
+              confidence: gateResult.confidence,
+            });
+            auditLog.record({
+              eventId: event.id, source: event.source, title: event.title,
+              severity: result.severity, ticker,
+              outcome: 'filtered', stoppedAt: 'llm_judge',
+              reason: `LLM: ${gateResult.reason} (confidence: ${gateResult.confidence})`,
+              reasonCategory: 'llm_judge',
+            });
+            return;
+          }
+          server.log.info({
+            pipeline: true,
+            stage: 'llm_judge',
+            source: event.source,
+            title: logTitle(event.title),
+            pass: true,
             reason: gateResult.reason,
             confidence: gateResult.confidence,
           });
-          auditLog.record({
-            eventId: event.id, source: event.source, title: event.title,
-            severity: result.severity, ticker,
-            outcome: 'filtered', stoppedAt: 'llm_gatekeeper',
-            reason: `LLM: ${gateResult.reason} (confidence: ${gateResult.confidence})`,
-            reasonCategory: 'llm_gatekeeper',
-          });
-          return;
         }
-        server.log.info({
-          pipeline: true,
-          stage: 'llm_gatekeeper',
-          source: event.source,
-          title: logTitle(event.title),
-          pass: true,
-          reason: gateResult.reason,
-          confidence: gateResult.confidence,
-        });
       }
 
       // LLM Enrichment (only for events flagged by L1)

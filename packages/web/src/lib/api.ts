@@ -3,65 +3,42 @@ import type { AlertSummary, EventDetailData, TickerProfileData } from '../types/
 const API_BASE = '/api';
 const API_KEY = 'er-dev-2026';
 
-async function apiFetch(path: string) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'X-Api-Key': API_KEY },
-  });
+async function apiFetch(path: string, options?: { public?: boolean }) {
+  const headers = options?.public ? undefined : { 'X-Api-Key': API_KEY };
+  const res = await fetch(`${API_BASE}${path}`, { headers });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
 
 export interface FeedResponse {
   alerts: AlertSummary[];
+  cursor: string | null;
+  total: number;
 }
 
 export async function getFeed(limit = 50): Promise<FeedResponse> {
-  // Show events from primary/government sources only
-  // These are genuine first-hand data, not social noise or clickbait
-  const primarySources = ['whitehouse', 'federal-register', 'sec-edgar', 'econ-calendar'];
-  const allEvents: Record<string, unknown>[] = [];
+  const res = await apiFetch(`/v1/feed?limit=${limit}`, { public: true });
+  const events: Record<string, unknown>[] = res.events ?? [];
 
-  for (const source of primarySources) {
-    try {
-      const res = await apiFetch(`/events?limit=10&source=${source}`);
-      const items: Record<string, unknown>[] = res.data ?? [];
-      allEvents.push(...items);
-    } catch {
-      // Source may not have events
-    }
-  }
-
-  // Also add any CRITICAL/HIGH breaking news that made it through
-  try {
-    const critRes = await apiFetch(`/events?limit=10&severity=CRITICAL&source=breaking-news`);
-    const critItems: Record<string, unknown>[] = critRes.data ?? [];
-    // Only include breaking news with short titles (likely real headlines, not analysis)
-    allEvents.push(...critItems.filter((e) => ((e.title as string) ?? '').length < 80));
-  } catch { /* ignore */ }
-
-  // Sort by time, newest first
-  const events = allEvents
-    .sort((a, b) => new Date(b.receivedAt as string).getTime() - new Date(a.receivedAt as string).getTime())
-    .slice(0, limit);
-
-  const alerts: AlertSummary[] = events.map((e: Record<string, unknown>) => {
-    const meta = (e.metadata ?? {}) as Record<string, unknown>;
-    const tickers: string[] = (meta.tickers as string[]) ?? (meta.ticker ? [meta.ticker as string] : []);
-    const source = (e.source as string) ?? 'unknown';
-
+  const alerts: AlertSummary[] = events.map((event: Record<string, unknown>) => {
+    const source = (event.source as string) ?? 'unknown';
     return {
-      id: e.id as string,
-      severity: (e.severity as string) ?? 'MEDIUM',
+      id: event.id as string,
+      severity: (event.severity as string) ?? 'MEDIUM',
       source: mapSource(source),
-      title: (e.title as string) ?? '',
-      tickers,
-      summary: (e.summary as string) ?? (e.rawPayload as Record<string, unknown>)?.body as string ?? '',
-      time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
+      title: (event.title as string) ?? '',
+      tickers: (event.tickers as string[]) ?? [],
+      summary: (event.summary as string) ?? '',
+      time: (event.time as string) ?? new Date().toISOString(),
       saved: false,
     };
   });
 
-  return { alerts };
+  return {
+    alerts,
+    cursor: (res.cursor as string | null) ?? null,
+    total: typeof res.total === 'number' ? res.total : alerts.length,
+  };
 }
 
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
