@@ -1,4 +1,11 @@
-import type { AlertSummary, EventDetailData, TickerProfileData, WatchlistItem } from '../types/index.js';
+import type {
+  AlertSummary,
+  ChartRange,
+  EventDetailData,
+  PriceChartData,
+  TickerProfileData,
+  WatchlistItem,
+} from '../types/index.js';
 
 const API_BASE = '/api';
 export const API_KEY = 'er-dev-2026';
@@ -31,6 +38,9 @@ export async function getFeed(limit = 50): Promise<FeedResponse> {
       summary: (event.summary as string) ?? '',
       time: (event.time as string) ?? new Date().toISOString(),
       saved: false,
+      direction: typeof event.metadata === 'object' && event.metadata && 'direction' in event.metadata
+        ? (event.metadata as Record<string, unknown>).direction as string
+        : undefined,
     };
   });
 
@@ -115,6 +125,7 @@ export async function getTickerProfile(symbol: string): Promise<TickerProfileDat
         summary: (e.summary as string) ?? '',
         time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
         saved: false,
+        direction: (meta.direction as string | undefined) ?? 'neutral',
       };
     });
 
@@ -156,8 +167,25 @@ export async function searchEvents(q: string, limit = 20): Promise<AlertSummary[
       summary: (e.summary as string) ?? '',
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       saved: false,
+      direction: (meta.direction as string | undefined) ?? 'neutral',
     };
   });
+}
+
+export async function getTickerPrice(symbol: string, range: ChartRange): Promise<PriceChartData> {
+  const data = await apiFetch(`/price/${symbol.toUpperCase()}?range=${range}`);
+  return {
+    ticker: (data.ticker as string) ?? symbol.toUpperCase(),
+    range,
+    candles: ((data.candles as Record<string, unknown>[] | undefined) ?? []).map((candle) => ({
+      time: (candle.time as string) ?? '',
+      open: Number(candle.open ?? 0),
+      high: Number(candle.high ?? 0),
+      low: Number(candle.low ?? 0),
+      close: Number(candle.close ?? 0),
+      volume: Number(candle.volume ?? 0),
+    })),
+  };
 }
 
 export async function getWatchlist(): Promise<WatchlistItem[]> {

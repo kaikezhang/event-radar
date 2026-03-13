@@ -19,6 +19,33 @@ const FEED_EVENT = {
   },
 };
 
+const PRICE_CANDLES = [
+  {
+    time: '2026-03-10',
+    open: 118.2,
+    high: 121.1,
+    low: 117.4,
+    close: 120.6,
+    volume: 41000000,
+  },
+  {
+    time: '2026-03-11',
+    open: 120.6,
+    high: 123.8,
+    low: 119.7,
+    close: 122.9,
+    volume: 45200000,
+  },
+  {
+    time: '2026-03-12',
+    open: 122.9,
+    high: 125.2,
+    low: 121.9,
+    close: 124.7,
+    volume: 48700000,
+  },
+];
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -73,8 +100,21 @@ beforeEach(() => {
             title: 'NVDA supplier update points to data-center demand',
             source: 'breaking-news',
             summary: 'Follow-on alert for Nvidia demand trends.',
+            receivedAt: '2026-03-11T18:00:00.000Z',
+            metadata: {
+              ...FEED_EVENT.metadata,
+              direction: 'bullish',
+            },
           },
         ],
+      });
+    }
+
+    if (url.pathname === '/api/price/NVDA') {
+      return jsonResponse({
+        ticker: 'NVDA',
+        range: url.searchParams.get('range') ?? '1m',
+        candles: PRICE_CANDLES,
       });
     }
 
