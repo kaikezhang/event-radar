@@ -51,6 +51,21 @@ export interface ScannerDetail {
   message?: string;
 }
 
+export interface ScannerEventsResponse {
+  scanner: string;
+  count: number;
+  events: ScannerEvent[];
+}
+
+export interface ScannerEvent {
+  id: string;
+  title: string;
+  summary: string;
+  severity: string;
+  tickers: string[];
+  received_at: string;
+}
+
 export interface PipelineFunnel {
   ingested: number;
   deduplicated: number;
@@ -101,6 +116,26 @@ export type AuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
 export interface AuditDeliveryChannel {
   channel: string;
   ok: boolean;
+}
+
+export interface DeliveryFeedResponse {
+  total: number;
+  cursor: string | null;
+  events: DeliveryFeedEvent[];
+}
+
+export interface DeliveryFeedEvent {
+  id: string;
+  title: string;
+  source: string;
+  severity: string;
+  tickers: string[];
+  analysis: string;
+  impact: string;
+  action: string | null;
+  regime_context: string | null;
+  delivery_channels: AuditDeliveryChannel[];
+  delivered_at: string;
 }
 
 // GET /api/v1/audit/stats

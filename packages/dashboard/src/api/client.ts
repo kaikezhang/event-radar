@@ -3,7 +3,9 @@ import type {
   AuditResponse,
   AuditStatsResponse,
   AuditQueryParams,
+  DeliveryFeedResponse,
   ScannersStatusResponse,
+  ScannerEventsResponse,
   HealthResponse,
 } from '../types/api.js';
 
@@ -43,4 +45,15 @@ export function fetchScannersStatus(): Promise<ScannersStatusResponse> {
 
 export function fetchHealth(): Promise<HealthResponse> {
   return fetchJSON<HealthResponse>('/health');
+}
+
+export function fetchScannerEvents(name: string, limit = 10): Promise<ScannerEventsResponse> {
+  return fetchJSON<ScannerEventsResponse>(`/api/v1/scanners/${encodeURIComponent(name)}/events`, { limit });
+}
+
+export function fetchDeliveryFeed(params?: {
+  limit?: number;
+  before?: string;
+}): Promise<DeliveryFeedResponse> {
+  return fetchJSON<DeliveryFeedResponse>('/api/v1/delivery/feed', params);
 }

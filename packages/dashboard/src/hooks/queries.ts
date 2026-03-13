@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   fetchDashboard,
   fetchAudit,
   fetchAuditStats,
+  fetchDeliveryFeed,
   fetchScannersStatus,
+  fetchScannerEvents,
   fetchHealth,
 } from '../api/client.js';
 import type { AuditQueryParams } from '../types/api.js';
@@ -40,5 +42,22 @@ export function useHealth() {
   return useQuery({
     queryKey: ['health'],
     queryFn: fetchHealth,
+  });
+}
+
+export function useScannerEvents(name: string, enabled = true) {
+  return useQuery({
+    queryKey: ['scanner-events', name],
+    queryFn: () => fetchScannerEvents(name),
+    enabled: enabled && name.length > 0,
+  });
+}
+
+export function useDeliveryFeed(limit = 20) {
+  return useInfiniteQuery({
+    queryKey: ['delivery-feed', limit],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => fetchDeliveryFeed({ limit, before: pageParam }),
+    getNextPageParam: (lastPage) => lastPage.cursor ?? undefined,
   });
 }
