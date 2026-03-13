@@ -83,6 +83,7 @@ interface AuditRow {
   historical_confidence: string | null;
   duration_ms: number | null;
   created_at: string;
+  event_metadata: unknown;
 }
 
 type FeedCategory = 'policy' | 'macro' | 'corporate' | 'geopolitics' | 'other';
@@ -165,6 +166,53 @@ function asStringArray(value: unknown): string[] {
   const parsed = parseJsonValue(value);
   if (!Array.isArray(parsed)) return [];
   return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+function parseConfidence(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function buildAuditLlmEnrichment(metadataValue: unknown): {
+  analysis: string;
+  action: string | null;
+  tickers: string[];
+  regimeContext: string | null;
+  confidence: number | null;
+} | null {
+  const metadata = asRecord(metadataValue);
+  const enrichment = asRecord(metadata['llm_enrichment']);
+  const summary = typeof enrichment['summary'] === 'string' ? enrichment['summary'].trim() : '';
+  const impact = typeof enrichment['impact'] === 'string' ? enrichment['impact'].trim() : '';
+  const analysis = [summary, impact].filter(Boolean).join('\n\n');
+
+  if (analysis.length === 0) {
+    return null;
+  }
+
+  const tickers = Array.isArray(enrichment['tickers'])
+    ? enrichment['tickers'].flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return [];
+      }
+
+      const symbol = (item as Record<string, unknown>).symbol;
+      return typeof symbol === 'string' && symbol.length > 0 ? [symbol] : [];
+    })
+    : [];
+  const judge = asRecord(metadata['llm_judge']);
+
+  return {
+    analysis,
+    action: typeof enrichment['action'] === 'string' ? enrichment['action'] : null,
+    tickers,
+    regimeContext: typeof enrichment['regimeContext'] === 'string' ? enrichment['regimeContext'] : null,
+    confidence: parseConfidence(judge['confidence']),
+  };
 }
 
 function getFeedTickers(metadata: Record<string, unknown>, fallbackTicker: string | null): string[] {
@@ -515,20 +563,26 @@ export function registerDashboardRoutes(
 
       // Build WHERE clause dynamically using drizzle sql template
       const pieces: ReturnType<typeof sqlTag>[] = [];
-      pieces.push(sqlTag`SELECT * FROM pipeline_audit`);
+      pieces.push(sqlTag`
+        SELECT
+          pa.*,
+          e.metadata AS event_metadata
+        FROM pipeline_audit pa
+        LEFT JOIN events e ON e.id::text = pa.event_id
+      `);
 
       const conds: ReturnType<typeof sqlTag>[] = [];
-      if (outcome) conds.push(sqlTag`outcome = ${outcome}`);
-      if (source) conds.push(sqlTag`source = ${source}`);
-      if (ticker) conds.push(sqlTag`ticker = ${ticker.toUpperCase()}`);
-      if (search) conds.push(sqlTag`title ILIKE ${'%' + search + '%'}`);
+      if (outcome) conds.push(sqlTag`pa.outcome = ${outcome}`);
+      if (source) conds.push(sqlTag`pa.source = ${source}`);
+      if (ticker) conds.push(sqlTag`pa.ticker = ${ticker.toUpperCase()}`);
+      if (search) conds.push(sqlTag`pa.title ILIKE ${'%' + search + '%'}`);
 
       if (conds.length > 0) {
         pieces.push(sqlTag`WHERE`);
         pieces.push(conds.reduce((a, b) => sqlTag`${a} AND ${b}`));
       }
 
-      pieces.push(sqlTag`ORDER BY created_at DESC LIMIT ${limit}`);
+      pieces.push(sqlTag`ORDER BY pa.created_at DESC LIMIT ${limit}`);
 
       const query = pieces.reduce((a, b) => sqlTag`${a} ${b}`);
       const result = await deps.db.execute(query);
@@ -552,6 +606,7 @@ export function registerDashboardRoutes(
           historical_confidence: row.historical_confidence,
           duration_ms: row.duration_ms,
           at: row.created_at,
+          llm_enrichment: buildAuditLlmEnrichment(row.event_metadata),
         })),
       });
     } catch (err) {

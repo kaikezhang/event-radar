@@ -4,6 +4,9 @@ import type {
   AuditStatsResponse,
   AuditQueryParams,
   DeliveryFeedResponse,
+  JudgeRecentResponse,
+  JudgeStatsQueryParams,
+  JudgeStatsResponse,
   ScannersStatusResponse,
   ScannerEventsResponse,
   HealthResponse,
@@ -56,4 +59,15 @@ export function fetchDeliveryFeed(params?: {
   before?: string;
 }): Promise<DeliveryFeedResponse> {
   return fetchJSON<DeliveryFeedResponse>('/api/v1/delivery/feed', params);
+}
+
+export function fetchJudgeRecent(limit = 50): Promise<JudgeRecentResponse> {
+  return fetchJSON<JudgeRecentResponse>('/api/v1/judge/recent', { limit });
+}
+
+export function fetchJudgeStats(params?: JudgeStatsQueryParams): Promise<JudgeStatsResponse> {
+  return fetchJSON<JudgeStatsResponse>(
+    '/api/v1/judge/stats',
+    params as unknown as Record<string, string | number | undefined>,
+  );
 }

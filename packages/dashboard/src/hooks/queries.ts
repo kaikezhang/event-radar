@@ -4,11 +4,13 @@ import {
   fetchAudit,
   fetchAuditStats,
   fetchDeliveryFeed,
+  fetchJudgeRecent,
+  fetchJudgeStats,
   fetchScannersStatus,
   fetchScannerEvents,
   fetchHealth,
 } from '../api/client.js';
-import type { AuditQueryParams } from '../types/api.js';
+import type { AuditQueryParams, JudgeStatsQueryParams } from '../types/api.js';
 
 export function useDashboard() {
   return useQuery({
@@ -61,5 +63,19 @@ export function useDeliveryFeed(limit = 20) {
     queryFn: ({ pageParam }) => fetchDeliveryFeed({ limit, before: pageParam }),
     getNextPageParam: (lastPage) => lastPage.cursor ?? undefined,
     refetchInterval: 15_000,
+  });
+}
+
+export function useJudgeRecent(limit = 50) {
+  return useQuery({
+    queryKey: ['judge-recent', limit],
+    queryFn: () => fetchJudgeRecent(limit),
+  });
+}
+
+export function useJudgeStats(params?: JudgeStatsQueryParams) {
+  return useQuery({
+    queryKey: ['judge-stats', params],
+    queryFn: () => fetchJudgeStats(params),
   });
 }

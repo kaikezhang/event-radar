@@ -157,6 +157,7 @@ describe('dashboard data helpers', () => {
         historical_confidence: null,
         duration_ms: null,
         at: '2026-03-12T22:25:00.000Z',
+        llm_enrichment: null,
       },
     ];
 

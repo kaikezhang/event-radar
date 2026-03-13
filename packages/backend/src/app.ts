@@ -59,6 +59,7 @@ import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
+import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
 import { MarketRegimeService } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
@@ -495,6 +496,17 @@ export function buildApp(options?: {
         event.metadata && typeof event.metadata['ticker'] === 'string'
           ? (event.metadata['ticker'] as string)
           : undefined;
+      const persistEventMetadata = async () => {
+        if (!db || !eventId) {
+          return;
+        }
+
+        await db.execute(sql`
+          UPDATE events
+          SET metadata = ${JSON.stringify(event.metadata ?? {})}::jsonb
+          WHERE id = ${eventId}
+        `);
+      };
 
       const filterResult = alertFilter.check(event);
 
@@ -543,6 +555,15 @@ export function buildApp(options?: {
         if (llmGatekeeper.isCircuitOpen) {
           const isPrimary = PRIMARY_SOURCES_SET.has(event.source.toLowerCase());
           if (!isPrimary) {
+            event.metadata = {
+              ...(event.metadata ?? {}),
+              llm_judge: {
+                decision: 'BLOCK',
+                confidence: 0,
+                reason: 'circuit breaker open — secondary source blocked',
+              },
+            };
+            await persistEventMetadata();
             pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
             alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_circuit_breaker' });
             server.log.info({
@@ -573,6 +594,15 @@ export function buildApp(options?: {
           });
         } else {
           const gateResult = await llmGatekeeper.check(event);
+          event.metadata = {
+            ...(event.metadata ?? {}),
+            llm_judge: {
+              decision: gateResult.pass ? 'PASS' : 'BLOCK',
+              confidence: gateResult.confidence,
+              reason: gateResult.reason,
+            },
+          };
+          await persistEventMetadata();
           if (!gateResult.pass) {
             pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
             alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_judge' });
@@ -616,14 +646,7 @@ export function buildApp(options?: {
             ...(event.metadata ?? {}),
             llm_enrichment: llmEnrichResult,
           };
-
-          if (db && eventId) {
-            await db.execute(sql`
-              UPDATE events
-              SET metadata = ${JSON.stringify(event.metadata)}::jsonb
-              WHERE id = ${eventId}
-            `);
-          }
+          await persistEventMetadata();
         }
       }
 
@@ -887,6 +910,7 @@ export function buildApp(options?: {
   // Register scanner health routes
   registerScannerRoutes(server, registry, db);
   registerDeliveryFeedRoutes(server, db);
+  registerJudgeRoutes(server, db);
 
   // Register dashboard route
   registerDashboardRoutes(server, {
