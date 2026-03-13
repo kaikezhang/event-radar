@@ -35,6 +35,7 @@ import { DojScanner } from './scanners/doj-scanner.js';
 import { FederalRegisterScanner } from './scanners/federal-register-scanner.js';
 import { NewswireScanner } from './scanners/newswire-scanner.js';
 import { SecEdgarScanner } from './scanners/sec-edgar-scanner.js';
+import { IrMonitorScanner } from './scanners/ir-monitor-scanner.js';
 import { type Database } from './db/connection.js';
 import * as schema from './db/schema.js';
 import { storeEvent } from './db/event-store.js';
@@ -354,6 +355,9 @@ export function buildApp(options?: {
   }
   if (process.env.SEC_EDGAR_ENABLED === 'true') {
     registry.register(new SecEdgarScanner(eventBus));
+  }
+  if (process.env.IR_MONITOR_ENABLED === 'true') {
+    registry.register(new IrMonitorScanner(eventBus));
   }
 
   // Helper: truncate title for logs

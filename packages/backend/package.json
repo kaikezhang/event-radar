@@ -17,10 +17,11 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@fastify/websocket": "^11.2.0",
     "@anthropic-ai/sdk": "^0.78.0",
     "@event-radar/delivery": "workspace:*",
     "@event-radar/shared": "workspace:*",
+    "@fastify/websocket": "^11.2.0",
+    "cheerio": "1.0.0-rc.12",
     "crawlee": "^3.16.0",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.2.0",
