@@ -1,4 +1,5 @@
 import { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
+import { validateApiKeyValue } from '../routes/auth-middleware.js';
 
 /**
  * API Key Authentication Plugin
@@ -23,9 +24,11 @@ interface AuthPluginOptions {
 
 export async function registerAuthPlugin(
   server: FastifyInstance,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _options: AuthPluginOptions,
+  options: AuthPluginOptions,
 ): Promise<void> {
+  const publicRoutes = new Set(options.publicRoutes ?? []);
+  const configuredApiKey = process.env.API_KEY ?? options.apiKey;
+
   // CORS headers for all responses
   server.addHook('onSend', async (_request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');
@@ -34,6 +37,8 @@ export async function registerAuthPlugin(
   });
 
   server.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    request.apiKeyAuthenticated = false;
+
     // CORS preflight — always allow
     if (request.method === 'OPTIONS') {
       reply.header('Access-Control-Allow-Origin', '*');
@@ -42,8 +47,31 @@ export async function registerAuthPlugin(
       return reply.status(204).send();
     }
 
-    // Auth disabled — all routes are public
-    request.apiKeyAuthenticated = false;
+    const pathname = request.url.split('?')[0] ?? request.url;
+    if (publicRoutes.has(pathname)) {
+      return;
+    }
+
+    const providedKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key']
+      : undefined;
+    const validation = validateApiKeyValue(providedKey, configuredApiKey);
+
+    if (!validation.ok && validation.message === 'Missing API key') {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Missing X-API-Key header',
+      });
+    }
+
+    if (!validation.ok) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: validation.message ?? 'Invalid API key',
+      });
+    }
+
+    request.apiKeyAuthenticated = true;
   });
 }
 

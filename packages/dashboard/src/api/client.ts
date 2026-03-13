@@ -4,12 +4,16 @@ import type {
   AuditStatsResponse,
   AuditQueryParams,
   DeliveryFeedResponse,
+  JudgeRecentResponse,
+  JudgeStatsQueryParams,
+  JudgeStatsResponse,
   ScannersStatusResponse,
   ScannerEventsResponse,
   HealthResponse,
 } from '../types/api.js';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const API_KEY = import.meta.env.VITE_API_KEY;
 
 async function fetchJSON<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
   const url = new URL(path, BASE_URL || window.location.origin);
@@ -20,7 +24,9 @@ async function fetchJSON<T>(path: string, params?: Record<string, string | numbe
       }
     }
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    headers: API_KEY ? { 'x-api-key': API_KEY } : undefined,
+  });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
@@ -56,4 +62,15 @@ export function fetchDeliveryFeed(params?: {
   before?: string;
 }): Promise<DeliveryFeedResponse> {
   return fetchJSON<DeliveryFeedResponse>('/api/v1/delivery/feed', params);
+}
+
+export function fetchJudgeRecent(limit = 50): Promise<JudgeRecentResponse> {
+  return fetchJSON<JudgeRecentResponse>('/api/v1/judge/recent', { limit });
+}
+
+export function fetchJudgeStats(params?: JudgeStatsQueryParams): Promise<JudgeStatsResponse> {
+  return fetchJSON<JudgeStatsResponse>(
+    '/api/v1/judge/stats',
+    params as unknown as Record<string, string | number | undefined>,
+  );
 }

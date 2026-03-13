@@ -109,6 +109,7 @@ export interface AuditEvent {
   historical_confidence: string | null;
   duration_ms: number | null;
   at: string;
+  llm_enrichment: AuditLlmEnrichment | null;
 }
 
 export type AuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
@@ -116,6 +117,43 @@ export type AuditSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
 export interface AuditDeliveryChannel {
   channel: string;
   ok: boolean;
+}
+
+export interface AuditLlmEnrichment {
+  analysis: string;
+  action: string | null;
+  tickers: string[];
+  regimeContext: string | null;
+  confidence: number | null;
+}
+
+export interface JudgeRecentResponse {
+  events: JudgeRecentEvent[];
+}
+
+export interface JudgeRecentEvent {
+  id: string;
+  title: string;
+  source: string;
+  severity: string | null;
+  decision: 'PASS' | 'BLOCK';
+  confidence: number | null;
+  reason: string | null;
+  ticker: string | null;
+  at: string;
+}
+
+export interface JudgeStatsResponse {
+  bySource: Record<string, JudgeSourceStats>;
+  total: {
+    passed: number;
+    blocked: number;
+  };
+}
+
+export interface JudgeSourceStats {
+  passed: number;
+  blocked: number;
 }
 
 export interface DeliveryFeedResponse {
@@ -202,4 +240,8 @@ export interface AuditQueryParams {
   source?: string;
   ticker?: string;
   search?: string;
+}
+
+export interface JudgeStatsQueryParams {
+  since?: '1h' | '24h' | '7d';
 }

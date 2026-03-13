@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useDeliveryFeed, useScannerEvents } from './queries.js';
+import { useJudgeRecent, useJudgeStats } from './queries.js';
+
+const useQueryMock = vi.fn();
+const useInfiniteQueryMock = vi.fn();
+const fetchJudgeRecentMock = vi.fn();
+const fetchJudgeStatsMock = vi.fn();
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn((options) => options),
-  useInfiniteQuery: vi.fn((options) => options),
+  useQuery: (options: unknown) => useQueryMock(options),
+  useInfiniteQuery: (options: unknown) => useInfiniteQueryMock(options),
 }));
 
 vi.mock('../api/client.js', () => ({
@@ -12,36 +16,45 @@ vi.mock('../api/client.js', () => ({
   fetchAudit: vi.fn(),
   fetchAuditStats: vi.fn(),
   fetchDeliveryFeed: vi.fn(),
+  fetchJudgeRecent: (...args: unknown[]) => fetchJudgeRecentMock(...args),
+  fetchJudgeStats: (...args: unknown[]) => fetchJudgeStatsMock(...args),
   fetchScannersStatus: vi.fn(),
   fetchScannerEvents: vi.fn(),
   fetchHealth: vi.fn(),
 }));
 
-describe('query polling intervals', () => {
+describe('judge query hooks', () => {
   beforeEach(() => {
-    vi.mocked(useQuery).mockClear();
-    vi.mocked(useInfiniteQuery).mockClear();
+    useQueryMock.mockReset();
+    useInfiniteQueryMock.mockReset();
+    fetchJudgeRecentMock.mockReset();
+    fetchJudgeStatsMock.mockReset();
+    useQueryMock.mockReturnValue({ data: undefined, isLoading: false, error: null });
   });
 
-  it('refreshes scanner events every 15 seconds', () => {
-    useScannerEvents('sec-edgar');
+  it('configures a 15 second refetch interval for recent judge decisions', async () => {
+    useJudgeRecent(25);
 
-    expect(useQuery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        queryKey: ['scanner-events', 'sec-edgar'],
-        refetchInterval: 15_000,
-      }),
-    );
+    expect(useQueryMock).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ['judge-recent', 25],
+      refetchInterval: 15_000,
+    }));
+
+    const [{ queryFn }] = useQueryMock.mock.calls[0] as [{ queryFn: () => Promise<unknown> }];
+    await queryFn();
+    expect(fetchJudgeRecentMock).toHaveBeenCalledWith(25);
   });
 
-  it('refreshes the delivery feed every 15 seconds', () => {
-    useDeliveryFeed();
+  it('configures a 15 second refetch interval for judge stats', async () => {
+    useJudgeStats({ since: '24h' });
 
-    expect(useInfiniteQuery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        queryKey: ['delivery-feed', 20],
-        refetchInterval: 15_000,
-      }),
-    );
+    expect(useQueryMock).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ['judge-stats', { since: '24h' }],
+      refetchInterval: 15_000,
+    }));
+
+    const [{ queryFn }] = useQueryMock.mock.calls[0] as [{ queryFn: () => Promise<unknown> }];
+    await queryFn();
+    expect(fetchJudgeStatsMock).toHaveBeenCalledWith({ since: '24h' });
   });
 });

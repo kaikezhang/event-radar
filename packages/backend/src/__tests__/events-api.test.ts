@@ -108,14 +108,16 @@ describe('GET /api/events', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('should return 200 without API key (auth disabled)', async () => {
+  it('should return 401 without API key', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events',
     });
 
-    // Auth is currently a no-op — all requests pass through
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: 'Unauthorized',
+    });
   });
 
   it('should return paginated events with valid API key', async () => {
@@ -249,14 +251,16 @@ describe('GET /api/events/:id', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('should return 200 without API key (auth disabled)', async () => {
+  it('should return 401 without API key', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: `/api/events/${storedEventId}`,
     });
 
-    // Auth is currently a no-op — all requests pass through
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: 'Unauthorized',
+    });
   });
 
   it('should return a single event by id with valid API key', async () => {

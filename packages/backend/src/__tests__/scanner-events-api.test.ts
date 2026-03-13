@@ -99,6 +99,9 @@ describe('GET /api/v1/scanners/:name/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/scanners/sec-edgar/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -141,6 +144,9 @@ describe('GET /api/v1/scanners/:name/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/scanners/reddit/events?limit=1',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -161,6 +167,9 @@ describe('GET /api/v1/scanners/:name/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/scanners/breaking-news/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -173,6 +182,9 @@ describe('GET /api/v1/scanners/:name/events', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/scanners/nonexistent/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -190,6 +202,9 @@ describe('GET /api/v1/scanners/:name/events', () => {
     const response = await noDbCtx.server.inject({
       method: 'GET',
       url: '/api/v1/scanners/sec-edgar/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
     });
 
     expect(response.statusCode).toBe(503);

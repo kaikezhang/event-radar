@@ -178,20 +178,93 @@ function EventRow({
 
 function ExpandedDetails({ event }: { event: AuditEvent }) {
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs md:grid-cols-4">
-      <DetailItem label="Event ID" value={event.event_id} mono />
-      <DetailItem label="Category" value={event.reason_category ?? '—'} />
-      <DetailItem label="Duration" value={event.duration_ms != null ? `${event.duration_ms}ms` : '—'} mono />
-      <DetailItem label="Timestamp" value={new Date(event.at).toLocaleString()} />
-      <DetailItem
-        label="Delivery Channels"
-        value={formatDeliveryChannels(event.delivery_channels)}
-      />
-      <DetailItem
-        label="Historical Match"
-        value={event.historical_match ? `Yes (${event.historical_confidence ?? '?'})` : 'No'}
-        accent={event.historical_match ?? false}
-      />
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs md:grid-cols-4">
+        <DetailItem label="Event ID" value={event.event_id} mono />
+        <DetailItem label="Category" value={event.reason_category ?? '—'} />
+        <DetailItem label="Duration" value={event.duration_ms != null ? `${event.duration_ms}ms` : '—'} mono />
+        <DetailItem label="Timestamp" value={new Date(event.at).toLocaleString()} />
+        <DetailItem
+          label="Delivery Channels"
+          value={formatDeliveryChannels(event.delivery_channels)}
+        />
+        <DetailItem
+          label="Historical Match"
+          value={event.historical_match ? `Yes (${event.historical_confidence ?? '?'})` : 'No'}
+          accent={event.historical_match ?? false}
+        />
+      </div>
+
+      {event.llm_enrichment && <LlmEnrichmentPanel event={event} />}
+    </div>
+  );
+}
+
+function LlmEnrichmentPanel({ event }: { event: AuditEvent }) {
+  const enrichment = event.llm_enrichment;
+  if (!enrichment) {
+    return null;
+  }
+
+  const confidencePct = enrichment.confidence != null ? Math.round(enrichment.confidence * 100) : null;
+
+  return (
+    <div className="rounded-lg border border-radar-border bg-radar-bg/70 p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-radar-text-muted">
+        LLM Enrichment
+      </div>
+      <div className="mt-3 space-y-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-radar-text-muted">Analysis</div>
+          <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-radar-text">
+            {enrichment.analysis}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-radar-text-muted">Action</div>
+            <div className="mt-1 text-sm text-radar-blue">{enrichment.action ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-radar-text-muted">Tickers</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {enrichment.tickers.length === 0 ? (
+                <span className="text-sm text-radar-text-muted">—</span>
+              ) : (
+                enrichment.tickers.map((ticker) => (
+                  <span
+                    key={ticker}
+                    className="rounded-md bg-radar-amber/10 px-2 py-1 font-mono text-xs text-radar-amber"
+                  >
+                    {ticker}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-radar-text-muted">Regime Context</div>
+          <div className="mt-1 text-sm text-radar-text-muted">
+            {enrichment.regimeContext ?? 'No additional regime context recorded'}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-wider text-radar-text-muted">
+            <span>Judge Confidence</span>
+            <span className="font-mono text-radar-text">{confidencePct != null ? `${confidencePct}%` : '—'}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-radar-blue transition-[width]"
+              style={{ width: `${confidencePct ?? 0}%` }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

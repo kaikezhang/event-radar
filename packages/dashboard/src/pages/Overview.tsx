@@ -13,6 +13,7 @@ import { StatusBadge } from '../components/StatusBadge.js';
 import { ScannerCard } from '../components/ScannerCard.js';
 import { FunnelChart } from '../components/FunnelChart.js';
 import { FilterBreakdownChart } from '../components/FilterBreakdownChart.js';
+import { JudgeCard } from '../components/JudgeCard.js';
 import { LoadingSpinner, ErrorDisplay } from '../components/LoadingSpinner.js';
 import { buildScannerAlerts, buildScannerCards } from '../lib/dashboard.js';
 import { formatNumber } from '../lib/utils.js';
@@ -108,6 +109,8 @@ export function Overview() {
           <FilterBreakdownChart breakdown={pipeline.filter_breakdown} />
         </Card>
       </div>
+
+      <JudgeCard />
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
