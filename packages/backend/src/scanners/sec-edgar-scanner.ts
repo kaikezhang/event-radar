@@ -258,7 +258,7 @@ function buildForm4Title(entry: EdgarAtomEntry): string {
   const ticker = entry.tickers[0] ?? normalizeCompanyName(entry.issuerName ?? entry.companyName);
   const action = inferForm4Action(entry);
 
-  if (entry.transactionValue !== undefined && action !== 'filed') {
+  if (entry.transactionValue !== undefined && entry.transactionValue > 0 && action !== 'filed') {
     return `SEC Form 4: ${actor} ${action} $${formatAmount(entry.transactionValue)} of ${ticker}`;
   }
 
@@ -549,7 +549,7 @@ export class SecEdgarScanner extends BaseScanner {
         officer_name: entry.officerName ?? null,
         issuer_name: normalizeCompanyName(entry.issuerName ?? entry.companyName),
         transaction_type: entry.transactionType ?? null,
-        transactionValue,
+        transaction_value: transactionValue,
         shares: entry.shares ?? null,
         price_per_share: entry.pricePerShare ?? null,
         ticker: ticker ?? null,

@@ -136,8 +136,7 @@ export async function getTickerProfile(symbol: string): Promise<TickerProfileDat
   }
 }
 
-export async function submitFeedback(eventId: string, helpful: boolean) {
-  void [eventId, helpful];
+export async function submitFeedback(_eventId: string, _helpful: boolean) {
   // TODO: integrate with real feedback API
   return { ok: true };
 }

@@ -194,7 +194,7 @@ describe('SecEdgarScanner', () => {
         accession_number: '0001987654-26-000001',
         issuer_name: 'Example Corp',
         transaction_type: 'purchase',
-        transactionValue: 2_500_000,
+        transaction_value: 2_500_000,
         severity_hint: 'HIGH',
         ticker: 'EXMP',
       });
@@ -221,11 +221,8 @@ describe('SecEdgarScanner', () => {
     });
 
     it('polls Form 4 on a 120-second cadence while keeping 8-K at 60 seconds', async () => {
-      const nowSpy = vi.spyOn(Date, 'now');
-      nowSpy
-        .mockReturnValueOnce(0)
-        .mockReturnValueOnce(60_000)
-        .mockReturnValueOnce(120_000);
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
 
       const scanner = new SecEdgarScanner(new InMemoryEventBus());
       const fetchFn = vi.fn<typeof fetch>()
@@ -239,11 +236,13 @@ describe('SecEdgarScanner', () => {
       scanner.fetchFn = fetchFn;
 
       await scanner.scan();
+      vi.setSystemTime(60_000);
       await scanner.scan();
+      vi.setSystemTime(120_000);
       await scanner.scan();
 
       expect(fetchFn).toHaveBeenCalledTimes(5);
-      nowSpy.mockRestore();
+      vi.useRealTimers();
     });
 
     it('falls back to a generic Form 4 title when transaction details are absent from the feed', async () => {
@@ -261,7 +260,7 @@ describe('SecEdgarScanner', () => {
       expect(form4?.title).toBe(
         'SEC Form 4: Jane Doe filed insider trade disclosure for Example Corp',
       );
-      expect(form4?.metadata?.['transactionValue']).toBe(0);
+      expect(form4?.metadata?.['transaction_value']).toBe(0);
     });
   });
 
