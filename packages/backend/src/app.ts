@@ -86,7 +86,7 @@ import { AuditLog } from './pipeline/audit-log.js';
 import { LLMGatekeeper } from './pipeline/llm-gatekeeper.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
-// WebSocket removed
+import { registerWebsocketPlugin, toLiveFeedEvent } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
 import { MarketContextCache } from './services/market-context-cache.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
@@ -230,6 +230,7 @@ export function buildApp(options?: {
     ?? (db && marketCache
       ? new HistoricalEnricher(db, marketCache, options?.historicalEnricherConfig)
       : undefined);
+  const websocketClientState = { count: 0 };
   const shouldWarmHistoricalResources =
     db != null &&
     marketCache != null &&
@@ -249,6 +250,7 @@ export function buildApp(options?: {
 
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
+  server.decorate('websocketClientCount', () => websocketClientState.count);
   server.register(async () => {
     await registerAuthPlugin(server, {
       apiKey,
@@ -263,6 +265,12 @@ export function buildApp(options?: {
         '/api/v1/audit/stats',
       ],
     });
+  });
+
+  server.register(registerWebsocketPlugin, {
+    apiKey,
+    clientState: websocketClientState,
+    eventBus,
   });
 
 
@@ -387,8 +395,10 @@ export function buildApp(options?: {
     }
 
     // Step 6: Store to DB (if available)
+    let eventId: string | undefined;
+
     if (db) {
-      const eventId = await storeEvent(db, { event, severity: result.severity });
+      eventId = await storeEvent(db, { event, severity: result.severity });
 
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
@@ -415,6 +425,20 @@ export function buildApp(options?: {
         await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
       }
     }
+
+    await eventBus.publishTopic?.(
+      'event:classified',
+      toLiveFeedEvent({
+        id: eventId ?? event.id,
+        source: event.source,
+        title: event.title,
+        summary: event.body,
+        severity: result.severity,
+        metadata: event.metadata,
+        time: event.timestamp,
+        llmReason: llmResult?.ok ? llmResult.value.reasoning : undefined,
+      }),
+    );
 
     pipelineFunnelTotal.inc({ stage: 'stored' });
 
@@ -703,6 +727,9 @@ export function buildApp(options?: {
       scanners,
       db: {
         status: dbStatus,
+      },
+      websocket: {
+        clients: server.websocketClientCount?.() ?? 0,
       },
       lastEventTime,
       uptime: process.uptime(),

@@ -16,6 +16,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@fastify/websocket": "^11.2.0",
     "@anthropic-ai/sdk": "^0.78.0",
     "@event-radar/delivery": "workspace:*",
     "@event-radar/shared": "workspace:*",
