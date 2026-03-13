@@ -1,0 +1,71 @@
+import { AlertTriangle, ArrowDown, ArrowUp, Dot } from 'lucide-react';
+import type { ReactNode } from 'react';
+import type { Severity } from '../types/index.js';
+import { cn } from '../lib/utils.js';
+
+const severityConfig: Record<
+  Severity,
+  {
+    label: string;
+    color: string;
+    icon: ReactNode;
+    barClassName: string;
+    barStyle?: string;
+  }
+> = {
+  CRITICAL: {
+    label: 'Critical',
+    color: 'text-severity-critical',
+    icon: <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />,
+    barClassName: 'w-[3px] bg-severity-critical',
+  },
+  HIGH: {
+    label: 'High',
+    color: 'text-severity-high',
+    icon: <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />,
+    barClassName:
+      'w-[3px] bg-[length:4px_4px] bg-[repeating-linear-gradient(180deg,var(--severity-high)_0,var(--severity-high)_2px,transparent_2px,transparent_4px)]',
+  },
+  MEDIUM: {
+    label: 'Medium',
+    color: 'text-severity-medium',
+    icon: <Dot className="h-4 w-4" aria-hidden="true" />,
+    barClassName:
+      'w-[3px] bg-[length:4px_6px] bg-[radial-gradient(circle,var(--severity-medium)_1px,transparent_1.4px)]',
+  },
+  LOW: {
+    label: 'Low',
+    color: 'text-severity-low',
+    icon: <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />,
+    barClassName: 'w-px bg-severity-low',
+  },
+};
+
+export function SeverityBadge({
+  severity,
+  className,
+}: {
+  severity: Severity;
+  className?: string;
+}) {
+  const config = severityConfig[severity];
+
+  return (
+    <span
+      className={cn(
+        'inline-flex min-h-11 items-center gap-2 rounded-full bg-bg-elevated/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em]',
+        config.color,
+        className,
+      )}
+      aria-label={`${config.label} severity alert`}
+    >
+      <span
+        className={cn('h-5 shrink-0 rounded-full', config.barClassName)}
+        aria-hidden="true"
+      />
+      {config.icon}
+      <span>{severity}</span>
+      <span className="sr-only">{config.label}</span>
+    </span>
+  );
+}
