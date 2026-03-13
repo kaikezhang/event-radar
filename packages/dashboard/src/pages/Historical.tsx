@@ -132,14 +132,14 @@ function StatCard({
 }
 
 function MarketContextPanel({ ctx }: { ctx: MarketContext }) {
-  const regimeColors: Record<string, string> = {
+  const regimeColors: Record<MarketContext['regime'], string> = {
     bull: 'text-radar-green',
     bear: 'text-radar-red',
     correction: 'text-radar-amber',
-    recovery: 'text-radar-blue',
+    neutral: 'text-radar-text-muted',
   };
 
-  const RegimeIcon = ctx.regime === 'bull' || ctx.regime === 'recovery' ? TrendingUp : TrendingDown;
+  const RegimeIcon = ctx.regime === 'bull' ? TrendingUp : TrendingDown;
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

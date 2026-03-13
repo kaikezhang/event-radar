@@ -69,12 +69,16 @@ export class DeliveryKillSwitch implements IDeliveryKillSwitch {
       .where(eq(schema.deliveryKillSwitch.id, 1))
       .limit(1);
 
+    if (!row) {
+      throw new Error('Kill switch row missing after ensureRow');
+    }
+
     return {
-      enabled: row!.enabled,
-      activatedAt: row!.activatedAt?.toISOString() ?? null,
-      reason: row!.reason,
-      updatedBy: row!.updatedBy ?? null,
-      updatedAt: row!.updatedAt.toISOString(),
+      enabled: row.enabled,
+      activatedAt: row.activatedAt?.toISOString() ?? null,
+      reason: row.reason,
+      updatedBy: row.updatedBy ?? null,
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 

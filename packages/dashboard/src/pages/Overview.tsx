@@ -168,7 +168,7 @@ export function Overview() {
           onToggleExpand={() => setShowAllFactors((expanded) => !expanded)}
         />
         <DeliveryControlCard
-          control={deliveryControl}
+          control={deliveryControl ?? null}
           delivery={delivery}
           canToggle={hasDashboardApiKey}
           errorMessage={deliveryError}
@@ -321,12 +321,20 @@ function DeliveryControlCard({
                 {control?.enabled ? 'Kill switch active' : 'Delivery active'}
               </span>
             </div>
-            <div className="text-xs text-radar-text-muted">
-              Last operator {control?.operator ?? 'unknown'}
-            </div>
-            <div className="text-xs text-radar-text-muted">
-              Last operation {control?.last_operation_at ? timeAgo(control.last_operation_at) : 'never'}
-            </div>
+            {control ? (
+              <>
+                <div className="text-xs text-radar-text-muted">
+                  Last operator {control.operator ?? 'unknown'}
+                </div>
+                <div className="text-xs text-radar-text-muted">
+                  Last operation {control.last_operation_at ? timeAgo(control.last_operation_at) : 'never'}
+                </div>
+              </>
+            ) : (
+              <div className="text-xs text-radar-text-muted">
+                Add a valid API key to view kill switch state
+              </div>
+            )}
             {!canToggle && (
               <div className="text-xs text-radar-amber">
                 Configure `VITE_API_KEY` or `localStorage[event-radar.api-key]` to enable toggle actions

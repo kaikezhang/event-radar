@@ -34,7 +34,7 @@ export interface DashboardResponse {
   };
   delivery: Record<string, DeliveryChannelStats>;
   regime: DashboardRegime | null;
-  delivery_control: DeliveryControlState | null;
+  delivery_control?: DeliveryControlState | null;
   db: {
     total_events: number;
     last_event: string;
@@ -80,7 +80,7 @@ export interface PipelineFunnel {
 export interface MarketContext {
   vix: number;
   spy: number;
-  regime: 'bull' | 'bear' | 'correction' | 'recovery';
+  regime: 'bull' | 'bear' | 'correction' | 'neutral';
   updated: string;
 }
 

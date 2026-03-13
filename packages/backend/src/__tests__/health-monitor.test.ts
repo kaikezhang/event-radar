@@ -242,4 +242,25 @@ describe('DeliveryKillSwitch', () => {
     const status = await ks2.getStatus();
     expect(status.reason).toBe('persist test');
   });
+
+  it('throws a descriptive error when the singleton row disappears before status read', async () => {
+    const fakeDb = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: async () => undefined,
+        }),
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [],
+          }),
+        }),
+      }),
+    } as unknown as Database;
+
+    const ks = new DeliveryKillSwitch(fakeDb);
+
+    await expect(ks.getStatus()).rejects.toThrow('Kill switch row missing after ensureRow');
+  });
 });

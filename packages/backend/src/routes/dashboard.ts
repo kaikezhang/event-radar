@@ -5,10 +5,12 @@ import type { Database } from '../db/connection.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
 import type { IDeliveryKillSwitch } from '../services/delivery-kill-switch.js';
 import { toDashboardMarketRegime } from '../services/market-regime.js';
+import { validateApiKeyValue } from './auth-middleware.js';
 import { registry as metricsRegistry } from '../metrics.js';
 import { asRecord, parseConfidence, parseJsonValue } from './route-utils.js';
 
 export interface DashboardDeps {
+  apiKey: string;
   db?: Database;
   scannerRegistry: ScannerRegistry;
   marketCache?: MarketContextCache;
@@ -277,9 +279,17 @@ export function registerDashboardRoutes(
   server: FastifyInstance,
   deps: DashboardDeps,
 ): void {
-  server.get('/api/v1/dashboard', async (_request, reply) => {
+  server.get('/api/v1/dashboard', async (request, reply) => {
     const uptimeS = (Date.now() - deps.startTime) / 1000;
     const graceActive = uptimeS < 90;
+    const providedApiKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key']
+      : undefined;
+    const apiKeyAuthenticated = validateApiKeyValue(providedApiKey, deps.apiKey).ok;
+
+    if (apiKeyAuthenticated) {
+      request.apiKeyAuthenticated = true;
+    }
 
     // Parse all metrics at once
     const metricsText = await metricsRegistry.metrics();
@@ -473,11 +483,15 @@ export function registerDashboardRoutes(
         ...regimeSnapshot,
         market_regime: toDashboardMarketRegime(regimeSnapshot.score),
       } : null,
-      delivery_control: killSwitchStatus ? {
-        enabled: killSwitchStatus.enabled,
-        last_operation_at: killSwitchStatus.updatedAt,
-        operator: killSwitchStatus.updatedBy,
-      } : null,
+      ...(apiKeyAuthenticated
+        ? {
+            delivery_control: killSwitchStatus ? {
+              enabled: killSwitchStatus.enabled,
+              last_operation_at: killSwitchStatus.updatedAt,
+              operator: killSwitchStatus.updatedBy,
+            } : null,
+          }
+        : {}),
       delivery: deliveryWithSuccessTimes,
       db: {
         total_events: dbEventCount,

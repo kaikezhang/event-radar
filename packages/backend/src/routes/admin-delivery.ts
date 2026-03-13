@@ -9,7 +9,7 @@ const KillRequestSchema = z.object({
 });
 
 export interface AdminDeliveryRouteOptions {
-  apiKey?: string;
+  apiKey: string;
   killSwitch: IDeliveryKillSwitch;
   healthMonitor: HealthMonitorService;
 }

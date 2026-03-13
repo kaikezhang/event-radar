@@ -15,7 +15,11 @@ import type {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const API_KEY = import.meta.env.VITE_API_KEY;
 
-async function fetchJSON<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+async function fetchJSON<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  init?: RequestInit,
+): Promise<T> {
   const url = new URL(path, BASE_URL || window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -24,8 +28,14 @@ async function fetchJSON<T>(path: string, params?: Record<string, string | numbe
       }
     }
   }
+  const headers = new Headers(init?.headers);
+  if (API_KEY && !headers.has('x-api-key')) {
+    headers.set('x-api-key', API_KEY);
+  }
+
   const res = await fetch(url.toString(), {
-    headers: API_KEY ? { 'x-api-key': API_KEY } : undefined,
+    ...init,
+    headers,
   });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -44,7 +54,19 @@ export function readDashboardApiKey(): string | null {
 }
 
 export function fetchDashboard(): Promise<DashboardResponse> {
-  return fetchJSON<DashboardResponse>('/api/v1/dashboard');
+  const apiKey = readDashboardApiKey();
+
+  return fetchJSON<DashboardResponse>(
+    '/api/v1/dashboard',
+    undefined,
+    apiKey
+      ? {
+          headers: {
+            'x-api-key': apiKey,
+          },
+        }
+      : undefined,
+  );
 }
 
 export function fetchAudit(params?: AuditQueryParams): Promise<AuditResponse> {

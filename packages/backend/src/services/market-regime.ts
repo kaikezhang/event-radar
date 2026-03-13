@@ -6,6 +6,10 @@ import type {
   RegimeSnapshot,
 } from '@event-radar/shared';
 
+interface MarketRegimeLogger {
+  error: (object: unknown, message?: string) => void;
+}
+
 interface HistoricalRow {
   date: Date;
   close: number;
@@ -348,6 +352,7 @@ export function toRegimeHistoryPoint(snapshot: RegimeSnapshotWithExtras): Regime
 export class MarketRegimeService implements IMarketRegimeService {
   private readonly yahooFinance: YahooFinanceClient;
   private readonly cacheTtlMs: number;
+  private readonly logger?: MarketRegimeLogger;
   private readonly now: () => Date;
   private cache: CacheEntry | null = null;
   private inFlightSnapshot: Promise<RegimeSnapshotWithExtras> | null = null;
@@ -357,10 +362,12 @@ export class MarketRegimeService implements IMarketRegimeService {
   constructor(options?: {
     yahooFinance?: YahooFinanceClient;
     cacheTtlMs?: number;
+    logger?: MarketRegimeLogger;
     now?: () => Date;
   }) {
     this.yahooFinance = options?.yahooFinance ?? new YahooFinance();
     this.cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    this.logger = options?.logger;
     this.now = options?.now ?? (() => new Date());
   }
 
@@ -396,9 +403,9 @@ export class MarketRegimeService implements IMarketRegimeService {
 
     this.inFlightSnapshot = this.fetchSnapshot(now)
       .catch((error) => {
-        console.error(
-          '[market-regime] Failed to refresh snapshot:',
-          error instanceof Error ? error.message : error,
+        this.logger?.error(
+          { err: error },
+          'failed to refresh market regime snapshot',
         );
 
         return this.lastSnapshot ?? createNeutralSnapshot(now);

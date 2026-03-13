@@ -268,4 +268,41 @@ describe('Overview', () => {
       );
     });
   });
+
+  it('renders the neutral regime badge when the backend reports neutral', () => {
+    const baseRegime = makeDashboardData().regime as NonNullable<DashboardResponse['regime']>;
+    useDashboardMock.mockReturnValue({
+      data: makeDashboardData({
+        regime: {
+          ...baseRegime,
+          score: 10,
+          market_regime: 'neutral',
+        },
+      }),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<Overview />);
+
+    expect(screen.getByText('NEUTRAL')).toBeTruthy();
+  });
+
+  it('renders delivery stats even when delivery control metadata is omitted', () => {
+    useDashboardMock.mockReturnValue({
+      data: makeDashboardData({
+        delivery_control: undefined,
+      }),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<Overview />);
+
+    expect(screen.getByText('Delivery Control')).toBeTruthy();
+    expect(screen.getByText(/Delivery active/i)).toBeTruthy();
+    expect(screen.getByText(/Add a valid API key to view kill switch state/i)).toBeTruthy();
+  });
 });

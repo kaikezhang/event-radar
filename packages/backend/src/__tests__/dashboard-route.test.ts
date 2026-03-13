@@ -8,6 +8,7 @@ import { createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 import type { PGlite } from '@electric-sql/pglite';
 
 describe('GET /api/v1/dashboard', () => {
+  const TEST_API_KEY = 'dashboard-test-key';
   let db: Database;
   let client: PGlite;
 
@@ -29,37 +30,7 @@ describe('GET /api/v1/dashboard', () => {
     await safeClose(client);
   });
 
-  it('returns the full regime snapshot and delivery control metadata', async () => {
-    const snapshot: RegimeSnapshot = {
-      score: 72,
-      label: 'overbought',
-      spy: 604.8,
-      factors: {
-        vix: { value: 13.2, zscore: -0.85 },
-        spyRsi: { value: 68.4, signal: 'overbought' },
-        spy52wPosition: { pctFromHigh: -1.1, pctFromLow: 23.7 },
-        maSignal: { sma20: 604.2, sma50: 592.5, signal: 'golden_cross' },
-        yieldCurve: { spread: 1.1, inverted: false },
-      },
-      amplification: {
-        bullish: 0.7,
-        bearish: 1.5,
-      },
-      updatedAt: '2026-03-13T12:00:00.000Z',
-    };
-    const killSwitch = {
-      isActive: vi.fn().mockResolvedValue(true),
-      activate: vi.fn(),
-      deactivate: vi.fn(),
-      getStatus: vi.fn().mockResolvedValue({
-        enabled: true,
-        activatedAt: '2026-03-13T11:55:00.000Z',
-        reason: 'Manual pause',
-        updatedAt: '2026-03-13T11:55:00.000Z',
-        updatedBy: 'api_key',
-      }),
-    };
-
+  async function seedDashboardDeliveryData() {
     await db.execute(sql`
       INSERT INTO events (id, source, title, summary, metadata, source_urls, created_at, received_at)
       VALUES (
@@ -94,9 +65,25 @@ describe('GET /api/v1/dashboard', () => {
     deliveriesSentTotal.inc({ channel: 'discord', status: 'success' });
     deliveriesSentTotal.inc({ channel: 'discord', status: 'failure' });
     deliveriesSentTotal.inc({ channel: 'telegram', status: 'success' });
+  }
 
-    const ctx = buildApp({
+  function buildDashboardContext(snapshot: RegimeSnapshot) {
+    const killSwitch = {
+      isActive: vi.fn().mockResolvedValue(true),
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({
+        enabled: true,
+        activatedAt: '2026-03-13T11:55:00.000Z',
+        reason: 'Manual pause',
+        updatedAt: '2026-03-13T11:55:00.000Z',
+        updatedBy: 'api_key',
+      }),
+    };
+
+    return buildApp({
       logger: false,
+      apiKey: TEST_API_KEY,
       db,
       killSwitch: killSwitch as never,
       marketRegimeService: {
@@ -104,6 +91,29 @@ describe('GET /api/v1/dashboard', () => {
         getAmplificationFactor: vi.fn(),
       } as never,
     });
+  }
+
+  it('omits delivery control metadata without a valid api key', async () => {
+    const snapshot: RegimeSnapshot = {
+      score: 72,
+      label: 'overbought',
+      spy: 604.8,
+      factors: {
+        vix: { value: 13.2, zscore: -0.85 },
+        spyRsi: { value: 68.4, signal: 'overbought' },
+        spy52wPosition: { pctFromHigh: -1.1, pctFromLow: 23.7 },
+        maSignal: { sma20: 604.2, sma50: 592.5, signal: 'golden_cross' },
+        yieldCurve: { spread: 1.1, inverted: false },
+      },
+      amplification: {
+        bullish: 0.7,
+        bearish: 1.5,
+      },
+      updatedAt: '2026-03-13T12:00:00.000Z',
+    };
+    await seedDashboardDeliveryData();
+
+    const ctx = buildDashboardContext(snapshot);
     await ctx.server.ready();
 
     const response = await ctx.server.inject({
@@ -123,11 +133,6 @@ describe('GET /api/v1/dashboard', () => {
           spyRsi: { value: 68.4, signal: 'overbought' },
         },
       },
-      delivery_control: {
-        enabled: true,
-        last_operation_at: '2026-03-13T11:55:00.000Z',
-        operator: 'api_key',
-      },
       delivery: {
         discord: {
           sent: 2,
@@ -139,6 +144,49 @@ describe('GET /api/v1/dashboard', () => {
           errors: 0,
           last_success_at: '2026-03-13T11:58:00.000Z',
         },
+      },
+    });
+    expect(response.json()).not.toHaveProperty('delivery_control');
+    await safeCloseServer(ctx.server);
+  });
+
+  it('returns delivery control metadata when the dashboard request has a valid api key', async () => {
+    const snapshot: RegimeSnapshot = {
+      score: 72,
+      label: 'overbought',
+      spy: 604.8,
+      factors: {
+        vix: { value: 13.2, zscore: -0.85 },
+        spyRsi: { value: 68.4, signal: 'overbought' },
+        spy52wPosition: { pctFromHigh: -1.1, pctFromLow: 23.7 },
+        maSignal: { sma20: 604.2, sma50: 592.5, signal: 'golden_cross' },
+        yieldCurve: { spread: 1.1, inverted: false },
+      },
+      amplification: {
+        bullish: 0.7,
+        bearish: 1.5,
+      },
+      updatedAt: '2026-03-13T12:00:00.000Z',
+    };
+    await seedDashboardDeliveryData();
+
+    const ctx = buildDashboardContext(snapshot);
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/dashboard',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      delivery_control: {
+        enabled: true,
+        last_operation_at: '2026-03-13T11:55:00.000Z',
+        operator: 'api_key',
       },
     });
     await safeCloseServer(ctx.server);

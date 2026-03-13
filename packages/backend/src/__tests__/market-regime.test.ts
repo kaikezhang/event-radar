@@ -278,7 +278,10 @@ describe('MarketRegimeService', () => {
     const yahooFinance = {
       historical: vi.fn().mockRejectedValue(new Error('Yahoo failure')),
     };
-    const service = new MarketRegimeService({ yahooFinance, cacheTtlMs: 300_000 });
+    const logger = {
+      error: vi.fn(),
+    };
+    const service = new MarketRegimeService({ yahooFinance, cacheTtlMs: 300_000, logger });
 
     const first = await service.getRegimeSnapshot();
     const second = await service.getRegimeSnapshot();
@@ -286,6 +289,12 @@ describe('MarketRegimeService', () => {
     expect(first.label).toBe('neutral');
     expect(second).toBe(first);
     expect(yahooFinance.historical).toHaveBeenCalledTimes(4);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.any(Error),
+      }),
+      'failed to refresh market regime snapshot',
+    );
   });
 });
 
