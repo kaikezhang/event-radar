@@ -59,7 +59,7 @@ export function useAlerts(limit = 50): UseAlertsResult {
 
   const pendingCount = pendingAlerts.length;
   const isInitialLoading = query.isLoading && visibleAlerts.length === 0;
-  const isEmpty = !isInitialLoading && visibleAlerts.length === 0;
+  const isEmpty = !isInitialLoading && !query.error && visibleAlerts.length === 0;
 
   return {
     alerts: useMemo(() => visibleAlerts, [visibleAlerts]),
