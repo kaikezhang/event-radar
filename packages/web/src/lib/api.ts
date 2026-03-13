@@ -192,7 +192,8 @@ export async function removeFromWatchlist(ticker: string): Promise<void> {
 
 export async function getEventSources(): Promise<string[]> {
   const data = await apiFetch('/events/sources');
-  return data.sources ?? [];
+  const raw: string[] = data.sources ?? [];
+  return [...new Set(raw.map(mapSource))].sort();
 }
 
 function mapSource(source: string): string {

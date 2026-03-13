@@ -741,7 +741,7 @@ export function buildApp(options?: {
     registerFeedbackRoutes(server, db, { apiKey });
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
-    registerWatchlistRoutes(server, db);
+    registerWatchlistRoutes(server, db, { apiKey });
   }
 
   // Register classify debug route (works without DB)

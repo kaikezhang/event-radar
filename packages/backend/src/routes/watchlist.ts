@@ -2,16 +2,27 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
+import { requireApiKey } from './auth-middleware.js';
+
+export interface WatchlistRouteOptions {
+  apiKey?: string;
+}
 
 export function registerWatchlistRoutes(
   server: FastifyInstance,
   db: Database,
+  options?: WatchlistRouteOptions,
 ): void {
+  const withAuth = async (
+    request: Parameters<typeof requireApiKey>[0],
+    reply: Parameters<typeof requireApiKey>[1],
+  ) => requireApiKey(request, reply, options?.apiKey);
+
   /**
    * GET /api/watchlist
    * List all watchlist tickers
    */
-  server.get('/api/watchlist', async () => {
+  server.get('/api/watchlist', { preHandler: withAuth }, async () => {
     const data = await db
       .select()
       .from(watchlist)
@@ -25,6 +36,7 @@ export function registerWatchlistRoutes(
    * Add a ticker to the watchlist
    */
   server.post('/api/watchlist', {
+    preHandler: withAuth,
     schema: {
       body: {
         type: 'object',
@@ -32,8 +44,8 @@ export function registerWatchlistRoutes(
         properties: {
           ticker: {
             type: 'string',
-            pattern: '^[A-Z]{1,10}$',
-            description: 'Ticker symbol (1-10 uppercase letters)',
+            pattern: '^[A-Z]{1,5}$',
+            description: 'Ticker symbol (1-5 uppercase letters)',
           },
           notes: {
             type: 'string',
@@ -69,6 +81,7 @@ export function registerWatchlistRoutes(
    * Remove a ticker from the watchlist
    */
   server.delete('/api/watchlist/:ticker', {
+    preHandler: withAuth,
     schema: {
       params: {
         type: 'object',

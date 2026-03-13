@@ -232,12 +232,13 @@ export function registerEventRoutes(
     const { q, limit: rawLimit } = request.query as { q: string; limit?: number };
     const searchLimit = Math.min(rawLimit || 20, 100);
 
-    // Check if query is a ticker-like pattern (1-5 uppercase letters)
-    const isTickerQuery = /^[A-Z]{1,5}$/.test(q.trim());
+    // Normalize and check if query is a ticker-like pattern (1-5 letters)
+    const trimmed = q.trim().toUpperCase();
+    const isTickerQuery = /^[A-Z]{1,5}$/.test(trimmed);
 
     if (isTickerQuery) {
       // Ticker search: match metadata->>'ticker' or metadata->'tickers'
-      const ticker = q.trim();
+      const ticker = trimmed;
       const data = await db
         .select()
         .from(events)

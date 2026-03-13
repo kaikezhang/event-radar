@@ -1,15 +1,16 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Bell, X } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../components/EmptyState.js';
 import { AlertCard } from '../components/AlertCard.js';
 import { PillBanner } from '../components/PillBanner.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useAlerts } from '../hooks/useAlerts.js';
+import { getEventSources } from '../lib/api.js';
 import type { FilterPreset } from '../types/index.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
-const SOURCES = ['SEC Filing', 'White House', 'Federal Register', 'Breaking News', 'Reddit', 'StockTwits', 'Economic Calendar', 'DOJ', 'FDA', 'Congress', 'Options Flow', 'Short Interest', 'Truth Social', 'X/Twitter'] as const;
 
 const PRESETS_KEY = 'event-radar-filter-presets';
 
@@ -32,6 +33,12 @@ function saveCustomPresets(presets: FilterPreset[]) {
 }
 
 export function Feed() {
+  const { data: sources = [] } = useQuery<string[]>({
+    queryKey: ['event-sources'],
+    queryFn: getEventSources,
+    staleTime: 60_000,
+  });
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse filter state from URL
@@ -276,7 +283,7 @@ export function Feed() {
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">Source</h3>
             <div className="flex flex-wrap gap-2">
-              {SOURCES.map((s) => (
+              {sources.map((s) => (
                 <button
                   key={s}
                   type="button"

@@ -355,3 +355,91 @@ describe('GET /api/events?watchlist=true', () => {
     await safeClose(emptyClient);
   });
 });
+
+describe('Watchlist auth regression', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    await cleanTestDb(sharedDb);
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('should return 401 for GET /api/watchlist without API key', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/watchlist',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('should return 401 for POST /api/watchlist without API key', async () => {
+    const response = await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      payload: { ticker: 'AAPL' },
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('should return 401 for DELETE /api/watchlist/:ticker without API key', async () => {
+    const response = await ctx.server.inject({
+      method: 'DELETE',
+      url: '/api/watchlist/AAPL',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('Search case normalization', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    await cleanTestDb(sharedDb);
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'NVIDIA earnings beat',
+        metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
+      }),
+      severity: 'HIGH',
+    });
+
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('should match ticker search with lowercase input', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=nvda',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    const meta = body.data[0].metadata as { ticker?: string };
+    expect(meta.ticker).toBe('NVDA');
+  });
+
+  it('should match ticker search with mixed-case input', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=Nvda',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+  });
+});
