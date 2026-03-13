@@ -1,11 +1,9 @@
 import { AlertTriangle, ArrowDown, ArrowUp, Dot } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Severity } from '../types/index.js';
+
 import { cn } from '../lib/utils.js';
 
-const severityConfig: Record<
-  Severity,
-  {
+const severityConfig: Record<string, {
     label: string;
     color: string;
     icon: ReactNode;
@@ -45,7 +43,7 @@ export function SeverityBadge({
   severity,
   className,
 }: {
-  severity: Severity;
+  severity: string;
   className?: string;
 }) {
   const config = severityConfig[severity];

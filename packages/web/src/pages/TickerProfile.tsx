@@ -1,10 +1,8 @@
-import { Bell, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { AlertCard } from '../components/AlertCard.js';
 import { EmptyState } from '../components/EmptyState.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
-import { StatCard } from '../components/StatCard.js';
-import { formatPercent, formatPrice } from '../lib/format.js';
 import { useTickerProfile } from '../hooks/useTickerProfile.js';
 
 export function TickerProfile() {
@@ -25,7 +23,7 @@ export function TickerProfile() {
       <EmptyState
         icon="🔍"
         title="Ticker not found"
-        description="This symbol is not available in the mock profile dataset."
+        description={`No events found for ${symbol?.toUpperCase() ?? 'this ticker'}.`}
         ctaLabel="Back to feed"
       />
     );
@@ -40,22 +38,11 @@ export function TickerProfile() {
               Ticker Profile
             </p>
             <h1 className="mt-2 text-[24px] font-semibold leading-8 text-text-primary">
-              {data.name}
+              ${data.symbol}
             </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span className="font-mono text-xl font-semibold text-text-primary">
-                {formatPrice(data.price ?? 0)}
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  (data.priceChangePercent ?? 0) >= 0
-                    ? 'bg-emerald-400/12 text-emerald-300'
-                    : 'bg-severity-critical/12 text-severity-critical'
-                }`}
-              >
-                {formatPercent(data.priceChangePercent ?? 0)}
-              </span>
-            </div>
+            <p className="mt-2 text-sm text-text-secondary">
+              {data.eventCount} events tracked
+            </p>
           </div>
 
           <button
@@ -68,24 +55,12 @@ export function TickerProfile() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-3">
-        {data.stats.map((stat) => (
-          <StatCard key={stat.label} value={stat.value} label={stat.label} />
-        ))}
-      </section>
-
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Recent radar for {data.symbol}</h2>
-            <p className="mt-1 text-sm text-text-secondary">
-              Latest alerts tied to this ticker from filings, news, and social sources.
-            </p>
-          </div>
-          <Bell className="h-5 w-5 text-text-secondary" />
-        </div>
+        <h2 className="mb-4 text-[17px] font-semibold leading-[1.4] text-text-primary">
+          Recent events for ${data.symbol}
+        </h2>
         <div className="space-y-3">
-          {data.recentEvents.map((event) => (
+          {data.recentAlerts.map((event) => (
             <AlertCard key={event.id} alert={event} />
           ))}
         </div>

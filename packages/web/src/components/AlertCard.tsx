@@ -24,7 +24,7 @@ export function AlertCard({ alert }: { alert: AlertSummary }) {
       <div
         className={cn(
           'absolute inset-y-4 left-0 rounded-full',
-          severityBarClassName[alert.severity],
+          severityBarClassName[alert.severity as keyof typeof severityBarClassName] ?? 'w-px bg-severity-low',
         )}
         aria-hidden="true"
       />
@@ -38,7 +38,7 @@ export function AlertCard({ alert }: { alert: AlertSummary }) {
           ))}
         </div>
         <span className="ml-auto font-mono text-xs text-text-secondary">
-          {formatRelativeTime(alert.publishedAt)}
+          {formatRelativeTime(alert.time)}
         </span>
       </div>
 

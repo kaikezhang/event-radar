@@ -1,64 +1,54 @@
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
-export type SourceName =
-  | 'SEC Filing'
-  | 'Breaking News'
-  | 'Federal Register'
-  | 'StockTwits'
-  | 'Reddit'
-  | 'Press Release';
-
 export interface AlertSummary {
   id: string;
-  severity: Severity;
-  source: SourceName;
+  severity: string;
+  source: string;
   title: string;
   summary: string;
   tickers: string[];
-  publishedAt: string;
-  sourceUrl: string;
+  time: string;
   saved?: boolean;
 }
 
-export interface MarketContextEntry {
+export interface TickerDirection {
   symbol: string;
-  direction: 'up' | 'down' | 'flat';
+  direction: string;
   context: string;
 }
 
-export interface HistoricalPattern {
-  matchRate: number;
-  matchCount: number;
-  averageMoveT5: number;
-  averageMoveT20: number;
-  winRate: number;
-}
-
 export interface SimilarEvent {
-  id: string;
-  symbol: string;
   title: string;
-  occurredOn: string;
-  severity: Severity;
+  date: string;
+  move: string;
 }
 
-export interface EventDetailData extends AlertSummary {
-  aiSummary: string;
-  marketContext: MarketContextEntry[];
-  historicalPattern?: HistoricalPattern;
-  similarEvents: SimilarEvent[];
-}
-
-export interface TickerQuickStat {
-  label: string;
-  value: string;
+export interface EventDetailData {
+  id: string;
+  severity: string;
+  source: string;
+  title: string;
+  tickers: string[];
+  time: string;
+  url: string | null;
+  aiAnalysis: {
+    summary: string;
+    impact: string | null;
+    tickerDirections: TickerDirection[];
+  };
+  historicalPattern: {
+    matchCount: number;
+    confidence: string;
+    avgMoveT5: number | null;
+    avgMoveT20: number | null;
+    winRate: number | null;
+    similarEvents: SimilarEvent[];
+  };
 }
 
 export interface TickerProfileData {
   symbol: string;
   name: string;
-  price?: number;
-  priceChangePercent?: number;
-  recentEvents: AlertSummary[];
-  stats: TickerQuickStat[];
+  eventCount: number;
+  recentAlerts: AlertSummary[];
 }
