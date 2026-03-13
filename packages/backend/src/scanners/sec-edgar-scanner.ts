@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   BaseScanner,
   err,
@@ -9,11 +8,14 @@ import {
 } from '@event-radar/shared';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
+import {
+  deterministicScannerUuid,
+  SEC_USER_AGENT,
+  SEC_XML_ACCEPT,
+} from './sec-edgar-feed-utils.js';
 
 const EIGHT_K_POLL_INTERVAL_MS = 60_000;
 const FORM_4_POLL_INTERVAL_MS = 120_000;
-const SEC_USER_AGENT = 'EventRadar/1.0 (contact@example.com)';
-const SEC_XML_ACCEPT = 'application/atom+xml, application/xml, text/xml';
 
 const EIGHT_K_ATOM_URL =
   'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&dateb=&owner=include&count=40&search_text=&start=0&output=atom';
@@ -219,17 +221,7 @@ function formatAmount(value: number): string {
 }
 
 function accessionToUuid(accessionNumber: string): string {
-  const hex = createHash('sha256')
-    .update(`sec-edgar:${accessionNumber}`)
-    .digest('hex');
-
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    `5${hex.slice(13, 16)}`,
-    `a${hex.slice(17, 20)}`,
-    hex.slice(20, 32),
-  ].join('-');
+  return deterministicScannerUuid(`sec-edgar:${accessionNumber}`);
 }
 
 function normalizeCompanyName(value: string): string {
