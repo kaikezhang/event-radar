@@ -1,7 +1,7 @@
 import type { RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { getMarketSession } from './llm-gatekeeper.js';
+import { getMarketSession, getNextSessionOpenMs } from './llm-gatekeeper.js';
 
 const require = createRequire(import.meta.url);
 
@@ -187,14 +187,15 @@ export class AlertFilter {
   /**
    * Session-aware max age calculation.
    * During market hours (RTH/PRE/POST): 2 hours.
-   * During CLOSED: extend to allow events that arrived since last session close.
-   * Practical extension: 16h covers overnight + weekend mornings.
+   * During CLOSED: max(2h, nextSessionOpen - now) so events remain valid
+   * until the next trading session opens (handles weekends + holidays).
    */
   private getEffectiveMaxAge(now: Date): number {
     const session = getMarketSession(now);
     if (session === 'CLOSED') {
-      // Overnight/weekend: extend to 16h to cover next-session relevance
-      return 16 * 60 * 60_000;
+      const nextOpenMs = getNextSessionOpenMs(now);
+      const msUntilOpen = nextOpenMs - now.getTime();
+      return Math.max(this.maxAgeMs, msUntilOpen);
     }
     return this.maxAgeMs; // 2h default
   }

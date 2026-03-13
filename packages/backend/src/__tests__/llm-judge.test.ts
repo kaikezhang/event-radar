@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LLMGatekeeper, getMarketSession } from '../pipeline/llm-gatekeeper.js';
+import { LLMGatekeeper, getMarketSession, getNextSessionOpenMs } from '../pipeline/llm-gatekeeper.js';
 import type { RawEvent } from '@event-radar/shared';
 import type { LLMProvider } from '../services/llm-provider.js';
 import { ok, err } from '@event-radar/shared';
@@ -117,6 +117,89 @@ describe('getMarketSession', () => {
   it('should return CLOSED at midnight on a weekday', () => {
     const d = etDate(2026, 3, 11, 0, 0);
     expect(getMarketSession(d)).toBe('CLOSED');
+  });
+
+  it('should return CLOSED on NYSE holidays (MLK Day 2026-01-19)', () => {
+    const d = etDate(2026, 1, 19, 10, 0); // Monday 10am ET — would be RTH but it's MLK Day
+    expect(getMarketSession(d)).toBe('CLOSED');
+  });
+
+  it('should return CLOSED on Good Friday (2026-04-03)', () => {
+    const d = etDate(2026, 4, 3, 12, 0); // Friday noon ET
+    expect(getMarketSession(d)).toBe('CLOSED');
+  });
+
+  it('should return CLOSED on Thanksgiving (2026-11-26)', () => {
+    const d = etDate(2026, 11, 26, 11, 0); // Thursday 11am ET
+    expect(getMarketSession(d)).toBe('CLOSED');
+  });
+
+  it('should return CLOSED on Christmas (2026-12-25)', () => {
+    const d = etDate(2026, 12, 25, 14, 0); // Friday 2pm ET
+    expect(getMarketSession(d)).toBe('CLOSED');
+  });
+
+  it('should return RTH on a normal weekday that is not a holiday', () => {
+    const d = etDate(2026, 1, 20, 10, 0); // Tuesday after MLK Day
+    expect(getMarketSession(d)).toBe('RTH');
+  });
+});
+
+// --- getNextSessionOpenMs tests ---
+
+describe('getNextSessionOpenMs', () => {
+  // Helper: create a Date in ET timezone at specific day/time
+  function etDate(year: number, month: number, day: number, hour: number, minute: number): Date {
+    const etStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+    const tempDate = new Date(etStr);
+    const utcStr = tempDate.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const utcDate = new Date(utcStr);
+    const offset = utcDate.getTime() - tempDate.getTime();
+    return new Date(tempDate.getTime() - offset);
+  }
+
+  it('should return Monday 09:30 ET from Friday 16:00 ET (~65.5h)', () => {
+    // Friday 2026-03-13 16:00 ET → Monday 2026-03-16 09:30 ET
+    const fri = etDate(2026, 3, 13, 16, 0);
+    const nextOpen = getNextSessionOpenMs(fri);
+    const hoursUntil = (nextOpen - fri.getTime()) / (60 * 60_000);
+    // Friday 16:00 to Monday 09:30 = 65.5 hours
+    expect(hoursUntil).toBeCloseTo(65.5, 0);
+  });
+
+  it('should return Monday 09:30 ET from Saturday noon ET (~45.5h)', () => {
+    // Saturday 2026-03-14 12:00 ET → Monday 2026-03-16 09:30 ET
+    const sat = etDate(2026, 3, 14, 12, 0);
+    const nextOpen = getNextSessionOpenMs(sat);
+    const hoursUntil = (nextOpen - sat.getTime()) / (60 * 60_000);
+    // Saturday 12:00 to Monday 09:30 = 45.5 hours
+    expect(hoursUntil).toBeCloseTo(45.5, 0);
+  });
+
+  it('should return same-day 09:30 when before market open on a weekday', () => {
+    // Wednesday 2026-03-11 03:00 ET → same day 09:30 ET
+    const wed = etDate(2026, 3, 11, 3, 0);
+    const nextOpen = getNextSessionOpenMs(wed);
+    const hoursUntil = (nextOpen - wed.getTime()) / (60 * 60_000);
+    expect(hoursUntil).toBeCloseTo(6.5, 0);
+  });
+
+  it('should return next-day 09:30 when after market close on a weekday', () => {
+    // Wednesday 2026-03-11 20:00 ET → Thursday 2026-03-12 09:30 ET
+    const wed = etDate(2026, 3, 11, 20, 0);
+    const nextOpen = getNextSessionOpenMs(wed);
+    const hoursUntil = (nextOpen - wed.getTime()) / (60 * 60_000);
+    expect(hoursUntil).toBeCloseTo(13.5, 0);
+  });
+
+  it('should skip holidays when computing next session open', () => {
+    // Thursday before Good Friday (2026-04-02 20:00 ET)
+    // Good Friday 2026-04-03 is a holiday, so next open = Monday 2026-04-06 09:30 ET
+    const thu = etDate(2026, 4, 2, 20, 0);
+    const nextOpen = getNextSessionOpenMs(thu);
+    const hoursUntil = (nextOpen - thu.getTime()) / (60 * 60_000);
+    // Thu 20:00 to Mon 09:30 = 85.5 hours
+    expect(hoursUntil).toBeCloseTo(85.5, 0);
   });
 });
 

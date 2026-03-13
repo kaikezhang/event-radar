@@ -87,14 +87,14 @@ describe('AlertFilter', () => {
     });
 
     it('should extend staleness window during CLOSED session (overnight/weekend)', () => {
-      // Saturday noon ET — CLOSED session, should use 16h window
+      // Saturday noon ET — CLOSED session, next open is Monday 09:30 ET (~45.5h away)
       const closedNow = new Date('2026-03-14T17:00:00Z'); // Saturday noon ET
       const staleFilter = new AlertFilter({
         enabled: true,
         maxAgeMinutes: 120,
         nowFn: () => closedNow,
       });
-      // Event from 10h ago — should PASS during CLOSED (16h window)
+      // Event from 10h ago — should PASS (next open is ~45.5h away)
       const event = makeEvent({
         timestamp: new Date(closedNow.getTime() - 10 * 60 * 60_000),
       });
@@ -102,8 +102,9 @@ describe('AlertFilter', () => {
       expect(result.pass).toBe(true);
     });
 
-    it('should still block very old events during CLOSED session (>16h)', () => {
-      const closedNow = new Date('2026-03-14T17:00:00Z');
+    it('should pass Friday close events through to Monday open', () => {
+      // Saturday noon ET, event from Friday 16:00 ET (~20h ago)
+      const closedNow = new Date('2026-03-14T17:00:00Z'); // Saturday noon ET
       const staleFilter = new AlertFilter({
         enabled: true,
         maxAgeMinutes: 120,
@@ -113,8 +114,44 @@ describe('AlertFilter', () => {
         timestamp: new Date(closedNow.getTime() - 20 * 60 * 60_000), // 20h old
       });
       const result = staleFilter.check(event);
+      // Next open is ~45.5h away, so 20h old event should pass
+      expect(result.pass).toBe(true);
+    });
+
+    it('should block events older than time-to-next-session during CLOSED', () => {
+      // Saturday noon ET, next open Monday 09:30 ET (~45.5h away)
+      const closedNow = new Date('2026-03-14T17:00:00Z');
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => closedNow,
+      });
+      // Event from 50h ago — older than ~45.5h window
+      const event = makeEvent({
+        timestamp: new Date(closedNow.getTime() - 50 * 60 * 60_000),
+      });
+      const result = staleFilter.check(event);
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('stale');
+    });
+
+    it('should handle holiday weekends with extended staleness', () => {
+      // Thursday 2026-04-02 20:00 ET, Good Friday is a holiday
+      // Next open = Monday 2026-04-06 09:30 ET (~85.5h away)
+      // Use a helper to build the ET date
+      const etStr = '2026-04-03T01:00:00.000Z'; // ~Thu 21:00 ET (EDT offset)
+      const closedNow = new Date(etStr);
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        maxAgeMinutes: 120,
+        nowFn: () => closedNow,
+      });
+      // Event from 40h ago should pass (next open is ~85.5h from Thu 20:00)
+      const event = makeEvent({
+        timestamp: new Date(closedNow.getTime() - 40 * 60 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(true);
     });
   });
 

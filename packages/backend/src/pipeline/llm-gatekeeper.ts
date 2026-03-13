@@ -9,6 +9,75 @@ export interface GatekeeperResult {
 
 export type MarketSession = 'RTH' | 'PRE' | 'POST' | 'CLOSED';
 
+/**
+ * NYSE holidays for 2026.
+ * Format: 'YYYY-MM-DD' in ET.
+ */
+const NYSE_HOLIDAYS_2026 = new Set([
+  '2026-01-01', // New Year's Day
+  '2026-01-19', // MLK Day
+  '2026-02-16', // Presidents' Day
+  '2026-04-03', // Good Friday
+  '2026-05-25', // Memorial Day
+  '2026-07-03', // Independence Day (observed)
+  '2026-09-07', // Labor Day
+  '2026-11-26', // Thanksgiving
+  '2026-12-25', // Christmas
+]);
+
+/** Check if a date (in ET) falls on an NYSE holiday */
+function isNYSEHoliday(etDate: Date): boolean {
+  const y = etDate.getFullYear();
+  const m = String(etDate.getMonth() + 1).padStart(2, '0');
+  const d = String(etDate.getDate()).padStart(2, '0');
+  return NYSE_HOLIDAYS_2026.has(`${y}-${m}-${d}`);
+}
+
+/** Convert any Date to an ET Date object (for local field access) */
+function toET(d: Date): Date {
+  return new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+}
+
+/**
+ * Return the ms timestamp of the next RTH open (Mon-Fri 09:30 ET, excluding holidays).
+ * Used for session-aware staleness: events remain valid until the next trading session opens.
+ */
+export function getNextSessionOpenMs(now: Date): number {
+  const et = toET(now);
+
+  const day = et.getDay(); // 0=Sun, 6=Sat
+  const totalMinutes = et.getHours() * 60 + et.getMinutes();
+
+  // If it's a weekday, not a holiday, and before 09:30 ET → next open is today 09:30
+  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(et)) {
+    const target = new Date(et);
+    target.setHours(9, 30, 0, 0);
+    // Convert back: offset = et - now in ms
+    const offsetMs = et.getTime() - now.getTime();
+    return now.getTime() + (target.getTime() - et.getTime());
+  }
+
+  // Otherwise, find the next weekday that isn't a holiday
+  const candidate = new Date(et);
+  // Start from tomorrow
+  candidate.setDate(candidate.getDate() + 1);
+  candidate.setHours(9, 30, 0, 0);
+
+  // Walk forward until we find a non-weekend, non-holiday day (max 10 days to be safe)
+  for (let i = 0; i < 10; i++) {
+    const cDay = candidate.getDay();
+    if (cDay >= 1 && cDay <= 5 && !isNYSEHoliday(candidate)) {
+      // Found the next trading day — convert back to real timestamp
+      const offsetMs = et.getTime() - now.getTime();
+      return now.getTime() + (candidate.getTime() - et.getTime());
+    }
+    candidate.setDate(candidate.getDate() + 1);
+  }
+
+  // Fallback: should never reach here, but 16h is a safe default
+  return now.getTime() + 16 * 60 * 60_000;
+}
+
 /** Source reliability tiers for LLM Judge context */
 const PRIMARY_GOVERNMENT_SOURCES = new Set([
   'whitehouse', 'congress', 'sec-edgar', 'fda', 'doj-antitrust',
@@ -41,12 +110,13 @@ function getSourceReliabilityTier(source: string): string {
  */
 export function getMarketSession(now?: Date): MarketSession {
   const d = now ?? new Date();
-  // Convert to ET
-  const etStr = d.toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const et = new Date(etStr);
+  const et = toET(d);
 
   const day = et.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return 'CLOSED';
+
+  // NYSE holidays
+  if (isNYSEHoliday(et)) return 'CLOSED';
 
   const hours = et.getHours();
   const minutes = et.getMinutes();
