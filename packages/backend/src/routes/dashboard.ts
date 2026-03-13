@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ScannerRegistry } from '@event-radar/shared';
+import { sql, type SQL } from 'drizzle-orm';
+import { z } from 'zod';
 import type { Database } from '../db/connection.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
 import { registry as metricsRegistry } from '../metrics.js';
@@ -83,6 +85,216 @@ interface AuditRow {
   historical_confidence: string | null;
   duration_ms: number | null;
   created_at: string;
+}
+
+const FeedTickerSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
+  z.string().regex(/^[A-Z]{1,5}$/),
+);
+
+const FeedQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  before: z.string().trim().min(1).optional(),
+  ticker: FeedTickerSchema.optional(),
+});
+
+const FEED_CATEGORIES = new Set(['policy', 'macro', 'corporate', 'geopolitics', 'other']);
+
+interface FeedCursor {
+  createdAt: Date;
+  auditId: number;
+}
+
+interface FeedRow {
+  audit_id: number;
+  audit_created_at: string | Date;
+  audit_reason: string | null;
+  audit_severity: string | null;
+  audit_ticker: string | null;
+  event_id: string;
+  event_source: string;
+  event_title: string;
+  event_severity: string | null;
+  event_summary: string | null;
+  event_received_at: string | Date | null;
+  event_created_at: string | Date;
+  event_metadata: unknown;
+  event_raw_payload: unknown;
+  event_source_urls: unknown;
+}
+
+function sendValidationError(
+  reply: { status(code: number): { send(payload: unknown): void } },
+  details: Array<{ path: string; message: string }>,
+): void {
+  reply.status(400).send({
+    error: 'Invalid request',
+    details,
+  });
+}
+
+function toIsoString(value: string | Date | null | undefined): string | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  return null;
+}
+
+function parseFeedCursor(raw: string): FeedCursor | null {
+  const pieces = raw.split('|');
+  if (pieces.length !== 2) {
+    return null;
+  }
+
+  const [createdAtRaw, auditIdRaw] = pieces;
+  const createdAt = new Date(createdAtRaw);
+  const auditId = Number.parseInt(auditIdRaw, 10);
+
+  if (Number.isNaN(createdAt.getTime()) || !Number.isInteger(auditId) || auditId < 1) {
+    return null;
+  }
+
+  return { createdAt, auditId };
+}
+
+function encodeFeedCursor(createdAt: string | Date, auditId: number): string {
+  const iso = toIsoString(createdAt);
+  return iso ? `${iso}|${auditId}` : String(auditId);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function extractTickers(metadataValue: unknown, fallbackTicker: string | null): string[] {
+  const metadata = asRecord(metadataValue);
+  const tickersValue = metadata?.['tickers'];
+
+  if (Array.isArray(tickersValue)) {
+    const tickers = tickersValue
+      .filter((ticker): ticker is string => typeof ticker === 'string' && ticker.length > 0)
+      .map((ticker) => ticker.toUpperCase());
+    if (tickers.length > 0) {
+      return [...new Set(tickers)];
+    }
+  }
+
+  const singleTicker = getString(metadata?.['ticker']) ?? fallbackTicker;
+  return singleTicker ? [singleTicker.toUpperCase()] : [];
+}
+
+function extractCategory(metadataValue: unknown): string {
+  const metadata = asRecord(metadataValue);
+  const category = getString(metadata?.['category']);
+  return category && FEED_CATEGORIES.has(category) ? category : 'other';
+}
+
+function extractUrl(
+  sourceUrlsValue: unknown,
+  metadataValue: unknown,
+  rawPayloadValue: unknown,
+): string | null {
+  if (Array.isArray(sourceUrlsValue)) {
+    for (const item of sourceUrlsValue) {
+      if (typeof item === 'string' && item.length > 0) {
+        return item;
+      }
+
+      const nestedUrl = getString(asRecord(item)?.['url']);
+      if (nestedUrl) {
+        return nestedUrl;
+      }
+    }
+  }
+
+  const metadataUrl = getString(asRecord(metadataValue)?.['url']);
+  if (metadataUrl) {
+    return metadataUrl;
+  }
+
+  return getString(asRecord(rawPayloadValue)?.['url']);
+}
+
+function buildFeedWhere(
+  ticker: string | undefined,
+  beforeCursor?: FeedCursor,
+): SQL {
+  const conditions: SQL[] = [sql`pa.outcome = 'delivered'`];
+
+  if (ticker) {
+    conditions.push(sql`(
+      upper(coalesce(pa.ticker, '')) = ${ticker}
+      OR upper(coalesce(e.metadata->>'ticker', '')) = ${ticker}
+      OR EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(e.metadata->'tickers') = 'array' THEN e.metadata->'tickers'
+            ELSE '[]'::jsonb
+          END
+        ) AS ticker_value(value)
+        WHERE upper(ticker_value.value) = ${ticker}
+      )
+    )`);
+  }
+
+  if (beforeCursor) {
+    conditions.push(sql`(
+      pa.created_at < ${beforeCursor.createdAt}
+      OR (pa.created_at = ${beforeCursor.createdAt} AND pa.id < ${beforeCursor.auditId})
+    )`);
+  }
+
+  return conditions.reduce((left, right) => sql`${left} AND ${right}`);
+}
+
+function mapFeedRow(row: FeedRow): {
+  id: string;
+  title: string;
+  source: string;
+  severity: string;
+  tickers: string[];
+  summary: string;
+  url: string | null;
+  time: string;
+  category: string;
+  llmReason: string;
+} {
+  const rawPayload = asRecord(row.event_raw_payload);
+  const summary = row.event_summary ?? getString(rawPayload?.['body']) ?? '';
+  const time = toIsoString(row.event_received_at)
+    ?? toIsoString(row.event_created_at)
+    ?? toIsoString(row.audit_created_at)
+    ?? new Date(0).toISOString();
+
+  return {
+    id: row.event_id,
+    title: row.event_title,
+    source: row.event_source,
+    severity: row.event_severity ?? row.audit_severity ?? 'MEDIUM',
+    tickers: extractTickers(row.event_metadata, row.audit_ticker),
+    summary,
+    url: extractUrl(row.event_source_urls, row.event_metadata, row.event_raw_payload),
+    time,
+    category: extractCategory(row.event_metadata),
+    llmReason: row.audit_reason ?? '',
+  };
 }
 
 export function registerDashboardRoutes(
@@ -225,6 +437,91 @@ export function registerDashboardRoutes(
       },
       alerts,
     });
+  });
+
+  /**
+   * GET /api/v1/feed
+   * Public delivered-event feed for the web app.
+   */
+  server.get('/api/v1/feed', async (request, reply) => {
+    if (!deps.db) {
+      return reply.code(503).send({ error: 'Database not configured' });
+    }
+
+    const parsedQuery = FeedQuerySchema.safeParse(request.query ?? {});
+    if (!parsedQuery.success) {
+      return sendValidationError(reply, parsedQuery.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })));
+    }
+
+    const { limit, before, ticker } = parsedQuery.data;
+    const beforeCursor = before ? parseFeedCursor(before) : null;
+
+    if (before && !beforeCursor) {
+      return sendValidationError(reply, [{ path: 'before', message: 'Invalid cursor' }]);
+    }
+
+    const joinSql = sql.raw(`
+      FROM pipeline_audit pa
+      JOIN LATERAL (
+        SELECT e.*
+        FROM events e
+        WHERE e.source_event_id = pa.event_id OR CAST(e.id AS text) = pa.event_id
+        ORDER BY CASE WHEN CAST(e.id AS text) = pa.event_id THEN 0 ELSE 1 END, e.created_at DESC
+        LIMIT 1
+      ) e ON TRUE
+    `);
+
+    try {
+      const [eventsResult, totalResult] = await Promise.all([
+        deps.db.execute(sql`
+          SELECT
+            pa.id AS audit_id,
+            pa.created_at AS audit_created_at,
+            pa.reason AS audit_reason,
+            pa.severity AS audit_severity,
+            pa.ticker AS audit_ticker,
+            e.id AS event_id,
+            e.source AS event_source,
+            e.title AS event_title,
+            e.severity AS event_severity,
+            e.summary AS event_summary,
+            e.received_at AS event_received_at,
+            e.created_at AS event_created_at,
+            e.metadata AS event_metadata,
+            e.raw_payload AS event_raw_payload,
+            e.source_urls AS event_source_urls
+          ${joinSql}
+          WHERE ${buildFeedWhere(ticker, beforeCursor ?? undefined)}
+          ORDER BY pa.created_at DESC, pa.id DESC
+          LIMIT ${limit + 1}
+        `),
+        deps.db.execute(sql`
+          SELECT COUNT(*)::int AS total
+          ${joinSql}
+          WHERE ${buildFeedWhere(ticker)}
+        `),
+      ]);
+
+      const rows = (eventsResult as unknown as { rows: FeedRow[] }).rows;
+      const totalRow = (totalResult as unknown as { rows: Array<{ total: number }> }).rows[0];
+      const hasMore = rows.length > limit;
+      const pageRows = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = pageRows.at(-1);
+
+      return reply.send({
+        events: pageRows.map(mapFeedRow),
+        cursor: hasMore && lastRow
+          ? encodeFeedCursor(lastRow.audit_created_at, lastRow.audit_id)
+          : null,
+        total: totalRow?.total ?? 0,
+      });
+    } catch (err) {
+      server.log.error({ err, msg: 'feed query failed' });
+      return reply.code(500).send({ error: 'Feed query failed' });
+    }
   });
 
   /**
