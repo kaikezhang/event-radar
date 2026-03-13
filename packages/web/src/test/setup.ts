@@ -78,6 +78,36 @@ beforeEach(() => {
       });
     }
 
+    // Search endpoint
+    if (url.pathname === '/api/events/search') {
+      const q = url.searchParams.get('q') ?? '';
+      if (q.toLowerCase().includes('nvda') || q === 'NVDA') {
+        return jsonResponse({ data: [FEED_EVENT], total: 1 });
+      }
+      if (q.toLowerCase().includes('earnings')) {
+        return jsonResponse({
+          data: [{
+            ...FEED_EVENT,
+            id: 'evt-earnings-1',
+            title: 'Quarterly earnings beat expectations',
+            summary: 'Strong earnings results reported.',
+          }],
+          total: 1,
+        });
+      }
+      return jsonResponse({ data: [], total: 0 });
+    }
+
+    // Watchlist endpoints
+    if (url.pathname === '/api/watchlist') {
+      return jsonResponse({ data: [] });
+    }
+
+    // Sources endpoint
+    if (url.pathname === '/api/events/sources') {
+      return jsonResponse({ sources: ['sec-edgar', 'fed', 'breaking-news'] });
+    }
+
     return jsonResponse({ error: 'Not found' }, 404);
   }) as typeof fetch);
 });

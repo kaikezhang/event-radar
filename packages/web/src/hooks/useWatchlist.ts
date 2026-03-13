@@ -1,0 +1,40 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getWatchlist, addToWatchlist, removeFromWatchlist } from '../lib/api.js';
+import type { WatchlistItem } from '../types/index.js';
+
+export function useWatchlist() {
+  const queryClient = useQueryClient();
+
+  const { data: items = [], isLoading } = useQuery<WatchlistItem[]>({
+    queryKey: ['watchlist'],
+    queryFn: getWatchlist,
+    staleTime: 30_000,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (ticker: string) => addToWatchlist(ticker),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (ticker: string) => removeFromWatchlist(ticker),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+
+  const isOnWatchlist = (ticker: string) =>
+    items.some((w) => w.ticker === ticker.toUpperCase());
+
+  return {
+    items,
+    isLoading,
+    add: addMutation.mutate,
+    remove: removeMutation.mutate,
+    isAdding: addMutation.isPending,
+    isRemoving: removeMutation.isPending,
+    isOnWatchlist,
+  };
+}

@@ -48,6 +48,7 @@ import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
+import { registerWatchlistRoutes } from './routes/watchlist.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
@@ -741,6 +742,7 @@ export function buildApp(options?: {
     registerFeedbackRoutes(server, db, { apiKey });
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
+    registerWatchlistRoutes(server, db, { apiKey });
   }
 
   // Register classify debug route (works without DB)

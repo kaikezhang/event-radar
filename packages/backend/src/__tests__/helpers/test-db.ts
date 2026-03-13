@@ -25,6 +25,7 @@ export async function safeCloseServer(
 
 /** Truncate all tables to clean data between tests (keeps the schema) */
 export async function cleanTestDb(db: Database): Promise<void> {
+  await db.execute(sql`DELETE FROM watchlist`);
   await db.execute(sql`DELETE FROM severity_changes`);
   await db.execute(sql`DELETE FROM severity_overrides`);
   await db.execute(sql`DELETE FROM budget_config`);
@@ -223,6 +224,15 @@ export async function createTestDb(): Promise<{
       reason TEXT NOT NULL,
       changed_by VARCHAR(20) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS watchlist (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticker VARCHAR(10) NOT NULL UNIQUE,
+      added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      notes TEXT
     )
   `);
 
