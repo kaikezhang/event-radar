@@ -29,8 +29,32 @@ interface YahooFinanceClient {
   }>>;
 }
 
+type DashboardMarketRegime = 'bull' | 'bear' | 'correction' | 'neutral';
+
+export interface RegimeHistoryPoint {
+  at: string;
+  score: number;
+  vix: number;
+  spy: number;
+  regime: DashboardMarketRegime;
+  factors: {
+    rsi: number;
+    ma_cross: 'golden_cross' | 'death_cross' | 'neutral';
+    yield_curve: number;
+    vix_zscore: number;
+    pct_from_high: number;
+    pct_from_low: number;
+    label: RegimeLabel;
+  };
+}
+
+type RegimeSnapshotWithExtras = RegimeSnapshot & {
+  spy?: number;
+  market_regime?: DashboardMarketRegime;
+};
+
 interface CacheEntry {
-  snapshot: RegimeSnapshot;
+  snapshot: RegimeSnapshotWithExtras;
   expiresAt: number;
 }
 
@@ -187,10 +211,11 @@ export function calculateAmplificationFactor(
   return 0.5;
 }
 
-function createNeutralSnapshot(updatedAt: Date): RegimeSnapshot {
+function createNeutralSnapshot(updatedAt: Date): RegimeSnapshotWithExtras {
   return {
     score: 0,
     label: 'neutral',
+    spy: 0,
     factors: {
       vix: {
         value: 20,
@@ -219,6 +244,7 @@ function createNeutralSnapshot(updatedAt: Date): RegimeSnapshot {
       bearish: 1,
     },
     updatedAt: updatedAt.toISOString(),
+    market_regime: 'neutral',
   };
 }
 
@@ -284,13 +310,49 @@ function normalizeYieldCurve(spread: number): number {
   return clamp(spread / YIELD_CURVE_SCALE_PCT, -1, 1);
 }
 
+export function toDashboardMarketRegime(score: number): DashboardMarketRegime {
+  if (score >= 40) {
+    return 'bull';
+  }
+
+  if (score <= -40) {
+    return 'bear';
+  }
+
+  if (score < 0) {
+    return 'correction';
+  }
+
+  return 'neutral';
+}
+
+export function toRegimeHistoryPoint(snapshot: RegimeSnapshotWithExtras): RegimeHistoryPoint {
+  return {
+    at: snapshot.updatedAt,
+    score: snapshot.score,
+    vix: snapshot.factors.vix.value,
+    spy: snapshot.spy ?? 0,
+    regime: snapshot.market_regime ?? toDashboardMarketRegime(snapshot.score),
+    factors: {
+      rsi: snapshot.factors.spyRsi.value,
+      ma_cross: snapshot.factors.maSignal.signal,
+      yield_curve: snapshot.factors.yieldCurve.spread,
+      vix_zscore: snapshot.factors.vix.zscore,
+      pct_from_high: snapshot.factors.spy52wPosition.pctFromHigh,
+      pct_from_low: snapshot.factors.spy52wPosition.pctFromLow,
+      label: snapshot.label,
+    },
+  };
+}
+
 export class MarketRegimeService implements IMarketRegimeService {
   private readonly yahooFinance: YahooFinanceClient;
   private readonly cacheTtlMs: number;
   private readonly now: () => Date;
   private cache: CacheEntry | null = null;
-  private inFlightSnapshot: Promise<RegimeSnapshot> | null = null;
-  private lastSnapshot: RegimeSnapshot | null = null;
+  private inFlightSnapshot: Promise<RegimeSnapshotWithExtras> | null = null;
+  private lastSnapshot: RegimeSnapshotWithExtras | null = null;
+  private history: RegimeHistoryPoint[] = [];
 
   constructor(options?: {
     yahooFinance?: YahooFinanceClient;
@@ -305,6 +367,19 @@ export class MarketRegimeService implements IMarketRegimeService {
   getAmplificationFactor(direction: RegimeDirection): number {
     const score = this.lastSnapshot?.score ?? 0;
     return calculateAmplificationFactor(score, direction);
+  }
+
+  async getHistory(hours: number): Promise<RegimeHistoryPoint[]> {
+    if (this.history.length === 0) {
+      await this.getRegimeSnapshot();
+    }
+
+    const cutoff = this.now().getTime() - hours * 60 * 60 * 1000;
+    return this.history.filter((point) => new Date(point.at).getTime() >= cutoff);
+  }
+
+  async getRegimeHistory(hours: number): Promise<RegimeHistoryPoint[]> {
+    return this.getHistory(hours);
   }
 
   async getRegimeSnapshot(): Promise<RegimeSnapshot> {
@@ -334,6 +409,7 @@ export class MarketRegimeService implements IMarketRegimeService {
           expiresAt: now.getTime() + this.cacheTtlMs,
         };
         this.lastSnapshot = snapshot;
+        this.recordHistoryPoint(snapshot);
         return snapshot;
       })
       .finally(() => {
@@ -343,7 +419,7 @@ export class MarketRegimeService implements IMarketRegimeService {
     return this.inFlightSnapshot;
   }
 
-  private async fetchSnapshot(updatedAt: Date): Promise<RegimeSnapshot> {
+  private async fetchSnapshot(updatedAt: Date): Promise<RegimeSnapshotWithExtras> {
     const [spyHistory, vixHistory, tenYearHistory, shortRateHistory] = await Promise.all([
       this.fetchHistory('SPY', SPY_HISTORY_DAYS),
       this.fetchHistory('^VIX', AUX_HISTORY_DAYS),
@@ -395,9 +471,10 @@ export class MarketRegimeService implements IMarketRegimeService {
     });
     const label = getRegimeLabel(score);
 
-    const snapshot: RegimeSnapshot = {
+    const snapshot: RegimeSnapshotWithExtras = {
       score,
       label,
+      spy: roundTo(currentSpy),
       factors: {
         vix: {
           value: roundTo(currentVix),
@@ -426,9 +503,24 @@ export class MarketRegimeService implements IMarketRegimeService {
         bearish: calculateAmplificationFactor(score, 'bearish'),
       },
       updatedAt: updatedAt.toISOString(),
+      market_regime: toDashboardMarketRegime(score),
     };
 
     return snapshot;
+  }
+
+  private recordHistoryPoint(snapshot: RegimeSnapshotWithExtras): void {
+    const point = toRegimeHistoryPoint(snapshot);
+    const lastPoint = this.history.at(-1);
+
+    if (lastPoint?.at === point.at) {
+      this.history[this.history.length - 1] = point;
+    } else {
+      this.history.push(point);
+    }
+
+    const retentionCutoff = this.now().getTime() - 7 * 24 * 60 * 60 * 1000;
+    this.history = this.history.filter((entry) => new Date(entry.at).getTime() >= retentionCutoff);
   }
 
   private async fetchHistory(symbol: string, lookbackDays: number): Promise<HistoricalRow[]> {

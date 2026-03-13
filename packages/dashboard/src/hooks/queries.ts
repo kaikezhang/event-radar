@@ -16,6 +16,7 @@ export function useDashboard() {
   return useQuery({
     queryKey: ['dashboard'],
     queryFn: fetchDashboard,
+    refetchInterval: 15_000,
   });
 }
 
@@ -23,6 +24,7 @@ export function useAudit(params: AuditQueryParams) {
   return useQuery({
     queryKey: ['audit', params],
     queryFn: () => fetchAudit(params),
+    refetchInterval: 15_000,
   });
 }
 
@@ -30,6 +32,7 @@ export function useAuditStats() {
   return useQuery({
     queryKey: ['audit-stats'],
     queryFn: fetchAuditStats,
+    refetchInterval: 15_000,
   });
 }
 
@@ -37,6 +40,7 @@ export function useScannersStatus() {
   return useQuery({
     queryKey: ['scanners-status'],
     queryFn: fetchScannersStatus,
+    refetchInterval: 15_000,
   });
 }
 
@@ -44,6 +48,7 @@ export function useHealth() {
   return useQuery({
     queryKey: ['health'],
     queryFn: fetchHealth,
+    refetchInterval: 15_000,
   });
 }
 

@@ -264,6 +264,7 @@ export async function createTestDb(): Promise<{
       enabled BOOLEAN NOT NULL DEFAULT FALSE,
       activated_at TIMESTAMPTZ,
       reason TEXT,
+      updated_by VARCHAR(50),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);

@@ -32,7 +32,9 @@ export interface DashboardResponse {
     };
     market_context: MarketContext | null;
   };
-  delivery: Record<string, { sent: number; errors: number }>;
+  delivery: Record<string, DeliveryChannelStats>;
+  regime: DashboardRegime | null;
+  delivery_control: DeliveryControlState | null;
   db: {
     total_events: number;
     last_event: string;
@@ -80,6 +82,53 @@ export interface MarketContext {
   spy: number;
   regime: 'bull' | 'bear' | 'correction' | 'recovery';
   updated: string;
+}
+
+export interface DashboardRegime {
+  score: number;
+  label: 'extreme_oversold' | 'oversold' | 'neutral' | 'overbought' | 'extreme_overbought';
+  spy?: number;
+  market_regime: 'bull' | 'bear' | 'correction' | 'neutral';
+  factors: {
+    vix: {
+      value: number;
+      zscore: number;
+    };
+    spyRsi: {
+      value: number;
+      signal: 'oversold' | 'neutral' | 'overbought';
+    };
+    spy52wPosition: {
+      pctFromHigh: number;
+      pctFromLow: number;
+    };
+    maSignal: {
+      sma20: number;
+      sma50: number;
+      signal: 'golden_cross' | 'death_cross' | 'neutral';
+    };
+    yieldCurve: {
+      spread: number;
+      inverted: boolean;
+    };
+  };
+  amplification: {
+    bullish: number;
+    bearish: number;
+  };
+  updatedAt: string;
+}
+
+export interface DeliveryControlState {
+  enabled: boolean;
+  last_operation_at: string | null;
+  operator: string | null;
+}
+
+export interface DeliveryChannelStats {
+  sent: number;
+  errors: number;
+  last_success_at: string | null;
 }
 
 export interface Alert {

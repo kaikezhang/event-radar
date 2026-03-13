@@ -258,9 +258,11 @@ export {
   RegimeLabelSchema,
   RegimeDirectionSchema,
   RegimeSnapshotSchema,
+  RegimeHistoryPointSchema,
   type RegimeLabel,
   type RegimeDirection,
   type RegimeSnapshot,
+  type RegimeHistoryPoint,
 } from './types/regime.js';
 export {
   type IMarketRegimeService,

@@ -389,6 +389,7 @@ export const deliveryKillSwitch = pgTable('delivery_kill_switch', {
   enabled: boolean('enabled').notNull().default(false),
   activatedAt: timestamp('activated_at', { withTimezone: true }),
   reason: text('reason'),
+  updatedBy: varchar('updated_by', { length: 50 }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -918,6 +918,8 @@ export function buildApp(options?: {
     db,
     scannerRegistry: registry,
     marketCache: marketCache ?? undefined,
+    marketRegimeService,
+    killSwitch,
     startTime,
     version: backendPackage.version,
   });
