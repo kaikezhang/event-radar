@@ -25,10 +25,23 @@ const EXCHANGE_PATTERN = /\((?:NYSE|NASDAQ|TSX|AMEX|OTC)\s*:\s*([A-Z]{1,5})\)/gi
 /** Cashtag pattern like $TSLA */
 const CASHTAG_PATTERN = /\$([A-Z]{1,5})\b/g;
 
-export function extractTickers(text: string): string[] {
+/**
+ * RSS <category> tag pattern for stock symbols.
+ * Matches patterns like "Nasdaq:AAPL", "LSE:EDV", "TSX-V:ENW", "OTC Markets:BIEI"
+ */
+const CATEGORY_TICKER_PATTERN = /^(?:[\w\s-]+):([A-Z]{1,5}(?:W|Z|L)?)$/i;
+
+/**
+ * Extract tickers from text (title + description).
+ * Optionally also extract from RSS <category> tag values.
+ */
+export function extractTickers(
+  text: string,
+  categories?: string[],
+): string[] {
   const found = new Set<string>();
 
-  // Match exchange-prefix patterns
+  // Match exchange-prefix patterns in text
   let match: RegExpExecArray | null;
   while ((match = EXCHANGE_PATTERN.exec(text)) !== null) {
     const ticker = match[1]!.toUpperCase();
@@ -37,11 +50,28 @@ export function extractTickers(text: string): string[] {
     }
   }
 
-  // Match cashtag patterns
+  // Match cashtag patterns in text
   while ((match = CASHTAG_PATTERN.exec(text)) !== null) {
     const ticker = match[1]!.toUpperCase();
     if (!FALSE_POSITIVES.has(ticker)) {
       found.add(ticker);
+    }
+  }
+
+  // Extract tickers from RSS <category> tags (e.g. "Nasdaq:AAPL", "LSE:EDV")
+  if (categories) {
+    for (const cat of categories) {
+      // A category may contain multiple symbols separated by ", " or "; "
+      const parts = cat.split(/[,;]\s*/);
+      for (const part of parts) {
+        const cm = CATEGORY_TICKER_PATTERN.exec(part.trim());
+        if (cm) {
+          const ticker = cm[1]!.toUpperCase();
+          if (!FALSE_POSITIVES.has(ticker)) {
+            found.add(ticker);
+          }
+        }
+      }
     }
   }
 

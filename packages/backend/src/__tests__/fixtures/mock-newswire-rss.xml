@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>PR Newswire - Financial Services</title>
+    <link>https://www.prnewswire.com</link>
+    <description>Financial services press releases</description>
+
+    <item>
+      <title>Acme Corp (NYSE: ACME) Announces Acquisition of Widget Inc for $2.5 Billion</title>
+      <link>https://www.prnewswire.com/news/acme-acquisition-2026</link>
+      <guid>prn-acme-acquisition-001</guid>
+      <pubDate>Thu, 12 Mar 2026 09:00:00 GMT</pubDate>
+      <description>Acme Corp (NYSE: ACME) today announced it has entered into a definitive agreement to acquire Widget Inc in an all-cash transaction valued at approximately $2.5 billion. The acquisition is expected to close in the third quarter of 2026.</description>
+    </item>
+
+    <item>
+      <title>BioGen Therapeutics Receives FDA Approval for Novel Cancer Treatment</title>
+      <link>https://www.prnewswire.com/news/biogen-fda-approval-2026</link>
+      <guid>prn-biogen-fda-001</guid>
+      <pubDate>Thu, 12 Mar 2026 08:30:00 GMT</pubDate>
+      <description><![CDATA[BioGen Therapeutics (NASDAQ: BGEN) announced today that the U.S. Food and Drug Administration has granted FDA approval for its breakthrough cancer therapy, making it the first treatment of its kind.]]></description>
+    </item>
+
+    <item>
+      <title>GlobalTech Industries Reports Record Q4 Revenue</title>
+      <link>https://www.prnewswire.com/news/globaltech-q4-2026</link>
+      <guid>prn-globaltech-q4-001</guid>
+      <pubDate>Thu, 12 Mar 2026 07:00:00 GMT</pubDate>
+      <description>GlobalTech Industries today reported fourth-quarter revenue of $4.2 billion, exceeding analyst expectations. The company also announced a new share repurchase program.</description>
+    </item>
+
+    <item>
+      <title>MegaRetail Corp Announces Workforce Reduction of 5,000 Employees</title>
+      <link>https://www.prnewswire.com/news/megaretail-layoffs-2026</link>
+      <guid>prn-megaretail-layoffs-001</guid>
+      <pubDate>Thu, 12 Mar 2026 06:00:00 GMT</pubDate>
+      <description>MegaRetail Corp ($MEGA) today announced a restructuring plan that includes a workforce reduction of approximately 5,000 positions as part of its ongoing operational efficiency initiatives.</description>
+    </item>
+
+    <item>
+      <title>ShadyCorp Under SEC Investigation for Alleged Fraud</title>
+      <link>https://www.prnewswire.com/news/shadycorp-sec-2026</link>
+      <guid>prn-shadycorp-sec-001</guid>
+      <pubDate>Thu, 12 Mar 2026 05:00:00 GMT</pubDate>
+      <description>ShadyCorp ($SHDY) disclosed today that it is the subject of an SEC investigation related to allegations of fraud in its financial reporting practices.</description>
+    </item>
+
+    <item>
+      <title>SmallCo Partners with University on Research Program</title>
+      <link>https://www.prnewswire.com/news/smallco-research-2026</link>
+      <guid>prn-smallco-research-001</guid>
+      <pubDate>Thu, 12 Mar 2026 04:00:00 GMT</pubDate>
+      <description>SmallCo announced a new partnership with State University to conduct joint research on advanced materials. The multi-year program aims to develop next-generation composites.</description>
+    </item>
+
+  </channel>
+</rss>

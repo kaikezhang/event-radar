@@ -76,6 +76,7 @@ export interface RssItem {
   pubDate: string;
   description: string;
   guid: string;
+  categories: string[];
 }
 
 /**
@@ -98,6 +99,7 @@ export function parseRssXml(xml: string): RssItem[] {
     const pubDate = extractTag(block, 'pubDate');
     const description = extractTag(block, 'description');
     const guid = extractTag(block, 'guid') || link || title;
+    const categories = extractAllTags(block, 'category');
 
     if (title && guid) {
       items.push({
@@ -106,11 +108,42 @@ export function parseRssXml(xml: string): RssItem[] {
         pubDate: pubDate || '',
         description: description || '',
         guid,
+        categories,
       });
     }
   }
 
   return items;
+}
+
+/**
+ * Extract all occurrences of a tag (e.g. multiple <category> elements).
+ */
+function extractAllTags(xml: string, tag: string): string[] {
+  const results: string[] = [];
+
+  // Match CDATA variants
+  const cdataRegex = new RegExp(
+    `<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`,
+    'gi',
+  );
+  let m: RegExpExecArray | null;
+  while ((m = cdataRegex.exec(xml)) !== null) {
+    const v = m[1]!.trim();
+    if (v) results.push(v);
+  }
+
+  // Match plain-text variants (skip those already matched as CDATA)
+  const plainRegex = new RegExp(
+    `<${tag}[^>]*>([^<]*)</${tag}>`,
+    'gi',
+  );
+  while ((m = plainRegex.exec(xml)) !== null) {
+    const v = m[1]!.trim();
+    if (v && !results.includes(v)) results.push(v);
+  }
+
+  return results;
 }
 
 /**
