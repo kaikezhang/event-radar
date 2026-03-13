@@ -1,159 +1,144 @@
-# TASK.md — Dashboard Frontend
+# Current Task: User-Facing Web App (P0 + P1)
 
-## Goal
+## Overview
+Build the user-facing mobile-first web app for Event Radar. This is a NEW package `packages/web/`.
 
-Build a single-page admin dashboard for Event Radar that visualizes system status, pipeline health, and event audit trail. The dashboard connects to the existing backend APIs.
+**Read `docs/USER-APP-SPEC.md` carefully** — it has the full spec including design system, components, pages, and wireframes.
 
-## Tech Stack
+## This Task: P0 (Design System) + P1 (Public Feed + Alert Detail)
 
-- **Framework**: React 19 + Vite
-- **UI**: Tailwind CSS + shadcn/ui (dark mode only)
-- **Charts**: Recharts (lightweight, React-native)
-- **State**: React Query (TanStack Query) for API data fetching
-- **Package**: `packages/dashboard/` in the existing monorepo
-- **Build**: Vite, output to `packages/dashboard/dist/`
-- **Serve**: Backend serves the built dashboard at `/` (static files from dist/)
+### P0: Project Setup + Design System
 
-## Backend APIs Available
+1. **Create `packages/web/`** with:
+   - React 19 + Vite + TypeScript (strict, ESM)
+   - Tailwind CSS v4
+   - TanStack Query v5
+   - React Router v7
+   - Package name: `@event-radar/web`
 
-All APIs are at `http://localhost:3001`. No auth needed for these endpoints.
+2. **Tailwind theme** — use CSS custom properties from spec:
+   ```
+   --bg-primary:    #0A0A0A
+   --bg-surface:    #141414
+   --bg-elevated:   #1C1C1C
+   --border:        #1F1F1F
+   --text-primary:  #FAFAFA
+   --text-secondary:#8A8A8A
+   --severity-critical: #EF4444
+   --severity-high:     #FB923C
+   --severity-medium:   #EAB308
+   --severity-low:      #6B7280
+   --accent:        #3B82F6
+   ```
 
-### 1. `GET /api/v1/dashboard`
-System overview — scanners, pipeline funnel, historical stats, delivery, alerts.
+3. **Build these components** (see spec for details):
+   - `SeverityBadge` — color bar + text label + icon (CRITICAL/HIGH/MEDIUM/LOW)
+   - `SourceBadge` — SEC Filing, Breaking News, Federal Register, etc.
+   - `TickerChip` — tappable `$NVDA` pill, links to `/ticker/NVDA`
+   - `AlertCard` — compact 3-line card for feed (severity bar + source + tickers + time | title | truncated summary)
+   - `SkeletonCard` — loading placeholder
+   - `EmptyState` — icon + message + CTA template
+   - `BottomNav` — 4 tabs: Feed / Watchlist / Search / Settings
+   - `PillBanner` — "N new alerts" sticky notification at top
+   - `StatCard` — number + label for historical stats
+   - `SimilarEventRow` — compact row for similar events
 
-### 2. `GET /api/v1/audit?limit=50&outcome=filtered&source=breaking-news&ticker=TSLA&search=crash`
-Per-event pipeline audit trail. Filterable by outcome, source, ticker, text search.
+4. **Layout**: App shell with BottomNav, main content area, safe-area padding
 
-### 3. `GET /api/v1/audit/stats`
-24h breakdown of pipeline outcomes by category.
+### P1: Public Feed + Alert Detail Pages
 
-### 4. `GET /api/scanners/status`
-Detailed scanner health with timing and error info.
+5. **Feed page** (`/`):
+   - Fetch from `GET /api/v1/feed?limit=50` (TanStack Query, 30s refetch)
+   - Render `AlertCard` list
+   - Skeleton loading on initial load (5 cards)
+   - Pull-to-refresh (if possible in web)
+   - "N new alerts" pill when new data arrives (don't auto-insert)
+   - Empty state when no events
+   - **No auth required** — public feed
 
-### 5. `GET /health`
-Basic health check with all scanner details and DB status.
+6. **Alert Detail page** (`/event/:id`):
+   - Fetch from `GET /api/v1/feed/:id`
+   - Show: severity badge, title, metadata line (source + tickers + time)
+   - AI Summary section
+   - Market Context section (tickers with direction)
+   - Historical Pattern card (match count, avg move T+5/T+20, win rate)
+   - Similar Events list (top 3 + "Show all N →")
+   - Source link
+   - Feedback buttons (👍 / 👎)
+   - Legal disclaimer footer
+   - All sections expanded by default (no collapse)
 
-### 6. `GET /metrics`
-Prometheus text format metrics (for reference, not displayed directly).
+7. **Ticker Profile page** (`/ticker/:symbol`):
+   - Show ticker name at top
+   - List of events for this ticker (reuse AlertCard)
+   - Fetch from `GET /api/v1/ticker/:symbol`
 
-## Pages / Sections
+8. **Vite config**: proxy `/api` to `http://localhost:3001` for dev
 
-### Page 1: Overview (default)
+## Backend API Notes
 
-**Top Bar:**
-- System status badge (healthy/degraded/down)
-- Uptime
-- Grace period indicator (if active)
-- Memory usage
-- Last event time
+The feed API doesn't exist yet. For now, **mock the API responses** in the frontend using realistic fake data so the UI can be built and tested independently. Create a `src/mocks/` directory with sample data.
 
-**Scanner Grid (2 columns):**
-- Card per scanner showing: name, status (color dot), last scan time, error count
-- Degraded/down scanners highlighted in orange/red
-- Backoff indicator
+Mock data should include:
+- 10-15 sample alerts with varying severities (2 CRITICAL, 3 HIGH, 5 MEDIUM, 5 LOW)
+- Various sources: SEC Filing, Breaking News, Federal Register, StockTwits, Reddit
+- Tickers: NVDA, TSLA, AAPL, AMZN, META, GOOG
+- At least 2 alerts with historical pattern data
+- At least 1 alert with AI enrichment (summary + impact + tickers with direction)
 
-**Pipeline Funnel (center, large):**
-- Vertical funnel visualization:
-  ```
-  Ingested:     1,250  ████████████████████████████████
-  Deduplicated:   980  ████████████████████████████
-  Unique:         270  ████████
-  Filter Passed:   75  ███
-  Delivered:       75  ███
-  ```
-- Conversion rate at bottom
+## Constraints
 
-**Filter Breakdown (pie/donut chart):**
-- Slices: stale, retrospective, keyword, social_noise, cooldown, llm_gatekeeper, etc.
-- Shows where events are being blocked
-
-**Delivery Status:**
-- Per-channel: sent count, error count, status dot
-- Historical enrichment hit rate
-
-**Active Alerts:**
-- List of system warnings (scanner down, backoff, etc.)
-
-### Page 2: Audit Trail
-
-**Filter Bar:**
-- Dropdown: outcome (all / delivered / filtered / deduped / grace_period)
-- Dropdown: source (all / breaking-news / stocktwits / whitehouse / etc.)
-- Text input: search in title
-- Text input: ticker filter
-
-**Event Table:**
-- Columns: Time, Source, Title, Severity, Ticker, Outcome, Stopped At, Reason
-- Color-coded outcome badges:
-  - delivered → green
-  - filtered → red
-  - deduped → gray
-  - grace_period → yellow
-  - error → red outline
-- Click row → expand to show full details (delivery channels, historical match, confidence, duration)
-
-**Auto-refresh** every 10 seconds with smooth update (no flicker).
-
-### Page 3: Historical Intelligence
-
-**Stats:**
-- Total historical events count
-- Enrichment hit rate
-- Market context (VIX, SPY, regime)
-
-**Recent Enriched Alerts:**
-- List of recent delivered events that had historical matches
-- Show confidence, match count, pattern summary
-
-## Design Requirements
-
-- **Dark mode only** — dark background (#0a0a0a), muted borders, high contrast text
-- **Terminal/hacker aesthetic** — monospace numbers, subtle green accents for healthy, amber for warnings, red for errors
-- **Responsive** — works on 1440p+ monitors, no mobile needed
-- **Auto-refresh** — all data polls every 10s, no manual refresh needed
-- **No auth** — internal admin tool, no login needed
+- Mobile-first: design for 375px width, responsive up
+- Dark theme only (use CSS vars for future light mode)
+- All text must meet WCAG AA contrast (4.5:1)
+- Touch targets ≥ 44px
+- System font stack, monospace for numbers
+- Severity: always show color + text label + icon (never color-only)
+- TypeScript strict mode
+- **Create a branch and PR — do NOT push to main**
+- Add basic tests for components (at least render tests)
+- Run `pnpm --filter @event-radar/web build` to verify before PR
+- Add lint script: `"lint": "eslint src/"`
+- Add eslint config (copy from `packages/dashboard/eslint.config.js`)
 
 ## File Structure
-
 ```
-packages/dashboard/
+packages/web/
   package.json
-  vite.config.ts
   tsconfig.json
+  vite.config.ts
+  eslint.config.js
   index.html
   src/
     main.tsx
     App.tsx
-    api/         — API client functions
-    components/  — Reusable UI components
-    pages/       — Overview, Audit, Historical
-    hooks/       — useQuery hooks
-    lib/         — Utilities
+    components/
+      AlertCard.tsx
+      SeverityBadge.tsx
+      SourceBadge.tsx
+      TickerChip.tsx
+      SkeletonCard.tsx
+      EmptyState.tsx
+      BottomNav.tsx
+      PillBanner.tsx
+      StatCard.tsx
+      SimilarEventRow.tsx
+    pages/
+      Feed.tsx
+      EventDetail.tsx
+      TickerProfile.tsx
+      Watchlist.tsx      (placeholder)
+      Search.tsx         (placeholder "Coming Soon")
+      Settings.tsx       (placeholder)
+    hooks/
+      useAlerts.ts
+      useEventDetail.ts
+    mocks/
+      alerts.ts
+      event-detail.ts
+    types/
+      index.ts
+    lib/
+      api.ts
+      format.ts          (relative time, number formatting)
 ```
-
-## Docker Integration
-
-Add to `docker-compose.yml`:
-- Build dashboard: `pnpm --filter dashboard build`
-- Backend serves `packages/dashboard/dist/` as static files at `/`
-- OR: separate nginx container serving the built files
-
-## Key Constraints
-
-- Do NOT install a full UI framework (Material, Ant, Chakra). Use shadcn/ui only.
-- Do NOT use SSR. This is a pure SPA (Vite + React).
-- Do NOT add authentication. This is an internal tool.
-- DO use TypeScript strict mode.
-- DO make API base URL configurable via env var (default: same origin).
-- DO handle loading and error states gracefully.
-- DO use React Query for all data fetching with 10s refetch interval.
-
-## Exit Criteria
-
-- Dashboard loads at `http://localhost:5173` (dev) or `http://localhost:3001/` (production)
-- All 3 pages functional with real API data
-- Pipeline funnel chart renders correctly
-- Audit trail table with working filters
-- Scanner status cards with color-coded health
-- Auto-refresh every 10s without flicker
-- All TypeScript, no errors, builds clean
