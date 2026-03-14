@@ -48,8 +48,10 @@ describe('buildApp market data wiring', () => {
     vi.doMock('../services/market-data-cache.js', () => ({
       MarketDataCache: class {
         constructor(
-          public readonly provider: unknown,
-          public readonly config: { refreshIntervalMs?: number } | undefined,
+          public readonly options: {
+            provider: unknown;
+            refreshIntervalMs?: number;
+          },
         ) {}
 
         start = marketDataCacheStart;

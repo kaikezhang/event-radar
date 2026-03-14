@@ -323,7 +323,10 @@ export function buildApp(options?: {
     ? new MarketContextCache({ refreshIntervalMs: 300_000 })
     : undefined;
   const tickerMarketDataCache = tickerMarketDataProvider
-    ? new MarketDataCache(tickerMarketDataProvider, { refreshIntervalMs: 300_000 })
+    ? new MarketDataCache({
+      provider: tickerMarketDataProvider,
+      refreshIntervalMs: 300_000,
+    })
     : undefined;
   const historicalEnricher = options?.historicalEnricher
     ?? (db && marketCache

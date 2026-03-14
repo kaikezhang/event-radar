@@ -1,57 +1,166 @@
 import type { MarketDataProvider, MarketQuote } from './market-data-provider.js';
 
-export type TickerMarketContext = Pick<
-  MarketQuote,
-  | 'price'
-  | 'change1d'
-  | 'change5d'
-  | 'change20d'
-  | 'volumeRatio'
-  | 'rsi14'
-  | 'high52w'
-  | 'low52w'
-  | 'support'
-  | 'resistance'
->;
-
 interface CacheEntry {
-  fetchedAt: number;
-  value: TickerMarketContext;
+  value: MarketQuote;
+  expiresAt: number;
 }
 
-const DEFAULT_TTL_MS = 300_000;
-const DEFAULT_REFRESH_INTERVAL_MS = 300_000;
+const DEFAULT_MAX_SYMBOLS = 500;
+
+function normalizeSymbol(symbol: string): string {
+  return symbol.trim().toUpperCase();
+}
+
+function normalizeQuote(symbol: string, quote: MarketQuote): MarketQuote {
+  return {
+    ...quote,
+    symbol,
+  };
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function getUniqueSymbols(symbols: string[]): string[] {
+  const uniqueSymbols = new Set<string>();
+
+  for (const symbol of symbols) {
+    const normalized = normalizeSymbol(symbol);
+
+    if (normalized.length === 0) {
+      continue;
+    }
+
+    uniqueSymbols.add(normalized);
+  }
+
+  return Array.from(uniqueSymbols);
+}
 
 export class MarketDataCache {
-  private readonly entries = new Map<string, CacheEntry>();
-  private readonly inFlight = new Map<string, Promise<TickerMarketContext>>();
-  private readonly refreshIntervalMs: number;
+  private readonly provider: MarketDataProvider;
   private readonly ttlMs: number;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly refreshIntervalMs: number;
+  private readonly maxConcurrent: number;
+  private readonly maxSymbols: number;
+  private readonly cache = new Map<string, CacheEntry>();
+  private readonly knownSymbols = new Set<string>();
+  private timer: NodeJS.Timeout | null = null;
 
-  constructor(
-    private readonly provider: MarketDataProvider,
-    config?: {
-      refreshIntervalMs?: number;
-      ttlMs?: number;
-    },
-  ) {
-    this.refreshIntervalMs = config?.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS;
-    this.ttlMs = config?.ttlMs ?? DEFAULT_TTL_MS;
+  constructor(options: {
+    provider: MarketDataProvider;
+    ttlMs?: number;
+    refreshIntervalMs?: number;
+    maxConcurrent?: number;
+    maxSymbols?: number;
+  }) {
+    this.provider = options.provider;
+    this.ttlMs = options.ttlMs ?? 300_000;
+    this.refreshIntervalMs = options.refreshIntervalMs ?? 300_000;
+    this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 4);
+    this.maxSymbols = Math.max(1, options.maxSymbols ?? DEFAULT_MAX_SYMBOLS);
+  }
+
+  async getSymbol(symbol: string): Promise<MarketQuote | undefined> {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    if (normalizedSymbol.length === 0) {
+      return undefined;
+    }
+
+    const entry = this.cache.get(normalizedSymbol);
+    if (!entry || entry.expiresAt <= Date.now()) {
+      return undefined;
+    }
+
+    return entry.value;
+  }
+
+  setSymbol(symbol: string, value: MarketQuote): void {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    if (normalizedSymbol.length === 0) {
+      return;
+    }
+
+    this.cache.delete(normalizedSymbol);
+    this.cache.set(normalizedSymbol, {
+      value: normalizeQuote(normalizedSymbol, value),
+      expiresAt: Date.now() + this.ttlMs,
+    });
+    this.knownSymbols.delete(normalizedSymbol);
+    this.knownSymbols.add(normalizedSymbol);
+    this.evictOverflow();
+  }
+
+  async getOrFetch(symbol: string): Promise<MarketQuote | undefined> {
+    const normalizedSymbol = normalizeSymbol(symbol);
+    if (normalizedSymbol.length === 0) {
+      return undefined;
+    }
+
+    const cached = await this.getSymbol(normalizedSymbol);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const quote = await this.provider.getQuote(normalizedSymbol);
+      const normalizedQuote = normalizeQuote(normalizedSymbol, quote);
+      this.setSymbol(normalizedSymbol, normalizedQuote);
+      return normalizedQuote;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async refreshSymbols(symbols: string[]): Promise<Map<string, MarketQuote | Error>> {
+    const uniqueSymbols = getUniqueSymbols(symbols);
+    const results = new Map<string, MarketQuote | Error>();
+
+    if (uniqueSymbols.length === 0) {
+      return results;
+    }
+
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < uniqueSymbols.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        const symbol = uniqueSymbols[currentIndex];
+
+        if (!symbol) {
+          return;
+        }
+
+        try {
+          const quote = await this.provider.getQuote(symbol);
+          const normalizedQuote = normalizeQuote(symbol, quote);
+          this.setSymbol(symbol, normalizedQuote);
+          results.set(symbol, normalizedQuote);
+        } catch (error) {
+          results.set(symbol, toError(error));
+        }
+      }
+    };
+
+    const workerCount = Math.min(this.maxConcurrent, uniqueSymbols.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => runWorker()));
+
+    return results;
   }
 
   start(): void {
-    if (this.timer != null) {
+    if (this.timer) {
       return;
     }
 
     this.timer = setInterval(() => {
-      void this.refreshTrackedTickers();
+      void this.refreshSymbols(Array.from(this.knownSymbols));
     }, this.refreshIntervalMs);
   }
 
   stop(): void {
-    if (this.timer == null) {
+    if (!this.timer) {
       return;
     }
 
@@ -59,89 +168,31 @@ export class MarketDataCache {
     this.timer = null;
   }
 
-  get(symbol: string): TickerMarketContext | null {
-    const normalizedSymbol = normalizeSymbol(symbol);
-    return this.entries.get(normalizedSymbol)?.value ?? null;
+  isRunning(): boolean {
+    return this.timer !== null;
   }
 
-  async getOrFetch(symbol: string): Promise<TickerMarketContext> {
-    const normalizedSymbol = normalizeSymbol(symbol);
-    const cached = this.entries.get(normalizedSymbol);
+  private evictOverflow(): void {
+    while (this.knownSymbols.size > this.maxSymbols) {
+      const oldestSymbol = this.knownSymbols.values().next().value;
 
-    if (cached && Date.now() - cached.fetchedAt < this.ttlMs) {
-      return cached.value;
-    }
-
-    const existingRequest = this.inFlight.get(normalizedSymbol);
-    if (existingRequest) {
-      return existingRequest;
-    }
-
-    const request = this.fetchAndStore(normalizedSymbol, cached?.value);
-    this.inFlight.set(normalizedSymbol, request);
-
-    try {
-      return await request;
-    } finally {
-      this.inFlight.delete(normalizedSymbol);
-    }
-  }
-
-  private async refreshTrackedTickers(): Promise<void> {
-    const tickers = Array.from(this.entries.keys());
-    await Promise.all(
-      tickers.map(async (symbol) => {
-        try {
-          await this.fetchAndStore(symbol, this.entries.get(symbol)?.value);
-        } catch (error) {
-          console.error(
-            '[market-data-cache] Refresh failed:',
-            error instanceof Error ? error.message : error,
-          );
-        }
-      }),
-    );
-  }
-
-  private async fetchAndStore(
-    symbol: string,
-    fallback?: TickerMarketContext,
-  ): Promise<TickerMarketContext> {
-    try {
-      const quote = await this.provider.getQuote(symbol);
-      const value = toTickerMarketContext(quote);
-
-      this.entries.set(symbol, {
-        value,
-        fetchedAt: Date.now(),
-      });
-
-      return value;
-    } catch (error) {
-      if (fallback) {
-        return fallback;
+      if (!oldestSymbol) {
+        return;
       }
 
-      throw error;
+      this.knownSymbols.delete(oldestSymbol);
+      this.cache.delete(oldestSymbol);
+    }
+
+    while (this.cache.size > this.maxSymbols) {
+      const oldestSymbol = this.cache.keys().next().value;
+
+      if (!oldestSymbol) {
+        return;
+      }
+
+      this.cache.delete(oldestSymbol);
+      this.knownSymbols.delete(oldestSymbol);
     }
   }
-}
-
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
-
-function toTickerMarketContext(quote: MarketQuote): TickerMarketContext {
-  return {
-    price: quote.price,
-    change1d: quote.change1d,
-    change5d: quote.change5d,
-    change20d: quote.change20d,
-    volumeRatio: quote.volumeRatio,
-    rsi14: quote.rsi14,
-    high52w: quote.high52w,
-    low52w: quote.low52w,
-    support: quote.support,
-    resistance: quote.resistance,
-  };
 }

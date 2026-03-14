@@ -3,7 +3,7 @@ import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import { historicalEnrichmentTimeoutsTotal } from '../metrics.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
-import type { MarketDataCache } from '../services/market-data-cache.js';
+import type { MarketQuote } from '../services/market-data-provider.js';
 import {
   findSimilarFromOutcomes,
   type OutcomeSimilarEvent,
@@ -22,11 +22,15 @@ import { extractTickers } from '../scanners/ticker-extractor.js';
 
 export type ConfidenceLevel = HistoricalContext['confidence'];
 
+interface HistoricalTickerMarketDataSource {
+  getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
+}
+
 export interface HistoricalEnricherConfig {
   enabled?: boolean;
   minConfidence?: ConfidenceLevel;
   timeoutMs?: number;
-  marketDataCache?: Pick<MarketDataCache, 'getOrFetch'>;
+  marketDataCache?: HistoricalTickerMarketDataSource;
 }
 
 const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
@@ -82,7 +86,7 @@ const OUTCOME_TITLE_STOP_WORDS = new Set([
 export class HistoricalEnricher {
   private readonly enabled: boolean;
   private readonly minConfidence: ConfidenceLevel;
-  private readonly tickerMarketDataCache?: Pick<MarketDataCache, 'getOrFetch'>;
+  private readonly tickerMarketDataCache?: HistoricalTickerMarketDataSource;
   private readonly timeoutMs: number;
 
   constructor(
@@ -316,6 +320,10 @@ export class HistoricalEnricher {
 
     try {
       const marketContext = await this.tickerMarketDataCache.getOrFetch(ticker);
+      if (!marketContext) {
+        return context;
+      }
+
       return {
         ...context,
         marketContext,
