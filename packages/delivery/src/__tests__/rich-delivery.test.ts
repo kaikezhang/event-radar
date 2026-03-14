@@ -178,8 +178,7 @@ describe('Rich Delivery Format', () => {
       const embed = JSON.parse(options.body as string).embeds[0];
 
       expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
-      expect(embed.description).toContain('NVDA files 8-K restructuring');
-      expect(embed.description).toContain('Major impact');
+      expect(embed.description).toContain('Item 5.02 Departure of CEO');
     });
   });
 

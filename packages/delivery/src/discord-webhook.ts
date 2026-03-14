@@ -203,9 +203,7 @@ export class DiscordWebhook implements DeliveryService {
     // --- Build embed ---
     const title = `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;
 
-    const description = enrichment
-      ? truncate(formatAiAnalysis(enrichment), 2048)
-      : truncate(alert.event.body, 2048);
+    const description = truncate(alert.event.body, 2048);
 
     const embed = {
       title: truncate(title, 256),
