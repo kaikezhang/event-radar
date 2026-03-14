@@ -1,0 +1,10 @@
+{
+  "name": "Event Radar",
+  "short_name": "Radar",
+  "description": "Real-time event-driven trading intelligence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "lang": "en-US"
+}
