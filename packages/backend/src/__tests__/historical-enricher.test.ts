@@ -364,6 +364,12 @@ describe('HistoricalEnricher', () => {
       matchCount: 2,
       avgChange1d: 0.06,
       avgChange1w: 0.11,
+      topMatches: expect.arrayContaining([
+        expect.objectContaining({
+          headline: 'Apple launches AI server platform',
+          source: 'stocktwits',
+        }),
+      ]),
       similarEvents: expect.arrayContaining([
         expect.objectContaining({
           title: 'Apple launches AI server platform',
@@ -373,6 +379,172 @@ describe('HistoricalEnricher', () => {
         }),
       ]),
     });
+  });
+
+  it('extracts focused title keywords for outcome similarity queries', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
+    similarityMock.mockResolvedValue({
+      confidence: 'insufficient',
+      totalCandidates: 0,
+      stats: {
+        count: 0,
+        avgReturnT1: 0,
+        avgReturnT5: 0,
+        avgReturnT20: 0,
+        avgAlphaT1: 0,
+        avgAlphaT5: 0,
+        avgAlphaT20: 0,
+        winRateT20: 0,
+        medianAlphaT20: 0,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    await enricher.enrich(
+      makeEvent({
+        source: 'breaking-news',
+        title: 'META announces massive layoffs: 20,000 jobs cut in restructuring',
+        body: 'Management says costs will be reduced.',
+        metadata: { ticker: 'META' },
+      }),
+      makeLlmResult({ severity: 'HIGH' }),
+    );
+
+    expect(outcomeSimilarityMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ticker: 'META',
+        titleKeywords: ['layoffs', 'jobs', 'cut', 'restructuring'],
+      }),
+    );
+  });
+
+  it('filters outcome matches below the display threshold and includes source on top matches', async () => {
+    outcomeSimilarityMock.mockResolvedValue([
+      {
+        eventId: 'event-1',
+        ticker: 'META',
+        title: 'Meta cuts 20000 jobs in restructuring',
+        source: 'breaking-news',
+        severity: 'high',
+        eventTime: '2026-03-10T12:00:00.000Z',
+        eventPrice: 210,
+        change1h: 0.01,
+        change1d: 0.08,
+        change1w: 0.14,
+        change1m: 0.22,
+        score: 0.82,
+      },
+      {
+        eventId: 'event-2',
+        ticker: 'META',
+        title: 'Meta begins workforce restructuring',
+        source: 'sec-edgar',
+        severity: 'high',
+        eventTime: '2026-03-08T12:00:00.000Z',
+        eventPrice: 205,
+        change1h: 0.01,
+        change1d: 0.06,
+        change1w: 0.1,
+        change1m: 0.19,
+        score: 0.4,
+      },
+      {
+        eventId: 'event-3',
+        ticker: 'META',
+        title: 'Meta chatter spikes on layoffs rumor',
+        source: 'stocktwits',
+        severity: 'medium',
+        eventTime: '2026-03-09T12:00:00.000Z',
+        eventPrice: 202,
+        change1h: 0,
+        change1d: 0.01,
+        change1w: 0.02,
+        change1m: 0.03,
+        score: 0.39,
+      },
+    ]);
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    const context = await enricher.enrich(
+      makeEvent({
+        source: 'breaking-news',
+        title: 'META announces layoffs and restructuring',
+        metadata: { ticker: 'META' },
+      }),
+      makeLlmResult({ severity: 'HIGH' }),
+    );
+
+    expect(similarityMock).not.toHaveBeenCalled();
+    expect(context).toMatchObject({
+      matchCount: 2,
+      similarEvents: [
+        expect.objectContaining({ title: 'Meta cuts 20000 jobs in restructuring' }),
+        expect.objectContaining({ title: 'Meta begins workforce restructuring' }),
+      ],
+      topMatches: [
+        expect.objectContaining({
+          ticker: 'META',
+          headline: 'Meta cuts 20000 jobs in restructuring',
+          source: 'breaking-news',
+        }),
+        expect.objectContaining({
+          ticker: 'META',
+          headline: 'Meta begins workforce restructuring',
+          source: 'sec-edgar',
+        }),
+      ],
+    });
+    expect(context?.similarEvents).toHaveLength(2);
+  });
+
+  it('returns null when all outcome matches fall below the minimum display threshold', async () => {
+    outcomeSimilarityMock.mockResolvedValue([
+      {
+        eventId: 'event-1',
+        ticker: 'AAPL',
+        title: 'Weak stocktwits analog',
+        source: 'stocktwits',
+        severity: 'medium',
+        eventTime: '2026-03-10T12:00:00.000Z',
+        eventPrice: 100,
+        change1h: 0,
+        change1d: 0,
+        change1w: 0,
+        change1m: 0,
+        score: 0.39,
+      },
+      {
+        eventId: 'event-2',
+        ticker: 'AAPL',
+        title: 'Another weak stocktwits analog',
+        source: 'stocktwits',
+        severity: 'medium',
+        eventTime: '2026-03-09T12:00:00.000Z',
+        eventPrice: 100,
+        change1h: 0,
+        change1d: 0,
+        change1w: 0,
+        change1m: 0,
+        score: 0.15,
+      },
+    ]);
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    const context = await enricher.enrich(
+      makeEvent({
+        source: 'stocktwits',
+        title: 'Random Apple chatter',
+        metadata: { ticker: 'AAPL' },
+      }),
+      makeLlmResult(),
+    );
+
+    expect(context).toBeNull();
+    expect(similarityMock).not.toHaveBeenCalled();
   });
 
   it('falls back to historical_events when outcomes do not produce enough strong matches', async () => {

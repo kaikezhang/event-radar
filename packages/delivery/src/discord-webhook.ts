@@ -142,7 +142,8 @@ export class DiscordWebhook implements DeliveryService {
         historyText += `\n\n**Most Similar:**\n`;
         for (const m of ctx.topMatches.slice(0, 3)) {
           const ms = m.alphaT20 >= 0 ? '+' : '';
-          historyText += `• ${m.ticker} — ${m.headline} (${ms}${(m.alphaT20 * 100).toFixed(1)}%)\n`;
+          const sourceLabel = m.source ? ` [${m.source}]` : '';
+          historyText += `• ${m.ticker}${sourceLabel} — ${m.headline} (${ms}${(m.alphaT20 * 100).toFixed(1)}%)\n`;
         }
       }
 

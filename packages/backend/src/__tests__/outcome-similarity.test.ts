@@ -185,6 +185,44 @@ describe('findSimilarFromOutcomes', () => {
     expect(result[0]?.score).toBeCloseTo(1, 4);
   });
 
+  it('applies a strong penalty to low-value sources during similarity scoring', async () => {
+    await seedOutcome({
+      title: 'Meta layoffs cut 20000 jobs in restructuring plan',
+      source: 'breaking-news',
+      ticker: 'META',
+      severity: 'HIGH',
+      eventTime: '2026-03-10T12:00:00.000Z',
+      change1d: 0.05,
+      change1w: 0.09,
+    });
+    await seedOutcome({
+      title: 'Meta chatter ties layoffs to restructuring',
+      source: 'stocktwits',
+      ticker: 'META',
+      severity: 'HIGH',
+      eventTime: '2026-03-09T12:00:00.000Z',
+      change1d: 0.02,
+      change1w: 0.03,
+    });
+
+    const result = await runQuery({
+      ticker: 'META',
+      source: 'breaking-news',
+      severity: 'high',
+      titleKeywords: ['layoffs', 'jobs', 'restructuring'],
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      source: 'breaking-news',
+      score: 1,
+    });
+    expect(result[1]).toMatchObject({
+      source: 'stocktwits',
+    });
+    expect(result[1]?.score).toBeCloseTo(0.255, 4);
+  });
+
   it('matches on title keyword overlap for events from the same source', async () => {
     await seedOutcome({
       title: 'Trading halt resumes after volatility spike',
@@ -204,6 +242,49 @@ describe('findSimilarFromOutcomes', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.score).toBeGreaterThan(0.6);
+  });
+
+  it('deduplicates candidates by normalized title and keeps the most recent match', async () => {
+    await seedOutcome({
+      title: 'META entered StockTwits trending',
+      source: 'stocktwits',
+      ticker: 'META',
+      severity: 'HIGH',
+      eventTime: '2026-03-08T12:00:00.000Z',
+      change1d: 0.01,
+      change1w: 0.02,
+    });
+    await seedOutcome({
+      title: '  meta entered stocktwits trending  ',
+      source: 'stocktwits',
+      ticker: 'META',
+      severity: 'HIGH',
+      eventTime: '2026-03-10T12:00:00.000Z',
+      change1d: 0.03,
+      change1w: 0.04,
+    });
+    await seedOutcome({
+      title: 'Meta announces restructuring layoffs',
+      source: 'breaking-news',
+      ticker: 'META',
+      severity: 'HIGH',
+      eventTime: '2026-03-09T12:00:00.000Z',
+      change1d: 0.08,
+      change1w: 0.12,
+    });
+
+    const result = await runQuery({
+      ticker: 'META',
+      severity: 'high',
+      titleKeywords: ['meta'],
+      limit: 10,
+    });
+
+    expect(result.filter((match) => match.title.toLowerCase().includes('stocktwits trending'))).toHaveLength(1);
+    expect(result.find((match) => match.title.toLowerCase().includes('stocktwits trending'))).toMatchObject({
+      eventTime: '2026-03-10T12:00:00.000Z',
+      change1d: 0.03,
+    });
   });
 
   it('excludes the current event when excludeEventId matches the source_event_id', async () => {

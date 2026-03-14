@@ -40,14 +40,12 @@ describe('dashboard api client', () => {
 
     await fetchDashboard();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/dashboard'),
-      expect.objectContaining({
-        headers: {
-          'x-api-key': 'dashboard-key',
-        },
-      }),
-    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
+
+    expect(url).toContain('/api/v1/dashboard');
+    expect(init?.headers).toBeInstanceOf(Headers);
+    expect(new Headers(init?.headers).get('x-api-key')).toBe('dashboard-key');
   });
 
   it('fetches the dashboard without auth headers when no api key is configured', async () => {
@@ -55,10 +53,12 @@ describe('dashboard api client', () => {
 
     await fetchDashboard();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/dashboard'),
-      undefined,
-    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
+
+    expect(url).toContain('/api/v1/dashboard');
+    expect(init?.headers).toBeInstanceOf(Headers);
+    expect(new Headers(init?.headers).has('x-api-key')).toBe(false);
   });
 
   it('posts to the kill endpoint with the dashboard api key and reason when pausing delivery', async () => {
