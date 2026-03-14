@@ -139,7 +139,7 @@ describe('LLMEnricher.enrich', () => {
             content: JSON.stringify({
               summary: 'Summary',
               impact: 'Impact',
-              action: '🟡 持续观察',
+              action: '🟡 WATCH',
               tickers: [],
             }),
           },
@@ -165,6 +165,8 @@ describe('LLMEnricher.enrich', () => {
     const request = create.mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
+    expect(request.messages[0]?.content).toContain('English summary');
+    expect(request.messages[0]?.content).toContain('🔴 ACT NOW');
     expect(request.messages[1]?.content).toContain('## Market Context');
     expect(request.messages[1]?.content).toContain('Current regime: overbought');
   });
@@ -203,7 +205,7 @@ describe('LLMEnricher.enrich', () => {
     expect(result).toEqual({
       summary: 'AI summary',
       impact: 'AI impact',
-      action: '🟢 仅供参考',
+      action: '🟢 FYI',
       tickers: [],
       regimeContext: 'Regime note',
     });
@@ -222,7 +224,7 @@ describe('LLMEnricher.enrich', () => {
                   content: JSON.stringify({
                     summary: null,
                     impact: 'AI impact',
-                    action: '🔴 立即关注',
+                    action: '🔴 ACT NOW',
                     tickers: [],
                   }),
                 },

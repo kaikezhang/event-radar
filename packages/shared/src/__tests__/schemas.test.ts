@@ -7,6 +7,8 @@ import {
   ActionSchema,
   ClassificationPredictionSchema,
   AccuracyStatsSchema,
+  LLMEnrichmentActionSchema,
+  LLMEnrichmentSchema,
   ok,
   err,
 } from '../index.js';
@@ -236,5 +238,28 @@ describe('Accuracy schemas', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe('LLM enrichment schemas', () => {
+  it('accepts the English action labels', () => {
+    expect(LLMEnrichmentActionSchema.safeParse('🔴 ACT NOW').success).toBe(true);
+    expect(LLMEnrichmentActionSchema.safeParse('🟡 WATCH').success).toBe(true);
+    expect(LLMEnrichmentActionSchema.safeParse('🟢 FYI').success).toBe(true);
+  });
+
+  it('falls back invalid actions to the English FYI label', () => {
+    const result = LLMEnrichmentSchema.safeParse({
+      summary: 'Summary',
+      impact: 'Impact',
+      action: 'INVALID',
+      tickers: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.action).toBe('🟢 FYI');
+      expect(result.data.tickers).toEqual([]);
+    }
   });
 });

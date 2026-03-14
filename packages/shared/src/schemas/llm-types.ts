@@ -48,9 +48,9 @@ export const LLMClassificationMethodSchema = z.enum(['rule', 'llm', 'hybrid']);
 export type LLMClassificationMethod = z.infer<typeof LLMClassificationMethodSchema>;
 
 export const LLMEnrichmentActionSchema = z.enum([
-  '🔴 立即关注',
-  '🟡 持续观察',
-  '🟢 仅供参考',
+  '🔴 ACT NOW',
+  '🟡 WATCH',
+  '🟢 FYI',
 ]);
 export type LLMEnrichmentAction = z.infer<typeof LLMEnrichmentActionSchema>;
 
@@ -60,7 +60,7 @@ export const LLMEnrichmentTickerSchema = z.object({
 });
 export type LLMEnrichmentTicker = z.infer<typeof LLMEnrichmentTickerSchema>;
 
-const DEFAULT_ENRICHMENT_ACTION: LLMEnrichmentAction = '🟢 仅供参考';
+const DEFAULT_ENRICHMENT_ACTION: LLMEnrichmentAction = '🟢 FYI';
 
 export const LLMEnrichmentSchema = z.object({
   summary: z.string().min(1),

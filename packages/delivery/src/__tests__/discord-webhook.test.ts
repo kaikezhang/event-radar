@@ -257,7 +257,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -286,7 +286,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -313,7 +313,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -329,7 +329,7 @@ describe('DiscordWebhook', () => {
     );
 
     expect(tickerField.value).toContain('@ $187.34');
-    expect(actionField.value).toBe('🔴 立即关注');
+    expect(actionField.value).toBe('🔴 ACT NOW');
     expect(fieldNames.indexOf('Action')).toBe(fieldNames.indexOf('Tickers') + 1);
   });
 
@@ -341,7 +341,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
         historicalContext: {
@@ -475,7 +475,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
           regimeContext: 'Risk-off tape could deepen the reaction.',
         },

@@ -172,7 +172,7 @@ describe('BarkPusher', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time',
-          action: '🔴 立即关注',
+          action: '🔴 ACT NOW',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -181,7 +181,7 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
-    expect(body.title).toContain('🔴 立即关注');
+    expect(body.title).toContain('🔴 ACT NOW');
     expect(body.title).toContain('AAPL');
     expect(body.body).toBe('Apple CEO departure triggers uncertainty');
   });

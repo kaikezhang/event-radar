@@ -16,11 +16,11 @@ export interface LLMEnricherConfig {
 
 const SYSTEM_PROMPT = `You are a stock market event analyst. Analyze events and respond ONLY with valid JSON (no markdown, no code fences). Use this exact schema:
 {
-  "summary": "1-2 sentence Chinese summary (简洁有力)",
-  "impact": "1-2 sentences why this matters for investors (Chinese)",
-  "action": "one of: 🔴 立即关注, 🟡 持续观察, 🟢 仅供参考",
+  "summary": "1-2 sentence English summary of what happened",
+  "impact": "1-2 sentences explaining why this matters for traders",
+  "action": "one of: 🔴 ACT NOW, 🟡 WATCH, 🟢 FYI",
   "tickers": [{"symbol": "TICKER", "direction": "bullish|bearish|neutral"}],
-  "regimeContext": "1 sentence: how the current market regime amplifies or dampens this event's impact (Chinese, omit if no market context provided)"
+  "regimeContext": "1 sentence in English on how the current market regime amplifies or dampens this event's impact (omit if no market context provided)"
 }`;
 
 const REGIME_EXPLANATIONS: Record<string, string> = {
