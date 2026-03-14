@@ -15,6 +15,13 @@
       "when": 1773479522865,
       "tag": "0001_luxuriant_ken_ellis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773494144824,
+      "tag": "0002_purple_raza",
+      "breakpoints": true
     }
   ]
 }

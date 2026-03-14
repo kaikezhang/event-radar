@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
+import { ensureUserExists, resolveRequestUserId } from './user-context.js';
 
 export interface WatchlistRouteOptions {
   apiKey?: string;
@@ -22,10 +23,12 @@ export function registerWatchlistRoutes(
    * GET /api/watchlist
    * List all watchlist tickers
    */
-  server.get('/api/watchlist', { preHandler: withAuth }, async () => {
+  server.get('/api/watchlist', { preHandler: withAuth }, async (request) => {
+    const userId = resolveRequestUserId(request);
     const data = await db
       .select()
       .from(watchlist)
+      .where(eq(watchlist.userId, userId))
       .orderBy(watchlist.addedAt);
 
     return { data };
@@ -56,12 +59,15 @@ export function registerWatchlistRoutes(
     },
   }, async (request, reply) => {
     const { ticker, notes } = request.body as { ticker: string; notes?: string };
+    const userId = resolveRequestUserId(request);
+
+    await ensureUserExists(db, userId);
 
     // Check if ticker already exists
     const [existing] = await db
       .select()
       .from(watchlist)
-      .where(eq(watchlist.ticker, ticker))
+      .where(and(eq(watchlist.userId, userId), eq(watchlist.ticker, ticker)))
       .limit(1);
 
     if (existing) {
@@ -70,7 +76,7 @@ export function registerWatchlistRoutes(
 
     const [inserted] = await db
       .insert(watchlist)
-      .values({ ticker, notes: notes ?? null })
+      .values({ userId, ticker, notes: notes ?? null })
       .returning();
 
     return reply.status(201).send(inserted);
@@ -97,10 +103,11 @@ export function registerWatchlistRoutes(
   }, async (request, reply) => {
     const { ticker } = request.params as { ticker: string };
     const upperTicker = ticker.toUpperCase();
+    const userId = resolveRequestUserId(request);
 
     const deleted = await db
       .delete(watchlist)
-      .where(eq(watchlist.ticker, upperTicker))
+      .where(and(eq(watchlist.userId, userId), eq(watchlist.ticker, upperTicker)))
       .returning();
 
     if (deleted.length === 0) {
