@@ -259,12 +259,18 @@ describe('OutcomeTracker', () => {
         eventPrice: '179.50',
         price1h: '180.00',
         price1d: null,
+        priceT5: '188.20',
+        priceT20: '194.50',
         price1w: null,
         price1m: null,
         change1h: '0.2786',
         change1d: null,
+        changeT5: '4.8468',
+        changeT20: '8.3565',
         change1w: null,
         change1m: null,
+        evaluatedT5At: new Date('2024-03-09T10:00:00Z'),
+        evaluatedT20At: new Date('2024-03-24T10:00:00Z'),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -300,6 +306,8 @@ describe('OutcomeTracker', () => {
           eventPrice: '179.50',
           price1h: '180.00',
           price1d: '181.20',
+          priceT5: '184.10',
+          priceT20: '191.50',
           price1w: null,
           price1m: null,
         },
@@ -311,6 +319,8 @@ describe('OutcomeTracker', () => {
           eventPrice: '177.00',
           price1h: '177.50',
           price1d: '178.00',
+          priceT5: '181.10',
+          priceT20: '187.50',
           price1w: '180.00',
           price1m: null,
         },
@@ -368,6 +378,10 @@ describe('OutcomeTracker', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).priceColumnKey('price_1d')).toBe('price1d');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((tracker as any).priceColumnKey('price_t5')).toBe('priceT5');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((tracker as any).priceColumnKey('price_t20')).toBe('priceT20');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).priceColumnKey('price_1w')).toBe('price1w');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).priceColumnKey('price_1m')).toBe('price1m');
@@ -385,9 +399,97 @@ describe('OutcomeTracker', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).changeColumnKey('change_1d')).toBe('change1d');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((tracker as any).changeColumnKey('change_t5')).toBe('changeT5');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((tracker as any).changeColumnKey('change_t20')).toBe('changeT20');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).changeColumnKey('change_1w')).toBe('change1w');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((tracker as any).changeColumnKey('change_1m')).toBe('change1m');
+    });
+  });
+
+  describe('fillInterval', () => {
+    it('should stamp evaluated_t5_at even when no price is available', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt: vi.fn().mockResolvedValue({ ok: true, value: null }) } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: '179.50',
+        },
+        {
+          hours: 120,
+          column: 'price_t5',
+          changeCol: 'change_t5',
+          label: 'T+5d',
+          evaluatedAtCol: 'evaluated_t5_at',
+        },
+      );
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evaluatedT5At: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should store price_t20 and change_t20 when the interval price is available', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt: vi.fn().mockResolvedValue({ ok: true, value: 194.5 }) } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: '179.50',
+        },
+        {
+          hours: 480,
+          column: 'price_t20',
+          changeCol: 'change_t20',
+          label: 'T+20d',
+          evaluatedAtCol: 'evaluated_t20_at',
+        },
+      );
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priceT20: '194.5',
+          changeT20: expect.any(String),
+          evaluatedT20At: expect.any(Date),
+        }),
+      );
     });
   });
 });

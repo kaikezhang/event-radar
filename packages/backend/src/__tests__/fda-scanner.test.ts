@@ -118,7 +118,7 @@ describe('FdaScanner', () => {
         // 5 relevant items (food labeling is filtered out)
         expect(result.value.length).toBe(5);
         expect(result.value[0]!.source).toBe('fda');
-        expect(result.value[0]!.type).toBe('fda-action');
+        expect(result.value[0]!.type).toBe('fda_approval');
       }
     });
 

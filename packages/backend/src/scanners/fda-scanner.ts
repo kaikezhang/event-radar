@@ -113,6 +113,25 @@ export function extractDrugName(text: string): string | null {
   return null;
 }
 
+function mapFdaEventType(
+  actionType: ReturnType<typeof classifyFdaAction>,
+  text: string,
+): string {
+  if (text.toLowerCase().includes('orphan drug')) {
+    return 'fda_orphan_drug';
+  }
+
+  if (actionType === 'approval') {
+    return 'fda_approval';
+  }
+
+  if (actionType === 'crl' || actionType === 'safety') {
+    return 'fda_rejection';
+  }
+
+  return 'news_breaking';
+}
+
 export class FdaScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'fda');
   /** Override for testing */
@@ -155,11 +174,12 @@ export class FdaScanner extends BaseScanner {
         const tickers = extractTickers(fullText);
         const actionType = classifyFdaAction(fullText);
         const drugName = extractDrugName(item.title);
+        const eventType = mapFdaEventType(actionType, fullText);
 
         events.push({
           id: randomUUID(),
           source: 'fda',
-          type: 'fda-action',
+          type: eventType,
           title: item.title,
           body: item.description || item.title,
           url: item.link || undefined,

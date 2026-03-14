@@ -42,7 +42,7 @@ function makeRuleResult(
 }
 
 const VALID_LLM_JSON = JSON.stringify({
-  eventType: 'filing',
+  eventType: 'sec_form_8k',
   severity: 'CRITICAL',
   direction: 'bearish',
   confidence: 0.92,
@@ -108,7 +108,7 @@ describe('LLMClassifierService.classify', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.eventType).toBe('filing');
+      expect(result.value.eventType).toBe('sec_form_8k');
       expect(result.value.severity).toBe('CRITICAL');
       expect(result.value.direction).toBe('bearish');
       expect(result.value.confidence).toBe(0.92);
@@ -193,7 +193,7 @@ describe('MockProvider', () => {
   it('returns custom preset response', async () => {
     const customResponse = ok(
       JSON.stringify({
-        eventType: 'earnings',
+        eventType: 'earnings_beat',
         severity: 'HIGH',
         direction: 'bullish',
         confidence: 0.88,
@@ -205,7 +205,7 @@ describe('MockProvider', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(JSON.parse(result.value)).toHaveProperty('eventType', 'earnings');
+      expect(JSON.parse(result.value)).toHaveProperty('eventType', 'earnings_beat');
     }
   });
 });
@@ -221,6 +221,17 @@ describe('buildClassifyPrompt', () => {
     expect(prompt).toContain('Example 1:');
     expect(prompt).toContain('Example 2:');
     expect(prompt).toContain('Example 3:');
+  });
+
+  it('lists the unified taxonomy in the prompt', () => {
+    const prompt = buildClassifyPrompt({
+      headline: 'AAPL files 8-K',
+    });
+
+    expect(prompt).toContain('sec_form_8k');
+    expect(prompt).toContain('earnings_beat');
+    expect(prompt).toContain('fed_announcement');
+    expect(prompt).toContain('news_breaking');
   });
 
   it('includes all input fields', () => {
@@ -257,7 +268,7 @@ describe('parseLLMClassification', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.eventType).toBe('filing');
+      expect(result.value.eventType).toBe('sec_form_8k');
       expect(result.value.severity).toBe('CRITICAL');
     }
   });

@@ -1,19 +1,25 @@
-import { LLMClassificationSchema, type LLMClassification } from '@event-radar/shared';
+import {
+  LLMClassificationSchema,
+  LLMEventTypeSchema,
+  type LLMClassification,
+} from '@event-radar/shared';
 import { ok, err, type Result } from '@event-radar/shared';
 import { LLMError } from './llm-provider.js';
+
+const EVENT_TYPE_LIST = LLMEventTypeSchema.options.join('|');
 
 const FEW_SHOT_EXAMPLES = `
 Example 1:
 Event: "AAPL files 8-K: CEO Tim Cook announces retirement effective Q3 2025"
-Output: {"eventType":"filing","severity":"CRITICAL","direction":"bearish","confidence":0.9,"reasoning":"CEO departure from top-5 market cap company is highly material."}
+Output: {"eventType":"sec_form_8k","severity":"CRITICAL","direction":"bearish","confidence":0.9,"reasoning":"An 8-K filing announcing a CEO departure is highly material."}
 
 Example 2:
 Event: "Fed holds rates steady at 5.25-5.50%, signals possible cut in September"
-Output: {"eventType":"macro","severity":"HIGH","direction":"bullish","confidence":0.85,"reasoning":"Rate hold with dovish forward guidance is broadly bullish for equities."}
+Output: {"eventType":"fed_announcement","severity":"HIGH","direction":"bullish","confidence":0.85,"reasoning":"A Fed decision with dovish forward guidance is broadly bullish for equities."}
 
 Example 3:
 Event: "Senator purchases $500K in defense stocks ahead of committee vote"
-Output: {"eventType":"political","severity":"MEDIUM","direction":"bullish","confidence":0.7,"reasoning":"Congressional insider trading pattern suggests upcoming favorable legislation."}
+Output: {"eventType":"insider_large_trade","severity":"MEDIUM","direction":"bullish","confidence":0.7,"reasoning":"A large politically connected trade can signal upcoming policy relevance."}
 `.trim();
 
 export function buildClassifyPrompt(input: {
@@ -26,7 +32,7 @@ export function buildClassifyPrompt(input: {
     'You are a financial event classifier. Classify the following event.',
     '',
     'Return ONLY valid JSON with these fields:',
-    '- eventType: filing|earnings|insider|macro|political|analyst|social',
+    `- eventType: ${EVENT_TYPE_LIST}`,
     '- severity: LOW|MEDIUM|HIGH|CRITICAL',
     '- direction: bullish|bearish|neutral',
     '- confidence: 0.0-1.0',

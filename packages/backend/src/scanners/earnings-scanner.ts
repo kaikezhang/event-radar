@@ -151,7 +151,7 @@ export class EarningsScanner extends BaseScanner {
 
         if (earning.epsActual != null && surprise) {
           // Post-earnings result
-          eventType = 'earnings-result';
+          eventType = surprise === 'beat' ? 'earnings_beat' : 'earnings_miss';
           const emoji =
             surprise === 'beat' ? '🟢' : surprise === 'miss' ? '🔴' : '⚪';
           const surpriseStr =

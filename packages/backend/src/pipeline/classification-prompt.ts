@@ -1,13 +1,19 @@
 import type { RawEvent, ClassificationResult } from '@event-radar/shared';
-import { LlmClassificationResultSchema, type LlmClassificationResult } from '@event-radar/shared';
+import {
+  LLMEventTypeSchema,
+  LlmClassificationResultSchema,
+  type LlmClassificationResult,
+} from '@event-radar/shared';
 import { ok, err, type Result } from '@event-radar/shared';
+
+const EVENT_TYPE_LIST = LLMEventTypeSchema.options.join(', ');
 
 const SYSTEM_PROMPT = `You are a financial event classifier for a real-time trading intelligence platform.
 
 Given an event from a financial data source, classify it by:
 1. **severity**: CRITICAL | HIGH | MEDIUM | LOW — how market-moving is this event?
 2. **direction**: BULLISH | BEARISH | NEUTRAL | MIXED — what is the likely price impact?
-3. **eventType**: a snake_case label (e.g. "insider_purchase", "restructuring", "executive_change", "earnings_release", "material_agreement", "bankruptcy", "stock_split", "dividend_change", "sec_investigation", "guidance_update")
+3. **eventType**: choose exactly one of these labels: ${EVENT_TYPE_LIST}
 4. **confidence**: 0 to 1 — how confident are you in this classification?
 5. **reasoning**: 1-3 sentence explanation of your classification
 6. **tags**: array of relevant string tags

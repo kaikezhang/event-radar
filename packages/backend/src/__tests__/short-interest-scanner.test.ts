@@ -129,7 +129,7 @@ describe('ShortInterestScanner', () => {
         // CVNA: 50% change ✓
         expect(result.value.length).toBe(4);
         expect(result.value[0]!.source).toBe('short-interest');
-        expect(result.value[0]!.type).toBe('short-interest');
+        expect(result.value[0]!.type).toBe('short_interest');
       }
     });
 

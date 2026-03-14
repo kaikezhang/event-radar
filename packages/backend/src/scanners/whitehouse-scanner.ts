@@ -181,7 +181,7 @@ export class WhiteHouseScanner extends BaseScanner {
         events.push({
           id: randomUUID(),
           source: 'whitehouse',
-          type: 'executive-action',
+          type: 'executive_order',
           title: `${docTypeLabel}: ${doc.title}`,
           body: doc.abstract ?? doc.title,
           url: doc.html_url,

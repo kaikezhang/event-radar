@@ -136,7 +136,7 @@ export class UnusualOptionsScanner extends BaseScanner {
         events.push({
           id: randomUUID(),
           source: 'unusual-options',
-          type: 'unusual-options',
+          type: 'unusual_options',
           title: `${option.ticker} ${option.type.toUpperCase()} $${option.strike} ${option.expiry} — ${option.tradeType} ${premiumFormatted} (${signal})`,
           body: `Unusual ${option.type} activity on ${option.ticker}: ${option.tradeType} of $${option.strike} ${option.expiry} for ${premiumFormatted} premium. Volume: ${option.volume}, OI: ${option.openInterest}, Vol/OI: ${option.volOiRatio}x. Signal: ${signal}.`,
           timestamp: new Date(),

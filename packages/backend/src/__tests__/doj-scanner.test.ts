@@ -92,7 +92,7 @@ describe('DojScanner', () => {
       if (result.ok) {
         expect(result.value.length).toBe(5);
         expect(result.value[0]!.source).toBe('doj');
-        expect(result.value[0]!.type).toBe('antitrust-action');
+        expect(result.value[0]!.type).toBe('ftc_antitrust');
       }
     });
 

@@ -148,13 +148,13 @@ describe('EarningsScanner', () => {
         expect(upcoming!.title).toContain('NVDA');
 
         const beat = result.value.find(
-          (e) => e.title.includes('AAPL') && e.type === 'earnings-result',
+          (e) => e.title.includes('AAPL') && e.type === 'earnings_beat',
         );
         expect(beat).toBeDefined();
         expect(beat!.title).toContain('BEAT');
 
         const miss = result.value.find(
-          (e) => e.title.includes('TSLA') && e.type === 'earnings-result',
+          (e) => e.title.includes('TSLA') && e.type === 'earnings_miss',
         );
         expect(miss).toBeDefined();
         expect(miss!.title).toContain('MISS');

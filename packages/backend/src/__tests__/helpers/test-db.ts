@@ -81,12 +81,18 @@ export async function createTestDb(): Promise<{
       event_price DECIMAL(10, 2),
       price_1h DECIMAL(10, 2),
       price_1d DECIMAL(10, 2),
+      price_t5 DECIMAL(12, 2),
+      price_t20 DECIMAL(12, 2),
       price_1w DECIMAL(10, 2),
       price_1m DECIMAL(10, 2),
       change_1h DECIMAL(10, 4),
       change_1d DECIMAL(10, 4),
+      change_t5 DECIMAL(8, 4),
+      change_t20 DECIMAL(8, 4),
       change_1w DECIMAL(10, 4),
       change_1m DECIMAL(10, 4),
+      evaluated_t5_at TIMESTAMPTZ,
+      evaluated_t20_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )

@@ -171,7 +171,7 @@ describe('SecEdgarScanner', () => {
 
       expect(result.value).toHaveLength(2);
 
-      const filing8k = result.value.find((event) => event.type === '8-K');
+      const filing8k = result.value.find((event) => event.type === 'sec_form_8k');
       expect(filing8k).toMatchObject({
         source: 'sec-edgar',
         title: 'SEC 8-K: Example Corp — Item 2.05 (Costs Associated with Exit or Disposal Activities)',
@@ -185,7 +185,7 @@ describe('SecEdgarScanner', () => {
         severity_hint: 'HIGH',
       });
 
-      const form4 = result.value.find((event) => event.type === 'form-4');
+      const form4 = result.value.find((event) => event.type === 'sec_form_4');
       expect(form4).toMatchObject({
         source: 'sec-edgar',
         title: 'SEC Form 4: Jane Doe bought $2,500,000 of EXMP',
@@ -256,7 +256,7 @@ describe('SecEdgarScanner', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      const form4 = result.value.find((event) => event.type === 'form-4');
+      const form4 = result.value.find((event) => event.type === 'sec_form_4');
       expect(form4?.title).toBe(
         'SEC Form 4: Jane Doe filed insider trade disclosure for Example Corp',
       );

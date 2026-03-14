@@ -194,7 +194,7 @@ describe('RedditScanner', () => {
         // 4 posts (5 total minus 1 stickied)
         expect(result.value.length).toBe(4 * 4); // 4 subreddits × 4 non-stickied posts
         expect(result.value[0]!.source).toBe('reddit');
-        expect(result.value[0]!.type).toBe('social-post');
+        expect(result.value[0]!.type).toBe('reddit_trending');
       }
     });
 

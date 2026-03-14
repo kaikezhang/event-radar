@@ -89,6 +89,18 @@ describe('ScannerRegistry', () => {
       registry.register(scanner);
       expect(registry.getById('findme')).toBe(scanner);
     });
+
+    it('should normalize legacy aliases', () => {
+      const xScanner = createScanner('x-elonmusk');
+      const secScanner = createScanner('sec-edgar');
+      registry.register(xScanner);
+      registry.register(secScanner);
+      expect(registry.getById('x')).toBe(xScanner);
+      expect(registry.getById('twitter')).toBe(xScanner);
+      expect(registry.getById('  X  ')).toBe(xScanner);
+      expect(registry.getById('form-4')).toBe(secScanner);
+      expect(registry.getById('8-k')).toBe(secScanner);
+    });
   });
 
   describe('startAll / stopAll', () => {

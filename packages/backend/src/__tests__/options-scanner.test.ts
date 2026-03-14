@@ -147,7 +147,7 @@ describe('UnusualOptionsScanner', () => {
         // SPY is filtered out (30k premium, 0.04x vol/OI)
         expect(result.value.length).toBe(4);
         expect(result.value[0]!.source).toBe('unusual-options');
-        expect(result.value[0]!.type).toBe('unusual-options');
+        expect(result.value[0]!.type).toBe('unusual_options');
       }
     });
 

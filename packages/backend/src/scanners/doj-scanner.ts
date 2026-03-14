@@ -70,6 +70,12 @@ export function extractCompanyNames(text: string): string[] {
   return [...new Set(companies)];
 }
 
+function mapDojEventType(
+  actionType: ReturnType<typeof classifyDojAction>,
+): string {
+  return actionType === 'settlement' ? 'doj_settlement' : 'ftc_antitrust';
+}
+
 export class DojScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'doj');
   /** Override for testing */
@@ -111,11 +117,12 @@ export class DojScanner extends BaseScanner {
         const tickers = extractTickers(fullText);
         const actionType = classifyDojAction(fullText);
         const companies = extractCompanyNames(item.title);
+        const eventType = mapDojEventType(actionType);
 
         events.push({
           id: randomUUID(),
           source: 'doj',
-          type: 'antitrust-action',
+          type: eventType,
           title: item.title,
           body: item.description || item.title,
           url: item.link || undefined,

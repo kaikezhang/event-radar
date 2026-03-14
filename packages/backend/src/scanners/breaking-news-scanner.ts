@@ -240,7 +240,7 @@ export class BreakingNewsScanner extends BaseScanner {
             events.push({
               id: randomUUID(),
               source: 'breaking-news',
-              type: 'breaking-news',
+              type: 'news_breaking',
               title: item.title,
               body: item.description || item.title,
               url: item.link || undefined,

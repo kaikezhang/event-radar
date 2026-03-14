@@ -195,6 +195,39 @@ describe('GET /api/v1/scanners/:name/events', () => {
     });
   });
 
+  it('returns events when the requested scanner name is an alias', async () => {
+    const aliasedEventId = await seedScannerEvent({
+      source: 'x-elonmusk',
+      title: 'Alias-resolved event',
+      tickers: ['TSLA'],
+      receivedAt: '2026-03-13T12:30:00.000Z',
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/scanners/x/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      scanner: 'x-elonmusk',
+      count: 1,
+      events: [
+        {
+          id: aliasedEventId,
+          title: 'Alias-resolved event',
+          summary: 'Alias-resolved event body',
+          severity: 'MEDIUM',
+          tickers: ['TSLA'],
+          received_at: '2026-03-13T12:30:00.000Z',
+        },
+      ],
+    });
+  });
+
   it('returns 503 when the database is not configured', async () => {
     const noDbCtx = buildApp({ logger: false, apiKey: TEST_API_KEY });
     await noDbCtx.server.ready();
