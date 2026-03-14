@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ScannerRegistry } from '@event-radar/shared';
+import { normalizeScannerId } from '@event-radar/shared/scanner-registry';
 import type { Database } from '../db/connection.js';
 import { events } from '../db/schema.js';
 
@@ -78,6 +79,8 @@ export function registerScannerRoutes(
       return reply.code(400).send({ error: 'Invalid scanner request' });
     }
 
+    const scannerName = normalizeScannerId(paramsResult.data.name);
+
     const rows = await db
       .select({
         id: events.id,
@@ -89,12 +92,12 @@ export function registerScannerRoutes(
         createdAt: events.createdAt,
       })
       .from(events)
-      .where(eq(events.source, paramsResult.data.name))
+      .where(eq(events.source, scannerName))
       .orderBy(desc(events.receivedAt), desc(events.createdAt))
       .limit(queryResult.data.limit);
 
     return reply.send({
-      scanner: paramsResult.data.name,
+      scanner: scannerName,
       count: rows.length,
       events: rows.map((row) => {
         const metadata =

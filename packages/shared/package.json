@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./scanner-registry": {
+      "import": "./dist/scanner-registry.js",
+      "types": "./dist/scanner-registry.d.ts"
     }
   },
   "scripts": {
