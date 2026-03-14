@@ -5,6 +5,8 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+const DEFAULT_MAX_SYMBOLS = 500;
+
 function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
 }
@@ -41,6 +43,7 @@ export class MarketDataCache {
   private readonly ttlMs: number;
   private readonly refreshIntervalMs: number;
   private readonly maxConcurrent: number;
+  private readonly maxSymbols: number;
   private readonly cache = new Map<string, CacheEntry>();
   private readonly knownSymbols = new Set<string>();
   private timer: NodeJS.Timeout | null = null;
@@ -50,11 +53,13 @@ export class MarketDataCache {
     ttlMs?: number;
     refreshIntervalMs?: number;
     maxConcurrent?: number;
+    maxSymbols?: number;
   }) {
     this.provider = options.provider;
     this.ttlMs = options.ttlMs ?? 300_000;
     this.refreshIntervalMs = options.refreshIntervalMs ?? 300_000;
     this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 4);
+    this.maxSymbols = Math.max(1, options.maxSymbols ?? DEFAULT_MAX_SYMBOLS);
   }
 
   async getSymbol(symbol: string): Promise<MarketQuote | undefined> {
@@ -77,11 +82,14 @@ export class MarketDataCache {
       return;
     }
 
+    this.cache.delete(normalizedSymbol);
     this.cache.set(normalizedSymbol, {
       value: normalizeQuote(normalizedSymbol, value),
       expiresAt: Date.now() + this.ttlMs,
     });
+    this.knownSymbols.delete(normalizedSymbol);
     this.knownSymbols.add(normalizedSymbol);
+    this.evictOverflow();
   }
 
   async getOrFetch(symbol: string): Promise<MarketQuote | undefined> {
@@ -162,5 +170,29 @@ export class MarketDataCache {
 
   isRunning(): boolean {
     return this.timer !== null;
+  }
+
+  private evictOverflow(): void {
+    while (this.knownSymbols.size > this.maxSymbols) {
+      const oldestSymbol = this.knownSymbols.values().next().value;
+
+      if (!oldestSymbol) {
+        return;
+      }
+
+      this.knownSymbols.delete(oldestSymbol);
+      this.cache.delete(oldestSymbol);
+    }
+
+    while (this.cache.size > this.maxSymbols) {
+      const oldestSymbol = this.cache.keys().next().value;
+
+      if (!oldestSymbol) {
+        return;
+      }
+
+      this.cache.delete(oldestSymbol);
+      this.knownSymbols.delete(oldestSymbol);
+    }
   }
 }

@@ -196,6 +196,42 @@ describe('MarketDataCache', () => {
     await expect(cache.getSymbol('aapl')).resolves.toEqual(createQuote('AAPL', 101));
   });
 
+  it('evicts the oldest cached symbol when maxSymbols is exceeded', async () => {
+    const { provider } = createProvider();
+    const options = { provider, maxSymbols: 2 };
+    const cache = new MarketDataCache(options);
+
+    cache.setSymbol('AAPL', createQuote('AAPL', 101));
+    cache.setSymbol('MSFT', createQuote('MSFT', 202));
+    cache.setSymbol('TSLA', createQuote('TSLA', 303));
+
+    await expect(cache.getSymbol('AAPL')).resolves.toBeUndefined();
+    await expect(cache.getSymbol('MSFT')).resolves.toEqual(createQuote('MSFT', 202));
+    await expect(cache.getSymbol('TSLA')).resolves.toEqual(createQuote('TSLA', 303));
+  });
+
+  it('keeps periodic refresh tracking bounded with the cache when maxSymbols is exceeded', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const { provider, getQuote } = createProvider();
+    getQuote.mockImplementation(async (symbol) => createQuote(symbol, symbol.length * 100));
+
+    const options = { provider, refreshIntervalMs: 1_000, maxSymbols: 2 };
+    const cache = new MarketDataCache(options);
+
+    cache.setSymbol('AAPL', createQuote('AAPL', 101));
+    cache.setSymbol('MSFT', createQuote('MSFT', 202));
+    cache.setSymbol('TSLA', createQuote('TSLA', 303));
+
+    cache.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(getQuote).toHaveBeenCalledTimes(2);
+    expect(getQuote.mock.calls.map(([symbol]) => symbol).sort()).toEqual(['MSFT', 'TSLA']);
+    cache.stop();
+  });
+
   it('respects the max concurrency cap when refreshing symbols', async () => {
     const { provider, getQuote } = createProvider();
     let activeRequests = 0;
