@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DiscordWebhook } from '../discord-webhook.js';
 import type { AlertEvent } from '../types.js';
+import type { RegimeSnapshot } from '@event-radar/shared';
 
 function makeAlert(overrides?: Partial<AlertEvent>): AlertEvent {
   return {
@@ -18,6 +19,28 @@ function makeAlert(overrides?: Partial<AlertEvent>): AlertEvent {
     ticker: 'AAPL',
     ...overrides,
   };
+}
+
+function makeRegimeSnapshot(overrides?: Partial<RegimeSnapshot>): RegimeSnapshot {
+  return {
+    score: 0,
+    label: 'neutral',
+    factors: {
+      vix: { value: 18.0, zscore: 0.0 },
+      spyRsi: { value: 50.0, signal: 'neutral' },
+      spy52wPosition: { pctFromHigh: -5.0, pctFromLow: 15.0 },
+      maSignal: { sma20: 450.0, sma50: 448.0, signal: 'neutral' },
+      yieldCurve: { spread: 0.5, inverted: false },
+    },
+    amplification: { bullish: 1.0, bearish: 1.0 },
+    updatedAt: '2024-01-15T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function getEmbedFromLastCall(fetchSpy: ReturnType<typeof vi.fn>) {
+  const [, options] = fetchSpy.mock.calls.at(-1) as [string, RequestInit];
+  return JSON.parse(options.body as string).embeds[0];
 }
 
 describe('DiscordWebhook', () => {
@@ -241,8 +264,8 @@ describe('DiscordWebhook', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const embed = JSON.parse(options.body as string).embeds[0];
 
-    expect(embed.title).toContain('HIGH');
-    expect(embed.title).toContain('Apple CEO departure triggers uncertainty');
+    expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
+    expect(embed.description).toContain('Apple CEO departure triggers uncertainty');
     expect(embed.description).toContain('Leadership vacuum');
     expect(embed.footer.text).toContain('AI Enhanced');
 
@@ -252,6 +275,245 @@ describe('DiscordWebhook', () => {
     expect(tickerField).toBeDefined();
     expect(tickerField.value).toContain('AAPL');
     expect(tickerField.value).toContain('📉');
+  });
+
+  it('uses the event title for enriched embeds instead of severity and summary text', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time for iPhone launch',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+        },
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+
+    expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
+  });
+
+  it('renders action after tickers and appends the event price to the ticker field', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+    const baseAlert = makeAlert();
+
+    await webhook.send(
+      makeAlert({
+        event: {
+          ...baseAlert.event,
+          metadata: {
+            ...baseAlert.event.metadata,
+            event_price: 187.34,
+          },
+        },
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time for iPhone launch',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+        },
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const fieldNames = embed.fields.map((field: { name: string }) => field.name);
+    const tickerField = embed.fields.find(
+      (field: { name: string }) => field.name === 'Tickers',
+    );
+    const actionField = embed.fields.find(
+      (field: { name: string }) => field.name === 'Action',
+    );
+
+    expect(tickerField.value).toContain('@ $187.34');
+    expect(actionField.value).toBe('🔴 立即关注');
+    expect(fieldNames.indexOf('Action')).toBe(fieldNames.indexOf('Tickers') + 1);
+  });
+
+  it('places the source link immediately after AI analysis and before historical and regime fields', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time for iPhone launch',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+        },
+        historicalContext: {
+          matchCount: 8,
+          confidence: 'high',
+          avgAlphaT5: 0.024,
+          avgAlphaT20: 0.083,
+          winRateT20: 62,
+          medianAlphaT20: 0.071,
+          topMatches: [
+            {
+              ticker: 'NVDA',
+              headline: 'Nvidia beat and raised guidance',
+              source: 'earnings',
+              eventDate: '2025-02-21T21:00:00.000Z',
+              alphaT20: 0.16,
+              score: 11,
+            },
+          ],
+          patternSummary: 'Technology earnings beat in bull market',
+        },
+        regimeSnapshot: makeRegimeSnapshot({
+          score: 65,
+          label: 'overbought',
+          amplification: { bullish: 0.7, bearish: 1.5 },
+        }),
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const fieldNames = embed.fields.map((field: { name: string }) => field.name);
+    const aiIndex = fieldNames.indexOf('🤖 AI Analysis');
+    const sourceIndex = fieldNames.indexOf('🔗 Source');
+    const historicalIndex = fieldNames.findIndex((name: string) => name.includes('Historical Pattern'));
+    const regimeIndex = fieldNames.indexOf('📈 Market Regime');
+
+    expect(sourceIndex).toBe(aiIndex + 1);
+    expect(sourceIndex).toBeLessThan(historicalIndex);
+    expect(sourceIndex).toBeLessThan(regimeIndex);
+  });
+
+  it('formats historical stats as a code block instead of a markdown table', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 8,
+          confidence: 'high',
+          avgAlphaT5: 0.024,
+          avgAlphaT20: 0.083,
+          winRateT20: 62,
+          medianAlphaT20: 0.071,
+          topMatches: [
+            {
+              ticker: 'NVDA',
+              headline: 'Nvidia beat and raised guidance',
+              source: 'earnings',
+              eventDate: '2025-02-21T21:00:00.000Z',
+              alphaT20: 0.16,
+              score: 11,
+            },
+          ],
+          patternSummary: 'Technology earnings beat in bull market',
+        },
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const historyField = embed.fields.find(
+      (field: { name: string }) => field.name.includes('Historical Pattern'),
+    );
+
+    expect(historyField.value).toContain('```');
+    expect(historyField.value).toContain('Avg Alpha T+5');
+    expect(historyField.value).not.toContain('| Metric | Value |');
+  });
+
+  it('hides the historical field when all historical values are zero or null', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        historicalContext: {
+          matchCount: 3,
+          confidence: 'medium',
+          avgAlphaT5: 0,
+          avgAlphaT20: 0,
+          winRateT20: 0,
+          medianAlphaT20: 0,
+          topMatches: [
+            {
+              ticker: 'AAPL',
+              headline: 'Prior event with flat alpha',
+              source: 'earnings',
+              eventDate: '2025-01-01T10:00:00.000Z',
+              alphaT20: 0,
+              score: 8,
+            },
+          ],
+          similarEvents: [
+            {
+              title: 'Prior flat event',
+              ticker: 'AAPL',
+              source: 'earnings',
+              eventTime: '2025-01-01T10:00:00.000Z',
+              change1d: null,
+              change1w: null,
+              change1m: null,
+              score: 8,
+            },
+          ],
+          patternSummary: 'No meaningful historical edge',
+        },
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const historyField = embed.fields.find(
+      (field: { name: string }) => field.name.includes('Historical Pattern'),
+    );
+
+    expect(historyField).toBeUndefined();
+  });
+
+  it('moves regime context from AI analysis into the market regime field', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Apple CEO departure triggers uncertainty',
+          impact: 'Leadership vacuum at critical time for iPhone launch',
+          action: '🔴 立即关注',
+          tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+          regimeContext: 'Risk-off tape could deepen the reaction.',
+        },
+        regimeSnapshot: makeRegimeSnapshot({
+          score: -30,
+          label: 'oversold',
+          amplification: { bullish: 1.2, bearish: 1.6 },
+        }),
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const aiField = embed.fields.find(
+      (field: { name: string }) => field.name === '🤖 AI Analysis',
+    );
+    const regimeField = embed.fields.find(
+      (field: { name: string }) => field.name === '📈 Market Regime',
+    );
+
+    expect(aiField.value).not.toContain('Risk-off tape could deepen the reaction.');
+    expect(regimeField.value).toContain('Risk-off tape could deepen the reaction.');
+  });
+
+  it('hides neutral amplification when both bullish and bearish multipliers are 1x', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        regimeSnapshot: makeRegimeSnapshot(),
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const regimeField = embed.fields.find(
+      (field: { name: string }) => field.name === '📈 Market Regime',
+    );
+
+    expect(regimeField.value).not.toContain('Bullish amp');
+    expect(regimeField.value).not.toContain('Bearish amp');
   });
 
   it('should throw on non-ok response', async () => {
