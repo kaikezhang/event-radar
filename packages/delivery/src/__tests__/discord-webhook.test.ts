@@ -265,8 +265,7 @@ describe('DiscordWebhook', () => {
     const embed = JSON.parse(options.body as string).embeds[0];
 
     expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
-    expect(embed.description).toContain('Apple CEO departure triggers uncertainty');
-    expect(embed.description).toContain('Leadership vacuum');
+    expect(embed.description).toContain('Item 5.02 Departure of CEO');
     expect(embed.footer.text).toContain('AI Enhanced');
 
     const tickerField = embed.fields.find(
