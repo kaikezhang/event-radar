@@ -68,10 +68,13 @@ export class WebhookDelivery implements DeliveryService {
             confidence: alert.historicalContext.confidence,
             avgAlphaT5: alert.historicalContext.avgAlphaT5,
             avgAlphaT20: alert.historicalContext.avgAlphaT20,
+            avgChange1d: alert.historicalContext.avgChange1d,
+            avgChange1w: alert.historicalContext.avgChange1w,
             winRateT20: alert.historicalContext.winRateT20,
             medianAlphaT20: alert.historicalContext.medianAlphaT20,
             bestCase: alert.historicalContext.bestCase,
             worstCase: alert.historicalContext.worstCase,
+            similarEvents: alert.historicalContext.similarEvents,
             patternSummary: alert.historicalContext.patternSummary,
           }
         : undefined,

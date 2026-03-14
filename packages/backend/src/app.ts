@@ -662,6 +662,13 @@ export function buildApp(options?: {
           llmResult?.ok ? llmResult.value : undefined,
         );
         historicalContext = histResult ?? undefined;
+        if (historicalContext) {
+          event.metadata = {
+            ...(event.metadata ?? {}),
+            historical_context: historicalContext,
+          };
+          await persistEventMetadata();
+        }
         const histDurationMs = Date.now() - histStart;
         const histDurationS = histDurationMs / 1000;
         historicalEnrichmentDurationSeconds.observe(histDurationS);
