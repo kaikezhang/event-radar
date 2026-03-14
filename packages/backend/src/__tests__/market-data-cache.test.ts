@@ -258,20 +258,23 @@ describe('MarketDataCache', () => {
     expect(resolvers.size).toBe(2);
 
     resolvers.get('AAPL')?.(createQuote('AAPL', 110));
-    resolvers.get('MSFT')?.(createQuote('MSFT', 120));
-
     await flushPromises();
     expect(maxSeen).toBe(2);
-    expect(resolvers.size).toBe(4);
 
-    resolvers.get('TSLA')?.(createQuote('TSLA', 130));
-    resolvers.get('NVDA')?.(createQuote('NVDA', 140));
+    resolvers.get('MSFT')?.(createQuote('MSFT', 210));
+    await flushPromises();
+    expect(maxSeen).toBe(2);
+
+    resolvers.get('TSLA')?.(createQuote('TSLA', 310));
+    await flushPromises();
+    resolvers.get('NVDA')?.(createQuote('NVDA', 410));
 
     const results = await refreshPromise;
+
     expect(maxSeen).toBe(2);
     expect(results.get('AAPL')).toEqual(createQuote('AAPL', 110));
-    expect(results.get('MSFT')).toEqual(createQuote('MSFT', 120));
-    expect(results.get('TSLA')).toEqual(createQuote('TSLA', 130));
-    expect(results.get('NVDA')).toEqual(createQuote('NVDA', 140));
+    expect(results.get('MSFT')).toEqual(createQuote('MSFT', 210));
+    expect(results.get('TSLA')).toEqual(createQuote('TSLA', 310));
+    expect(results.get('NVDA')).toEqual(createQuote('NVDA', 410));
   });
 });
