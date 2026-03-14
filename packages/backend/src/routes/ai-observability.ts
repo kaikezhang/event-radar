@@ -237,13 +237,31 @@ export function registerAiObservabilityRoutes(
       return reply.status(503).send({ error: 'Database not available' });
     }
 
-    // 1. Pipeline funnel for current window
-    const funnelRows = await db.execute(sql`
-      SELECT outcome, COUNT(*) as count
-      FROM pipeline_audit
-      WHERE created_at >= ${windowStart}
-      GROUP BY outcome
-    `);
+    // Parallel batch 1: four independent pipeline queries
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
+    const [funnelRows, prevFunnelRows, scannerRateRows, allLastSeenRows] = await Promise.all([
+      // 1. Pipeline funnel for current window
+      db.execute(sql`
+        SELECT outcome, COUNT(*) as count
+        FROM pipeline_audit WHERE created_at >= ${windowStart} GROUP BY outcome
+      `),
+      // 2. Previous window (trend)
+      db.execute(sql`
+        SELECT outcome, COUNT(*) as count
+        FROM pipeline_audit WHERE created_at >= ${prevWindowStart} AND created_at < ${windowStart} GROUP BY outcome
+      `),
+      // 3. Scanner event rates
+      db.execute(sql`
+        SELECT source, COUNT(*) as count, MAX(created_at) as last_seen
+        FROM pipeline_audit WHERE created_at >= ${windowStart} GROUP BY source
+      `),
+      // 4. Last seen (bounded to 30 days — avoids full table scan)
+      db.execute(sql`
+        SELECT source, MAX(created_at) as last_seen
+        FROM pipeline_audit WHERE created_at >= ${thirtyDaysAgo} GROUP BY source
+      `),
+    ]);
+
     const funnel: Record<string, number> = {};
     for (const r of funnelRows.rows) {
       funnel[r.outcome as string] = Number(r.count);
@@ -255,25 +273,11 @@ export function registerAiObservabilityRoutes(
     const deduped = funnel['deduped'] ?? 0;
     const gracePeriod = funnel['grace_period'] ?? 0;
 
-    // 2. Pipeline funnel for previous window (trend)
-    const prevFunnelRows = await db.execute(sql`
-      SELECT outcome, COUNT(*) as count
-      FROM pipeline_audit
-      WHERE created_at >= ${prevWindowStart} AND created_at < ${windowStart}
-      GROUP BY outcome
-    `);
     let prevIngested = 0;
     for (const r of prevFunnelRows.rows) {
       prevIngested += Number(r.count);
     }
 
-    // 3. Scanner event rates in window
-    const scannerRateRows = await db.execute(sql`
-      SELECT source, COUNT(*) as count, MAX(created_at) as last_seen
-      FROM pipeline_audit
-      WHERE created_at >= ${windowStart}
-      GROUP BY source
-    `);
     const scannerRates: Record<string, { count: number; lastSeen: string }> = {};
     for (const r of scannerRateRows.rows) {
       const ls = r.last_seen;
@@ -284,12 +288,6 @@ export function registerAiObservabilityRoutes(
       };
     }
 
-    // Get all-time last seen for silent scanners
-    const allLastSeenRows = await db.execute(sql`
-      SELECT source, MAX(created_at) as last_seen
-      FROM pipeline_audit
-      GROUP BY source
-    `);
     const allLastSeen: Record<string, string> = {};
     for (const r of allLastSeenRows.rows) {
       const ls = r.last_seen;
@@ -399,8 +397,8 @@ export function registerAiObservabilityRoutes(
       if (histCount > 0) {
         llmAvgLatencyMs = Math.round((histSum / histCount) * 1000);
       }
-    } catch {
-      // Metrics unavailable
+    } catch (metricsErr) {
+      server.log.warn({ error: metricsErr instanceof Error ? metricsErr.message : String(metricsErr) }, 'Metrics parsing failed');
     }
 
     // Historical match rate from DB
@@ -635,10 +633,10 @@ export function registerAiObservabilityRoutes(
     const prevTotal = Object.values(prevCounts).reduce((s, v) => s + v, 0);
     const prevDelivered = prevCounts['delivered'] ?? 0;
 
-    // Week average
+    // Week average (use actual distinct days to avoid underestimating with fewer days of data)
     const weekRows = await db.execute(sql`
-      SELECT COUNT(*)::float / 7 as avg_total,
-             COUNT(*) FILTER (WHERE outcome = 'delivered')::float / 7 as avg_delivered
+      SELECT COUNT(*)::float / GREATEST(COUNT(DISTINCT DATE(created_at)), 1) as avg_total,
+             COUNT(*) FILTER (WHERE outcome = 'delivered')::float / GREATEST(COUNT(DISTINCT DATE(created_at)), 1) as avg_delivered
       FROM pipeline_audit
       WHERE created_at >= ${weekStart} AND created_at <= ${dayEnd}
     `);
@@ -1084,7 +1082,7 @@ export function registerAiObservabilityRoutes(
       timestamp: String(audit.created_at),
       timeline,
       deliveryChannels,
-      outcome_data: outcome,
+      priceOutcome: outcome,
     });
   });
 
