@@ -61,10 +61,18 @@ export const LLMEnrichmentTickerSchema = z.object({
 export type LLMEnrichmentTicker = z.infer<typeof LLMEnrichmentTickerSchema>;
 
 const DEFAULT_ENRICHMENT_ACTION: LLMEnrichmentAction = '🟢 FYI';
+const OptionalEnrichmentFieldSchema = z.preprocess(
+  (value) => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined,
+  z.string().min(1).optional(),
+);
 
 export const LLMEnrichmentSchema = z.object({
   summary: z.string().min(1),
   impact: z.string().min(1),
+  whyNow: OptionalEnrichmentFieldSchema,
+  currentSetup: OptionalEnrichmentFieldSchema,
+  historicalContext: OptionalEnrichmentFieldSchema,
+  risks: OptionalEnrichmentFieldSchema,
   action: z.preprocess(
     (value) => (
       LLMEnrichmentActionSchema.safeParse(value).success

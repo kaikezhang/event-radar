@@ -242,6 +242,28 @@ describe('Accuracy schemas', () => {
 });
 
 describe('LLM enrichment schemas', () => {
+  it('accepts the structured enrichment fields alongside the legacy ones', () => {
+    const result = LLMEnrichmentSchema.safeParse({
+      summary: 'Summary',
+      impact: 'Impact',
+      whyNow: 'Fresh catalyst is hitting the tape now.',
+      currentSetup: 'Ticker is stretched into resistance with elevated volume.',
+      historicalContext: 'Historical analogs skew constructive over 20 days.',
+      risks: 'Management commentary can reverse the first reaction.',
+      action: '🟡 WATCH',
+      tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
+      regimeContext: 'Risk-on tape can cushion the downside reaction.',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.whyNow).toContain('Fresh catalyst');
+      expect(result.data.currentSetup).toContain('resistance');
+      expect(result.data.historicalContext).toContain('Historical analogs');
+      expect(result.data.risks).toContain('reverse');
+    }
+  });
+
   it('accepts the English action labels', () => {
     expect(LLMEnrichmentActionSchema.safeParse('🔴 ACT NOW').success).toBe(true);
     expect(LLMEnrichmentActionSchema.safeParse('🟡 WATCH').success).toBe(true);
@@ -260,6 +282,27 @@ describe('LLM enrichment schemas', () => {
     if (result.success) {
       expect(result.data.action).toBe('🟢 FYI');
       expect(result.data.tickers).toEqual([]);
+    }
+  });
+
+  it('drops blank structured fields instead of failing validation', () => {
+    const result = LLMEnrichmentSchema.safeParse({
+      summary: 'Summary',
+      impact: 'Impact',
+      whyNow: '   ',
+      currentSetup: '',
+      historicalContext: '\n',
+      risks: '\t',
+      action: '🟢 FYI',
+      tickers: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.whyNow).toBeUndefined();
+      expect(result.data.currentSetup).toBeUndefined();
+      expect(result.data.historicalContext).toBeUndefined();
+      expect(result.data.risks).toBeUndefined();
     }
   });
 });
