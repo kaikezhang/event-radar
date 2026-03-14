@@ -108,6 +108,7 @@ import { MarketDataCache } from './services/market-data-cache.js';
 import { createMarketDataProvider } from './services/create-market-data-provider.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
+import { PatternMatcher } from './services/pattern-matcher.js';
 import type {
   AccuracyDirection,
   ClassificationPrediction,
@@ -302,7 +303,6 @@ export function buildApp(options?: {
       : undefined,
     enabled: process.env.LLM_GATEKEEPER_ENABLED === 'true',
   });
-  const llmEnricher = new LLMEnricher(options?.llmEnricherConfig, marketRegimeService);
   const accuracyService = db
     ? new ClassificationAccuracyService(db, { eventBus })
     : undefined;
@@ -328,6 +328,13 @@ export function buildApp(options?: {
       refreshIntervalMs: 300_000,
     })
     : undefined;
+  const patternMatcher = db ? new PatternMatcher(db) : undefined;
+  const llmEnricher = new LLMEnricher(options?.llmEnricherConfig, {
+    regimeService: marketRegimeService,
+    marketDataCache: tickerMarketDataCache,
+    patternMatcher,
+    marketSnapshotProvider: marketCache,
+  });
   const historicalEnricher = options?.historicalEnricher
     ?? (db && marketCache
       ? new HistoricalEnricher(db, marketCache, {
@@ -736,7 +743,10 @@ export function buildApp(options?: {
       if (filterResult.enrichWithLLM && llmEnricher.enabled) {
         const enrichStart = Date.now();
         try {
-          const llmEnrichResult = await llmEnricher.enrich(event);
+          const llmEnrichResult = await llmEnricher.enrich(
+            event,
+            llmResult?.ok ? llmResult.value : undefined,
+          );
           const enrichDurationSec = (Date.now() - enrichStart) / 1000;
           llmEnrichmentDurationSeconds.observe(enrichDurationSec);
           if (llmEnrichResult) {
