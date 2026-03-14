@@ -15,6 +15,7 @@ export interface HistoricalContext {
   readonly topMatches: ReadonlyArray<{
     ticker: string;
     headline: string;
+    source?: string;
     eventDate: string;
     alphaT20: number;
     score: number;

@@ -6,6 +6,14 @@ import { toNumber } from '../utils/number.js';
 const DEFAULT_LIMIT = 5;
 const MAX_CANDIDATE_FETCH = 100;
 const RECENCY_WINDOW_MS = 90 * 24 * 60 * 60 * 1_000;
+const LOW_VALUE_SOURCES = new Set(['stocktwits']);
+const SCORE_WEIGHTS = {
+  ticker: 0.3,
+  source: 0.15,
+  severity: 0.1,
+  keywords: 0.4,
+  recency: 0.05,
+} as const;
 
 const SEVERITY_ORDER = {
   critical: 0,
@@ -142,6 +150,14 @@ function hasKeywordOverlap(keywords: string[], title: string): boolean {
   return keywords.some((keyword) => normalizedTitle.includes(keyword));
 }
 
+function isLowValueSource(source: string): boolean {
+  return LOW_VALUE_SOURCES.has(normalizeText(source) ?? '');
+}
+
+function normalizeTitle(value: string): string {
+  return normalizeText(value) ?? value.trim();
+}
+
 function scoreOutcomeCandidate(
   query: OutcomeSimilarityQuery,
   candidate: OutcomeSimilarityRow,
@@ -152,24 +168,28 @@ function scoreOutcomeCandidate(
   const normalizedKeywords = normalizeKeywords(query.titleKeywords);
 
   if (normalizedTicker && normalizeTicker(candidate.ticker) === normalizedTicker) {
-    score += 0.4;
+    score += SCORE_WEIGHTS.ticker;
   }
 
   if (normalizedSource && normalizeText(candidate.source) === normalizedSource) {
-    score += 0.2;
+    score += SCORE_WEIGHTS.source;
   }
 
   if (severityMatches(query.severity, candidate.severity)) {
-    score += 0.15;
+    score += SCORE_WEIGHTS.severity;
   }
 
   if (hasKeywordOverlap(normalizedKeywords, candidate.title)) {
-    score += 0.25;
+    score += SCORE_WEIGHTS.keywords;
   }
 
   const eventTime = new Date(candidate.eventTime).getTime();
   if (Date.now() - eventTime <= RECENCY_WINDOW_MS) {
-    score += 0.05;
+    score += SCORE_WEIGHTS.recency;
+  }
+
+  if (isLowValueSource(candidate.source)) {
+    score *= 0.3;
   }
 
   return Math.min(round(score), 1);
@@ -236,7 +256,7 @@ export async function findSimilarFromOutcomes(
     .orderBy(desc(eventOutcomes.eventTime))
     .limit(MAX_CANDIDATE_FETCH)) as OutcomeSimilarityRow[];
 
-  return rows
+  const scoredRows = rows
     .map((row) => ({
       eventId: row.eventId,
       ticker: row.ticker,
@@ -261,6 +281,36 @@ export async function findSimilarFromOutcomes(
       return (
         new Date(right.eventTime).getTime() - new Date(left.eventTime).getTime()
       );
+    });
+
+  const deduplicated = new Map<string, OutcomeSimilarEvent>();
+  for (const row of scoredRows) {
+    const titleKey = normalizeTitle(row.title);
+    const existing = deduplicated.get(titleKey);
+
+    if (!existing) {
+      deduplicated.set(titleKey, row);
+      continue;
+    }
+
+    const existingTime = new Date(existing.eventTime).getTime();
+    const candidateTime = new Date(row.eventTime).getTime();
+    if (
+      candidateTime > existingTime ||
+      (candidateTime === existingTime && row.score > existing.score)
+    ) {
+      deduplicated.set(titleKey, row);
+    }
+  }
+
+  return Array.from(deduplicated.values())
+    .sort((left, right) => {
+      const scoreDelta = right.score - left.score;
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+
+      return new Date(right.eventTime).getTime() - new Date(left.eventTime).getTime();
     })
     .slice(0, limit);
 }

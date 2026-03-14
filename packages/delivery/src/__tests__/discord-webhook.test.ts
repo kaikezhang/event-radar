@@ -197,6 +197,7 @@ describe('DiscordWebhook', () => {
             {
               ticker: 'NVDA',
               headline: 'Nvidia beat and raised guidance',
+              source: 'earnings',
               eventDate: '2025-02-21T21:00:00.000Z',
               alphaT20: 0.16,
               score: 11,
@@ -220,6 +221,7 @@ describe('DiscordWebhook', () => {
     expect(historyField.value).toContain('62');
     expect(historyField.value).toContain('Worst');
     expect(historyField.value).toContain('INTC');
+    expect(historyField.value).toContain('earnings');
   });
 
   it('should use enrichment fields when LLM enrichment is present', async () => {

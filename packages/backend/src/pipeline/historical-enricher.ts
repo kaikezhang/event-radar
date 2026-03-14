@@ -3,7 +3,6 @@ import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import { historicalEnrichmentTimeoutsTotal } from '../metrics.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
-import { extractKeywords } from '../services/event-similarity.js';
 import {
   findSimilarFromOutcomes,
   type OutcomeSimilarEvent,
@@ -35,8 +34,48 @@ const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
   high: 3,
 };
 
-const OUTCOME_SCORE_THRESHOLD = 0.3;
+const OUTCOME_SCORE_THRESHOLD = 0.4;
 const MIN_OUTCOME_MATCHES = 2;
+const OUTCOME_TITLE_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'announced',
+  'announces',
+  'announcing',
+  'alert',
+  'after',
+  'amid',
+  'at',
+  'before',
+  'breaking',
+  'company',
+  'corp',
+  'corporation',
+  'enters',
+  'entered',
+  'for',
+  'from',
+  'inc',
+  'into',
+  'latest',
+  'massive',
+  'market',
+  'news',
+  'on',
+  'report',
+  'reported',
+  'reports',
+  'say',
+  'says',
+  'shares',
+  'spike',
+  'stock',
+  'the',
+  'trending',
+  'update',
+  'updates',
+]);
 
 export class HistoricalEnricher {
   private readonly enabled: boolean;
@@ -172,6 +211,7 @@ export class HistoricalEnricher {
       topMatches: similarityResult.events.slice(0, 3).map((match) => ({
         ticker: match.ticker,
         headline: match.headline,
+        source: undefined,
         eventDate: match.eventDate,
         alphaT20: match.alphaT20,
         score: match.score,
@@ -203,9 +243,9 @@ export class HistoricalEnricher {
   ): Promise<HistoricalContext | null> {
     const query = buildOutcomeSimilarityQuery(event, llmResult);
     const matches = await findSimilarFromOutcomes(this.db, query);
-    const qualifyingMatches = matches.filter((match) => match.score > OUTCOME_SCORE_THRESHOLD);
+    const qualifyingMatches = matches.filter((match) => match.score >= OUTCOME_SCORE_THRESHOLD);
 
-    if (qualifyingMatches.length < MIN_OUTCOME_MATCHES) {
+    if (qualifyingMatches.length === 0 || qualifyingMatches.length < MIN_OUTCOME_MATCHES) {
       return null;
     }
 
@@ -230,6 +270,7 @@ export class HistoricalEnricher {
       topMatches: qualifyingMatches.slice(0, 3).map((match) => ({
         ticker: match.ticker,
         headline: match.title,
+        source: match.source,
         eventDate: match.eventTime,
         alphaT20: match.change1w ?? 0,
         score: match.score,
@@ -321,11 +362,13 @@ function buildOutcomeSimilarityQuery(
   event: RawEvent,
   llmResult?: LlmClassificationResult,
 ): OutcomeSimilarityQuery {
+  const ticker = extractTicker(event);
+
   return {
-    ticker: extractTicker(event),
+    ticker,
     source: event.source,
     severity: llmResult?.severity?.toLowerCase(),
-    titleKeywords: extractKeywords(event.title).slice(0, 8),
+    titleKeywords: extractOutcomeTitleKeywords(event.title, ticker),
     limit: 10,
     excludeEventId: event.id,
   };
@@ -338,6 +381,32 @@ function extractTicker(event: RawEvent): string | undefined {
   }
 
   return extractTickers(`${event.title} ${event.body}`)[0]?.toUpperCase();
+}
+
+function extractOutcomeTitleKeywords(
+  title: string,
+  primaryTicker?: string,
+): string[] {
+  const excludedTickers = new Set(
+    [
+      primaryTicker,
+      ...extractTickers(title),
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .map((value) => value.toLowerCase()),
+  );
+
+  return Array.from(
+    new Set(
+      title
+        .toLowerCase()
+        .match(/[a-z]+/g) ?? [],
+    ),
+  )
+    .filter((token) => token.length >= 3)
+    .filter((token) => !OUTCOME_TITLE_STOP_WORDS.has(token))
+    .filter((token) => !excludedTickers.has(token))
+    .slice(0, 8);
 }
 
 function averageNumbers(values: Array<number | null>): number | null {
