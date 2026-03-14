@@ -161,7 +161,7 @@ function parseMetrics(text: string): Map<string, Array<{ labels: Record<string, 
   const result = new Map<string, Array<{ labels: Record<string, string>; value: number }>>();
   for (const line of text.split('\n')) {
     if (line.startsWith('#') || line.trim() === '') continue;
-    const match = line.match(/^([a-z_]+)(\{[^}]*\})?\s+(\S+)/);
+    const match = line.match(/^([a-z_][a-z0-9_]*)(\{[^}]*\})?\s+(\S+)/);
     if (!match) continue;
     const [, name, labelsStr, valueStr] = match;
     const value = Number(valueStr);
@@ -169,7 +169,7 @@ function parseMetrics(text: string): Map<string, Array<{ labels: Record<string, 
 
     const labels: Record<string, string> = {};
     if (labelsStr) {
-      const labelMatches = labelsStr.matchAll(/([a-z_]+)="([^"]*)"/g);
+      const labelMatches = labelsStr.matchAll(/([a-z][a-z0-9_]*)="([^"]*)"/g);
       for (const lm of labelMatches) {
         labels[lm[1]] = lm[2];
       }

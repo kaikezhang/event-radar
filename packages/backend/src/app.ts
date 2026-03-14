@@ -157,6 +157,72 @@ export interface AppContext {
 
 type HistoricalEnricherLike = Pick<HistoricalEnricher, 'enrich'>;
 
+interface OutcomeProcessingLoopLogger {
+  info(message: string): void;
+  error(message: string, error: unknown): void;
+}
+
+interface OutcomeProcessingLoopOptions {
+  outcomeTracker: Pick<OutcomeTracker, 'processOutcomes'>;
+  startupDelayMs: number;
+  intervalMs: number;
+  logger: OutcomeProcessingLoopLogger;
+}
+
+interface OutcomeProcessingLoopHandle {
+  stop(): void;
+}
+
+export function startOutcomeProcessingLoop(
+  options: OutcomeProcessingLoopOptions,
+): OutcomeProcessingLoopHandle {
+  const {
+    outcomeTracker,
+    startupDelayMs,
+    intervalMs,
+    logger,
+  } = options;
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+  const timeoutId = setTimeout(() => {
+    if (stopped) {
+      return;
+    }
+
+    logger.info('Starting periodic outcome backfill');
+    void processOutcomesPeriodically();
+    intervalId = setInterval(() => {
+      void processOutcomesPeriodically();
+    }, intervalMs);
+  }, startupDelayMs);
+  let stopped = false;
+  let isProcessing = false;
+
+  const processOutcomesPeriodically = async () => {
+    if (stopped || isProcessing) {
+      return;
+    }
+
+    isProcessing = true;
+    try {
+      await outcomeTracker.processOutcomes();
+    } catch (error: unknown) {
+      logger.error('Outcome processing failed', error);
+    } finally {
+      isProcessing = false;
+    }
+  };
+
+  return {
+    stop() {
+      stopped = true;
+      clearTimeout(timeoutId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    },
+  };
+}
+
 function buildAlertRouter(): AlertRouterType {
   const barkKey = process.env.BARK_KEY;
   const barkServerUrl = process.env.BARK_SERVER_URL;
@@ -972,40 +1038,31 @@ export function buildApp(options?: {
   }
 
   // Start periodic outcome backfill (fills in change_1d/1w/1m prices)
-  let outcomeInterval: ReturnType<typeof setInterval> | undefined;
-  let outcomeStartupTimeout: ReturnType<typeof setTimeout> | undefined;
+  let outcomeProcessingLoop: OutcomeProcessingLoopHandle | undefined;
   if (outcomeTracker && process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
-    const OUTCOME_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-    const OUTCOME_STARTUP_DELAY_MS = 2 * 60 * 1000; // 2 minutes after boot
-
-    let isProcessingOutcomes = false;
-    const processOutcomesPeriodically = async () => {
-      if (isProcessingOutcomes) return; // Prevent overlapping runs
-      isProcessingOutcomes = true;
-      try {
-        await outcomeTracker!.processOutcomes();
-      } catch (e: unknown) {
-        console.error('[outcome-tracker] Processing failed:', e instanceof Error ? e.message : e);
-      } finally {
-        isProcessingOutcomes = false;
-      }
-    };
-
-    outcomeStartupTimeout = setTimeout(() => {
-      console.log('[outcome-tracker] Starting periodic outcome backfill');
-      void processOutcomesPeriodically();
-      outcomeInterval = setInterval(() => {
-        void processOutcomesPeriodically();
-      }, OUTCOME_PROCESS_INTERVAL_MS);
-    }, OUTCOME_STARTUP_DELAY_MS);
+    outcomeProcessingLoop = startOutcomeProcessingLoop({
+      outcomeTracker,
+      intervalMs: 15 * 60 * 1000,
+      startupDelayMs: 2 * 60 * 1000,
+      logger: {
+        info(message) {
+          console.log(`[outcome-tracker] ${message}`);
+        },
+        error(message, error) {
+          console.error(
+            `[outcome-tracker] ${message}:`,
+            error instanceof Error ? error.message : error,
+          );
+        },
+      },
+    });
   }
 
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
     marketCache?.stop();
     healthMonitor?.stop();
-    if (outcomeStartupTimeout) clearTimeout(outcomeStartupTimeout);
-    if (outcomeInterval) clearInterval(outcomeInterval);
+    outcomeProcessingLoop?.stop();
   });
 
   return {
