@@ -48,6 +48,7 @@ import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerWinRateRoutes } from './routes/win-rate.js';
 import { registerStoryGroupRoutes } from './routes/story-groups.js';
 import { registerAccuracyRoutes } from './routes/accuracy.js';
+import { registerAlertScorecardRoutes } from './routes/alert-scorecard.js';
 import { registerAdaptiveRoutes } from './routes/adaptive.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
@@ -1014,6 +1015,7 @@ export function buildApp(options?: {
     registerEventsHistoryRoutes(server, db, { apiKey });
     registerEventImpactRoutes(server, db, { apiKey });
     registerHistoricalRoutes(server, db, { apiKey });
+    registerAlertScorecardRoutes(server, db);
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
