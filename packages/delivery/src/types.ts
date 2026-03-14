@@ -32,6 +32,18 @@ export interface HistoricalContext {
     change1m?: number | null;
     score: number;
   }>;
+  readonly marketContext?: {
+    price: number;
+    change1d: number;
+    change5d: number;
+    change20d: number;
+    volumeRatio: number;
+    rsi14: number;
+    high52w: number;
+    low52w: number;
+    support: number;
+    resistance: number;
+  };
   readonly patternSummary: string;
 }
 

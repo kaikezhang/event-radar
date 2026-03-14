@@ -104,6 +104,8 @@ import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebsocketPlugin, toLiveFeedEvent } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
 import { MarketContextCache } from './services/market-context-cache.js';
+import { MarketDataCache } from './services/market-data-cache.js';
+import { createMarketDataProvider } from './services/create-market-data-provider.js';
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import type {
@@ -311,27 +313,47 @@ export function buildApp(options?: {
     db != null
       ? new OutcomeTracker(db, undefined, accuracyService)
       : undefined;
+  const tickerMarketDataProvider = process.env.ALPHA_VANTAGE_API_KEY
+    ? createMarketDataProvider({
+      apiKey: process.env.ALPHA_VANTAGE_API_KEY,
+    })
+    : undefined;
 
   const marketCache = db
     ? new MarketContextCache({ refreshIntervalMs: 300_000 })
     : undefined;
+  const tickerMarketDataCache = tickerMarketDataProvider
+    ? new MarketDataCache({
+      provider: tickerMarketDataProvider,
+      refreshIntervalMs: 300_000,
+    })
+    : undefined;
   const historicalEnricher = options?.historicalEnricher
     ?? (db && marketCache
-      ? new HistoricalEnricher(db, marketCache, options?.historicalEnricherConfig)
+      ? new HistoricalEnricher(db, marketCache, {
+        ...options?.historicalEnricherConfig,
+        marketDataCache:
+          options?.historicalEnricherConfig?.marketDataCache ?? tickerMarketDataCache,
+      })
       : undefined);
   const killSwitch = options?.killSwitch ?? (db ? new DeliveryKillSwitch(db) : undefined);
   const healthMonitor = db ? new HealthMonitorService(db, eventBus, { killSwitch }) : undefined;
 
   const websocketClientState = { count: 0 };
+  const historicalEnrichmentEnabled =
+    options?.historicalEnricherConfig?.enabled
+    ?? process.env.HISTORICAL_ENRICHMENT_ENABLED !== 'false';
   const shouldWarmHistoricalResources =
     db != null &&
     marketCache != null &&
+    historicalEnrichmentEnabled &&
     historicalEnricher instanceof HistoricalEnricher &&
     process.env.VITEST !== 'true' &&
     process.env.NODE_ENV !== 'test';
 
   if (shouldWarmHistoricalResources) {
     marketCache.start();
+    tickerMarketDataCache?.start();
     void prewarmSectorCache(db).catch((error) => {
       console.error(
         '[event-type-mapper] Failed to prewarm sector cache:',
