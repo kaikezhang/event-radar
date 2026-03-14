@@ -1,3 +1,4 @@
+import type { HistoricalContext } from '@event-radar/delivery';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
@@ -143,6 +144,15 @@ function getLlmEnrichment(metadata: Record<string, unknown>): Record<string, unk
   return asRecord(metadata['llm_enrichment']);
 }
 
+function getHistoricalContext(metadata: Record<string, unknown>): HistoricalContext | null {
+  const parsed = parseJsonValue<Record<string, unknown>>(metadata['historical_context']);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+
+  return parsed as HistoricalContext;
+}
+
 async function queryDeliveryFeed(
   db: Database,
   options: {
@@ -265,6 +275,7 @@ export function registerDeliveryFeedRoutes(server: FastifyInstance, db?: Databas
         events: result.rows.map((row) => {
           const metadata = asRecord(row.metadata);
           const enrichment = getLlmEnrichment(metadata);
+          const historical = getHistoricalContext(metadata);
 
           return {
             id: row.id,
@@ -278,6 +289,7 @@ export function registerDeliveryFeedRoutes(server: FastifyInstance, db?: Databas
             regime_context:
               typeof enrichment.regimeContext === 'string' ? enrichment.regimeContext : null,
             delivery_channels: asDeliveryChannels(row.delivery_channels),
+            historical,
             delivered_at: new Date(row.audit_created_at).toISOString(),
           };
         }),

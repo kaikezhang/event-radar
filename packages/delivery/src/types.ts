@@ -6,6 +6,8 @@ export interface HistoricalContext {
   readonly confidence: 'insufficient' | 'low' | 'medium' | 'high';
   readonly avgAlphaT5: number;
   readonly avgAlphaT20: number;
+  readonly avgChange1d?: number;
+  readonly avgChange1w?: number;
   readonly winRateT20: number;
   readonly medianAlphaT20: number;
   readonly bestCase?: { ticker: string; alphaT20: number; headline: string };
@@ -15,6 +17,18 @@ export interface HistoricalContext {
     headline: string;
     eventDate: string;
     alphaT20: number;
+    score: number;
+  }>;
+  readonly similarEvents?: ReadonlyArray<{
+    title: string;
+    ticker: string;
+    source?: string;
+    eventTime: string;
+    eventPrice?: number | null;
+    change1h?: number | null;
+    change1d?: number | null;
+    change1w?: number | null;
+    change1m?: number | null;
     score: number;
   }>;
   readonly patternSummary: string;

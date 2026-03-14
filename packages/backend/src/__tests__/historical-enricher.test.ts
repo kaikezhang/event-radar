@@ -8,7 +8,12 @@ vi.mock('../services/similarity.js', () => ({
   findSimilarEvents: vi.fn(),
 }));
 
+vi.mock('../services/outcome-similarity.js', () => ({
+  findSimilarFromOutcomes: vi.fn(),
+}));
+
 import { findSimilarEvents } from '../services/similarity.js';
+import { findSimilarFromOutcomes } from '../services/outcome-similarity.js';
 import {
   HistoricalEnricher,
   generatePatternSummary,
@@ -136,9 +141,11 @@ describe('mapEventToSimilarityQuery', () => {
 
 describe('HistoricalEnricher', () => {
   const similarityMock = vi.mocked(findSimilarEvents);
+  const outcomeSimilarityMock = vi.mocked(findSimilarFromOutcomes);
 
   beforeEach(() => {
     similarityMock.mockReset();
+    outcomeSimilarityMock.mockReset();
     resetMetrics();
     resetSectorCacheForTests();
   });
@@ -148,6 +155,7 @@ describe('HistoricalEnricher', () => {
   });
 
   it('builds a similarity query with market and sector context and returns historical context', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
     similarityMock.mockResolvedValue({
       confidence: 'high',
       totalCandidates: 8,
@@ -238,6 +246,7 @@ describe('HistoricalEnricher', () => {
   });
 
   it('queries both earnings and earnings_results for breaking-news earnings events', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
     similarityMock
       .mockResolvedValueOnce({
         confidence: 'low',
@@ -297,6 +306,165 @@ describe('HistoricalEnricher', () => {
     expect(context?.matchCount).toBe(6);
   });
 
+  it('uses event_outcomes first and skips the historical fallback when enough strong matches exist', async () => {
+    outcomeSimilarityMock.mockResolvedValue([
+      {
+        eventId: 'event-1',
+        ticker: 'AAPL',
+        title: 'Apple launches AI server platform',
+        source: 'stocktwits',
+        severity: 'high',
+        eventTime: '2026-03-10T12:00:00.000Z',
+        eventPrice: 100,
+        change1h: 0.01,
+        change1d: 0.08,
+        change1w: 0.12,
+        change1m: 0.2,
+        score: 0.9,
+      },
+      {
+        eventId: 'event-2',
+        ticker: 'AAPL',
+        title: 'Apple expands AI server rollout',
+        source: 'breaking-news',
+        severity: 'high',
+        eventTime: '2026-03-08T12:00:00.000Z',
+        eventPrice: 98,
+        change1h: 0.01,
+        change1d: 0.04,
+        change1w: 0.1,
+        change1m: 0.18,
+        score: 0.72,
+      },
+    ]);
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    const context = await enricher.enrich(
+      makeEvent({
+        source: 'stocktwits',
+        title: 'Apple AI server demand is accelerating',
+        body: 'Momentum remains strong.',
+        metadata: { ticker: 'AAPL' },
+      }),
+      makeLlmResult({ severity: 'HIGH' }),
+    );
+
+    expect(outcomeSimilarityMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ticker: 'AAPL',
+        source: 'stocktwits',
+        severity: 'high',
+        excludeEventId: '550e8400-e29b-41d4-a716-446655440000',
+      }),
+    );
+    expect(similarityMock).not.toHaveBeenCalled();
+    expect(context).toMatchObject({
+      confidence: 'low',
+      matchCount: 2,
+      avgChange1d: 0.06,
+      avgChange1w: 0.11,
+      similarEvents: expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Apple launches AI server platform',
+          ticker: 'AAPL',
+          change1d: 0.08,
+          change1w: 0.12,
+        }),
+      ]),
+    });
+  });
+
+  it('falls back to historical_events when outcomes do not produce enough strong matches', async () => {
+    outcomeSimilarityMock.mockResolvedValue([
+      {
+        eventId: 'event-1',
+        ticker: 'AAPL',
+        title: 'Weak analog',
+        source: 'earnings',
+        severity: 'high',
+        eventTime: '2026-03-10T12:00:00.000Z',
+        eventPrice: 100,
+        change1h: 0,
+        change1d: 0.01,
+        change1w: 0.02,
+        change1m: 0.03,
+        score: 0.29,
+      },
+    ]);
+    similarityMock.mockResolvedValue({
+      confidence: 'medium',
+      totalCandidates: 4,
+      stats: {
+        count: 4,
+        avgReturnT1: 0.01,
+        avgReturnT5: 0.03,
+        avgReturnT20: 0.05,
+        avgAlphaT1: 0.005,
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.06,
+        winRateT20: 60,
+        medianAlphaT20: 0.05,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    const context = await enricher.enrich(
+      makeEvent({
+        source: 'earnings',
+        type: 'earnings-result',
+        title: 'AAPL beats earnings expectations',
+        metadata: {
+          ticker: 'AAPL',
+          surprise_type: 'beat',
+        },
+      }),
+      makeLlmResult({ eventType: 'earnings' }),
+    );
+
+    expect(outcomeSimilarityMock).toHaveBeenCalledOnce();
+    expect(similarityMock).toHaveBeenCalledOnce();
+    expect(context?.avgAlphaT20).toBe(0.06);
+    expect(context?.avgChange1d).toBe(0.01);
+    expect(context?.avgChange1w).toBe(0.03);
+  });
+
+  it('returns null for skipped sources when outcome similarity also has no viable matches', async () => {
+    outcomeSimilarityMock.mockResolvedValue([
+      {
+        eventId: 'event-1',
+        ticker: 'AAPL',
+        title: 'Weak stocktwits analog',
+        source: 'stocktwits',
+        severity: 'medium',
+        eventTime: '2026-03-10T12:00:00.000Z',
+        eventPrice: 100,
+        change1h: 0,
+        change1d: 0,
+        change1w: 0,
+        change1m: 0,
+        score: 0.2,
+      },
+    ]);
+
+    const enricher = new HistoricalEnricher(makeMockDb(), makeMarketCache());
+    const context = await enricher.enrich(
+      makeEvent({
+        source: 'stocktwits',
+        title: 'Random Apple chatter',
+        metadata: { ticker: 'AAPL' },
+      }),
+      makeLlmResult(),
+    );
+
+    expect(outcomeSimilarityMock).toHaveBeenCalledOnce();
+    expect(similarityMock).not.toHaveBeenCalled();
+    expect(context).toBeNull();
+  });
+
   it('returns null when the enricher is disabled', async () => {
     const enricher = new HistoricalEnricher(
       makeMockDb(),
@@ -309,6 +477,7 @@ describe('HistoricalEnricher', () => {
   });
 
   it('returns null when similarity search reports insufficient confidence', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
     similarityMock.mockResolvedValue({
       confidence: 'insufficient',
       totalCandidates: 1,
@@ -334,7 +503,7 @@ describe('HistoricalEnricher', () => {
 
   it('returns null when the similarity query times out', async () => {
     vi.useFakeTimers();
-    similarityMock.mockImplementation(() => new Promise(() => {}));
+    outcomeSimilarityMock.mockImplementation(() => new Promise(() => {}));
 
     const enricher = new HistoricalEnricher(
       makeMockDb(),

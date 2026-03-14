@@ -515,6 +515,40 @@ describe('GET /api/v1/delivery/feed', () => {
         { channel: 'bark', ok: true },
       ],
     });
+    await sharedDb.execute(sql`
+      UPDATE events
+      SET metadata = jsonb_set(
+        COALESCE(metadata, '{}'::jsonb),
+        '{historical_context}',
+        ${JSON.stringify({
+          matchCount: 2,
+          confidence: 'low',
+          avgAlphaT5: 0.04,
+          avgAlphaT20: 0.1,
+          winRateT20: 100,
+          medianAlphaT20: 0.1,
+          avgChange1d: 0.06,
+          avgChange1w: 0.11,
+          topMatches: [],
+          similarEvents: [
+            {
+              title: 'Nvidia raised AI guidance',
+              ticker: 'NVDA',
+              source: 'sec-edgar',
+              eventTime: '2026-03-10T10:00:00.000Z',
+              score: 0.88,
+              eventPrice: 100,
+              change1h: 0.01,
+              change1d: 0.08,
+              change1w: 0.12,
+              change1m: 0.2,
+            },
+          ],
+          patternSummary: '2 similar outcome matches',
+        })}::jsonb
+      )
+      WHERE id = ${eventId}
+    `);
 
     const response = await ctx.server.inject({
       method: 'GET',
@@ -540,6 +574,32 @@ describe('GET /api/v1/delivery/feed', () => {
             { channel: 'discord', ok: true },
             { channel: 'bark', ok: true },
           ],
+          historical: {
+            matchCount: 2,
+            confidence: 'low',
+            avgAlphaT5: 0.04,
+            avgAlphaT20: 0.1,
+            winRateT20: 100,
+            medianAlphaT20: 0.1,
+            avgChange1d: 0.06,
+            avgChange1w: 0.11,
+            topMatches: [],
+            similarEvents: [
+              {
+                title: 'Nvidia raised AI guidance',
+                ticker: 'NVDA',
+                source: 'sec-edgar',
+                eventTime: '2026-03-10T10:00:00.000Z',
+                score: 0.88,
+                eventPrice: 100,
+                change1h: 0.01,
+                change1d: 0.08,
+                change1w: 0.12,
+                change1m: 0.2,
+              },
+            ],
+            patternSummary: '2 similar outcome matches',
+          },
           delivered_at: '2026-03-13T10:01:00.000Z',
         },
       ],
@@ -570,6 +630,7 @@ describe('GET /api/v1/delivery/feed', () => {
       impact: '',
       action: null,
       regime_context: null,
+      historical: null,
     });
   });
 
