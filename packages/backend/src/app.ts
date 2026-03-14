@@ -58,6 +58,7 @@ import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
 import { registerClassifyRoute } from './routes/classify.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
+import { registerAiObservabilityRoutes } from './routes/ai-observability.js';
 import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
@@ -955,6 +956,14 @@ export function buildApp(options?: {
     killSwitch,
     startTime,
     version: backendPackage.version,
+  });
+
+  // Register AI observability routes
+  registerAiObservabilityRoutes(server, {
+    apiKey,
+    db,
+    scannerRegistry: registry,
+    startTime,
   });
 
   // Start health monitor (production only)
