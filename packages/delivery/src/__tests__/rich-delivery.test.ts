@@ -76,7 +76,7 @@ describe('Rich Delivery Format', () => {
       expect(aiField).toBeDefined();
       expect(aiField.value).toContain('Apple CEO departure triggers uncertainty');
       expect(aiField.value).toContain('Leadership vacuum');
-      expect(aiField.value).toContain('neutral market');
+      expect(aiField.value).not.toContain('neutral market');
       expect(aiField.inline).toBe(false);
     });
   });
@@ -159,7 +159,7 @@ describe('Rich Delivery Format', () => {
   });
 
   describe('Discord — title format with enrichment', () => {
-    it('should format title with severity, ticker, and summary', async () => {
+    it('should format title with severity emoji and event title', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -177,10 +177,9 @@ describe('Rich Delivery Format', () => {
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
 
-      expect(embed.title).toContain('🟠');
-      expect(embed.title).toContain('HIGH');
-      expect(embed.title).toContain('NVDA');
-      expect(embed.title).toContain('NVDA files 8-K restructuring');
+      expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
+      expect(embed.description).toContain('NVDA files 8-K restructuring');
+      expect(embed.description).toContain('Major impact');
     });
   });
 

@@ -1,5 +1,5 @@
 import type { Severity } from '@event-radar/shared';
-import type { AlertEvent, DeliveryService } from './types.js';
+import type { AlertEvent, DeliveryService, HistoricalContext } from './types.js';
 
 export interface DiscordConfig {
   /** Discord webhook URL. */
@@ -70,6 +70,8 @@ export class DiscordWebhook implements DeliveryService {
   async send(alert: AlertEvent): Promise<void> {
     const enrichment = alert.enrichment;
     const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+    const eventPrice = alert.event.metadata?.['event_price'];
+    const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
 
     // --- Source badge ---
     const sourceBadge = SOURCE_BADGE[alert.event.source] ?? `📡 ${alert.event.source}`;
@@ -87,9 +89,13 @@ export class DiscordWebhook implements DeliveryService {
       const tickerDisplay = enrichment.tickers
         .map((t: NonNullable<AlertEvent['enrichment']>['tickers'][number]) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
         .join('  ');
-      fields.push({ name: 'Tickers', value: tickerDisplay, inline: true });
+      fields.push({ name: 'Tickers', value: `${tickerDisplay}${priceStr}`, inline: true });
     } else if (alert.ticker) {
-      fields.push({ name: 'Ticker', value: `**${alert.ticker}**`, inline: true });
+      fields.push({ name: 'Ticker', value: `**${alert.ticker}**${priceStr}`, inline: true });
+    }
+
+    if (enrichment?.action) {
+      fields.push({ name: 'Action', value: enrichment.action, inline: true });
     }
 
     // --- Items (e.g., 8-K item types) ---
@@ -100,13 +106,7 @@ export class DiscordWebhook implements DeliveryService {
 
     // --- AI Analysis (enrichment summary + impact) ---
     if (enrichment) {
-      let aiText = enrichment.summary;
-      if (enrichment.impact) {
-        aiText += `\n\n${enrichment.impact}`;
-      }
-      if (enrichment.regimeContext) {
-        aiText += `\n\n*${enrichment.regimeContext}*`;
-      }
+      const aiText = formatAiAnalysis(enrichment);
       fields.push({
         name: '🤖 AI Analysis',
         value: truncate(aiText, 1024),
@@ -114,20 +114,32 @@ export class DiscordWebhook implements DeliveryService {
       });
     }
 
+    // --- Source link ---
+    if (alert.event.url) {
+      fields.push({
+        name: '🔗 Source',
+        value: `[View Original](${alert.event.url})`,
+        inline: false,
+      });
+    }
+
     // --- Historical context ---
-    if (alert.historicalContext && alert.historicalContext.confidence !== 'insufficient') {
+    if (
+      alert.historicalContext
+      && alert.historicalContext.confidence !== 'insufficient'
+      && hasRealHistoricalData(alert.historicalContext)
+    ) {
       const ctx = alert.historicalContext;
       const sign20 = ctx.avgAlphaT20 >= 0 ? '+' : '';
       const sign5 = ctx.avgAlphaT5 >= 0 ? '+' : '';
 
       let historyText = `**${ctx.patternSummary}**\n`;
       historyText += `📊 **${ctx.matchCount}** similar events found\n`;
-      historyText += `\n`;
-      historyText += `| Metric | Value |\n`;
-      historyText += `|--------|-------|\n`;
-      historyText += `| Avg Alpha T+5 | ${sign5}${(ctx.avgAlphaT5 * 100).toFixed(1)}% |\n`;
-      historyText += `| Avg Alpha T+20 | ${sign20}${(ctx.avgAlphaT20 * 100).toFixed(1)}% |\n`;
-      historyText += `| Win Rate T+20 | ${ctx.winRateT20.toFixed(0)}% |\n`;
+      historyText += '\n```\n';
+      historyText += `Avg Alpha T+5  │ ${sign5}${(ctx.avgAlphaT5 * 100).toFixed(1)}%\n`;
+      historyText += `Avg Alpha T+20 │ ${sign20}${(ctx.avgAlphaT20 * 100).toFixed(1)}%\n`;
+      historyText += `Win Rate T+20  │ ${ctx.winRateT20.toFixed(0)}%\n`;
+      historyText += '```\n';
 
       if (ctx.bestCase) {
         const bs = ctx.bestCase.alphaT20 >= 0 ? '+' : '';
@@ -166,19 +178,15 @@ export class DiscordWebhook implements DeliveryService {
       if (rs.factors.yieldCurve.inverted) {
         regimeText += ' ⚠️ INVERTED';
       }
-      regimeText += `\nBullish amp: ${rs.amplification.bullish}x | Bearish amp: ${rs.amplification.bearish}x`;
+      if (rs.amplification.bullish !== 1 || rs.amplification.bearish !== 1) {
+        regimeText += `\nBullish amp: ${rs.amplification.bullish}x | Bearish amp: ${rs.amplification.bearish}x`;
+      }
+      if (enrichment?.regimeContext) {
+        regimeText += `\n\n*${enrichment.regimeContext}*`;
+      }
       fields.push({
         name: '📈 Market Regime',
         value: regimeText,
-        inline: false,
-      });
-    }
-
-    // --- Source link ---
-    if (alert.event.url) {
-      fields.push({
-        name: '🔗 Source',
-        value: `[View Original](${alert.event.url})`,
         inline: false,
       });
     }
@@ -193,12 +201,10 @@ export class DiscordWebhook implements DeliveryService {
     }
 
     // --- Build embed ---
-    const title = enrichment
-      ? `${SEVERITY_EMOJI[alert.severity]} ${alert.severity} — ${alert.ticker ?? ''} — ${enrichment.summary}`.trim()
-      : `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;
+    const title = `${SEVERITY_EMOJI[alert.severity]} ${alert.event.title}`;
 
     const description = enrichment
-      ? truncate(enrichment.impact, 2048)
+      ? truncate(formatAiAnalysis(enrichment), 2048)
       : truncate(alert.event.body, 2048);
 
     const embed = {
@@ -267,4 +273,21 @@ async function sleep(ms: number): Promise<void> {
 function truncate(str: string, max: number): string {
   if (str.length <= max) return str;
   return str.slice(0, max - 3) + '...';
+}
+
+function formatAiAnalysis(enrichment: NonNullable<AlertEvent['enrichment']>): string {
+  let aiText = enrichment.summary;
+  if (enrichment.impact) {
+    aiText += `\n\n${enrichment.impact}`;
+  }
+  return aiText;
+}
+
+function hasRealHistoricalData(ctx: HistoricalContext): boolean {
+  const hasNonZeroAlpha = ctx.topMatches.some((match) => match.alphaT20 !== 0);
+  const hasChanges = ctx.similarEvents?.some((event) =>
+    event.change1d != null || event.change1w != null || event.change1m != null
+  ) ?? false;
+
+  return hasNonZeroAlpha || hasChanges || ctx.avgAlphaT5 !== 0 || ctx.avgAlphaT20 !== 0;
 }
