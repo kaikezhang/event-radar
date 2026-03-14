@@ -964,21 +964,29 @@ export function buildApp(options?: {
 
   // Start periodic outcome backfill (fills in change_1d/1w/1m prices)
   let outcomeInterval: ReturnType<typeof setInterval> | undefined;
+  let outcomeStartupTimeout: ReturnType<typeof setTimeout> | undefined;
   if (outcomeTracker && process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
     const OUTCOME_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
     const OUTCOME_STARTUP_DELAY_MS = 2 * 60 * 1000; // 2 minutes after boot
 
-    setTimeout(() => {
-      console.log('[outcome-tracker] Starting periodic outcome backfill');
-      // Run once immediately after delay
-      void outcomeTracker!.processOutcomes().catch((e: unknown) => {
+    let isProcessingOutcomes = false;
+    const processOutcomesPeriodically = async () => {
+      if (isProcessingOutcomes) return; // Prevent overlapping runs
+      isProcessingOutcomes = true;
+      try {
+        await outcomeTracker!.processOutcomes();
+      } catch (e: unknown) {
         console.error('[outcome-tracker] Processing failed:', e instanceof Error ? e.message : e);
-      });
-      // Then every 15 minutes
+      } finally {
+        isProcessingOutcomes = false;
+      }
+    };
+
+    outcomeStartupTimeout = setTimeout(() => {
+      console.log('[outcome-tracker] Starting periodic outcome backfill');
+      void processOutcomesPeriodically();
       outcomeInterval = setInterval(() => {
-        void outcomeTracker!.processOutcomes().catch((e: unknown) => {
-          console.error('[outcome-tracker] Processing failed:', e instanceof Error ? e.message : e);
-        });
+        void processOutcomesPeriodically();
       }, OUTCOME_PROCESS_INTERVAL_MS);
     }, OUTCOME_STARTUP_DELAY_MS);
   }
@@ -987,6 +995,7 @@ export function buildApp(options?: {
   server.addHook('onClose', async () => {
     marketCache?.stop();
     healthMonitor?.stop();
+    if (outcomeStartupTimeout) clearTimeout(outcomeStartupTimeout);
     if (outcomeInterval) clearInterval(outcomeInterval);
   });
 
