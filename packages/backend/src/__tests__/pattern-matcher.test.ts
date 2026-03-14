@@ -340,6 +340,30 @@ describe('PatternMatcher', () => {
     });
   });
 
+  it('builds historical context directly from visible matcher results', async () => {
+    outcomeSimilarityMock.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => makeOutcomeMatch(index)),
+    );
+
+    const matcher = new PatternMatcher(makeMockDb());
+    const context = await matcher.findHistoricalContext(makeEvent(), {
+      llmResult: makeLlmResult(),
+    });
+
+    expect(context).toMatchObject({
+      matchCount: 10,
+      confidence: 'low',
+      avgAlphaT5: 0.095,
+      avgAlphaT20: 0.145,
+      winRateT20: 100,
+    });
+    expect(context?.topMatches[0]).toMatchObject({
+      ticker: 'AAPL',
+      headline: 'Apple AI server analog 0',
+      source: 'breaking-news',
+    });
+  });
+
   it('falls back to historical similarity when outcome matches stay below the minimum threshold', async () => {
     outcomeSimilarityMock.mockResolvedValue(
       Array.from({ length: 2 }, (_, index) => makeOutcomeMatch(index)),

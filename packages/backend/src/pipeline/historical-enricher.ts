@@ -5,11 +5,10 @@ import { historicalEnrichmentTimeoutsTotal } from '../metrics.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
 import {
+  extractPrimaryTicker,
   generatePatternSummary as generatePatternSummaryFromMatcher,
   PatternMatcher,
-  toHistoricalContext,
 } from '../services/pattern-matcher.js';
-import { extractTickers } from '../scanners/ticker-extractor.js';
 
 export type ConfidenceLevel = HistoricalContext['confidence'];
 
@@ -101,15 +100,10 @@ export class HistoricalEnricher {
     event: RawEvent,
     llmResult?: LlmClassificationResult,
   ): Promise<HistoricalContext | null> {
-    const match = await this.patternMatcher.findSimilar(event, {
+    const context = await this.patternMatcher.findHistoricalContext(event, {
       llmResult,
       marketSnapshot: this.marketCache.get(),
     });
-    if (!match) {
-      return null;
-    }
-
-    const context = toHistoricalContext(match);
     if (!context) {
       return null;
     }
@@ -158,39 +152,6 @@ export class HistoricalEnricher {
 }
 
 export const generatePatternSummary = generatePatternSummaryFromMatcher;
-
-function extractPrimaryTicker(event: RawEvent): string | undefined {
-  const metadataTicker = event.metadata?.['ticker'];
-  if (typeof metadataTicker === 'string' && metadataTicker.trim().length > 0) {
-    return metadataTicker.trim().toUpperCase();
-  }
-
-  const primaryTicker = event.metadata?.['primary_ticker'];
-  if (typeof primaryTicker === 'string' && primaryTicker.trim().length > 0) {
-    return primaryTicker.trim().toUpperCase();
-  }
-
-  const alternatePrimaryTicker = event.metadata?.['primaryTicker'];
-  if (
-    typeof alternatePrimaryTicker === 'string' &&
-    alternatePrimaryTicker.trim().length > 0
-  ) {
-    return alternatePrimaryTicker.trim().toUpperCase();
-  }
-
-  const tickers = event.metadata?.['tickers'];
-  if (Array.isArray(tickers)) {
-    const firstTicker = tickers.find(
-      (value): value is string =>
-        typeof value === 'string' && value.trim().length > 0,
-    );
-    if (firstTicker) {
-      return firstTicker.trim().toUpperCase();
-    }
-  }
-
-  return extractTickers(`${event.title} ${event.body}`)[0]?.toUpperCase();
-}
 
 function parseConfidence(value?: string): ConfidenceLevel | undefined {
   if (

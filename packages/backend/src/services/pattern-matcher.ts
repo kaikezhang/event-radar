@@ -151,6 +151,18 @@ export class PatternMatcher {
     return outcomeMatch;
   }
 
+  async findHistoricalContext(
+    event: RawEvent,
+    options: PatternMatcherOptions = {},
+  ): Promise<HistoricalContext | null> {
+    const match = await this.findSimilar(event, options);
+    if (!match) {
+      return null;
+    }
+
+    return toHistoricalContext(match);
+  }
+
   private async findOutcomeMatches(
     event: RawEvent,
     options: PatternMatcherOptions,
@@ -499,7 +511,7 @@ function buildQueryVariants(
   return [baseQuery];
 }
 
-function extractPrimaryTicker(event: RawEvent): string | undefined {
+export function extractPrimaryTicker(event: RawEvent): string | undefined {
   const metadataTicker = event.metadata?.['ticker'];
   if (typeof metadataTicker === 'string' && metadataTicker.trim().length > 0) {
     return metadataTicker.trim().toUpperCase();
