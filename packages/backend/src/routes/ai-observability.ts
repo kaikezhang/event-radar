@@ -157,7 +157,9 @@ function computeHealthScore(
 }
 
 // Parse Prometheus text format (shared helper)
-function parseMetrics(text: string): Map<string, Array<{ labels: Record<string, string>; value: number }>> {
+export function parsePrometheusMetrics(
+  text: string,
+): Map<string, Array<{ labels: Record<string, string>; value: number }>> {
   const result = new Map<string, Array<{ labels: Record<string, string>; value: number }>>();
   for (const line of text.split('\n')) {
     if (line.startsWith('#') || line.trim() === '') continue;
@@ -380,7 +382,7 @@ export function registerAiObservabilityRoutes(
     let llmAvgLatencyMs: number | null = null;
     try {
       const metricsText = await metricsRegistry.metrics();
-      const metrics = parseMetrics(metricsText);
+      const metrics = parsePrometheusMetrics(metricsText);
 
       const enrichSuccess = sumMetric(metrics, 'llm_enrichment_total', { result: 'success' });
       const enrichError = sumMetric(metrics, 'llm_enrichment_total', { result: 'error' });
