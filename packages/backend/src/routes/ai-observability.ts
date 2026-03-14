@@ -578,4 +578,615 @@ export function registerAiObservabilityRoutes(
 
     return reply.send(response);
   });
+
+  // ========================================================================
+  // Phase 2: Daily Intelligence Report
+  // GET /api/v1/ai/daily-report?date=YYYY-MM-DD
+  // ========================================================================
+
+  server.get<{
+    Querystring: { date?: string };
+  }>('/api/v1/ai/daily-report', async (request, reply) => {
+    const providedKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key'] : undefined;
+    const authResult = validateApiKeyValue(providedKey, apiKey);
+    if (!authResult.ok) {
+      return reply.status(401).send({ error: 'Unauthorized', message: authResult.message });
+    }
+    if (!db) {
+      return reply.status(503).send({ error: 'Database not available' });
+    }
+
+    const dateStr = (request.query.date ?? new Date().toISOString().slice(0, 10)) as string;
+    const dateMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
+    if (!dateMatch) {
+      return reply.status(400).send({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+
+    const dayStart = new Date(`${dateStr}T00:00:00Z`);
+    const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+    const prevDayStart = new Date(dayStart.getTime() - 86_400_000);
+    const prevDayEnd = new Date(dayEnd.getTime() - 86_400_000);
+    const weekStart = new Date(dayStart.getTime() - 7 * 86_400_000);
+
+    // 1. Summary — current day
+    const summaryRows = await db.execute(sql`
+      SELECT outcome, COUNT(*) as count
+      FROM pipeline_audit
+      WHERE created_at >= ${dayStart} AND created_at <= ${dayEnd}
+      GROUP BY outcome
+    `);
+    const dayCounts: Record<string, number> = {};
+    for (const r of summaryRows.rows) dayCounts[r.outcome as string] = Number(r.count);
+    const dayTotal = Object.values(dayCounts).reduce((s, v) => s + v, 0);
+    const dayDelivered = dayCounts['delivered'] ?? 0;
+    const dayFiltered = dayCounts['filtered'] ?? 0;
+    const dayConversion = dayTotal > 0 ? Math.round((dayDelivered / dayTotal) * 1000) / 10 : 0;
+
+    // Previous day
+    const prevRows = await db.execute(sql`
+      SELECT outcome, COUNT(*) as count
+      FROM pipeline_audit
+      WHERE created_at >= ${prevDayStart} AND created_at <= ${prevDayEnd}
+      GROUP BY outcome
+    `);
+    const prevCounts: Record<string, number> = {};
+    for (const r of prevRows.rows) prevCounts[r.outcome as string] = Number(r.count);
+    const prevTotal = Object.values(prevCounts).reduce((s, v) => s + v, 0);
+    const prevDelivered = prevCounts['delivered'] ?? 0;
+
+    // Week average
+    const weekRows = await db.execute(sql`
+      SELECT COUNT(*)::float / 7 as avg_total,
+             COUNT(*) FILTER (WHERE outcome = 'delivered')::float / 7 as avg_delivered
+      FROM pipeline_audit
+      WHERE created_at >= ${weekStart} AND created_at <= ${dayEnd}
+    `);
+    const weekAvg = weekRows.rows[0] ?? {};
+    const weekAvgTotal = Number(weekAvg.avg_total ?? 0);
+    const weekAvgDelivered = Number(weekAvg.avg_delivered ?? 0);
+
+    // 2. Scanner breakdown
+    const scannerRows = await db.execute(sql`
+      SELECT source,
+             COUNT(*) as events,
+             COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered,
+             ROUND(AVG(CASE
+               WHEN severity = 'CRITICAL' THEN 4
+               WHEN severity = 'HIGH' THEN 3
+               WHEN severity = 'MEDIUM' THEN 2
+               WHEN severity = 'LOW' THEN 1
+               ELSE 0
+             END), 1) as avg_severity_score,
+             MAX(created_at) as last_event
+      FROM pipeline_audit
+      WHERE created_at >= ${dayStart} AND created_at <= ${dayEnd}
+      GROUP BY source
+      ORDER BY events DESC
+    `);
+    const scannerBreakdown = scannerRows.rows.map(r => {
+      const events = Number(r.events);
+      const dlv = Number(r.delivered);
+      return {
+        name: r.source as string,
+        events,
+        delivered: dlv,
+        deliveryRate: events > 0 ? Math.round((dlv / events) * 1000) / 10 : 0,
+        avgSeverityScore: Number(r.avg_severity_score ?? 0),
+        lastEvent: String(r.last_event),
+      };
+    });
+
+    // 3. Judge analysis
+    const judgeRows = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE stopped_at = 'llm_judge' OR (outcome = 'delivered' AND confidence IS NOT NULL)) as total_judged,
+        COUNT(*) FILTER (WHERE outcome = 'delivered' AND confidence IS NOT NULL) as passed,
+        AVG(confidence::float) FILTER (WHERE confidence IS NOT NULL) as avg_confidence,
+        COUNT(*) FILTER (WHERE confidence IS NOT NULL AND confidence > 0.8) as high_conf,
+        COUNT(*) FILTER (WHERE confidence IS NOT NULL AND confidence >= 0.5 AND confidence <= 0.8) as med_conf,
+        COUNT(*) FILTER (WHERE confidence IS NOT NULL AND confidence < 0.5) as low_conf
+      FROM pipeline_audit
+      WHERE created_at >= ${dayStart} AND created_at <= ${dayEnd}
+    `);
+    const jd = judgeRows.rows[0] ?? {};
+    const dayJudged = Number(jd.total_judged ?? 0);
+    const dayPassed = Number(jd.passed ?? 0);
+
+    // Top block reasons
+    const blockRows = await db.execute(sql`
+      SELECT reason_category, COUNT(*) as count
+      FROM pipeline_audit
+      WHERE created_at >= ${dayStart} AND created_at <= ${dayEnd}
+        AND outcome = 'filtered' AND reason_category IS NOT NULL
+      GROUP BY reason_category
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    // 4. False negative candidates
+    // Events blocked by judge where actual price moved >3%
+    const falseNegRows = await db.execute(sql`
+      SELECT pa.event_id, pa.title, pa.ticker, pa.source, pa.severity,
+             pa.reason as blocked_reason, pa.confidence,
+             eo.event_price, eo.change_1d, eo.change_1w
+      FROM pipeline_audit pa
+      JOIN events e ON e.source_event_id = pa.event_id AND e.source = pa.source
+      JOIN event_outcomes eo ON eo.event_id = e.id
+      WHERE pa.outcome = 'filtered'
+        AND pa.created_at >= ${dayStart} AND pa.created_at <= ${dayEnd}
+        AND eo.change_1d IS NOT NULL
+        AND ABS(eo.change_1d::float) > 3
+      ORDER BY ABS(eo.change_1d::float) DESC
+      LIMIT 10
+    `);
+    const falseNegativeCandidates = falseNegRows.rows.map(r => ({
+      eventId: r.event_id as string,
+      title: r.title as string,
+      ticker: r.ticker as string | null,
+      source: r.source as string,
+      severity: r.severity as string | null,
+      blockedReason: r.blocked_reason as string | null,
+      confidence: r.confidence != null ? Number(r.confidence) : null,
+      priceAtEvent: r.event_price != null ? Number(r.event_price) : null,
+      priceChange1d: r.change_1d != null ? Number(r.change_1d) : null,
+      priceChange1w: r.change_1w != null ? Number(r.change_1w) : null,
+      verdict: Math.abs(Number(r.change_1d ?? 0)) > 5
+        ? 'likely_false_negative' as const
+        : 'review_needed' as const,
+    }));
+
+    // 5. Signal validation
+    // Compare delivered vs filtered events' actual price impact
+    const signalRows = await db.execute(sql`
+      SELECT
+        pa.outcome,
+        COUNT(*) as count,
+        AVG(ABS(eo.change_1d::float)) as avg_abs_change_1d,
+        AVG(ABS(eo.change_1w::float)) as avg_abs_change_1w,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ABS(eo.change_1d::float)) as median_abs_change_1d
+      FROM pipeline_audit pa
+      JOIN events e ON e.source_event_id = pa.event_id AND e.source = pa.source
+      JOIN event_outcomes eo ON eo.event_id = e.id
+      WHERE pa.created_at >= ${dayStart} AND pa.created_at <= ${dayEnd}
+        AND eo.change_1d IS NOT NULL
+        AND pa.outcome IN ('delivered', 'filtered')
+      GROUP BY pa.outcome
+    `);
+
+    const signalMap: Record<string, {
+      count: number;
+      avgAbsChange1d: number | null;
+      avgAbsChange1w: number | null;
+      medianAbsChange1d: number | null;
+    }> = {};
+    for (const r of signalRows.rows) {
+      signalMap[r.outcome as string] = {
+        count: Number(r.count),
+        avgAbsChange1d: r.avg_abs_change_1d != null ? Math.round(Number(r.avg_abs_change_1d) * 100) / 100 : null,
+        avgAbsChange1w: r.avg_abs_change_1w != null ? Math.round(Number(r.avg_abs_change_1w) * 100) / 100 : null,
+        medianAbsChange1d: r.median_abs_change_1d != null ? Math.round(Number(r.median_abs_change_1d) * 100) / 100 : null,
+      };
+    }
+    const deliveredSignal = signalMap['delivered'] ?? { count: 0, avgAbsChange1d: null, avgAbsChange1w: null, medianAbsChange1d: null };
+    const filteredSignal = signalMap['filtered'] ?? { count: 0, avgAbsChange1d: null, avgAbsChange1w: null, medianAbsChange1d: null };
+
+    let signalStrength: 'strong' | 'moderate' | 'weak' | 'negative' | 'insufficient_data' = 'insufficient_data';
+    let signalInterpretation = 'Insufficient outcome data for signal validation';
+
+    if (deliveredSignal.avgAbsChange1d != null && filteredSignal.avgAbsChange1d != null && filteredSignal.avgAbsChange1d > 0) {
+      const ratio = deliveredSignal.avgAbsChange1d / filteredSignal.avgAbsChange1d;
+      if (ratio >= 2.0) {
+        signalStrength = 'strong';
+        signalInterpretation = `Delivered events had ${ratio.toFixed(1)}x the price impact of filtered events. System is adding significant alpha.`;
+      } else if (ratio >= 1.5) {
+        signalStrength = 'moderate';
+        signalInterpretation = `Delivered events had ${ratio.toFixed(1)}x the price impact. Decent signal quality.`;
+      } else if (ratio >= 1.0) {
+        signalStrength = 'weak';
+        signalInterpretation = `Delivered events had only ${ratio.toFixed(1)}x impact vs filtered. Consider reviewing classification rules.`;
+      } else {
+        signalStrength = 'negative';
+        signalInterpretation = `ALERT: Filtered events had MORE price impact than delivered events (${(1/ratio).toFixed(1)}x). System is blocking the wrong events!`;
+      }
+    } else if (deliveredSignal.count < 3 || filteredSignal.count < 3) {
+      signalInterpretation = `Insufficient sample: ${deliveredSignal.count} delivered, ${filteredSignal.count} filtered with price data.`;
+    }
+
+    // 6. Outcome tracker health
+    const outcomeHealthRows = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE change_1d IS NOT NULL AND change_1w IS NOT NULL) as full_data,
+        COUNT(*) FILTER (WHERE change_1d IS NULL AND event_time < NOW() - INTERVAL '24 hours') as pending_1d,
+        COUNT(*) FILTER (WHERE change_1w IS NULL AND event_time < NOW() - INTERVAL '7 days') as pending_1w,
+        COUNT(*) FILTER (WHERE change_1m IS NULL AND event_time < NOW() - INTERVAL '30 days') as pending_1m,
+        MAX(updated_at) as last_update
+      FROM event_outcomes
+    `);
+    const oh = outcomeHealthRows.rows[0] ?? {};
+    const lastUpdate = oh.last_update ? new Date(String(oh.last_update)) : null;
+    const backfillStaleHours = lastUpdate ? (Date.now() - lastUpdate.getTime()) / 3_600_000 : Infinity;
+
+    let backfillHealth: 'healthy' | 'stale' | 'not_running' = 'not_running';
+    if (backfillStaleHours < 1) backfillHealth = 'healthy';
+    else if (backfillStaleHours < 24) backfillHealth = 'stale';
+
+    // 7. Recommendations
+    const recommendations: Array<{
+      priority: 'high' | 'medium' | 'low';
+      action: string;
+      reason: string;
+      data: Record<string, unknown>;
+    }> = [];
+
+    if (falseNegativeCandidates.filter(f => Math.abs(f.priceChange1d ?? 0) > 5).length >= 3) {
+      recommendations.push({
+        priority: 'high',
+        action: 'lower_judge_threshold',
+        reason: `${falseNegativeCandidates.filter(f => Math.abs(f.priceChange1d ?? 0) > 5).length} blocked events had >5% price moves. Judge may be too aggressive.`,
+        data: { count: falseNegativeCandidates.filter(f => Math.abs(f.priceChange1d ?? 0) > 5).length },
+      });
+    }
+
+    if (signalStrength === 'negative') {
+      recommendations.push({
+        priority: 'high',
+        action: 'review_classification',
+        reason: signalInterpretation,
+        data: { deliveredAvg: deliveredSignal.avgAbsChange1d, filteredAvg: filteredSignal.avgAbsChange1d },
+      });
+    }
+
+    const filterRate = dayTotal > 0 ? dayFiltered / dayTotal : 0;
+    if (filterRate > 0.75) {
+      recommendations.push({
+        priority: 'medium',
+        action: 'review_filter_rules',
+        reason: `Filter rate is ${Math.round(filterRate * 100)}% — high proportion of events being discarded.`,
+        data: { filterRate: Math.round(filterRate * 100), total: dayTotal, filtered: dayFiltered },
+      });
+    }
+
+    if (backfillHealth === 'not_running') {
+      recommendations.push({
+        priority: 'high',
+        action: 'fix_outcome_tracker',
+        reason: 'Outcome tracker appears not running — no recent price backfill updates.',
+        data: { lastUpdate: lastUpdate?.toISOString() ?? null },
+      });
+    }
+
+    if (signalStrength === 'weak') {
+      recommendations.push({
+        priority: 'medium',
+        action: 'review_classification',
+        reason: signalInterpretation,
+        data: { deliveredAvg: deliveredSignal.avgAbsChange1d, filteredAvg: filteredSignal.avgAbsChange1d },
+      });
+    }
+
+    return reply.send({
+      date: dateStr,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        eventsTotal: dayTotal,
+        delivered: dayDelivered,
+        filtered: dayFiltered,
+        conversionRate: dayConversion,
+        vsYesterday: computeTrend(dayTotal, prevTotal),
+        vsYesterdayDelivered: computeTrend(dayDelivered, prevDelivered),
+        vsPrevWeekAvg: computeTrend(dayTotal, weekAvgTotal > 0 ? Math.round(weekAvgTotal) : null),
+        vsPrevWeekAvgDelivered: computeTrend(dayDelivered, weekAvgDelivered > 0 ? Math.round(weekAvgDelivered) : null),
+      },
+      scannerBreakdown,
+      judgeAnalysis: {
+        totalJudged: dayJudged,
+        passRate: dayJudged > 0 ? Math.round((dayPassed / dayJudged) * 1000) / 10 : 0,
+        avgConfidence: jd.avg_confidence != null ? Math.round(Number(jd.avg_confidence) * 1000) / 1000 : null,
+        sampleSize: dayJudged,
+        confidenceDistribution: {
+          high: Number(jd.high_conf ?? 0),
+          medium: Number(jd.med_conf ?? 0),
+          low: Number(jd.low_conf ?? 0),
+        },
+        topBlockReasons: blockRows.rows.map(r => ({
+          reason: r.reason_category as string,
+          count: Number(r.count),
+        })),
+        falseNegativeCandidates,
+      },
+      signalValidation: {
+        deliveredEvents: deliveredSignal,
+        filteredEvents: filteredSignal,
+        signalStrength,
+        interpretation: signalInterpretation,
+      },
+      outcomeTracker: {
+        eventsWithFullPriceData: Number(oh.full_data ?? 0),
+        eventsPending1d: Number(oh.pending_1d ?? 0),
+        eventsPending1w: Number(oh.pending_1w ?? 0),
+        eventsPending1m: Number(oh.pending_1m ?? 0),
+        lastUpdate: lastUpdate?.toISOString() ?? null,
+        backfillHealth,
+      },
+      recommendations,
+    });
+  });
+
+  // ========================================================================
+  // Phase 3a: Event Trace
+  // GET /api/v1/ai/trace/:eventId
+  // ========================================================================
+
+  server.get<{
+    Params: { eventId: string };
+  }>('/api/v1/ai/trace/:eventId', async (request, reply) => {
+    const providedKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key'] : undefined;
+    const authResult = validateApiKeyValue(providedKey, apiKey);
+    if (!authResult.ok) {
+      return reply.status(401).send({ error: 'Unauthorized', message: authResult.message });
+    }
+    if (!db) {
+      return reply.status(503).send({ error: 'Database not available' });
+    }
+
+    const { eventId } = request.params;
+
+    // Find the event in pipeline_audit
+    const auditRows = await db.execute(sql`
+      SELECT pa.*, e.id as db_id, e.metadata as event_metadata, e.created_at as stored_at
+      FROM pipeline_audit pa
+      LEFT JOIN events e ON e.source_event_id = pa.event_id AND e.source = pa.source
+      WHERE pa.event_id = ${eventId}
+      ORDER BY pa.created_at DESC
+      LIMIT 1
+    `);
+
+    if (auditRows.rows.length === 0) {
+      return reply.status(404).send({ error: `Event ${eventId} not found in audit log` });
+    }
+
+    const audit = auditRows.rows[0];
+    const dbId = audit.db_id as string | null;
+    const metadata = typeof audit.event_metadata === 'object' ? audit.event_metadata as Record<string, unknown> : {};
+
+    // Build timeline from available data
+    const timeline: Array<{ stage: string; at: string; details: Record<string, unknown> }> = [];
+
+    // Stored
+    if (audit.stored_at) {
+      timeline.push({
+        stage: 'stored',
+        at: String(audit.stored_at),
+        details: { source: audit.source, title: audit.title },
+      });
+    }
+
+    // Classification (from classification_predictions if available)
+    if (dbId) {
+      const predRows = await db.execute(sql`
+        SELECT predicted_severity, predicted_direction, confidence, classified_by, classified_at
+        FROM classification_predictions
+        WHERE event_id = ${dbId}
+        LIMIT 1
+      `);
+      if (predRows.rows.length > 0) {
+        const pred = predRows.rows[0];
+        timeline.push({
+          stage: 'classified',
+          at: String(pred.classified_at ?? audit.created_at),
+          details: {
+            severity: pred.predicted_severity,
+            direction: pred.predicted_direction,
+            confidence: Number(pred.confidence ?? 0),
+            method: pred.classified_by,
+          },
+        });
+      }
+    }
+
+    // Judge decision (from event metadata)
+    const judgeData = metadata?.['llm_judge'] as Record<string, unknown> | undefined;
+    if (judgeData) {
+      timeline.push({
+        stage: 'judge',
+        at: String(audit.created_at),
+        details: {
+          decision: judgeData['decision'],
+          confidence: judgeData['confidence'],
+          reason: judgeData['reason'],
+        },
+      });
+    }
+
+    // Enrichment (from event metadata)
+    const enrichData = metadata?.['llm_enrichment'] as Record<string, unknown> | undefined;
+    if (enrichData) {
+      timeline.push({
+        stage: 'enriched',
+        at: String(audit.created_at),
+        details: {
+          summary: enrichData['summary'],
+          impact: enrichData['impact'],
+          action: enrichData['action'],
+        },
+      });
+    }
+
+    // Historical match
+    if (audit.historical_match) {
+      const histData = metadata?.['historical_context'] as Record<string, unknown> | undefined;
+      timeline.push({
+        stage: 'historical_match',
+        at: String(audit.created_at),
+        details: {
+          confidence: audit.historical_confidence,
+          ...(histData ?? {}),
+        },
+      });
+    }
+
+    // Final outcome
+    timeline.push({
+      stage: audit.outcome as string,
+      at: String(audit.created_at),
+      details: {
+        reason: audit.reason,
+        reasonCategory: audit.reason_category,
+        durationMs: audit.duration_ms,
+      },
+    });
+
+    // Outcome data
+    let outcome = null;
+    if (dbId) {
+      const outcomeRows = await db.execute(sql`
+        SELECT event_price, price_1h, price_1d, price_1w, change_1h, change_1d, change_1w
+        FROM event_outcomes
+        WHERE event_id = ${dbId}
+        LIMIT 1
+      `);
+      if (outcomeRows.rows.length > 0) {
+        const o = outcomeRows.rows[0];
+        outcome = {
+          priceAtEvent: o.event_price != null ? Number(o.event_price) : null,
+          price1h: o.price_1h != null ? Number(o.price_1h) : null,
+          price1d: o.price_1d != null ? Number(o.price_1d) : null,
+          price1w: o.price_1w != null ? Number(o.price_1w) : null,
+          change1h: o.change_1h != null ? Number(o.change_1h) : null,
+          change1d: o.change_1d != null ? Number(o.change_1d) : null,
+          change1w: o.change_1w != null ? Number(o.change_1w) : null,
+        };
+      }
+    }
+
+    // Delivery channels
+    let deliveryChannels = null;
+    if (audit.delivery_channels) {
+      try {
+        const raw = typeof audit.delivery_channels === 'string'
+          ? JSON.parse(audit.delivery_channels)
+          : audit.delivery_channels;
+        deliveryChannels = Array.isArray(raw) ? raw : null;
+      } catch { /* ignore */ }
+    }
+
+    return reply.send({
+      eventId,
+      dbId,
+      title: audit.title,
+      source: audit.source,
+      severity: audit.severity,
+      ticker: audit.ticker,
+      outcome: audit.outcome,
+      confidence: audit.confidence != null ? Number(audit.confidence) : null,
+      timestamp: String(audit.created_at),
+      timeline,
+      deliveryChannels,
+      outcome_data: outcome,
+    });
+  });
+
+  // ========================================================================
+  // Phase 3b: Scanner Deep Dive
+  // GET /api/v1/ai/scanner/:name?days=7
+  // ========================================================================
+
+  server.get<{
+    Params: { name: string };
+    Querystring: { days?: string };
+  }>('/api/v1/ai/scanner/:name', async (request, reply) => {
+    const providedKey = typeof request.headers['x-api-key'] === 'string'
+      ? request.headers['x-api-key'] : undefined;
+    const authResult = validateApiKeyValue(providedKey, apiKey);
+    if (!authResult.ok) {
+      return reply.status(401).send({ error: 'Unauthorized', message: authResult.message });
+    }
+    if (!db) {
+      return reply.status(503).send({ error: 'Database not available' });
+    }
+
+    const { name } = request.params;
+    const days = Math.min(Math.max(Number(request.query.days) || 7, 1), 30);
+    const periodStart = new Date(Date.now() - days * 86_400_000);
+    const prevPeriodStart = new Date(periodStart.getTime() - days * 86_400_000);
+
+    // Stats
+    const statsRows = await db.execute(sql`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered,
+        COUNT(*) FILTER (WHERE outcome = 'deduped') as deduped,
+        COUNT(*) FILTER (WHERE outcome = 'filtered') as filtered,
+        ROUND(AVG(CASE
+          WHEN severity = 'CRITICAL' THEN 4 WHEN severity = 'HIGH' THEN 3
+          WHEN severity = 'MEDIUM' THEN 2 WHEN severity = 'LOW' THEN 1 ELSE 0
+        END), 2) as avg_severity_score
+      FROM pipeline_audit
+      WHERE source = ${name} AND created_at >= ${periodStart}
+    `);
+    const stats = statsRows.rows[0] ?? {};
+    const total = Number(stats.total ?? 0);
+    const dlv = Number(stats.delivered ?? 0);
+    const dup = Number(stats.deduped ?? 0);
+    const flt = Number(stats.filtered ?? 0);
+
+    // Previous period for comparison
+    const prevStatsRows = await db.execute(sql`
+      SELECT COUNT(*) as total
+      FROM pipeline_audit
+      WHERE source = ${name}
+        AND created_at >= ${prevPeriodStart}
+        AND created_at < ${periodStart}
+    `);
+    const prevTotal = Number(prevStatsRows.rows[0]?.total ?? 0);
+
+    // Timeline (daily buckets)
+    const timelineRows = await db.execute(sql`
+      SELECT DATE(created_at) as day,
+             COUNT(*) as events,
+             COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered
+      FROM pipeline_audit
+      WHERE source = ${name} AND created_at >= ${periodStart}
+      GROUP BY DATE(created_at)
+      ORDER BY day
+    `);
+
+    // Top tickers
+    const tickerRows = await db.execute(sql`
+      SELECT ticker, COUNT(*) as count,
+             COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered_count
+      FROM pipeline_audit
+      WHERE source = ${name} AND created_at >= ${periodStart}
+        AND ticker IS NOT NULL
+      GROUP BY ticker
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    return reply.send({
+      scanner: name,
+      period: { start: periodStart.toISOString(), end: new Date().toISOString(), days },
+      stats: {
+        totalEvents: total,
+        deliveredEvents: dlv,
+        deliveryRate: total > 0 ? Math.round((dlv / total) * 1000) / 10 : 0,
+        dedupRate: total > 0 ? Math.round((dup / total) * 1000) / 10 : 0,
+        filterRate: total > 0 ? Math.round((flt / total) * 1000) / 10 : 0,
+        avgSeverityScore: Number(stats.avg_severity_score ?? 0),
+      },
+      timeline: timelineRows.rows.map(r => ({
+        day: String(r.day),
+        events: Number(r.events),
+        delivered: Number(r.delivered),
+      })),
+      topTickers: tickerRows.rows.map(r => ({
+        ticker: r.ticker as string,
+        count: Number(r.count),
+        deliveredCount: Number(r.delivered_count),
+      })),
+      comparison: computeTrend(total, prevTotal > 0 ? prevTotal : null),
+    });
+  });
 }
