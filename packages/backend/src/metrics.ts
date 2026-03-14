@@ -159,6 +159,22 @@ export const deliveryErrorsTotal = new Counter({
   registers: [registry],
 });
 
+/** Counter: LLM enrichment outcomes */
+export const llmEnrichmentTotal = new Counter({
+  name: 'llm_enrichment_total',
+  help: 'LLM enrichment outcomes',
+  labelNames: ['result'] as const,
+  registers: [registry],
+});
+
+/** Histogram: LLM enrichment duration */
+export const llmEnrichmentDurationSeconds = new Histogram({
+  name: 'llm_enrichment_duration_seconds',
+  help: 'Duration of LLM enrichment calls in seconds',
+  buckets: [0.5, 1, 2, 5, 10, 30],
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -178,4 +194,6 @@ export function resetMetrics(): void {
   historicalEnrichmentDurationSeconds.reset();
   gracePeriodSuppressedTotal.reset();
   deliveryErrorsTotal.reset();
+  llmEnrichmentTotal.reset();
+  llmEnrichmentDurationSeconds.reset();
 }

@@ -192,10 +192,8 @@ WHERE pa.outcome = 'filtered'
   AND pa.severity IN ('HIGH', 'CRITICAL')
   -- Low confidence = uncertain decision = worth reviewing
   AND pa.reason LIKE '%confidence:%'
-  AND CAST(
-    SUBSTRING(pa.reason FROM 'confidence: ([0-9.]+)')
-    AS NUMERIC
-  ) < 0.7
+  AND pa.confidence IS NOT NULL
+  AND pa.confidence < 0.7
 ORDER BY pa.created_at DESC
 LIMIT 5;
 ```
@@ -319,7 +317,7 @@ WHERE pa.outcome = 'filtered'
   AND pa.created_at >= :dayStart
   AND pa.created_at < :dayEnd
   AND eo.change_1d IS NOT NULL
-  AND ABS(eo.change_1d) > 0.03  -- >3% move
+  AND ABS(eo.change_1d) > 3  -- >3% move (change_1d stores percentage points: 3.0 = 3%)
 ORDER BY ABS(eo.change_1d) DESC
 LIMIT 10;
 ```

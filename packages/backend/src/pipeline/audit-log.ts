@@ -15,6 +15,8 @@ export interface AuditRecord {
   historicalMatch?: boolean;
   historicalConfidence?: string;
   durationMs?: number;
+  /** LLM judge confidence (0.0-1.0), stored directly for efficient querying */
+  confidence?: number;
 }
 
 /**
@@ -45,11 +47,12 @@ export class AuditLog {
 
     await this.db!.execute(sql`
       INSERT INTO pipeline_audit 
-        (event_id, source, title, severity, ticker, outcome, stopped_at, reason, reason_category, delivery_channels, historical_match, historical_confidence, duration_ms)
+        (event_id, source, title, severity, ticker, outcome, stopped_at, reason, reason_category, delivery_channels, historical_match, historical_confidence, duration_ms, confidence)
       VALUES (
         ${audit.eventId}, ${audit.source}, ${title}, ${audit.severity ?? null}, ${audit.ticker ?? null},
         ${audit.outcome}, ${audit.stoppedAt}, ${audit.reason ?? null}, ${audit.reasonCategory ?? null},
-        ${channels}::jsonb, ${audit.historicalMatch ?? null}, ${audit.historicalConfidence ?? null}, ${audit.durationMs ?? null}
+        ${channels}::jsonb, ${audit.historicalMatch ?? null}, ${audit.historicalConfidence ?? null}, ${audit.durationMs ?? null},
+        ${audit.confidence ?? null}
       )
     `);
   }

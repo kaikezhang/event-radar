@@ -41,6 +41,8 @@ export const pipelineAudit = pgTable('pipeline_audit', {
   historicalConfidence: varchar('historical_confidence', { length: 20 }),
   /** Processing duration in ms */
   durationMs: integer('duration_ms'),
+  /** LLM judge confidence (0.0-1.0), stored directly for efficient querying */
+  confidence: decimal('confidence', { precision: 5, scale: 4 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('idx_pipeline_audit_created_at').on(table.createdAt),
