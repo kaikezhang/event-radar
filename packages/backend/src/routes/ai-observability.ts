@@ -276,9 +276,11 @@ export function registerAiObservabilityRoutes(
     `);
     const scannerRates: Record<string, { count: number; lastSeen: string }> = {};
     for (const r of scannerRateRows.rows) {
+      const ls = r.last_seen;
+      const lastSeen = ls instanceof Date ? ls.toISOString() : String(ls);
       scannerRates[r.source as string] = {
         count: Number(r.count),
-        lastSeen: (r.last_seen as Date).toISOString(),
+        lastSeen,
       };
     }
 
@@ -290,7 +292,8 @@ export function registerAiObservabilityRoutes(
     `);
     const allLastSeen: Record<string, string> = {};
     for (const r of allLastSeenRows.rows) {
-      allLastSeen[r.source as string] = (r.last_seen as Date).toISOString();
+      const ls = r.last_seen;
+      allLastSeen[r.source as string] = ls instanceof Date ? ls.toISOString() : String(ls);
     }
 
     // Build scanner status array
@@ -360,16 +363,19 @@ export function registerAiObservabilityRoutes(
       ORDER BY created_at DESC
       LIMIT 5
     `);
-    const questionableBlocks: QuestionableBlock[] = questionableRows.rows.map(r => ({
-      eventId: r.event_id as string,
-      title: r.title as string,
-      source: r.source as string,
-      ticker: r.ticker as string | null,
-      severity: r.severity as string | null,
-      confidence: Number(r.confidence),
-      reason: r.reason as string | null,
-      blockedAt: (r.created_at as Date).toISOString(),
-    }));
+    const questionableBlocks: QuestionableBlock[] = questionableRows.rows.map(r => {
+      const ca = r.created_at;
+      return {
+        eventId: r.event_id as string,
+        title: r.title as string,
+        source: r.source as string,
+        ticker: r.ticker as string | null,
+        severity: r.severity as string | null,
+        confidence: Number(r.confidence),
+        reason: r.reason as string | null,
+        blockedAt: ca instanceof Date ? ca.toISOString() : String(ca),
+      };
+    });
 
     // 5. Enrichment stats from Prometheus counters (since process start)
     let llmSuccessRate: number | null = null;
