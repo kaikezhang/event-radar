@@ -193,6 +193,18 @@ describe('mapEventToSimilarityQuery', () => {
 describe('HistoricalEnricher', () => {
   const similarityMock = vi.mocked(findSimilarEvents);
   const outcomeSimilarityMock = vi.mocked(findSimilarFromOutcomes);
+  const tickerMarketContext = {
+    price: 182.45,
+    change1d: 1.25,
+    change5d: 4.5,
+    change20d: 12.75,
+    volumeRatio: 1.8,
+    rsi14: 63.2,
+    high52w: 199.5,
+    low52w: 145.1,
+    support: 175,
+    resistance: 188,
+  };
 
   beforeEach(() => {
     similarityMock.mockReset();
@@ -203,6 +215,181 @@ describe('HistoricalEnricher', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('includes per-ticker market context when a ticker is available and the cache returns data', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
+    similarityMock.mockResolvedValue({
+      confidence: 'medium',
+      totalCandidates: 4,
+      stats: {
+        count: 4,
+        avgReturnT1: 0.01,
+        avgReturnT5: 0.03,
+        avgReturnT20: 0.05,
+        avgAlphaT1: 0.005,
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.06,
+        winRateT20: 60,
+        medianAlphaT20: 0.05,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+    const marketDataCache = {
+      getOrFetch: vi.fn().mockResolvedValue(tickerMarketContext),
+    };
+
+    const enricher = new HistoricalEnricher(
+      makeMockDb(),
+      makeMarketCache(),
+      {
+        enabled: true,
+        marketDataCache,
+      },
+    );
+
+    const context = await enricher.enrich(makeEvent(), makeLlmResult());
+
+    expect(marketDataCache.getOrFetch).toHaveBeenCalledWith('AAPL');
+    expect(context).toMatchObject({
+      marketContext: tickerMarketContext,
+    });
+  });
+
+  it('uses the primary ticker from metadata arrays when ticker is not set directly', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
+    similarityMock.mockResolvedValue({
+      confidence: 'medium',
+      totalCandidates: 4,
+      stats: {
+        count: 4,
+        avgReturnT1: 0.01,
+        avgReturnT5: 0.03,
+        avgReturnT20: 0.05,
+        avgAlphaT1: 0.005,
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.06,
+        winRateT20: 60,
+        medianAlphaT20: 0.05,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+    const marketDataCache = {
+      getOrFetch: vi.fn().mockResolvedValue(tickerMarketContext),
+    };
+
+    const enricher = new HistoricalEnricher(
+      makeMockDb(''),
+      makeMarketCache(),
+      { marketDataCache },
+    );
+
+    await enricher.enrich(
+      makeEvent({
+        title: 'Company update without explicit single ticker',
+        body: 'No clear ticker in text.',
+        metadata: {
+          primary_ticker: 'msft',
+          tickers: ['msft', 'aapl'],
+          item_types: ['5.02'],
+        },
+      }),
+      makeLlmResult(),
+    );
+
+    expect(marketDataCache.getOrFetch).toHaveBeenCalledWith('MSFT');
+  });
+
+  it('stays successful when ticker market context lookup fails', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
+    similarityMock.mockResolvedValue({
+      confidence: 'medium',
+      totalCandidates: 4,
+      stats: {
+        count: 4,
+        avgReturnT1: 0.01,
+        avgReturnT5: 0.03,
+        avgReturnT20: 0.05,
+        avgAlphaT1: 0.005,
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.06,
+        winRateT20: 60,
+        medianAlphaT20: 0.05,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+    const marketDataCache = {
+      getOrFetch: vi.fn().mockRejectedValue(new Error('provider unavailable')),
+    };
+
+    const enricher = new HistoricalEnricher(
+      makeMockDb(),
+      makeMarketCache(),
+      { marketDataCache },
+    );
+
+    const context = await enricher.enrich(makeEvent(), makeLlmResult());
+
+    expect(context).toMatchObject({
+      matchCount: 4,
+      confidence: 'medium',
+    });
+    expect(context).not.toHaveProperty('marketContext');
+  });
+
+  it('does not try to load per-ticker market context when no ticker is available', async () => {
+    outcomeSimilarityMock.mockResolvedValue([]);
+    similarityMock.mockResolvedValue({
+      confidence: 'medium',
+      totalCandidates: 4,
+      stats: {
+        count: 4,
+        avgReturnT1: 0.01,
+        avgReturnT5: 0.03,
+        avgReturnT20: 0.05,
+        avgAlphaT1: 0.005,
+        avgAlphaT5: 0.02,
+        avgAlphaT20: 0.06,
+        winRateT20: 60,
+        medianAlphaT20: 0.05,
+        bestCase: null,
+        worstCase: null,
+      },
+      events: [],
+    });
+    const marketDataCache = {
+      getOrFetch: vi.fn(),
+    };
+
+    const enricher = new HistoricalEnricher(
+      makeMockDb(''),
+      makeMarketCache(),
+      { marketDataCache },
+    );
+
+    const context = await enricher.enrich(
+      makeEvent({
+        title: '8-K departure filing without ticker metadata',
+        body: 'Board announced a CEO departure.',
+        metadata: {
+          item_types: ['5.02'],
+        },
+      }),
+      makeLlmResult(),
+    );
+
+    expect(context).toMatchObject({
+      matchCount: 4,
+      confidence: 'medium',
+    });
+    expect(marketDataCache.getOrFetch).not.toHaveBeenCalled();
+    expect(context).not.toHaveProperty('marketContext');
   });
 
   it('builds a similarity query with market and sector context and returns historical context', async () => {

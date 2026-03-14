@@ -3,6 +3,7 @@ import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import { historicalEnrichmentTimeoutsTotal } from '../metrics.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
+import type { MarketDataCache } from '../services/market-data-cache.js';
 import {
   findSimilarFromOutcomes,
   type OutcomeSimilarEvent,
@@ -25,6 +26,7 @@ export interface HistoricalEnricherConfig {
   enabled?: boolean;
   minConfidence?: ConfidenceLevel;
   timeoutMs?: number;
+  marketDataCache?: Pick<MarketDataCache, 'getOrFetch'>;
 }
 
 const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
@@ -80,6 +82,7 @@ const OUTCOME_TITLE_STOP_WORDS = new Set([
 export class HistoricalEnricher {
   private readonly enabled: boolean;
   private readonly minConfidence: ConfidenceLevel;
+  private readonly tickerMarketDataCache?: Pick<MarketDataCache, 'getOrFetch'>;
   private readonly timeoutMs: number;
 
   constructor(
@@ -93,6 +96,7 @@ export class HistoricalEnricher {
       config?.minConfidence ??
       parseConfidence(process.env.HISTORICAL_MIN_CONFIDENCE) ??
       'low';
+    this.tickerMarketDataCache = config?.marketDataCache;
     this.timeoutMs =
       config?.timeoutMs ??
       parsePositiveInt(process.env.HISTORICAL_TIMEOUT_MS) ??
@@ -152,7 +156,7 @@ export class HistoricalEnricher {
         return null;
       }
 
-      return outcomeContext;
+      return this.attachTickerMarketContext(event, outcomeContext);
     }
 
     const mapped = mapEventToSimilarityQuery(
@@ -197,7 +201,7 @@ export class HistoricalEnricher {
       return null;
     }
 
-    return {
+    return this.attachTickerMarketContext(event, {
       matchCount: similarityResult.stats.count,
       confidence: similarityResult.confidence,
       avgAlphaT5: similarityResult.stats.avgAlphaT5,
@@ -234,7 +238,7 @@ export class HistoricalEnricher {
         winRateT20: similarityResult.stats.winRateT20,
         count: similarityResult.stats.count,
       }),
-    };
+    });
   }
 
   private async buildOutcomeHistoricalContext(
@@ -295,6 +299,34 @@ export class HistoricalEnricher {
         avgChangeT20,
       ),
     };
+  }
+
+  private async attachTickerMarketContext(
+    event: RawEvent,
+    context: HistoricalContext,
+  ): Promise<HistoricalContext> {
+    if (!this.tickerMarketDataCache) {
+      return context;
+    }
+
+    const ticker = extractPrimaryTicker(event);
+    if (!ticker) {
+      return context;
+    }
+
+    try {
+      const marketContext = await this.tickerMarketDataCache.getOrFetch(ticker);
+      return {
+        ...context,
+        marketContext,
+      };
+    } catch (error) {
+      console.error(
+        '[historical-enricher] Failed to load per-ticker market context:',
+        error instanceof Error ? error.message : error,
+      );
+      return context;
+    }
   }
 }
 
@@ -372,7 +404,7 @@ function buildOutcomeSimilarityQuery(
   event: RawEvent,
   llmResult?: LlmClassificationResult,
 ): OutcomeSimilarityQuery {
-  const ticker = extractTicker(event);
+  const ticker = extractPrimaryTicker(event);
 
   return {
     ticker,
@@ -384,10 +416,30 @@ function buildOutcomeSimilarityQuery(
   };
 }
 
-function extractTicker(event: RawEvent): string | undefined {
+function extractPrimaryTicker(event: RawEvent): string | undefined {
   const metadataTicker = event.metadata?.['ticker'];
   if (typeof metadataTicker === 'string' && metadataTicker.trim().length > 0) {
     return metadataTicker.trim().toUpperCase();
+  }
+
+  const primaryTicker = event.metadata?.['primary_ticker'];
+  if (typeof primaryTicker === 'string' && primaryTicker.trim().length > 0) {
+    return primaryTicker.trim().toUpperCase();
+  }
+
+  const alternatePrimaryTicker = event.metadata?.['primaryTicker'];
+  if (typeof alternatePrimaryTicker === 'string' && alternatePrimaryTicker.trim().length > 0) {
+    return alternatePrimaryTicker.trim().toUpperCase();
+  }
+
+  const tickers = event.metadata?.['tickers'];
+  if (Array.isArray(tickers)) {
+    const firstTicker = tickers.find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    );
+    if (firstTicker) {
+      return firstTicker.trim().toUpperCase();
+    }
   }
 
   return extractTickers(`${event.title} ${event.body}`)[0]?.toUpperCase();
