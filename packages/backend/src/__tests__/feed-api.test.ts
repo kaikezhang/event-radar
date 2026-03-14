@@ -73,8 +73,7 @@ async function seedDeliveredEvent(input: {
   deliveryChannels?: Array<{ channel: string; ok: boolean }>;
 }): Promise<string> {
   const ticker = input.ticker ?? input.tickers?.[0] ?? 'AAPL';
-  const eventId = await storeEvent(sharedDb, {
-    event: makeEvent({
+  const rawEvent = makeEvent({
       source: input.source ?? 'sec-edgar',
       title: input.title,
       body: input.summary ?? `${input.title} summary`,
@@ -86,7 +85,9 @@ async function seedDeliveredEvent(input: {
         url: input.url ?? `https://example.com/${input.title.toLowerCase().replace(/\s+/g, '-')}`,
         ...input.metadata,
       },
-    }),
+    });
+  const eventId = await storeEvent(sharedDb, {
+    event: rawEvent,
     severity: input.severity ?? 'HIGH',
   });
 
@@ -99,6 +100,7 @@ async function seedDeliveredEvent(input: {
     WHERE id = ${eventId}
   `);
 
+  // Use rawEvent.id (source_event_id) for pipeline_audit, matching production behavior
   await sharedDb.execute(sql`
     INSERT INTO pipeline_audit (
       event_id,
@@ -112,7 +114,7 @@ async function seedDeliveredEvent(input: {
       delivery_channels,
       created_at
     ) VALUES (
-      ${eventId},
+      ${rawEvent.id},
       ${input.source ?? 'sec-edgar'},
       ${input.title},
       ${input.severity ?? 'HIGH'},

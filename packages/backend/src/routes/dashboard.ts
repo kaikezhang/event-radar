@@ -548,7 +548,7 @@ export function registerDashboardRoutes(
       const countQuery = sqlTag`
         SELECT COUNT(*)::int AS total
         FROM pipeline_audit pa
-        INNER JOIN events e ON e.id::text = pa.event_id
+        INNER JOIN events e ON e.source_event_id = pa.event_id
         WHERE ${whereClause}
       `;
       const dataQuery = sqlTag`
@@ -567,7 +567,7 @@ export function registerDashboardRoutes(
           e.received_at,
           e.created_at
         FROM pipeline_audit pa
-        INNER JOIN events e ON e.id::text = pa.event_id
+        INNER JOIN events e ON e.source_event_id = pa.event_id
         WHERE ${whereClause}
         ORDER BY pa.created_at DESC, pa.id DESC
         LIMIT ${limit + 1}
@@ -653,7 +653,7 @@ export function registerDashboardRoutes(
           pa.*,
           e.metadata AS event_metadata
         FROM pipeline_audit pa
-        LEFT JOIN events e ON e.id::text = pa.event_id
+        LEFT JOIN events e ON e.source_event_id = pa.event_id
       `);
 
       const conds: ReturnType<typeof sqlTag>[] = [];
