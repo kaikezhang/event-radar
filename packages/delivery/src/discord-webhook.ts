@@ -73,9 +73,14 @@ export class DiscordWebhook implements DeliveryService {
     const eventPrice = alert.event.metadata?.['event_price'];
     const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
 
-    // --- Source badge ---
+    // --- Source badge + event time ---
     const sourceBadge = SOURCE_BADGE[alert.event.source] ?? `📡 ${alert.event.source}`;
-    fields.push({ name: 'Source', value: sourceBadge, inline: true });
+    const eventUnix = Math.floor(alert.event.timestamp.getTime() / 1000);
+    fields.push({
+      name: 'Source',
+      value: `${sourceBadge}\n🕐 <t:${eventUnix}:f> (<t:${eventUnix}:R>)`,
+      inline: true,
+    });
 
     // --- Severity ---
     fields.push({

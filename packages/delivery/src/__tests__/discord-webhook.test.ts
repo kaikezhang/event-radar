@@ -118,6 +118,8 @@ describe('DiscordWebhook', () => {
 
     expect(sourceField).toBeDefined();
     expect(sourceField.value).toContain('SEC Filing');
+    expect(sourceField.value).toContain('<t:');
+    expect(sourceField.value).toContain(':R>');
     expect(severityField).toBeDefined();
     expect(severityField.value).toContain('HIGH');
   });
