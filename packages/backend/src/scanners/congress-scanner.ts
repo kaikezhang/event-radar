@@ -123,7 +123,7 @@ export class CongressScanner extends BaseScanner {
         events.push({
           id: randomUUID(),
           source: 'congress',
-          type: 'congress-trade',
+          type: 'insider_large_trade',
           title: `${trade.politician} (${trade.party}-${trade.chamber}) ${direction} ${trade.ticker} ${trade.amountRange}${committeeTag}`,
           body: `Congress member ${trade.politician} (${trade.party}) filed a ${trade.tradeType} of ${trade.ticker} in the range ${trade.amountRange}. Filing date: ${trade.filingDate}.`,
           url: `https://www.capitoltrades.com/trades`,

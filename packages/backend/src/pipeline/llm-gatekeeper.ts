@@ -135,7 +135,8 @@ PASS if:
 - Breaking event with immediate market impact (crash, halt, FDA decision, acquisition, sanctions, tariff)
 - First-hand report of something that JUST happened
 - Government action with specific policy/regulatory change
-- Specific company event (earnings surprise, executive departure, fraud, guidance change)
+- Specific company event (earnings surprise, SEC 8-K, SEC Form 4, executive departure, fraud, guidance change)
+- Congressional trading disclosures, executive orders, or Federal Register actions with clear market implications
 - Unscheduled macro data or geopolitical shock
 
 BLOCK if:

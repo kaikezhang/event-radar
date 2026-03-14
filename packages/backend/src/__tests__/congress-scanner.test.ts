@@ -99,7 +99,7 @@ describe('CongressScanner', () => {
       if (result.ok) {
         expect(result.value.length).toBe(4);
         expect(result.value[0]!.source).toBe('congress');
-        expect(result.value[0]!.type).toBe('congress-trade');
+        expect(result.value[0]!.type).toBe('insider_large_trade');
       }
     });
 

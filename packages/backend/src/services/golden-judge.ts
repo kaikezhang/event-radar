@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  LLMEventTypeSchema,
   ok,
   SeveritySchema,
   type RawEvent,
@@ -103,6 +104,16 @@ const GoldenJudgeSampleResultSchema = z.object({
 });
 
 export type GoldenJudgeSampleResult = z.infer<typeof GoldenJudgeSampleResultSchema>;
+
+function normalizeGoldenEventType(eventType: string): LlmClassificationResult['eventType'] {
+  const normalized = eventType.trim().toLowerCase();
+  const parsed = LLMEventTypeSchema.safeParse(normalized);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  return 'news_breaking';
+}
 
 const GoldenJudgeReportSchema = z.object({
   mode: z.enum(['mock', 'live']),
@@ -308,7 +319,7 @@ function createMockClassifierProvider(sample: GoldenEventSample): Classification
   const payload: LlmClassificationResult = {
     severity: sample.expectedSeverity,
     direction: sample.expectedDirection.toUpperCase() as Uppercase<GoldenDirection>,
-    eventType: sample.expectedEventType,
+    eventType: normalizeGoldenEventType(sample.expectedEventType),
     confidence: 0.97,
     reasoning: sample.reasoning,
     tags: [sample.expectedEventType, sample.expectedDirection, sample.expectedSeverity.toLowerCase()],

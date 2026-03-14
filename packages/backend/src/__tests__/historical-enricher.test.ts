@@ -45,7 +45,7 @@ function makeLlmResult(
   return {
     severity: 'HIGH',
     direction: 'BULLISH',
-    eventType: 'earnings',
+    eventType: 'news_breaking',
     confidence: 0.92,
     reasoning: 'earnings beat',
     tags: [],
@@ -80,21 +80,21 @@ function makeMockDb(sector = 'Technology'): Database {
 }
 
 describe('mapEventToSimilarityQuery', () => {
-  it('maps SEC EDGAR item 5.02 to leadership_change', () => {
+  it('maps SEC EDGAR item 5.02 to sec_form_8k while preserving the filing item as subtype', () => {
     const mapped = mapEventToSimilarityQuery(makeEvent());
 
     expect(mapped).toMatchObject({
-      eventType: 'leadership_change',
+      eventType: 'sec_form_8k',
       eventSubtype: '5.02',
       ticker: 'AAPL',
     });
   });
 
-  it('maps earnings scanner events to earnings subtype beat with surprise context', () => {
+  it('maps earnings scanner events to earnings_beat with surprise context', () => {
     const mapped = mapEventToSimilarityQuery(
       makeEvent({
         source: 'earnings',
-        type: 'earnings-result',
+        type: 'earnings_beat',
         title: 'AAPL Q1 earnings beat expectations',
         metadata: {
           ticker: 'AAPL',
@@ -106,8 +106,7 @@ describe('mapEventToSimilarityQuery', () => {
     );
 
     expect(mapped).toMatchObject({
-      eventType: 'earnings',
-      eventSubtype: 'beat',
+      eventType: 'earnings_beat',
       ticker: 'AAPL',
       epsSurprisePct: 12.5,
       consecutiveBeats: 4,
@@ -121,12 +120,64 @@ describe('mapEventToSimilarityQuery', () => {
         title: 'Apple ($AAPL) beats earnings expectations and raises guidance',
         metadata: {},
       }),
-      makeLlmResult({ eventType: 'earnings' }),
+      makeLlmResult({ eventType: 'earnings_beat' }),
     );
 
     expect(mapped).toMatchObject({
-      eventType: 'earnings',
+      eventType: 'earnings_beat',
       ticker: 'AAPL',
+    });
+  });
+
+  it('maps FDA events to fda_approval using action metadata', () => {
+    const mapped = mapEventToSimilarityQuery(
+      makeEvent({
+        source: 'fda',
+        type: 'fda_approval',
+        metadata: {
+          ticker: 'MRK',
+          action_type: 'approval',
+        },
+      }),
+    );
+
+    expect(mapped).toMatchObject({
+      eventType: 'fda_approval',
+      ticker: 'MRK',
+    });
+  });
+
+  it('maps Congress trade events to insider_large_trade', () => {
+    const mapped = mapEventToSimilarityQuery(
+      makeEvent({
+        source: 'congress',
+        type: 'insider_large_trade',
+        metadata: {
+          ticker: 'NVDA',
+          trade_type: 'buy',
+        },
+      }),
+    );
+
+    expect(mapped).toMatchObject({
+      eventType: 'insider_large_trade',
+      ticker: 'NVDA',
+    });
+  });
+
+  it('maps White House events to executive_order', () => {
+    const mapped = mapEventToSimilarityQuery(
+      makeEvent({
+        source: 'whitehouse',
+        type: 'executive_order',
+        metadata: {
+          executive_order_number: '14250',
+        },
+      }),
+    );
+
+    expect(mapped).toMatchObject({
+      eventType: 'executive_order',
     });
   });
 
@@ -207,7 +258,7 @@ describe('HistoricalEnricher', () => {
     const context = await enricher.enrich(
       makeEvent({
         source: 'earnings',
-        type: 'earnings-result',
+        type: 'earnings_beat',
         title: 'AAPL Q1 earnings beat expectations',
         metadata: {
           ticker: 'AAPL',
@@ -222,8 +273,7 @@ describe('HistoricalEnricher', () => {
     expect(similarityMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        eventType: 'earnings',
-        eventSubtype: 'beat',
+        eventType: 'earnings_beat',
         ticker: 'AAPL',
         sector: 'Technology',
         severity: 'high',
@@ -245,7 +295,7 @@ describe('HistoricalEnricher', () => {
     });
   });
 
-  it('queries both earnings and earnings_results for breaking-news earnings events', async () => {
+  it('queries both the earnings taxonomy and SEC filing fallback for breaking-news earnings events', async () => {
     outcomeSimilarityMock.mockResolvedValue([]);
     similarityMock
       .mockResolvedValueOnce({
@@ -292,15 +342,15 @@ describe('HistoricalEnricher', () => {
         title: 'Apple ($AAPL) beats earnings expectations',
         metadata: {},
       }),
-      makeLlmResult({ eventType: 'earnings' }),
+      makeLlmResult({ eventType: 'earnings_beat' }),
     );
 
     expect(similarityMock).toHaveBeenCalledTimes(2);
     expect(similarityMock.mock.calls[0]?.[1]).toMatchObject({
-      eventType: 'earnings',
+      eventType: 'earnings_beat',
     });
     expect(similarityMock.mock.calls[1]?.[1]).toMatchObject({
-      eventType: 'earnings_results',
+      eventType: 'sec_form_8k',
     });
     expect(context?.confidence).toBe('medium');
     expect(context?.matchCount).toBe(6);

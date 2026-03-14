@@ -1,15 +1,33 @@
 import { z } from 'zod';
 import { SeveritySchema } from './severity.js';
 
-export const LLMEventTypeSchema = z.enum([
-  'filing',
-  'earnings',
-  'insider',
-  'macro',
-  'political',
-  'analyst',
-  'social',
-]);
+export const LLM_EVENT_TYPES = [
+  'earnings_beat',
+  'earnings_miss',
+  'earnings_guidance',
+  'sec_form_8k',
+  'sec_form_4',
+  'sec_form_10q',
+  'sec_form_10k',
+  'fda_approval',
+  'fda_rejection',
+  'fda_orphan_drug',
+  'ftc_antitrust',
+  'doj_settlement',
+  'executive_order',
+  'congress_bill',
+  'federal_register',
+  'economic_data',
+  'fed_announcement',
+  'unusual_options',
+  'insider_large_trade',
+  'short_interest',
+  'social_volume_spike',
+  'reddit_trending',
+  'news_breaking',
+] as const;
+
+export const LLMEventTypeSchema = z.enum(LLM_EVENT_TYPES);
 export type LLMEventType = z.infer<typeof LLMEventTypeSchema>;
 
 export const LLMSeveritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);

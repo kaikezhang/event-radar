@@ -129,7 +129,7 @@ export class ShortInterestScanner extends BaseScanner {
         events.push({
           id: randomUUID(),
           source: 'short-interest',
-          type: 'short-interest',
+          type: 'short_interest',
           title: `${entry.ticker} short interest ${direction} ${Math.abs(entry.changePct).toFixed(1)}% — ${entry.shortPctFloat.toFixed(1)}% of float`,
           body: `${entry.ticker} short interest ${direction} by ${Math.abs(entry.changePct).toFixed(1)}% to ${entry.shortInterest.toLocaleString()} shares (${entry.shortPctFloat.toFixed(1)}% of float). Days to cover: ${entry.daysToCover.toFixed(1)}.`,
           timestamp: new Date(),

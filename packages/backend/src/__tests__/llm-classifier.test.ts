@@ -34,7 +34,7 @@ function makeRuleResult(overrides: Partial<ClassificationResult> = {}): Classifi
 const VALID_LLM_RESPONSE = JSON.stringify({
   severity: 'CRITICAL',
   direction: 'BEARISH',
-  eventType: 'bankruptcy',
+  eventType: 'sec_form_8k',
   confidence: 0.95,
   reasoning: 'Chapter 11 filing indicates severe financial distress.',
   tags: ['bankruptcy', 'distressed'],
@@ -82,6 +82,15 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('8k-1.03-bankruptcy');
   });
 
+  it('should constrain eventType to the unified taxonomy', () => {
+    const prompt = buildClassificationPrompt(makeEvent());
+
+    expect(prompt).toContain('sec_form_8k');
+    expect(prompt).toContain('earnings_beat');
+    expect(prompt).toContain('fda_approval');
+    expect(prompt).toContain('news_breaking');
+  });
+
   it('should truncate long body text', () => {
     const longBody = 'x'.repeat(3000);
     const event = makeEvent({ body: longBody });
@@ -112,7 +121,7 @@ describe('parseLlmResponse', () => {
     if (result.ok) {
       expect(result.value.severity).toBe('CRITICAL');
       expect(result.value.direction).toBe('BEARISH');
-      expect(result.value.eventType).toBe('bankruptcy');
+      expect(result.value.eventType).toBe('sec_form_8k');
       expect(result.value.confidence).toBe(0.95);
       expect(result.value.reasoning).toContain('Chapter 11');
       expect(result.value.tags).toContain('bankruptcy');
@@ -153,7 +162,7 @@ describe('parseLlmResponse', () => {
     const incomplete = JSON.stringify({
       severity: 'CRITICAL',
       direction: 'INVALID_DIRECTION',
-      eventType: 'bankruptcy',
+      eventType: 'invalid_type',
     });
 
     const result = parseLlmResponse(incomplete);
@@ -180,7 +189,7 @@ describe('LlmClassifier', () => {
     if (result.ok) {
       expect(result.value.severity).toBe('CRITICAL');
       expect(result.value.direction).toBe('BEARISH');
-      expect(result.value.eventType).toBe('bankruptcy');
+      expect(result.value.eventType).toBe('sec_form_8k');
       expect(result.value.matchedRules).toEqual(['8k-1.03-bankruptcy']);
     }
     expect(provider.complete).toHaveBeenCalledOnce();

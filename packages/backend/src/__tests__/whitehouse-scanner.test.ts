@@ -138,7 +138,7 @@ describe('WhiteHouseScanner', () => {
         // 5 market-relevant docs (agriculture proclamation filtered out)
         expect(result.value.length).toBe(5);
         expect(result.value[0]!.source).toBe('whitehouse');
-        expect(result.value[0]!.type).toBe('executive-action');
+        expect(result.value[0]!.type).toBe('executive_order');
       }
     });
 

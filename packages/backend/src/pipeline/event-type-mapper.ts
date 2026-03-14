@@ -17,35 +17,68 @@ export interface MappedEventContext {
   consecutiveBeats?: number;
 }
 
-const KNOWN_HISTORICAL_TYPES = new Set([
-  'earnings',
-  'leadership_change',
-  'other_material',
-  'regulation_fd',
-  'earnings_results',
-  'contract_material',
-  'shareholder_vote',
-  'bankruptcy',
-  'acquisition_disposition',
-  'delisting',
-  'auditor_change',
-  'restructuring',
-  'off_balance_sheet',
+const KNOWN_EVENT_TYPES = new Set([
+  'earnings_beat',
+  'earnings_miss',
+  'earnings_guidance',
+  'sec_form_8k',
+  'sec_form_4',
+  'sec_form_10q',
+  'sec_form_10k',
+  'fda_approval',
+  'fda_rejection',
+  'fda_orphan_drug',
+  'ftc_antitrust',
+  'doj_settlement',
+  'executive_order',
+  'congress_bill',
+  'federal_register',
+  'economic_data',
+  'fed_announcement',
+  'unusual_options',
+  'insider_large_trade',
+  'short_interest',
+  'social_volume_spike',
+  'reddit_trending',
+  'news_breaking',
 ]);
 
+const LEGACY_EVENT_TYPE_ALIASES: Record<string, string> = {
+  filing: 'sec_form_8k',
+  earnings: 'earnings_beat',
+  insider: 'insider_large_trade',
+  macro: 'fed_announcement',
+  political: 'executive_order',
+  analyst: 'news_breaking',
+  social: 'social_volume_spike',
+  earnings_results: 'earnings_beat',
+  leadership_change: 'sec_form_8k',
+  other_material: 'sec_form_8k',
+  regulation_fd: 'sec_form_8k',
+  contract_material: 'sec_form_8k',
+  shareholder_vote: 'sec_form_8k',
+  bankruptcy: 'sec_form_8k',
+  acquisition_disposition: 'sec_form_8k',
+  delisting: 'sec_form_8k',
+  auditor_change: 'sec_form_8k',
+  restructuring: 'sec_form_8k',
+  off_balance_sheet: 'sec_form_8k',
+  fda: 'fda_approval',
+};
+
 const SEC_ITEM_MAP: Record<string, { eventType: string; priority: number }> = {
-  '2.02': { eventType: 'earnings_results', priority: 0 },
-  '2.05': { eventType: 'restructuring', priority: 1 },
-  '5.02': { eventType: 'leadership_change', priority: 2 },
-  '1.01': { eventType: 'contract_material', priority: 3 },
-  '1.03': { eventType: 'bankruptcy', priority: 3 },
-  '2.01': { eventType: 'acquisition_disposition', priority: 3 },
-  '2.03': { eventType: 'off_balance_sheet', priority: 3 },
-  '3.01': { eventType: 'delisting', priority: 3 },
-  '4.01': { eventType: 'auditor_change', priority: 3 },
-  '5.07': { eventType: 'shareholder_vote', priority: 3 },
-  '7.01': { eventType: 'regulation_fd', priority: 3 },
-  '8.01': { eventType: 'other_material', priority: 3 },
+  '2.02': { eventType: 'sec_form_8k', priority: 0 },
+  '2.05': { eventType: 'sec_form_8k', priority: 1 },
+  '5.02': { eventType: 'sec_form_8k', priority: 2 },
+  '1.01': { eventType: 'sec_form_8k', priority: 3 },
+  '1.03': { eventType: 'sec_form_8k', priority: 3 },
+  '2.01': { eventType: 'sec_form_8k', priority: 3 },
+  '2.03': { eventType: 'sec_form_8k', priority: 3 },
+  '3.01': { eventType: 'sec_form_8k', priority: 3 },
+  '4.01': { eventType: 'sec_form_8k', priority: 3 },
+  '5.07': { eventType: 'sec_form_8k', priority: 3 },
+  '7.01': { eventType: 'sec_form_8k', priority: 3 },
+  '8.01': { eventType: 'sec_form_8k', priority: 3 },
 };
 
 const SKIPPED_SOURCES = new Set([
@@ -53,10 +86,6 @@ const SKIPPED_SOURCES = new Set([
   'truth-social',
   'analyst',
   'econ-calendar',
-  'fda',
-  'congress',
-  'doj-antitrust',
-  'whitehouse',
 ]);
 
 const sectorCache = new Map<string, string>();
@@ -70,9 +99,18 @@ function normalizeSecItem(item: unknown): string | null {
 }
 
 function resolveSecEventType(event: RawEvent): { eventType?: string; eventSubtype?: string } {
+  const rawType = typeof event.type === 'string' ? event.type.trim().toLowerCase() : '';
+  const formType = typeof event.metadata?.['form_type'] === 'string'
+    ? event.metadata['form_type'].trim().toLowerCase()
+    : '';
+
+  if (rawType === 'form-4' || rawType === 'sec_form_4' || formType === '4') {
+    return { eventType: 'sec_form_4' };
+  }
+
   const rawItems = event.metadata?.['item_types'];
   if (!Array.isArray(rawItems)) {
-    return {};
+    return { eventType: rawType === 'sec_form_8k' ? 'sec_form_8k' : undefined };
   }
 
   const normalized = rawItems
@@ -104,7 +142,117 @@ function normalizeHistoricalType(eventType?: string): string | undefined {
     return undefined;
   }
 
-  return KNOWN_HISTORICAL_TYPES.has(eventType) ? eventType : undefined;
+  const normalized = eventType.trim().toLowerCase();
+  const aliased = LEGACY_EVENT_TYPE_ALIASES[normalized] ?? normalized;
+
+  return KNOWN_EVENT_TYPES.has(aliased) ? aliased : undefined;
+}
+
+function resolveEarningsEventType(event: RawEvent): string | undefined {
+  const normalizedType = normalizeHistoricalType(event.type);
+  if (normalizedType) {
+    return normalizedType;
+  }
+
+  const surprise = typeof event.metadata?.['surprise_type'] === 'string'
+    ? event.metadata['surprise_type'].trim().toLowerCase()
+    : undefined;
+
+  if (surprise === 'beat') {
+    return 'earnings_beat';
+  }
+
+  if (surprise === 'miss') {
+    return 'earnings_miss';
+  }
+
+  const guidance = event.metadata?.['guidance'];
+  if (typeof guidance === 'string' && guidance.trim().length > 0) {
+    return 'earnings_guidance';
+  }
+
+  return undefined;
+}
+
+function resolveFdaEventType(
+  event: RawEvent,
+  llmResult?: LlmClassificationResult,
+): string | undefined {
+  const llmType = normalizeHistoricalType(llmResult?.eventType);
+  if (llmType) {
+    return llmType;
+  }
+
+  const title = `${event.title} ${event.body}`.toLowerCase();
+  if (title.includes('orphan drug')) {
+    return 'fda_orphan_drug';
+  }
+
+  const actionType = typeof event.metadata?.['action_type'] === 'string'
+    ? event.metadata['action_type'].trim().toLowerCase()
+    : '';
+
+  if (actionType === 'approval') {
+    return 'fda_approval';
+  }
+
+  if (actionType === 'crl' || actionType === 'safety') {
+    return 'fda_rejection';
+  }
+
+  return 'news_breaking';
+}
+
+function resolveSourceFallbackType(
+  event: RawEvent,
+  llmResult?: LlmClassificationResult,
+): string | undefined {
+  const llmType = normalizeHistoricalType(llmResult?.eventType);
+  if (llmType) {
+    return llmType;
+  }
+
+  switch (event.source.toLowerCase()) {
+    case 'fda':
+      return resolveFdaEventType(event, llmResult);
+    case 'congress':
+      return 'insider_large_trade';
+    case 'doj':
+    case 'doj-antitrust': {
+      const actionType = typeof event.metadata?.['action_type'] === 'string'
+        ? event.metadata['action_type'].trim().toLowerCase()
+        : '';
+      return actionType === 'settlement' ? 'doj_settlement' : 'ftc_antitrust';
+    }
+    case 'whitehouse':
+      return 'executive_order';
+    case 'federal-register':
+      return 'federal_register';
+    case 'fedwatch':
+    case 'fed':
+      return 'fed_announcement';
+    case 'econ-calendar':
+      return 'economic_data';
+    case 'unusual-options':
+      return 'unusual_options';
+    case 'short-interest':
+      return 'short_interest';
+    case 'reddit':
+      return 'reddit_trending';
+    case 'x':
+    case 'x-scanner':
+    case 'stocktwits':
+    case 'truth-social':
+      return 'social_volume_spike';
+    case 'breaking-news':
+    case 'newswire':
+    case 'businesswire':
+    case 'pr-newswire':
+    case 'globenewswire':
+      return 'news_breaking';
+    default:
+      return undefined;
+  }
 }
 
 function extractTicker(event: RawEvent): string | undefined {
@@ -222,21 +370,11 @@ export function mapEventToSimilarityQuery(
     eventType = secMapping.eventType;
     eventSubtype = secMapping.eventSubtype;
   } else if (source === 'earnings') {
-    eventType = 'earnings';
-    const subtype = event.metadata?.['result'] ?? event.metadata?.['surprise_type'];
-    if (typeof subtype === 'string' && subtype.trim().length > 0) {
-      eventSubtype = subtype.trim().toLowerCase();
-    }
+    eventType = resolveEarningsEventType(event);
   } else if (source === 'breaking-news') {
-    if (/earnings|revenue|eps/i.test(event.title)) {
-      eventType = 'earnings';
-    } else {
-      eventType = normalizeHistoricalType(llmResult?.eventType);
-    }
-  } else if (source === 'reddit') {
-    eventType = normalizeHistoricalType(llmResult?.eventType);
+    eventType = resolveSourceFallbackType(event, llmResult);
   } else {
-    eventType = normalizeHistoricalType(llmResult?.eventType);
+    eventType = resolveSourceFallbackType(event, llmResult);
   }
 
   if (!eventType) {

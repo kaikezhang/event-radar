@@ -494,7 +494,7 @@ export class SecEdgarScanner extends BaseScanner {
     return {
       id: accessionToUuid(entry.accessionNumber),
       source: 'sec-edgar',
-      type: '8-K',
+      type: 'sec_form_8k',
       title: `SEC 8-K: ${entry.companyName} — Item ${primaryItem ?? 'N/A'} (${primaryItemDescription})`,
       body: build8KBody(entry),
       url: entry.link || undefined,
@@ -525,7 +525,7 @@ export class SecEdgarScanner extends BaseScanner {
     return {
       id: accessionToUuid(entry.accessionNumber),
       source: 'sec-edgar',
-      type: 'form-4',
+      type: 'sec_form_4',
       title: buildForm4Title(entry),
       body: buildForm4Body(entry),
       url: entry.link || undefined,

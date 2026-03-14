@@ -324,12 +324,20 @@ function buildQueryVariants(
   event: RawEvent,
   baseQuery: SimilarityQuery,
 ): SimilarityQuery[] {
-  if (event.source === 'breaking-news' && baseQuery.eventType === 'earnings') {
+  if (
+    event.source === 'breaking-news' &&
+    (
+      baseQuery.eventType === 'earnings_beat' ||
+      baseQuery.eventType === 'earnings_miss' ||
+      baseQuery.eventType === 'earnings_guidance'
+    )
+  ) {
     return [
       baseQuery,
       {
         ...baseQuery,
-        eventType: 'earnings_results',
+        eventType: 'sec_form_8k',
+        eventSubtype: undefined,
       },
     ];
   }

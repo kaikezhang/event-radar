@@ -159,7 +159,7 @@ describe('BreakingNewsScanner', () => {
       if (result.ok && result.value.length > 0) {
         expect(result.value[0]!.metadata!['source_feed']).toBe('Reuters');
         expect(result.value[0]!.source).toBe('breaking-news');
-        expect(result.value[0]!.type).toBe('breaking-news');
+        expect(result.value[0]!.type).toBe('news_breaking');
       }
     });
   });

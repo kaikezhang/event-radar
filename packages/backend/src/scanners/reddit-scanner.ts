@@ -149,7 +149,7 @@ export class RedditScanner extends BaseScanner {
           allEvents.push({
             id: randomUUID(),
             source: 'reddit',
-            type: 'social-post',
+            type: 'reddit_trending',
             title,
             body: post.selftext || post.title,
             url: `https://www.reddit.com${post.permalink}`,

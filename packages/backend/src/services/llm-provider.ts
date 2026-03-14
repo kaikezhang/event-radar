@@ -85,7 +85,7 @@ export class MockProvider implements LLMProvider {
 
   constructor(response?: Result<string, LLMError>) {
     this.presetResponse = response ?? ok(JSON.stringify({
-      eventType: 'filing',
+      eventType: 'sec_form_8k',
       severity: 'MEDIUM',
       direction: 'neutral',
       confidence: 0.75,
