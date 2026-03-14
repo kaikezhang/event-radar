@@ -179,7 +179,7 @@ describe('Watchlist CRUD', () => {
   });
 
   it('should list watchlist tickers', async () => {
-    // Add two tickers
+    // Add two tickers for the default user
     await ctx.server.inject({
       method: 'POST',
       url: '/api/watchlist',
@@ -191,6 +191,12 @@ describe('Watchlist CRUD', () => {
       url: '/api/watchlist',
       headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'NVDA' },
+    });
+    await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      payload: { ticker: 'TSLA' },
     });
 
     const response = await ctx.server.inject({
@@ -205,6 +211,7 @@ describe('Watchlist CRUD', () => {
     const tickers = body.data.map((w: { ticker: string }) => w.ticker);
     expect(tickers).toContain('AAPL');
     expect(tickers).toContain('NVDA');
+    expect(tickers).not.toContain('TSLA');
   });
 
   it('should reject duplicate ticker', async () => {
@@ -223,6 +230,25 @@ describe('Watchlist CRUD', () => {
     });
 
     expect(response.statusCode).toBe(409);
+  });
+
+  it('should allow the same ticker for a different user', async () => {
+    const firstResponse = await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: { ticker: 'AAPL' },
+    });
+
+    const secondResponse = await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      payload: { ticker: 'AAPL' },
+    });
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(secondResponse.statusCode).toBe(201);
   });
 
   it('should delete a ticker from the watchlist', async () => {
@@ -248,6 +274,32 @@ describe('Watchlist CRUD', () => {
     });
 
     expect(listResponse.json().data).toHaveLength(0);
+  });
+
+  it('should not delete another user watchlist ticker', async () => {
+    await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      payload: { ticker: 'AAPL' },
+    });
+
+    const deleteResponse = await ctx.server.inject({
+      method: 'DELETE',
+      url: '/api/watchlist/AAPL',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(deleteResponse.statusCode).toBe(404);
+
+    const listResponse = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().data).toHaveLength(1);
   });
 
   it('should return 404 when deleting non-existent ticker', async () => {
@@ -293,7 +345,7 @@ describe('GET /api/events?watchlist=true', () => {
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
 
-    // Add AAPL and NVDA to watchlist
+    // Add AAPL and NVDA to the default user watchlist
     await ctx.server.inject({
       method: 'POST',
       url: '/api/watchlist',
@@ -305,6 +357,12 @@ describe('GET /api/events?watchlist=true', () => {
       url: '/api/watchlist',
       headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'NVDA' },
+    });
+    await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      payload: { ticker: 'TSLA' },
     });
   });
 
@@ -327,6 +385,19 @@ describe('GET /api/events?watchlist=true', () => {
     expect(tickers).toContain('AAPL');
     expect(tickers).toContain('NVDA');
     expect(tickers).not.toContain('TSLA');
+  });
+
+  it('should filter events using the explicit user watchlist', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?watchlist=true',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].metadata.ticker).toBe('TSLA');
   });
 
   it('should return empty when watchlist is empty', async () => {
@@ -353,6 +424,17 @@ describe('GET /api/events?watchlist=true', () => {
 
     await safeCloseServer(emptyCtx.server);
     await safeClose(emptyClient);
+  });
+
+  it('should return empty for a user with no watchlist entries', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?watchlist=true',
+      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'empty-user' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(0);
   });
 });
 

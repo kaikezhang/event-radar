@@ -12,6 +12,7 @@ import {
   index,
   primaryKey,
   boolean,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { BudgetConfig, Priority, RuleActionValue, RuleConditionNode } from '@event-radar/shared';
 
@@ -262,6 +263,17 @@ export const weightAdjustments = pgTable(
   (table) => [index('idx_weight_adjustments_created_at').on(table.createdAt)],
 );
 
+export const users = pgTable(
+  'users',
+  {
+    id: varchar('id', { length: 100 }).primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_users_created_at').on(table.createdAt)],
+);
+
 export const reclassificationQueue = pgTable(
   'reclassification_queue',
   {
@@ -383,13 +395,46 @@ export const watchlist = pgTable(
   'watchlist',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ticker: varchar('ticker', { length: 10 }).notNull().unique(),
+    userId: varchar('user_id', { length: 100 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ticker: varchar('ticker', { length: 10 }).notNull(),
     addedAt: timestamp('added_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
     notes: text('notes'),
   },
-  (table) => [index('idx_watchlist_ticker').on(table.ticker)],
+  (table) => [
+    index('idx_watchlist_ticker').on(table.ticker),
+    index('idx_watchlist_user_id').on(table.userId),
+    uniqueIndex('idx_watchlist_user_ticker').on(table.userId, table.ticker),
+  ],
+);
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: varchar('user_id', { length: 100 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_push_subscriptions_user_id').on(table.userId),
+    uniqueIndex('idx_push_subscriptions_user_endpoint').on(table.userId, table.endpoint),
+  ],
 );
 
 export const deliveryKillSwitch = pgTable('delivery_kill_switch', {

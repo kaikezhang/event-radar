@@ -3,6 +3,7 @@ import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
 import { events, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
+import { resolveRequestUserId } from './user-context.js';
 
 // Query params schema for GET /api/events
 const ListEventsQuerySchema = {
@@ -183,9 +184,11 @@ export function registerEventRoutes(
 
     // Filter by watchlist tickers
     if (query.watchlist) {
+      const userId = resolveRequestUserId(request);
       const watchlistTickers = await db
         .select({ ticker: watchlist.ticker })
-        .from(watchlist);
+        .from(watchlist)
+        .where(eq(watchlist.userId, userId));
       const tickers = watchlistTickers.map((w) => w.ticker);
       if (tickers.length > 0) {
         conditions.push(

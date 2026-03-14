@@ -27,7 +27,9 @@ export async function safeCloseServer(
 export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM delivery_kill_switch`);
   await db.execute(sql`DELETE FROM pipeline_audit`);
+  await db.execute(sql`DELETE FROM push_subscriptions`);
   await db.execute(sql`DELETE FROM watchlist`);
+  await db.execute(sql`DELETE FROM users`);
   await db.execute(sql`DELETE FROM severity_changes`);
   await db.execute(sql`DELETE FROM severity_overrides`);
   await db.execute(sql`DELETE FROM budget_config`);
@@ -52,6 +54,13 @@ export async function createTestDb(): Promise<{
   const db = drizzle(client, { schema }) as unknown as Database;
 
   // Create tables using raw SQL (matching the drizzle schema)
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(100) PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS events (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -238,9 +247,27 @@ export async function createTestDb(): Promise<{
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS watchlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      ticker VARCHAR(10) NOT NULL UNIQUE,
+      user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      ticker VARCHAR(10) NOT NULL,
       added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      notes TEXT
+      notes TEXT,
+      CONSTRAINT watchlist_user_ticker_unique UNIQUE (user_id, ticker)
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      last_seen_at TIMESTAMPTZ,
+      disabled_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT push_subscriptions_user_endpoint_unique UNIQUE (user_id, endpoint)
     )
   `);
 
