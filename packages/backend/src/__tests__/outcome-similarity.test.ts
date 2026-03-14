@@ -55,6 +55,8 @@ async function seedOutcome(input: {
   eventTime: string;
   change1h?: number | null;
   change1d?: number | null;
+  changeT5?: number | null;
+  changeT20?: number | null;
   change1w?: number | null;
   change1m?: number | null;
 }): Promise<{ eventId: string; rawEventId: string }> {
@@ -80,6 +82,8 @@ async function seedOutcome(input: {
       event_price,
       change_1h,
       change_1d,
+      change_t5,
+      change_t20,
       change_1w,
       change_1m
     ) VALUES (
@@ -89,6 +93,8 @@ async function seedOutcome(input: {
       100.00,
       ${input.change1h ?? null},
       ${input.change1d ?? null},
+      ${input.changeT5 ?? null},
+      ${input.changeT20 ?? null},
       ${input.change1w ?? null},
       ${input.change1m ?? null}
     )
@@ -242,6 +248,32 @@ describe('findSimilarFromOutcomes', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.score).toBeGreaterThan(0.6);
+  });
+
+  it('returns T+5 and T+20 changes when they are present on the outcome row', async () => {
+    await seedOutcome({
+      title: 'Apple launches AI server platform',
+      source: 'breaking-news',
+      ticker: 'AAPL',
+      severity: 'HIGH',
+      eventTime: '2026-03-10T12:00:00.000Z',
+      change1d: 0.03,
+      changeT5: 0.11,
+      changeT20: 0.22,
+      change1w: 0.09,
+      change1m: 0.2,
+    });
+
+    const result = await runQuery({
+      ticker: 'AAPL',
+      source: 'breaking-news',
+      titleKeywords: ['apple', 'server'],
+    });
+
+    expect(result[0]).toMatchObject({
+      changeT5: 0.11,
+      changeT20: 0.22,
+    });
   });
 
   it('deduplicates candidates by normalized title and keeps the most recent match', async () => {

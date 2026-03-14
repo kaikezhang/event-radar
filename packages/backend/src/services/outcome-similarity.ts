@@ -41,6 +41,8 @@ export interface OutcomeSimilarEvent {
   eventPrice: number | null;
   change1h: number | null;
   change1d: number | null;
+  changeT5: number | null;
+  changeT20: number | null;
   change1w: number | null;
   change1m: number | null;
   score: number;
@@ -57,6 +59,8 @@ interface OutcomeSimilarityRow {
   eventPrice: string | number | null;
   change1h: string | number | null;
   change1d: string | number | null;
+  changeT5: string | number | null;
+  changeT20: string | number | null;
   change1w: string | number | null;
   change1m: string | number | null;
 }
@@ -247,6 +251,8 @@ export async function findSimilarFromOutcomes(
       eventPrice: eventOutcomes.eventPrice,
       change1h: eventOutcomes.change1h,
       change1d: eventOutcomes.change1d,
+      changeT5: eventOutcomes.changeT5,
+      changeT20: eventOutcomes.changeT20,
       change1w: eventOutcomes.change1w,
       change1m: eventOutcomes.change1m,
     })
@@ -267,6 +273,8 @@ export async function findSimilarFromOutcomes(
       eventPrice: toNumber(row.eventPrice),
       change1h: toNumber(row.change1h),
       change1d: toNumber(row.change1d),
+      changeT5: toNumber(row.changeT5),
+      changeT20: toNumber(row.changeT20),
       change1w: toNumber(row.change1w),
       change1m: toNumber(row.change1m),
       score: scoreOutcomeCandidate(query, row),

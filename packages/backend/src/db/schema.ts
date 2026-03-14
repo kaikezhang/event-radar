@@ -101,12 +101,18 @@ export const eventOutcomes = pgTable(
     eventPrice: decimal('event_price', { precision: 10, scale: 2 }),
     price1h: decimal('price_1h', { precision: 10, scale: 2 }),
     price1d: decimal('price_1d', { precision: 10, scale: 2 }),
+    priceT5: decimal('price_t5', { precision: 12, scale: 2 }),
+    priceT20: decimal('price_t20', { precision: 12, scale: 2 }),
     price1w: decimal('price_1w', { precision: 10, scale: 2 }),
     price1m: decimal('price_1m', { precision: 10, scale: 2 }),
     change1h: decimal('change_1h', { precision: 10, scale: 4 }),
     change1d: decimal('change_1d', { precision: 10, scale: 4 }),
+    changeT5: decimal('change_t5', { precision: 8, scale: 4 }),
+    changeT20: decimal('change_t20', { precision: 8, scale: 4 }),
     change1w: decimal('change_1w', { precision: 10, scale: 4 }),
     change1m: decimal('change_1m', { precision: 10, scale: 4 }),
+    evaluatedT5At: timestamp('evaluated_t5_at', { withTimezone: true }),
+    evaluatedT20At: timestamp('evaluated_t20_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

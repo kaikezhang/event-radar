@@ -251,20 +251,22 @@ export class HistoricalEnricher {
 
     const avgChange1d = averageNumbers(qualifyingMatches.map((match) => match.change1d));
     const avgChange1w = averageNumbers(qualifyingMatches.map((match) => match.change1w));
-    const medianChange1w = medianNumbers(qualifyingMatches.map((match) => match.change1w));
-    const winRate1w = computePositiveRate(qualifyingMatches.map((match) => match.change1w));
+    const avgChangeT5 = averageNumbers(qualifyingMatches.map((match) => match.changeT5));
+    const avgChangeT20 = averageNumbers(qualifyingMatches.map((match) => match.changeT20));
+    const medianChangeT20 = medianNumbers(qualifyingMatches.map((match) => match.changeT20));
+    const winRateT20 = computePositiveRate(qualifyingMatches.map((match) => match.changeT20));
     const bestCase = selectExtremeMatch(qualifyingMatches, 'best');
     const worstCase = selectExtremeMatch(qualifyingMatches, 'worst');
 
     return {
       matchCount: qualifyingMatches.length,
       confidence: confidenceFromCount(qualifyingMatches.length),
-      avgAlphaT5: avgChange1d ?? 0,
-      avgAlphaT20: avgChange1w ?? 0,
+      avgAlphaT5: avgChangeT5 ?? 0,
+      avgAlphaT20: avgChangeT20 ?? 0,
       avgChange1d: avgChange1d ?? undefined,
       avgChange1w: avgChange1w ?? undefined,
-      winRateT20: winRate1w,
-      medianAlphaT20: medianChange1w ?? 0,
+      winRateT20,
+      medianAlphaT20: medianChangeT20 ?? 0,
       bestCase,
       worstCase,
       topMatches: qualifyingMatches.slice(0, 3).map((match) => ({
@@ -272,7 +274,7 @@ export class HistoricalEnricher {
         headline: match.title,
         source: match.source,
         eventDate: match.eventTime,
-        alphaT20: match.change1w ?? 0,
+        alphaT20: match.changeT20 ?? 0,
         score: match.score,
       })),
       similarEvents: qualifyingMatches.slice(0, 5).map((match) => ({
@@ -290,7 +292,7 @@ export class HistoricalEnricher {
       patternSummary: generateOutcomePatternSummary(
         query.source ?? event.source,
         qualifyingMatches.length,
-        avgChange1w,
+        avgChangeT20,
       ),
     };
   }
@@ -455,34 +457,34 @@ function selectExtremeMatch(
   matches: OutcomeSimilarEvent[],
   direction: 'best' | 'worst',
 ): HistoricalContext['bestCase'] | HistoricalContext['worstCase'] | undefined {
-  const comparable = matches.filter((match) => match.change1w != null);
+  const comparable = matches.filter((match) => match.changeT20 != null);
   if (comparable.length === 0) {
     return undefined;
   }
 
   const selected = comparable.reduce((current, candidate) => {
-    if (current.change1w == null) {
+    if (current.changeT20 == null) {
       return candidate;
     }
 
     if (direction === 'best') {
-      return (candidate.change1w ?? -Infinity) > (current.change1w ?? -Infinity)
+      return (candidate.changeT20 ?? -Infinity) > (current.changeT20 ?? -Infinity)
         ? candidate
         : current;
     }
 
-    return (candidate.change1w ?? Infinity) < (current.change1w ?? Infinity)
+    return (candidate.changeT20 ?? Infinity) < (current.changeT20 ?? Infinity)
       ? candidate
       : current;
   });
 
-  if (selected.change1w == null) {
+  if (selected.changeT20 == null) {
     return undefined;
   }
 
   return {
     ticker: selected.ticker,
-    alphaT20: selected.change1w,
+    alphaT20: selected.changeT20,
     headline: selected.title,
   };
 }
@@ -506,13 +508,13 @@ function confidenceFromCount(count: number): ConfidenceLevel {
 function generateOutcomePatternSummary(
   source: string,
   count: number,
-  avgChange1w: number | null,
+  avgChangeT20: number | null,
 ): string {
   const normalizedSource = source.replaceAll('-', ' ');
-  const weeklyMove = avgChange1w ?? 0;
-  const sign = weeklyMove >= 0 ? '+' : '';
+  const t20Move = avgChangeT20 ?? 0;
+  const sign = t20Move >= 0 ? '+' : '';
 
-  return `${normalizedSource}: ${sign}${(weeklyMove * 100).toFixed(1)}% avg move in 1w (${count} cases)`;
+  return `${normalizedSource}: ${sign}${(t20Move * 100).toFixed(1)}% avg move by T+20 (${count} cases)`;
 }
 
 function parseConfidence(value?: string): ConfidenceLevel | undefined {

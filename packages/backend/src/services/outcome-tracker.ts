@@ -13,10 +13,32 @@ import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { ClassificationAccuracyService } from './classification-accuracy.js';
 
-/** Intervals in hours: 1h, 1d, 1w, 1m */
-const TRACKING_INTERVALS = [
+interface TrackingInterval {
+  hours: number;
+  column: string;
+  changeCol: string;
+  label: string;
+  evaluatedAtCol?: string;
+}
+
+/** Intervals in hours: 1h, 1d, 1w, 1m plus T+5/T+20. */
+const TRACKING_INTERVALS: TrackingInterval[] = [
   { hours: 1, column: 'price_1h', changeCol: 'change_1h', label: 'T+1h' },
   { hours: 24, column: 'price_1d', changeCol: 'change_1d', label: 'T+1d' },
+  {
+    hours: 120,
+    column: 'price_t5',
+    changeCol: 'change_t5',
+    label: 'T+5d',
+    evaluatedAtCol: 'evaluated_t5_at',
+  },
+  {
+    hours: 480,
+    column: 'price_t20',
+    changeCol: 'change_t20',
+    label: 'T+20d',
+    evaluatedAtCol: 'evaluated_t20_at',
+  },
   { hours: 168, column: 'price_1w', changeCol: 'change_1w', label: 'T+1w' },
   { hours: 720, column: 'price_1m', changeCol: 'change_1m', label: 'T+1m' },
 ] as const;
@@ -29,12 +51,18 @@ export interface OutcomeRecord {
   eventPrice: string | null;
   price1h: string | null;
   price1d: string | null;
+  priceT5: string | null;
+  priceT20: string | null;
   price1w: string | null;
   price1m: string | null;
   change1h: string | null;
   change1d: string | null;
+  changeT5: string | null;
+  changeT20: string | null;
   change1w: string | null;
   change1m: string | null;
+  evaluatedT5At: Date | null;
+  evaluatedT20At: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -114,7 +142,11 @@ export class OutcomeTracker {
         .select()
         .from(eventOutcomes)
         .where(
-          sql`${eventOutcomes.eventTime} <= ${cutoff} AND ${eventOutcomes[this.priceColumnKey(interval.column)]} IS NULL`,
+          sql`${eventOutcomes.eventTime} <= ${cutoff} AND ${
+            interval.evaluatedAtCol
+              ? eventOutcomes[this.evaluatedAtColumnKey(interval.evaluatedAtCol)]
+              : eventOutcomes[this.priceColumnKey(interval.column)]
+          } IS NULL`,
         )
         .limit(50);
 
@@ -221,15 +253,27 @@ export class OutcomeTracker {
     const map: Record<string, keyof typeof eventOutcomes.$inferSelect> = {
       price_1h: 'price1h',
       price_1d: 'price1d',
+      price_t5: 'priceT5',
+      price_t20: 'priceT20',
       price_1w: 'price1w',
       price_1m: 'price1m',
     };
     return map[col]!;
   }
 
+  private evaluatedAtColumnKey(
+    col: string,
+  ): keyof typeof eventOutcomes.$inferSelect {
+    const map: Record<string, keyof typeof eventOutcomes.$inferSelect> = {
+      evaluated_t5_at: 'evaluatedT5At',
+      evaluated_t20_at: 'evaluatedT20At',
+    };
+    return map[col]!;
+  }
+
   private async fillInterval(
     row: typeof eventOutcomes.$inferSelect,
-    interval: (typeof TRACKING_INTERVALS)[number],
+    interval: TrackingInterval,
   ): Promise<void> {
     const targetTime = new Date(
       row.eventTime.getTime() + interval.hours * 3_600_000,
@@ -240,7 +284,24 @@ export class OutcomeTracker {
       targetTime,
     );
 
-    if (!priceResult.ok || priceResult.value == null) return;
+    const updates: Record<string, string | Date> = {
+      updatedAt: new Date(),
+    };
+    if (interval.evaluatedAtCol) {
+      updates[this.evaluatedAtColumnKey(interval.evaluatedAtCol)] = new Date();
+    }
+
+    if (!priceResult.ok || priceResult.value == null) {
+      if (!interval.evaluatedAtCol) {
+        return;
+      }
+
+      await this.db
+        .update(eventOutcomes)
+        .set(updates)
+        .where(eq(eventOutcomes.id, row.id));
+      return;
+    }
 
     const price = priceResult.value;
     const eventPrice = row.eventPrice ? Number(row.eventPrice) : null;
@@ -249,9 +310,6 @@ export class OutcomeTracker {
         ? Math.round(((price - eventPrice) / eventPrice) * 100 * 10000) / 10000
         : null;
 
-    const updates: Record<string, string | Date> = {
-      updatedAt: new Date(),
-    };
     updates[this.priceColumnKey(interval.column)] = String(price);
     if (change != null) {
       updates[this.changeColumnKey(interval.changeCol)] = String(change);
@@ -278,6 +336,8 @@ export class OutcomeTracker {
     const map: Record<string, keyof typeof eventOutcomes.$inferSelect> = {
       change_1h: 'change1h',
       change_1d: 'change1d',
+      change_t5: 'changeT5',
+      change_t20: 'changeT20',
       change_1w: 'change1w',
       change_1m: 'change1m',
     };
@@ -341,6 +401,8 @@ export class OutcomeTracker {
     const intervals = [
       { label: 'T+1h', col: 'change_1h' },
       { label: 'T+1d', col: 'change_1d' },
+      { label: 'T+5d', col: 'change_t5' },
+      { label: 'T+20d', col: 'change_t20' },
       { label: 'T+1w', col: 'change_1w' },
       { label: 'T+1m', col: 'change_1m' },
     ];
