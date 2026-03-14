@@ -89,6 +89,8 @@ import {
   historicalEnrichmentDurationSeconds,
   gracePeriodSuppressedTotal,
   deliveryErrorsTotal,
+  llmEnrichmentTotal,
+  llmEnrichmentDurationSeconds,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
@@ -624,6 +626,7 @@ export function buildApp(options?: {
               outcome: 'filtered', stoppedAt: 'llm_judge',
               reason: `LLM: ${gateResult.reason} (confidence: ${gateResult.confidence})`,
               reasonCategory: 'llm_judge',
+              confidence: gateResult.confidence,
             });
             return;
           }
@@ -642,14 +645,30 @@ export function buildApp(options?: {
       // LLM Enrichment (only for events flagged by L1)
       let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
       if (filterResult.enrichWithLLM && llmEnricher.enabled) {
-        const llmEnrichResult = await llmEnricher.enrich(event);
-        if (llmEnrichResult) {
-          enrichment = llmEnrichResult;
-          event.metadata = {
-            ...(event.metadata ?? {}),
-            llm_enrichment: llmEnrichResult,
-          };
-          await persistEventMetadata();
+        const enrichStart = Date.now();
+        try {
+          const llmEnrichResult = await llmEnricher.enrich(event);
+          const enrichDurationSec = (Date.now() - enrichStart) / 1000;
+          llmEnrichmentDurationSeconds.observe(enrichDurationSec);
+          if (llmEnrichResult) {
+            enrichment = llmEnrichResult;
+            event.metadata = {
+              ...(event.metadata ?? {}),
+              llm_enrichment: llmEnrichResult,
+            };
+            await persistEventMetadata();
+            llmEnrichmentTotal.inc({ result: 'success' });
+          } else {
+            llmEnrichmentTotal.inc({ result: 'empty' });
+          }
+        } catch (enrichErr) {
+          const enrichDurationSec = (Date.now() - enrichStart) / 1000;
+          llmEnrichmentDurationSeconds.observe(enrichDurationSec);
+          llmEnrichmentTotal.inc({ result: 'error' });
+          server.log.error({
+            pipeline: true, stage: 'llm_enrichment', source: event.source,
+            error: enrichErr instanceof Error ? enrichErr.message : String(enrichErr),
+          });
         }
       }
 
@@ -767,6 +786,9 @@ export function buildApp(options?: {
         historical: !!historicalContext,
         ticker,
       });
+      const judgeConfidence = typeof event.metadata?.['llm_judge'] === 'object'
+        ? (event.metadata['llm_judge'] as Record<string, unknown>)?.['confidence']
+        : undefined;
       auditLog.record({
         eventId: event.id, source: event.source, title: event.title,
         severity: result.severity, ticker,
@@ -777,6 +799,7 @@ export function buildApp(options?: {
         historicalMatch: !!historicalContext,
         historicalConfidence: historicalContext?.confidence,
         durationMs: deliveryMs,
+        confidence: typeof judgeConfidence === 'number' ? judgeConfidence : undefined,
       });
     }
   });
@@ -939,10 +962,32 @@ export function buildApp(options?: {
     healthMonitor.start();
   }
 
+  // Start periodic outcome backfill (fills in change_1d/1w/1m prices)
+  let outcomeInterval: ReturnType<typeof setInterval> | undefined;
+  if (outcomeTracker && process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+    const OUTCOME_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+    const OUTCOME_STARTUP_DELAY_MS = 2 * 60 * 1000; // 2 minutes after boot
+
+    setTimeout(() => {
+      console.log('[outcome-tracker] Starting periodic outcome backfill');
+      // Run once immediately after delay
+      void outcomeTracker!.processOutcomes().catch((e: unknown) => {
+        console.error('[outcome-tracker] Processing failed:', e instanceof Error ? e.message : e);
+      });
+      // Then every 15 minutes
+      outcomeInterval = setInterval(() => {
+        void outcomeTracker!.processOutcomes().catch((e: unknown) => {
+          console.error('[outcome-tracker] Processing failed:', e instanceof Error ? e.message : e);
+        });
+      }, OUTCOME_PROCESS_INTERVAL_MS);
+    }, OUTCOME_STARTUP_DELAY_MS);
+  }
+
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
     marketCache?.stop();
     healthMonitor?.stop();
+    if (outcomeInterval) clearInterval(outcomeInterval);
   });
 
   return {

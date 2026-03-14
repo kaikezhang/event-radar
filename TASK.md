@@ -1,128 +1,143 @@
-# TASK.md — Admin Dashboard Observability
+# Current Task: AI Observability Prerequisites
 
-## Overview
+Fix all prerequisites identified during RFC review before implementing the observability APIs.
 
-增强 Admin Dashboard 的可观测性。现有 dashboard 已有 Overview（Scanner Grid + Pipeline Funnel + Filter Breakdown）、Audit Trail、Historical 三个页面。本次增强的核心目标：**让管理员一眼看清系统在干什么、为什么 block、怎么操控**。
+## 1. Enable Outcome Tracker Processing (P0 — CRITICAL)
 
-Dashboard 前端在 `packages/dashboard/`，使用 React + TanStack Query + Recharts + Tailwind CSS + Lucide icons。
-后端在 `packages/backend/`。
+**Problem:** `OutcomeTracker.processOutcomes()` is defined but NEVER called. 4912 event_outcomes rows have NULL change_1d/1w/1m.
 
-设计风格：保持现有 dark theme（`radar-bg`, `radar-surface`, `radar-border`, `radar-green`, `radar-red`, `radar-amber`, `radar-blue`, `radar-text`, `radar-text-muted`）。
+**Fix in `packages/backend/src/app.ts`:**
 
----
+After the app starts and grace period ends, set up a recurring interval to call `processOutcomes()`:
 
-## Task A: LLM Judge Transparency Panel (Codex)
+```typescript
+// After the server starts listening, add a periodic outcome processing job
+if (outcomeTracker) {
+  // Process outcomes every 15 minutes
+  const OUTCOME_PROCESS_INTERVAL_MS = 15 * 60 * 1000;
+  
+  const processOutcomesPeriodically = async () => {
+    try {
+      await outcomeTracker.processOutcomes();
+    } catch (e) {
+      logger.error('Outcome processing failed:', e);
+    }
+  };
+  
+  // Start after a delay to avoid processing during startup
+  setTimeout(() => {
+    processOutcomesPeriodically(); // Run once immediately after delay
+    setInterval(processOutcomesPeriodically, OUTCOME_PROCESS_INTERVAL_MS);
+  }, 120_000); // Wait 2 minutes after startup
+}
+```
 
-让管理员看到 LLM Judge 在干什么 — 通过/拒绝了哪些事件、为什么。
+**Important:** `processOutcomes()` processes 50 rows per interval per time bucket. With 4912 pending rows, it will take multiple cycles to backfill everything. This is by design — avoid hammering Yahoo Finance API.
 
-### Backend
+## 2. Add `confidence` Column to pipeline_audit (P0)
 
-1. **新 API**: `GET /api/v1/judge/recent?limit=50`
-   - 从 `pipeline_audit` 表查询 `stopped_at = 'llm_judge'` 的记录
-   - 返回: `{ events: [{ id, title, source, severity, decision, confidence, reason, ticker, at }] }`
-   - 也包含 `outcome = 'delivered'` 且经过 LLM Judge 的事件（judge passed）
-   - 按时间倒序
+**Create migration:** `packages/backend/src/db/migrations/add-audit-confidence.sql`
 
-2. **新 API**: `GET /api/v1/judge/stats`
-   - 统计 by source 的通过/拒绝数量
-   - 返回: `{ bySource: { "breaking-news": { passed: 2, blocked: 5 }, ... }, total: { passed: 10, blocked: 30 } }`
-   - 可选 `?since=1h|24h|7d` 时间范围
+```sql
+ALTER TABLE pipeline_audit 
+ADD COLUMN IF NOT EXISTS confidence DECIMAL(5,4);
 
-3. **增强 Audit Trail 数据**: 在 `/api/v1/audit` 的返回中增加 `llm_enrichment` 字段（如果事件有 AI enrichment），包含：
-   - `analysis` (AI 分析全文)
-   - `action` (建议 action)
-   - `tickers` (提取的 ticker 列表)
-   - `regimeContext` (regime 上下文)
-   - `confidence` (LLM judge confidence)
+-- Backfill from existing reason text where possible
+UPDATE pipeline_audit 
+SET confidence = CAST(
+  SUBSTRING(reason FROM 'confidence: ([0-9.]+)') AS DECIMAL(5,4)
+)
+WHERE confidence IS NULL 
+  AND reason LIKE '%confidence:%';
 
-### Frontend (`packages/dashboard/`)
+-- Index for observability queries
+CREATE INDEX IF NOT EXISTS idx_pipeline_audit_confidence 
+ON pipeline_audit (confidence) 
+WHERE confidence IS NOT NULL;
+```
 
-1. **Overview 新增 LLM Judge Card**:
-   - 通过/拒绝比例 donut chart（用 Recharts PieChart）
-   - By source 的通过率 bar chart
-   - 最近 5 个判定：title + source + decision badge (PASS 绿 / BLOCK 红) + confidence + reason 摘要
+**Update schema in `packages/backend/src/db/schema.ts`:**
+Add `confidence` column to `pipelineAudit` table definition.
 
-2. **Audit Trail 增强**:
-   - 展开详情里增加 LLM Enrichment 区域
-   - 如果事件有 AI 分析：显示完整 analysis + action + tickers + regime context
-   - LLM Judge confidence 用 progress bar 展示
+**Update audit writer:** When writing to pipeline_audit, include the confidence value directly instead of only embedding it in the reason string. Find where `pipeline_audit` INSERT happens (likely in `pipeline/audit-log.ts` or directly in `app.ts`) and add the confidence field.
 
-3. **新 hooks**: `useJudgeRecent()`, `useJudgeStats()`
+## 3. Add Database Indexes (P1)
 
----
+**Create migration:** `packages/backend/src/db/migrations/add-observability-indexes.sql`
 
-## Task B: Market Regime + Delivery Control Panel (Codex)
+```sql
+-- Composite indexes for time-windowed observability queries
+CREATE INDEX IF NOT EXISTS idx_pipeline_audit_outcome_created 
+ON pipeline_audit (outcome, created_at DESC);
 
-### Backend
+CREATE INDEX IF NOT EXISTS idx_pipeline_audit_source_created 
+ON pipeline_audit (source, created_at DESC);
 
-1. **新 API**: `GET /api/v1/regime/history?hours=24`
-   - 返回 regime score 时序数据（从内存 cache 或 DB）
-   - 格式: `{ snapshots: [{ at, score, vix, spy, regime, factors: { rsi, ma_cross, yield_curve, ... } }] }`
-   - 如果没有历史数据，从当前 snapshot 开始累积（每次 regime 更新时存一个点）
+CREATE INDEX IF NOT EXISTS idx_pipeline_audit_stopped_created 
+ON pipeline_audit (stopped_at, created_at DESC);
 
-2. **增强 `/api/v1/dashboard`**: 在返回中增加:
-   - `regime` 字段: 完整 regime snapshot（不只是 vix/spy/regime，还要 score + 所有因子）
-   - `delivery_control` 字段: kill switch 状态 + 最后操作时间 + 操作者
+-- Partial index for questionable blocks query
+CREATE INDEX IF NOT EXISTS idx_pipeline_audit_filtered_judge 
+ON pipeline_audit (created_at DESC) 
+WHERE outcome = 'filtered' AND stopped_at = 'llm_judge';
 
-### Frontend (`packages/dashboard/`)
+-- Index for events JOIN (currently unindexed!)
+CREATE INDEX IF NOT EXISTS idx_events_source_event_id 
+ON events (source_event_id);
 
-1. **Overview 新增 Market Regime Card**:
-   - 当前 regime badge（BULL 🟢 / BEAR 🔴 / CORRECTION 🟡 / NEUTRAL ⚪）
-   - Regime score gauge（-100 到 +100 的仪表盘）
-   - 关键因子一行：VIX | SPY RSI | MA Cross | Yield Curve
-   - 点击展开 → 所有因子详细值
+CREATE INDEX IF NOT EXISTS idx_events_source_source_event_id 
+ON events (source, source_event_id);
 
-2. **Overview 新增 Delivery Control Card**:
-   - Kill Switch 状态灯 + 一键 toggle 按钮（POST `/api/admin/delivery/kill` 或 `/resume`）
-   - 每个 delivery channel 的统计：sent / errors / last success time
-   - 需要 API_KEY 鉴权（从 Settings 或 env 读取）
+-- Partial indexes for outcome backfill queries
+CREATE INDEX IF NOT EXISTS idx_event_outcomes_pending_1d 
+ON event_outcomes (event_time) 
+WHERE price_1d IS NULL;
 
-3. **全局 Auto-refresh**: 所有 useQuery 加 `refetchInterval: 15_000`（15 秒刷新）
+CREATE INDEX IF NOT EXISTS idx_event_outcomes_pending_1w 
+ON event_outcomes (event_time) 
+WHERE price_1w IS NULL;
+```
 
----
+## 4. Fix RFC change_1d Threshold (P1)
 
-## Task C: Scanner Deep Dive + Alert Feed Page (Codex)
+**Update `docs/ai-observability-rfc.md`:**
+- Change `ABS(eo.change_1d) > 0.03` to `ABS(eo.change_1d) > 3` (change_1d stores percentage points, not decimals)
+- Similarly update signal validation thresholds
+- Add comment documenting that change_1d is in percentage points (3.0 = 3%)
 
-### Backend
+## 5. Add LLM Enrichment Metrics (P2)
 
-1. **新 API**: `GET /api/v1/scanners/:name/events?limit=10`
-   - 返回指定 scanner 最近产出的事件
-   - 从 `events` 表按 source 查询
+**Update `packages/backend/src/metrics.ts`:**
 
-2. **新 API**: `GET /api/v1/delivery/feed?limit=20`
-   - 只返回 delivered 事件 + 完整 enrichment
-   - 包含：title, source, severity, tickers, AI analysis, action, regime context, delivery channels, delivered_at
-   - Cursor pagination
+```typescript
+/** Counter: LLM enrichment results */
+export const llmEnrichmentTotal = new Counter({
+  name: 'llm_enrichment_total',
+  help: 'LLM enrichment outcomes',
+  labelNames: ['result'] as const,  // 'success' | 'error' | 'timeout'
+  registers: [registry],
+});
 
-### Frontend (`packages/dashboard/`)
+/** Histogram: LLM enrichment duration */
+export const llmEnrichmentDurationSeconds = new Histogram({
+  name: 'llm_enrichment_duration_seconds',
+  help: 'Duration of LLM enrichment calls in seconds',
+  buckets: [0.5, 1, 2, 5, 10, 30],
+  registers: [registry],
+});
+```
 
-1. **Scanner Card 可展开**:
-   - 点击 scanner card → 展开 drawer 或 modal
-   - 显示：最近 10 个事件列表、最近错误详情、events/hour 产出率
-   - 用 ScannerCard.tsx 改造
+**Instrument the LLM enrichment call in `app.ts`:** Wrap the existing enrichment call with timing + counter increments.
 
-2. **新页面: Alert Feed** (`pages/AlertFeed.tsx`):
-   - 在 App.tsx 导航加新 tab（Bell icon + "Alerts" label）
-   - 卡片式布局，每个 delivered alert 一张卡：
-     - 标题（粗体）+ source badge + severity badge
-     - AI 分析摘要（前 200 字）
-     - Tickers（黄色 mono）
-     - Delivery channels（Discord ✅ / Bark ✅）
-     - 送达时间
-   - 空状态：友好提示 "No alerts delivered yet"
-   - Cursor 分页（Load More 按钮）
+## Execution
 
-3. **新 hooks**: `useScannerEvents(name)`, `useDeliveryFeed()`
+- Branch: `fix/observability-prereqs`
+- Run all migrations via `docker exec`
+- Update schema.ts, app.ts, metrics.ts
+- Run `pnpm build && pnpm test`
+- Create PR, do NOT merge
 
----
-
-## General Rules
-
-- TypeScript strict mode, ESM with `.js` extensions in imports
-- 保持现有设计风格（dark theme, radar-* colors）
-- 新组件用现有 Card, StatusBadge, LoadingSpinner 组件
-- Charts 用 Recharts（已在依赖中）
-- 后端新 route 需要注册到 app.ts
-- Run `pnpm build` + `pnpm test` + `pnpm lint` — 全部通过
-- Create feature branch + PR. Do NOT push to main. Do NOT merge PRs.
-- 新增的前端页面/组件需要有 test 文件
+## Constraints
+- TypeScript strict mode, ESM with `.js` extensions
+- Do NOT change existing test behavior
+- Migrations must be idempotent (IF NOT EXISTS / IF NOT NULL)
