@@ -425,6 +425,7 @@ describe('judge routes', () => {
           llm_enrichment: {
             analysis: 'Nvidia disclosed a material customer commitment.\n\nRevenue visibility improves and peers may rerate.',
             action: '🔴 High-Quality Setup',
+            signal: '🔴 High-Quality Setup',
             tickers: ['NVDA'],
             regimeContext: 'Risk-on tape could amplify the reaction.',
             confidence: 0.93,

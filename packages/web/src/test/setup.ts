@@ -87,7 +87,7 @@ const SCORECARD = {
     summary: 'Bearish setup matched the T+20 move (-10.10%).',
     items: [
       'Used T+20 as the primary verdict window.',
-      'Original action label: Fade the headline.',
+      'Original signal label: Fade the headline.',
       'Confidence bucket: high.',
     ],
     verdictWindow: 'T+20',

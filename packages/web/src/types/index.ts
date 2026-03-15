@@ -64,6 +64,7 @@ export interface EventScorecard {
   eventTimestamp: string;
   originalAlert: {
     actionLabel: string | null;
+    signalLabel: string | null;
     direction: string | null;
     confidence: number | null;
     confidenceBucket: string | null;

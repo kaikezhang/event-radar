@@ -569,6 +569,7 @@ describe('GET /api/v1/delivery/feed', () => {
           analysis: 'AI summary',
           impact: 'AI impact',
           action: '🔴 High-Quality Setup',
+          signal: '🔴 High-Quality Setup',
           regime_context: 'Risk appetite is supportive.',
           delivery_channels: [
             { channel: 'discord', ok: true },
