@@ -29,6 +29,9 @@ export function useWebSocket<TEvent = unknown>(
       return;
     }
 
+    // Reset stopped flag on each mount (handles React StrictMode double-mount)
+    stoppedRef.current = false;
+
     const connect = () => {
       const socket = new WebSocket(options?.url ?? buildWebSocketUrl());
       socketRef.current = socket;
