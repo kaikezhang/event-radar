@@ -92,31 +92,6 @@ export interface EventScorecard {
   };
 }
 
-export interface ScorecardSummaryMetrics {
-  totalAlerts: number;
-  alertsWithUsableVerdicts: number;
-  directionalCorrectCount: number;
-  directionalHitRate: number | null;
-  setupWorkedCount: number;
-  setupWorkedRate: number | null;
-  avgT5Move: number | null;
-  avgT20Move: number | null;
-  medianT20Move: number | null;
-}
-
-export interface ScorecardSummaryBucket extends ScorecardSummaryMetrics {
-  bucket: string;
-}
-
-export interface ScorecardSummary {
-  days: number | null;
-  totals: ScorecardSummaryMetrics;
-  actionBuckets: ScorecardSummaryBucket[];
-  confidenceBuckets: ScorecardSummaryBucket[];
-  sourceBuckets: ScorecardSummaryBucket[];
-  eventTypeBuckets: ScorecardSummaryBucket[];
-}
-
 export interface TickerProfileData {
   symbol: string;
   name: string;
@@ -153,4 +128,26 @@ export interface FilterPreset {
   severities: string[];
   sources: string[];
   ticker?: string;
+}
+
+export interface ScorecardBucketSummary {
+  bucket: string;
+  totalAlerts: number;
+  alertsWithUsableVerdicts: number;
+  directionalCorrectCount: number;
+  directionalHitRate: number | null;
+  setupWorkedCount: number;
+  setupWorkedRate: number | null;
+  avgT5Move: number | null;
+  avgT20Move: number | null;
+  medianT20Move: number | null;
+}
+
+export interface ScorecardSummary {
+  days: number | null;
+  totals: Omit<ScorecardBucketSummary, 'bucket'>;
+  actionBuckets: ScorecardBucketSummary[];
+  confidenceBuckets: ScorecardBucketSummary[];
+  sourceBuckets: ScorecardBucketSummary[];
+  eventTypeBuckets: ScorecardBucketSummary[];
 }

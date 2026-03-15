@@ -4,7 +4,7 @@ import { AlertTriangle, CalendarRange, Target } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState.js';
 import { StatCard } from '../components/StatCard.js';
 import { formatScorecardBucketLabel, getScorecardSummary } from '../lib/api.js';
-import type { ScorecardSummaryBucket } from '../types/index.js';
+import type { ScorecardBucketSummary } from '../types/index.js';
 
 const WINDOWS = [
   { value: 30, label: '30d', description: 'Recent setups only' },
@@ -172,7 +172,7 @@ function BucketSection({
   title: string;
   description: string;
   group: 'action' | 'confidence' | 'source' | 'eventType';
-  buckets: ScorecardSummaryBucket[];
+  buckets: ScorecardBucketSummary[];
 }) {
   return (
     <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
@@ -224,7 +224,7 @@ function BucketSection({
 }
 
 function formatBucketValue(
-  bucket: ScorecardSummaryBucket,
+  bucket: ScorecardBucketSummary,
   key: (typeof BUCKET_COLUMNS)[number]['key'],
 ): string {
   if (key === 'totalAlerts') {

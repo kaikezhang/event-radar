@@ -93,7 +93,6 @@ const SCORECARD = {
     verdictWindow: 'T+20',
   },
 };
-
 const SCORECARD_SUMMARY_90D = {
   days: 90,
   totals: {
@@ -194,9 +193,6 @@ const SCORECARD_SUMMARY_ALL = {
       medianT20Move: -3.4,
     },
   ],
-};
-const SCORECARD_SUMMARY = {
-  ...SCORECARD_SUMMARY_ALL,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -305,10 +301,6 @@ beforeEach(() => {
       return jsonResponse({ sources: ['sec-edgar', 'fed', 'breaking-news'] });
     }
 
-    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
-      return jsonResponse(SCORECARD);
-    }
-
     if (url.pathname === '/api/v1/scorecards/summary') {
       const days = url.searchParams.get('days');
       if (days === '90') {
@@ -332,7 +324,7 @@ beforeEach(() => {
         });
       }
 
-      return jsonResponse(SCORECARD_SUMMARY);
+      return jsonResponse(SCORECARD_SUMMARY_ALL);
     }
 
     return jsonResponse({ error: 'Not found' }, 404);
