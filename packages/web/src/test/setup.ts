@@ -1,6 +1,20 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 
+// Polyfill IntersectionObserver for tests (used by Feed infinite scroll)
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  globalThis.IntersectionObserver = class IntersectionObserver {
+    readonly root: Element | null = null;
+    readonly rootMargin: string = '';
+    readonly thresholds: ReadonlyArray<number> = [];
+    constructor(_cb: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] { return []; }
+  };
+}
+
 const FEED_EVENT = {
   id: 'evt-critical-nvda-1',
   severity: 'HIGH',
@@ -20,6 +34,32 @@ const FEED_EVENT = {
     url: 'https://example.com/sec/nvda-export-filing',
     confirmationCount: 3,
     confirmedSources: ['sec-edgar', 'pr-newswire', 'reuters'],
+    llm_enrichment: {
+      summary: 'NVIDIA Corporation flagged heightened export exposure tied to China demand.',
+      impact: 'Export controls may pressure near-term demand expectations.',
+      whyNow: 'New export restrictions coincide with Q1 guidance period, amplifying uncertainty.',
+      risks: 'Regulatory escalation could further restrict chip sales to Chinese data centers.',
+      action: 'Fade the headline',
+      tickers: [
+        { symbol: 'NVDA', direction: 'bearish', context: 'Direct exposure to China export risk' },
+      ],
+      regimeContext: 'Correction market — broad risk-off sentiment amplifies headline reactions.',
+      filingItems: ['2.01', '3.01', '5.02'],
+    },
+    historical_context: {
+      patternLabel: 'Export restriction filing in correction market',
+      confidence: 'medium',
+      matchCount: 251,
+      avgAlphaT5: -0.6,
+      avgAlphaT20: -0.4,
+      winRateT20: 46,
+      bestCase: { ticker: 'SMCI', move: 78.3 },
+      worstCase: { ticker: 'UNH', move: -35.7 },
+      similarEvents: [
+        { title: 'Prior NVDA export disclosure', date: '2026-02-14T14:30:00.000Z', move: '+5.2%' },
+        { title: 'Semiconductor filing highlights China demand risk', date: '2026-01-10T15:00:00.000Z', move: '-3.1%' },
+      ],
+    },
   },
 };
 
@@ -207,8 +247,22 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+    // Auth endpoints
+    if (url.pathname === '/api/auth/me') {
+      return jsonResponse({ id: 'user-1', email: 'test@example.com', displayName: 'Test User' });
+    }
+
+    if (url.pathname === '/api/auth/refresh' && init?.method === 'POST') {
+      return jsonResponse({ ok: true });
+    }
+
+    // Watchlist summary
+    if (url.pathname === '/api/v1/feed/watchlist-summary') {
+      return jsonResponse({ tickers: [] });
+    }
 
     if (url.pathname === '/api/v1/feed') {
       return jsonResponse({

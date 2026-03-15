@@ -41,25 +41,10 @@ function formatProvenanceOffset(baseTime: string, sourceTime: string) {
   return `${deltaMinutes}m later`;
 }
 
-function buildWhyNow(data: NonNullable<ReturnType<typeof useEventDetail>['data']>) {
-  const thesis = data.scorecard?.originalAlert.thesis;
-
-  return thesis?.whyNow
-    ?? thesis?.impact
-    ?? data.aiAnalysis.impact
-    ?? `${data.source} pushed this alert ${formatRelativeTime(data.time)}, so the catalyst is still fresh for ${data.tickers.join(', ') || 'this name'}.`;
-}
-
-function buildTrustSummary(data: NonNullable<ReturnType<typeof useEventDetail>['data']>) {
-  if (data.scorecard?.notes.summary) {
-    return data.scorecard.notes.summary;
-  }
-
-  if (data.historicalPattern.matchCount > 0) {
-    return `${data.historicalPattern.matchCount} similar events were found with ${data.historicalPattern.confidence} pattern confidence.`;
-  }
-
-  return 'This alert is currently relying on live source context rather than a closed scorecard outcome.';
+function formatSignedPercent(value: number | null): string {
+  if (value == null) return 'N/A';
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${value.toFixed(1)}%`;
 }
 
 function buildFilterPath(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string {
@@ -126,8 +111,6 @@ export function EventDetail() {
   const shouldFallbackToWatchlist = location.key === 'default';
 
   const similarEvents = data?.historicalPattern?.similarEvents ?? [];
-  const whyNow = data ? buildWhyNow(data) : '';
-  const trustSummary = data ? buildTrustSummary(data) : '';
   const visibleSimilarEvents = useMemo(() => {
     return showAllSimilar ? similarEvents : similarEvents.slice(0, 3);
   }, [similarEvents, showAllSimilar]);
@@ -172,6 +155,9 @@ export function EventDetail() {
     );
   }
 
+  const enrichment = data.enrichment;
+  const historical = data.historical;
+
   return (
     <div className="space-y-4">
       {/* Sticky header */}
@@ -202,10 +188,17 @@ export function EventDetail() {
 
       {/* Header: severity + title + meta */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-        <SeverityBadge
-          severity={data.severity}
-          className="min-h-7 px-2.5 py-1 text-[10px] tracking-[0.14em]"
-        />
+        <div className="flex items-center gap-3">
+          <SeverityBadge
+            severity={data.severity}
+            className="min-h-7 px-2.5 py-1 text-[10px] tracking-[0.14em]"
+          />
+          {enrichment?.action && (
+            <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium text-text-primary">
+              {enrichment.action}
+            </span>
+          )}
+        </div>
         <h1 className="mt-4 text-[20px] font-semibold leading-7 text-text-primary">{data.title}</h1>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
           <span>{data.source}</span>
@@ -223,77 +216,199 @@ export function EventDetail() {
         )}
       </section>
 
-      {/* AI Summary — always visible */}
+      {/* AI Summary — always visible, use enrichment first */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <SectionHeading eyebrow="Catalyst / event summary" title="What happened" />
         <p className="text-[15px] leading-7 text-text-secondary">{data.aiAnalysis.summary}</p>
       </section>
 
-      {/* Why now — always visible */}
+      {/* Impact — from enrichment */}
+      {(enrichment?.impact ?? data.aiAnalysis.impact) && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Why it matters" title="Impact" />
+          <p className="text-[15px] leading-7 text-text-secondary">
+            {enrichment?.impact ?? data.aiAnalysis.impact}
+          </p>
+        </section>
+      )}
+
+      {/* Why Now — from enrichment */}
+      {enrichment?.whyNow && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Market timing" title="Why this matters now" />
+          <p className="text-[15px] leading-7 text-text-secondary">{enrichment.whyNow}</p>
+        </section>
+      )}
+
+      {/* Risks — from enrichment */}
+      {enrichment?.risks && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Risk factors" title="Risks" />
+          <p className="text-[15px] leading-7 text-text-secondary">{enrichment.risks}</p>
+        </section>
+      )}
+
+      {/* Key fields: Source / Severity / Tickers / Signal — Discord-style grid */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-        <SectionHeading eyebrow="Market timing" title="Why this matters now" />
-        <p className="text-[15px] leading-7 text-text-secondary">{whyNow}</p>
-      </section>
-
-      {/* Market Context + Historical Pattern — side by side on wider screens */}
-      {(data.aiAnalysis.tickerDirections.length > 0 || data.historicalPattern.matchCount > 0) && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {data.aiAnalysis.tickerDirections.length > 0 && (
-            <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-              <SectionHeading eyebrow="Directional context" title="Market Context" />
-              <div className="space-y-3">
-                {data.aiAnalysis.tickerDirections.map((td) => (
-                  <div
-                    key={td.symbol}
-                    className="flex items-start gap-3 rounded-2xl border border-white/6 bg-bg-elevated/70 p-4"
-                  >
-                    <span
-                      className={cn(
-                        'mt-0.5 font-mono text-sm font-semibold',
-                        td.direction === 'bullish' ? 'text-emerald-300' :
-                        td.direction === 'bearish' ? 'text-severity-critical' :
-                        'text-text-secondary',
-                      )}
-                    >
-                      {td.direction === 'bullish' ? '▲' : td.direction === 'bearish' ? '▼' : '•'} ${td.symbol}
-                    </span>
-                    <p className="text-[15px] leading-6 text-text-secondary">
-                      {td.context || td.direction}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoField label="Source" value={data.source} />
+          <InfoField label="Severity" value={formatSeverityLabel(data.severity)} />
+          {data.tickers.length > 0 && (
+            <InfoField
+              label="Tickers"
+              value={
+                enrichment?.tickers.length
+                  ? enrichment.tickers
+                      .map((t) => `${t.symbol} ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : ''}`.trim())
+                      .join(', ')
+                  : data.tickers.join(', ')
+              }
+            />
           )}
-
-          {data.historicalPattern.matchCount > 0 && (
-            <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                    Pattern match
-                  </p>
-                  <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">Historical Pattern</h2>
-                </div>
-                <div className="rounded-full bg-white/6 px-3 py-1 text-sm font-medium text-text-primary">
-                  {data.historicalPattern.confidence}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard value={String(data.historicalPattern.matchCount)} label="Matches found" />
-                {data.historicalPattern.avgMoveT5 != null && (
-                  <StatCard value={formatPercent(data.historicalPattern.avgMoveT5)} label="Avg move T+5" />
-                )}
-                {data.historicalPattern.avgMoveT20 != null && (
-                  <StatCard value={formatPercent(data.historicalPattern.avgMoveT20)} label="Avg move T+20" />
-                )}
-                {data.historicalPattern.winRate != null && (
-                  <StatCard value={`${data.historicalPattern.winRate}%`} label="Win rate" />
-                )}
-              </div>
-            </section>
+          {enrichment?.action && (
+            <InfoField label="Signal" value={enrichment.action} />
           )}
         </div>
+      </section>
+
+      {/* Filing Items — SEC-specific */}
+      {enrichment?.filingItems && enrichment.filingItems.length > 0 && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="SEC filing" title="Filing Items" />
+          <p className="text-[15px] font-mono leading-7 text-text-primary">
+            {enrichment.filingItems.join(', ')}
+          </p>
+        </section>
+      )}
+
+      {/* Regime Context */}
+      {enrichment?.regimeContext && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Market regime" title="Regime Context" />
+          <p className="text-[15px] leading-7 text-text-secondary">{enrichment.regimeContext}</p>
+        </section>
+      )}
+
+      {/* Market Context — ticker directions */}
+      {data.aiAnalysis.tickerDirections.length > 0 && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Directional context" title="Market Context" />
+          <div className="space-y-3">
+            {data.aiAnalysis.tickerDirections.map((td) => (
+              <div
+                key={td.symbol}
+                className="flex items-start gap-3 rounded-2xl border border-white/6 bg-bg-elevated/70 p-4"
+              >
+                <span
+                  className={cn(
+                    'mt-0.5 font-mono text-sm font-semibold',
+                    td.direction === 'bullish' ? 'text-emerald-300' :
+                    td.direction === 'bearish' ? 'text-severity-critical' :
+                    'text-text-secondary',
+                  )}
+                >
+                  {td.direction === 'bullish' ? '▲' : td.direction === 'bearish' ? '▼' : '•'} ${td.symbol}
+                </span>
+                <p className="text-[15px] leading-6 text-text-secondary">
+                  {td.context || td.direction}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Historical Pattern — full data from metadata.historical_context */}
+      {(historical || data.historicalPattern.matchCount > 0) && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                Pattern match
+              </p>
+              <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
+                📊 Historical Pattern
+              </h2>
+              {historical?.patternLabel && (
+                <p className="mt-1 text-sm leading-6 text-text-secondary">{historical.patternLabel}</p>
+              )}
+            </div>
+            {data.historicalPattern.confidence && (
+              <div className="rounded-full bg-white/6 px-3 py-1 text-sm font-medium text-text-primary">
+                {data.historicalPattern.confidence}
+              </div>
+            )}
+          </div>
+
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {data.historicalPattern.avgMoveT5 != null && (
+              <StatCard value={formatSignedPercent(data.historicalPattern.avgMoveT5)} label="Avg Alpha T+5" />
+            )}
+            {data.historicalPattern.avgMoveT20 != null && (
+              <StatCard value={formatSignedPercent(data.historicalPattern.avgMoveT20)} label="Avg Alpha T+20" />
+            )}
+            {data.historicalPattern.winRate != null && (
+              <StatCard value={`${data.historicalPattern.winRate}%`} label="Win Rate" />
+            )}
+            <StatCard value={String(data.historicalPattern.matchCount)} label="Similar events" />
+          </div>
+
+          {/* Best / Worst cases */}
+          {(historical?.bestCase || historical?.worstCase) && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {historical.bestCase && (
+                <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                    🏆 Best
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-emerald-300">
+                    {historical.bestCase.ticker} {formatSignedPercent(historical.bestCase.move)}
+                  </p>
+                </div>
+              )}
+              {historical.worstCase && (
+                <div className="rounded-2xl border border-red-400/15 bg-red-400/5 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                    💀 Worst
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-severity-critical">
+                    {historical.worstCase.ticker} {formatSignedPercent(historical.worstCase.move)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Similar Events */}
+      {similarEvents.length > 0 && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Historical precedents" title="Most Similar" />
+          <div className="space-y-3">
+            {visibleSimilarEvents.map((event, i) => (
+              <div key={i} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">{event.title}</p>
+                  <p className="mt-1 font-mono text-xs text-text-secondary">
+                    {event.date ? formatRelativeTime(event.date) : ''}
+                    {event.move ? ` · ${event.move}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {similarEvents.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAllSimilar((c) => !c)}
+              className="mt-4 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+            >
+              {showAllSimilar ? 'Show fewer' : `Show all ${similarEvents.length} →`}
+            </button>
+          )}
+        </section>
       )}
 
       {/* Trust / Verification — always visible */}
@@ -312,10 +427,11 @@ export function EventDetail() {
           )}
         </div>
 
-        <p className="mb-4 text-sm leading-6 text-text-secondary">{trustSummary}</p>
-
         {data.scorecard ? (
           <>
+            {data.scorecard.notes.summary && (
+              <p className="mb-4 text-sm leading-6 text-text-secondary">{data.scorecard.notes.summary}</p>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <InfoField
                 label="Original signal label"
@@ -371,35 +487,6 @@ export function EventDetail() {
           </div>
         )}
       </section>
-
-      {/* Similar Events */}
-      {similarEvents.length > 0 && (
-        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-          <SectionHeading eyebrow="Historical precedents" title="Similar Events" />
-          <div className="space-y-3">
-            {visibleSimilarEvents.map((event, i) => (
-              <div key={i} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">{event.title}</p>
-                  <p className="mt-1 font-mono text-xs text-text-secondary">
-                    {event.date ? formatRelativeTime(event.date) : ''}
-                    {event.move ? ` · ${event.move}` : ''}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {similarEvents.length > 3 && (
-            <button
-              type="button"
-              onClick={() => setShowAllSimilar((c) => !c)}
-              className="mt-4 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              {showAllSimilar ? 'Show fewer' : `Show all ${similarEvents.length} →`}
-            </button>
-          )}
-        </section>
-      )}
 
       {/* Feedback — placed after main content, before metadata */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">

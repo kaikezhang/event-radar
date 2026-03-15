@@ -1,10 +1,14 @@
 import type {
   AlertSummary,
   ChartRange,
+  EnrichmentTicker,
   EventScorecard,
   EventDetailData,
+  HistoricalContext,
+  LlmEnrichment,
   PriceChartData,
   ScorecardSummary,
+  SimilarEvent,
   TickerProfileData,
   WatchlistItem,
 } from '../types/index.js';
@@ -173,6 +177,77 @@ export async function updateNotificationPreferences(
   });
 }
 
+function mapLlmEnrichment(meta: Record<string, unknown>): LlmEnrichment | null {
+  const raw = meta.llm_enrichment as Record<string, unknown> | undefined;
+  if (!raw) return null;
+
+  const rawTickers = (raw.tickers ?? []) as Array<string | Record<string, unknown>>;
+  const tickers: EnrichmentTicker[] = rawTickers.map((t) => {
+    if (typeof t === 'string') return { symbol: t, direction: 'neutral' };
+    return {
+      symbol: (t.symbol as string) ?? (t.ticker as string) ?? '',
+      direction: (t.direction as string) ?? 'neutral',
+      context: (t.context as string) ?? undefined,
+    };
+  });
+
+  return {
+    summary: (raw.summary as string | null) ?? null,
+    impact: (raw.impact as string | null) ?? null,
+    whyNow: (raw.whyNow as string | null) ?? (raw.why_now as string | null) ?? null,
+    risks: (raw.risks as string | null) ?? null,
+    action: (raw.action as string | null) ?? (raw.actionLabel as string | null) ?? null,
+    tickers,
+    regimeContext: (raw.regimeContext as string | null) ?? (raw.regime_context as string | null) ?? null,
+    filingItems: Array.isArray(raw.filingItems) ? raw.filingItems as string[]
+      : Array.isArray(raw.filing_items) ? raw.filing_items as string[]
+      : undefined,
+  };
+}
+
+function mapHistoricalContext(meta: Record<string, unknown>): HistoricalContext | null {
+  const raw = (meta.historical_context ?? meta.historicalContext) as Record<string, unknown> | undefined;
+  if (!raw) return null;
+
+  const rawSimilar = (raw.similarEvents ?? raw.similar_events ?? raw.mostSimilar ?? []) as Array<Record<string, unknown>>;
+  const similarEvents: SimilarEvent[] = rawSimilar.map((s) => ({
+    title: (s.title as string) ?? (s.description as string) ?? '',
+    date: (s.date as string) ?? (s.eventDate as string) ?? '',
+    move: (s.move as string) ?? (typeof s.movePercent === 'number' ? `${s.movePercent > 0 ? '+' : ''}${(s.movePercent as number).toFixed(1)}%` : ''),
+  }));
+
+  const bestRaw = raw.bestCase as Record<string, unknown> | undefined;
+  const worstRaw = raw.worstCase as Record<string, unknown> | undefined;
+
+  return {
+    patternLabel: (raw.patternLabel as string | null) ?? (raw.pattern_label as string | null) ?? (raw.label as string | null) ?? null,
+    confidence: (raw.confidence as string | null) ?? null,
+    matchCount: typeof raw.matchCount === 'number' ? raw.matchCount
+      : typeof raw.match_count === 'number' ? raw.match_count
+      : typeof raw.caseCount === 'number' ? raw.caseCount
+      : similarEvents.length,
+    avgAlphaT5: typeof raw.avgAlphaT5 === 'number' ? raw.avgAlphaT5
+      : typeof raw.avg_alpha_t5 === 'number' ? raw.avg_alpha_t5
+      : null,
+    avgAlphaT20: typeof raw.avgAlphaT20 === 'number' ? raw.avgAlphaT20
+      : typeof raw.avg_alpha_t20 === 'number' ? raw.avg_alpha_t20
+      : null,
+    winRateT20: typeof raw.winRateT20 === 'number' ? raw.winRateT20
+      : typeof raw.win_rate_t20 === 'number' ? raw.win_rate_t20
+      : typeof raw.winRate === 'number' ? raw.winRate
+      : null,
+    bestCase: bestRaw ? {
+      ticker: (bestRaw.ticker as string) ?? '',
+      move: typeof bestRaw.move === 'number' ? bestRaw.move : 0,
+    } : null,
+    worstCase: worstRaw ? {
+      ticker: (worstRaw.ticker as string) ?? '',
+      move: typeof worstRaw.move === 'number' ? worstRaw.move : 0,
+    } : null,
+    similarEvents,
+  };
+}
+
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
   try {
     const data = await apiFetch(`/events/${id}`);
@@ -183,12 +258,16 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
     const tickers: string[] = (meta.tickers as string[]) ?? (meta.ticker ? [meta.ticker as string] : []);
     const source = (e.source as string) ?? 'unknown';
 
-    // Try to get similar events
-    let similarEvents: EventDetailData['historicalPattern']['similarEvents'] = [];
+    // Extract enrichment data from metadata
+    const enrichment = mapLlmEnrichment(meta);
+    const historical = mapHistoricalContext(meta);
+
+    // Try to get similar events from API as fallback
+    let apiSimilarEvents: SimilarEvent[] = [];
     try {
       const simData = await apiFetch(`/events/${id}/similar`);
       const simEvents = simData.data ?? simData.events ?? simData ?? [];
-      similarEvents = simEvents.slice(0, 5).map((s: Record<string, unknown>) => ({
+      apiSimilarEvents = simEvents.slice(0, 5).map((s: Record<string, unknown>) => ({
         title: (s.title as string) ?? '',
         date: (s.receivedAt as string) ?? (s.createdAt as string) ?? '',
         move: '',
@@ -196,6 +275,11 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
     } catch {
       // No similar events available
     }
+
+    // Merge similar events: prefer historical context, fall back to API
+    const similarEvents = historical?.similarEvents.length
+      ? historical.similarEvents
+      : apiSimilarEvents;
 
     // Map audit trail data if present
     const rawAudit = e.audit as Record<string, unknown> | null | undefined;
@@ -211,6 +295,22 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
           enrichedAt: (rawAudit.enrichedAt as string | null) ?? null,
         }
       : null;
+
+    // Use enrichment tickers for directions if available
+    const tickerDirections = enrichment?.tickers.length
+      ? enrichment.tickers.map((t) => ({
+          symbol: t.symbol,
+          direction: t.direction,
+          context: t.context ?? '',
+        }))
+      : tickers.map((t) => ({
+          symbol: t,
+          direction: (meta.direction as string) ?? 'neutral',
+          context: '',
+        }));
+
+    // Use enrichment or historical for pattern data
+    const matchCount = historical?.matchCount ?? similarEvents.length;
 
     return {
       id: e.id as string,
@@ -245,20 +345,19 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
           }))
         : [],
       aiAnalysis: {
-        summary: (e.summary as string) ?? '',
-        impact: (meta.impact as string) ?? null,
-        tickerDirections: tickers.map((t) => ({
-          symbol: t,
-          direction: (meta.direction as string) ?? 'neutral',
-          context: '',
-        })),
+        summary: enrichment?.summary ?? (e.summary as string) ?? '',
+        impact: enrichment?.impact ?? (meta.impact as string) ?? null,
+        tickerDirections,
       },
+      enrichment,
+      historical,
       historicalPattern: {
-        matchCount: similarEvents.length,
-        confidence: similarEvents.length > 3 ? 'high' : similarEvents.length > 0 ? 'medium' : 'low',
-        avgMoveT5: null,
-        avgMoveT20: null,
-        winRate: null,
+        matchCount,
+        confidence: historical?.confidence
+          ?? (matchCount > 3 ? 'high' : matchCount > 0 ? 'medium' : 'low'),
+        avgMoveT5: historical?.avgAlphaT5 ?? null,
+        avgMoveT20: historical?.avgAlphaT20 ?? null,
+        winRate: historical?.winRateT20 ?? null,
         similarEvents,
       },
       audit,
@@ -350,7 +449,24 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
 }
 
 export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
-  return apiFetch('/watchlist', { method: 'POST', body: { ticker: ticker.toUpperCase() } });
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const csrf = getCsrfToken();
+  if (csrf) headers['X-CSRF-Token'] = csrf;
+
+  const res = await fetch(`${API_BASE}/watchlist`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ ticker: ticker.toUpperCase() }),
+  });
+
+  // 409 = duplicate — ticker already on watchlist, treat as success
+  if (res.status === 409) {
+    return { id: '', ticker: ticker.toUpperCase(), addedAt: new Date().toISOString(), notes: null };
+  }
+
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
 }
 
 export async function removeFromWatchlist(ticker: string): Promise<void> {

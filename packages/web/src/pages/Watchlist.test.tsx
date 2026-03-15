@@ -41,6 +41,18 @@ describe('Watchlist page', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
 
+      if (url.pathname === '/api/auth/me') {
+        return new Response(JSON.stringify({ id: 'user-1', email: 'test@example.com', displayName: 'Test User' }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.pathname === '/api/v1/feed/watchlist-summary') {
+        return new Response(JSON.stringify({ tickers: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       if (url.pathname === '/api/watchlist' && (!init?.method || init.method === 'GET')) {
         return new Response(JSON.stringify({ data: watchlist }), {
           headers: { 'Content-Type': 'application/json' },
