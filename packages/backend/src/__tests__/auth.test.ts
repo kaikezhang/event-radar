@@ -1,3 +1,6 @@
+// Set JWT_SECRET for tests before any imports that use it
+process.env.JWT_SECRET = 'test-jwt-secret-for-auth-tests';
+
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { SignJWT } from 'jose';
@@ -382,7 +385,7 @@ describe('Auth endpoints', () => {
     it('returns user for valid JWT', async () => {
       await db.insert(schema.users).values({ id: 'user@example.com', email: 'user@example.com', displayName: 'Test User' });
 
-      const secret = new TextEncoder().encode('er-dev-jwt-secret-do-not-use-in-prod');
+      const secret = new TextEncoder().encode('test-jwt-secret-for-auth-tests');
       const accessToken = await new SignJWT({ sub: 'user@example.com', email: 'user@example.com' })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
@@ -439,7 +442,7 @@ describe('Auth middleware', () => {
   });
 
   it('allows access via JWT cookie', async () => {
-    const secret = new TextEncoder().encode('er-dev-jwt-secret-do-not-use-in-prod');
+    const secret = new TextEncoder().encode('test-jwt-secret-for-auth-tests');
     const accessToken = await new SignJWT({ sub: 'user@example.com', email: 'user@example.com' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -479,7 +482,7 @@ describe('Auth middleware', () => {
   });
 
   it('checks CSRF for POST with JWT cookie', async () => {
-    const secret = new TextEncoder().encode('er-dev-jwt-secret-do-not-use-in-prod');
+    const secret = new TextEncoder().encode('test-jwt-secret-for-auth-tests');
     const accessToken = await new SignJWT({ sub: 'user@example.com', email: 'user@example.com' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -503,7 +506,7 @@ describe('Auth middleware', () => {
   });
 
   it('passes CSRF check when tokens match', async () => {
-    const secret = new TextEncoder().encode('er-dev-jwt-secret-do-not-use-in-prod');
+    const secret = new TextEncoder().encode('test-jwt-secret-for-auth-tests');
     const accessToken = await new SignJWT({ sub: 'user@example.com', email: 'user@example.com' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

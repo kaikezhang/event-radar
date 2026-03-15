@@ -16,9 +16,39 @@ function randomToken(): string {
   return randomBytes(32).toString('hex'); // 64 hex chars
 }
 
+// Per-boot random secret for AUTH_REQUIRED=false (single-user self-hosted)
+let _bootSecret: string | undefined;
+function getBootSecret(): string {
+  if (!_bootSecret) {
+    _bootSecret = randomBytes(32).toString('hex');
+  }
+  return _bootSecret;
+}
+
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET ?? 'er-dev-jwt-secret-do-not-use-in-prod';
-  return new TextEncoder().encode(secret);
+  const secret = process.env.JWT_SECRET;
+  if (secret) return new TextEncoder().encode(secret);
+
+  const authRequired = process.env.AUTH_REQUIRED === 'true';
+  if (authRequired) {
+    throw new Error('JWT_SECRET must be set when AUTH_REQUIRED=true');
+  }
+
+  // AUTH_REQUIRED=false: random per-boot secret (acceptable for single-user self-hosted)
+  return new TextEncoder().encode(getBootSecret());
+}
+
+/**
+ * Validate JWT configuration at startup.
+ * Call this during server init to fail fast if misconfigured.
+ */
+export function validateJwtConfig(): void {
+  if (process.env.AUTH_REQUIRED === 'true' && !process.env.JWT_SECRET) {
+    throw new Error(
+      'FATAL: JWT_SECRET environment variable is required when AUTH_REQUIRED=true. ' +
+      'Set a strong random secret (e.g. openssl rand -hex 32) before starting the server.',
+    );
+  }
 }
 
 const ACCESS_TOKEN_EXPIRY = '7d';
@@ -105,7 +135,12 @@ async function sendMagicLinkEmail(email: string, token: string): Promise<void> {
 
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) {
-    console.log(`[auth] Magic link for ${email}: ${link}`);
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.AUTH_DEV_LOG === 'true';
+    if (isDev) {
+      console.log(`[auth] Magic link for ${email}: ${link}`);
+    } else {
+      console.log(`[auth] Magic link generated for ${email} (set NODE_ENV=development or AUTH_DEV_LOG=true to see URL)`);
+    }
     return;
   }
 
@@ -222,70 +257,88 @@ export function registerAuthRoutes(
 
     const tokenHash = sha256(refreshTokenPlain);
 
-    // Look up the token
-    const rows = await db
-      .select()
-      .from(schema.refreshTokens)
-      .where(eq(schema.refreshTokens.tokenHash, tokenHash))
-      .limit(1);
+    // Atomic refresh rotation in a single transaction
+    const result = await db.transaction(async (tx) => {
+      // SELECT FOR UPDATE to lock the token row and prevent concurrent rotation
+      const rows = await tx.execute(
+        sql`SELECT * FROM refresh_tokens WHERE token_hash = ${tokenHash} LIMIT 1 FOR UPDATE`,
+      );
 
-    if (rows.length === 0) {
-      return reply.status(401).send({ error: 'Invalid refresh token' });
-    }
+      if (rows.rows.length === 0) {
+        return { error: 'Invalid refresh token' } as const;
+      }
 
-    const tokenRow = rows[0]!;
+      const tokenRow = rows.rows[0] as {
+        id: string; user_id: string; token_hash: string;
+        family_id: string; replaced_by: string | null;
+        expires_at: Date; revoked_at: Date | null;
+      };
 
-    // If revoked → revoke entire family (replay attack)
-    if (tokenRow.revokedAt) {
-      await db
+      // If revoked → revoke entire family (replay attack) in same transaction
+      if (tokenRow.revoked_at) {
+        await tx
+          .update(schema.refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(
+            and(
+              eq(schema.refreshTokens.familyId, tokenRow.family_id),
+              isNull(schema.refreshTokens.revokedAt),
+            ),
+          );
+        return { error: 'Token reuse detected' } as const;
+      }
+
+      // If expired
+      if (new Date() > new Date(tokenRow.expires_at)) {
+        return { error: 'Refresh token expired' } as const;
+      }
+
+      // Rotate: insert new token, revoke old — all in one transaction
+      const newRefreshPlain = randomToken();
+      const newRefreshHash = sha256(newRefreshPlain);
+
+      const [newRow] = await tx
+        .insert(schema.refreshTokens)
+        .values({
+          userId: tokenRow.user_id,
+          tokenHash: newRefreshHash,
+          familyId: tokenRow.family_id,
+          expiresAt: new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000),
+        })
+        .returning();
+
+      await tx
         .update(schema.refreshTokens)
-        .set({ revokedAt: new Date() })
-        .where(
-          and(
-            eq(schema.refreshTokens.familyId, tokenRow.familyId),
-            isNull(schema.refreshTokens.revokedAt),
-          ),
-        );
-      clearCookies(reply);
-      return reply.status(401).send({ error: 'Token reuse detected' });
+        .set({ revokedAt: new Date(), replacedBy: newRow!.id })
+        .where(eq(schema.refreshTokens.id, tokenRow.id));
+
+      // Get user email for JWT
+      const userRows = await tx
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, tokenRow.user_id))
+        .limit(1);
+      const userEmail = userRows[0]?.email ?? tokenRow.user_id;
+
+      return {
+        ok: true,
+        userId: tokenRow.user_id,
+        userEmail,
+        newRefreshPlain,
+      } as const;
+    });
+
+    if ('error' in result) {
+      if (result.error === 'Token reuse detected') {
+        clearCookies(reply);
+      }
+      return reply.status(401).send({ error: result.error });
     }
 
-    // If expired
-    if (new Date() > tokenRow.expiresAt) {
-      return reply.status(401).send({ error: 'Refresh token expired' });
-    }
-
-    // Rotate: revoke old, create new in same family
-    const newRefreshPlain = randomToken();
-    const newRefreshHash = sha256(newRefreshPlain);
-
-    const [newRow] = await db
-      .insert(schema.refreshTokens)
-      .values({
-        userId: tokenRow.userId,
-        tokenHash: newRefreshHash,
-        familyId: tokenRow.familyId,
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000),
-      })
-      .returning();
-
-    await db
-      .update(schema.refreshTokens)
-      .set({ revokedAt: new Date(), replacedBy: newRow!.id })
-      .where(eq(schema.refreshTokens.id, tokenRow.id));
-
-    // Get user email for JWT
-    const userRows = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, tokenRow.userId))
-      .limit(1);
-    const userEmail = userRows[0]?.email ?? tokenRow.userId;
-
-    const accessToken = await signAccessToken(tokenRow.userId, userEmail);
+    const accessToken = await signAccessToken(result.userId, result.userEmail);
     const csrfToken = randomToken();
 
-    setCookies(reply, accessToken, newRefreshPlain, csrfToken);
+    setCookies(reply, accessToken, result.newRefreshPlain, csrfToken);
 
     return reply.send({ ok: true });
   });

@@ -43,6 +43,11 @@ export async function requireApiKey(
   reply: FastifyReply,
   apiKey?: string,
 ): Promise<void> {
+  // Already authenticated via JWT cookie (set by auth plugin) — skip API key check
+  if (request.userId) {
+    return;
+  }
+
   if (request.apiKeyAuthenticated) {
     return;
   }

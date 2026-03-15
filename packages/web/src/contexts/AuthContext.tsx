@@ -28,19 +28,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const me = await authMe();
         if (!cancelled) {
-          setUser(me);
-        }
-      } catch {
-        if (!cancelled) {
-          // Try refresh
-          try {
-            await authRefresh();
-            const me = await authMe();
-            if (!cancelled) setUser(me);
-          } catch {
-            if (!cancelled) setUser(null);
+          if (me) {
+            setUser(me);
+          } else {
+            // 401 or no session — try refresh before giving up
+            try {
+              await authRefresh();
+              const retryMe = await authMe();
+              if (!cancelled) setUser(retryMe);
+            } catch {
+              if (!cancelled) setUser(null);
+            }
           }
         }
+      } catch {
+        if (!cancelled) setUser(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
