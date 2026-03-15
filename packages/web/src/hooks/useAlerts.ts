@@ -32,8 +32,9 @@ function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertS
   });
 }
 
-export function useAlerts(limit = 50, options?: { watchlist?: boolean }): UseAlertsResult {
+export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlistTickers?: string[] }): UseAlertsResult {
   const watchlist = options?.watchlist ?? false;
+  const watchlistTickers = options?.watchlistTickers;
   const query = useQuery({
     queryKey: ['feed', limit, watchlist],
     queryFn: () => getFeed(limit, { watchlist }),
@@ -44,7 +45,18 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean }): UseAle
   const [pendingAlerts, setPendingAlerts] = useState<AlertSummary[]>([]);
   const [isAtTop, setIsAtTop] = useState(true);
   const seenAlertIdsRef = useRef<Set<string>>(new Set());
+  const prevWatchlistRef = useRef(watchlist);
   const { playForSeverity } = useAlertSound();
+
+  // Clear state when switching between watchlist/all tabs
+  useEffect(() => {
+    if (prevWatchlistRef.current !== watchlist) {
+      prevWatchlistRef.current = watchlist;
+      setVisibleAlerts([]);
+      setPendingAlerts([]);
+      seenAlertIdsRef.current = new Set();
+    }
+  }, [watchlist]);
 
   const rememberAlerts = (alerts: AlertSummary[]) => {
     for (const alert of alerts) {
@@ -52,10 +64,27 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean }): UseAle
     }
   };
 
+  const watchlistTickerSetRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    watchlistTickerSetRef.current = new Set(
+      (watchlistTickers ?? []).map((t) => t.toUpperCase()),
+    );
+  }, [watchlistTickers]);
+
+  const watchlistRef = useRef(watchlist);
+  watchlistRef.current = watchlist;
+
   const { status: connectionStatus } = useWebSocket<AlertSummary>({
     onEvent: (alert) => {
       if (seenAlertIdsRef.current.has(alert.id)) {
         return;
+      }
+
+      // In watchlist mode, filter websocket events to only matching tickers
+      if (watchlistRef.current && watchlistTickerSetRef.current.size > 0) {
+        const alertTickers = (alert.tickers ?? []).map((t: string) => t.toUpperCase());
+        const matches = alertTickers.some((t: string) => watchlistTickerSetRef.current.has(t));
+        if (!matches) return;
       }
 
       seenAlertIdsRef.current.add(alert.id);

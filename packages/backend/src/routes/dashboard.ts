@@ -546,7 +546,13 @@ export function registerDashboardRoutes(
 
         if (tickers.length > 0) {
           const tickerConditions = tickers.map(
-            (t) => sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}`,
+            (t) => sqlTag`(
+              UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}
+              OR EXISTS (
+                SELECT 1 FROM jsonb_array_elements(e.metadata->'llm_enrichment'->'tickers') AS et
+                WHERE UPPER(et->>'symbol') = ${t}
+              )
+            )`,
           );
           const combined = tickerConditions.reduce(
             (acc, cond) => sqlTag`${acc} OR ${cond}`,
@@ -674,7 +680,13 @@ export function registerDashboardRoutes(
 
       // Query per-ticker stats from delivered events in last 24h
       const tickerConditions = tickers.map(
-        (t) => sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}`,
+        (t) => sqlTag`(
+          UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(e.metadata->'llm_enrichment'->'tickers') AS et
+            WHERE UPPER(et->>'symbol') = ${t}
+          )
+        )`,
       );
       const tickerWhere = tickerConditions.reduce(
         (acc, cond) => sqlTag`${acc} OR ${cond}`,

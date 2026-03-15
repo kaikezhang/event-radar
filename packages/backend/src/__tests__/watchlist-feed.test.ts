@@ -167,6 +167,70 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     expect(body.total).toBe(0);
   });
 
+  it('matches events via enrichment.tickers[].symbol', async () => {
+    await seedUser(TEST_USER_ID);
+    await addWatchlistTicker(TEST_USER_ID, 'MSFT');
+
+    // Seed an event whose pa.ticker and metadata.ticker are not MSFT,
+    // but enrichment tickers include MSFT
+    const rawEvent = makeEvent({
+      source: 'breaking-news',
+      title: 'Broad tech news',
+      body: 'Affects multiple tickers',
+      timestamp: new Date('2026-03-13T10:00:00.000Z'),
+      metadata: {
+        ticker: 'AAPL',
+        tickers: ['AAPL'],
+        category: 'corporate',
+        url: 'https://example.com/broad',
+        llm_enrichment: {
+          summary: 'Broad impact',
+          impact: 'Multi-ticker',
+          tickers: [
+            { symbol: 'AAPL', direction: 'neutral' },
+            { symbol: 'MSFT', direction: 'bullish' },
+          ],
+        },
+      },
+    });
+    const eventId = await storeEvent(sharedDb, {
+      event: rawEvent,
+      severity: 'HIGH',
+    });
+
+    await sharedDb.execute(sql`
+      UPDATE events
+      SET
+        source_urls = ${JSON.stringify([`https://example.com/${eventId}`])}::jsonb,
+        created_at = ${new Date('2026-03-13T10:00:00.000Z')},
+        received_at = ${new Date('2026-03-13T10:00:00.000Z')}
+      WHERE id = ${eventId}
+    `);
+
+    await sharedDb.execute(sql`
+      INSERT INTO pipeline_audit (
+        event_id, source, title, severity, ticker,
+        outcome, stopped_at, reason, created_at
+      ) VALUES (
+        ${rawEvent.id}, 'breaking-news', 'Broad tech news',
+        'HIGH', 'AAPL',
+        'delivered', 'delivery', 'LLM approved',
+        ${new Date('2026-03-13T10:01:00.000Z')}
+      )
+    `);
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/feed?watchlist=true',
+      headers: { 'x-user-id': TEST_USER_ID },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Should match via enrichment tickers even though pa.ticker is AAPL
+    expect(body.events).toHaveLength(1);
+  });
+
   it('returns all events when watchlist filter is not set', async () => {
     await seedUser(TEST_USER_ID);
     await addWatchlistTicker(TEST_USER_ID, 'TSLA');

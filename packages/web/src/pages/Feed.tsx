@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -82,22 +82,39 @@ export function Feed() {
     staleTime: 300_000,
   });
 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { items: watchlistItems, isLoading: isWatchlistLoading } = useWatchlist();
   const hasWatchlist = watchlistItems.length > 0;
 
-  // Determine default tab
-  const defaultTab: FeedTab = (() => {
-    const saved = loadFeedTab();
-    if (saved) return saved;
-    return isAuthenticated && hasWatchlist ? 'watchlist' : 'all';
-  })();
+  const [activeTab, setActiveTab] = useState<FeedTab>('all');
+  const tabInitializedRef = useRef(false);
 
-  const [activeTab, setActiveTab] = useState<FeedTab>(defaultTab);
+  // Resolve default tab after auth + watchlist queries settle
+  useEffect(() => {
+    if (isAuthLoading || isWatchlistLoading) return;
+    if (tabInitializedRef.current) return;
+    tabInitializedRef.current = true;
+
+    // Only honor localStorage for authenticated users
+    if (isAuthenticated) {
+      const saved = loadFeedTab();
+      if (saved) {
+        setActiveTab(saved);
+        return;
+      }
+      if (hasWatchlist) {
+        setActiveTab('watchlist');
+        return;
+      }
+    }
+    // Unauthenticated or no watchlist → stay on 'all'
+  }, [isAuthLoading, isWatchlistLoading, isAuthenticated, hasWatchlist]);
 
   const handleTabChange = (tab: FeedTab) => {
     setActiveTab(tab);
-    saveFeedTab(tab);
+    if (isAuthenticated) {
+      saveFeedTab(tab);
+    }
   };
 
   const isWatchlistMode = activeTab === 'watchlist';
@@ -182,7 +199,10 @@ export function Feed() {
     pendingCount,
     applyPendingAlerts,
     refetch,
-  } = useAlerts(50, { watchlist: isWatchlistMode });
+  } = useAlerts(50, {
+    watchlist: isWatchlistMode,
+    watchlistTickers: isWatchlistMode ? watchlistItems.map((w) => w.ticker) : undefined,
+  });
   const connectionMeta = {
     connected: {
       icon: '🟢',

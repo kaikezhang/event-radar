@@ -25,6 +25,7 @@ export interface PushSubscriptionStore {
   listActiveSubscriptions(): Promise<ReadonlyArray<StoredPushSubscription>>;
   disableSubscription(subscriptionId: string): Promise<void>;
   getWatchlistTickers?(userId: string): Promise<string[]>;
+  getPushNonWatchlist?(userId: string): Promise<boolean>;
 }
 
 export interface WebPushClient {
@@ -91,26 +92,40 @@ export class WebPushChannel implements DeliveryService {
 
     // Filter subscriptions by watchlist if the store supports it
     let targetSubscriptions = subscriptions;
-    if (this.store.getWatchlistTickers && alertTickers.length > 0) {
+    if (this.store.getWatchlistTickers) {
       const alertTickerSet = new Set(alertTickers.map((t) => t.toUpperCase()));
+      const hasAlertTickers = alertTickerSet.size > 0;
 
       // Group subscriptions by userId to batch watchlist lookups
       const userIds = [...new Set(subscriptions.map((s) => s.userId))];
       const userWatchlists = new Map<string, Set<string>>();
+      const userPushNonWatchlist = new Map<string, boolean>();
 
       await Promise.all(
         userIds.map(async (userId) => {
-          const tickers = await this.store.getWatchlistTickers!(userId);
+          const [tickers, pushNonWatchlist] = await Promise.all([
+            this.store.getWatchlistTickers!(userId),
+            this.store.getPushNonWatchlist?.(userId) ?? Promise.resolve(false),
+          ]);
           userWatchlists.set(userId, new Set(tickers.map((t) => t.toUpperCase())));
+          userPushNonWatchlist.set(userId, pushNonWatchlist);
         }),
       );
 
       targetSubscriptions = subscriptions.filter((sub) => {
         const userTickers = userWatchlists.get(sub.userId);
-        if (!userTickers || userTickers.size === 0) {
-          // Users with no watchlist don't receive push (push_non_watchlist=false default)
-          return false;
+        const pushAll = userPushNonWatchlist.get(sub.userId) ?? false;
+
+        if (!hasAlertTickers) {
+          // No-ticker alert: only send to users who opted in for untargeted alerts
+          return pushAll;
         }
+
+        if (!userTickers || userTickers.size === 0) {
+          // User has no watchlist: only send if they opted in for all alerts
+          return pushAll;
+        }
+
         // Send if any alert ticker is in the user's watchlist
         return [...alertTickerSet].some((t) => userTickers.has(t));
       });

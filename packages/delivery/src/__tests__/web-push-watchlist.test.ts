@@ -153,6 +153,105 @@ describe('WebPushChannel watchlist filtering', () => {
     expect(sentTo).toHaveLength(0);
   });
 
+  it('skips no-ticker alerts when push_non_watchlist is false', async () => {
+    const sentTo: string[] = [];
+
+    const store: PushSubscriptionStore = {
+      async listActiveSubscriptions(): Promise<ReadonlyArray<StoredPushSubscription>> {
+        return [makeSub('user-1', 'sub-1'), makeSub('user-2', 'sub-2')];
+      },
+      async disableSubscription() {},
+      async getWatchlistTickers(userId: string): Promise<string[]> {
+        return userId === 'user-1' ? ['AAPL'] : [];
+      },
+      // push_non_watchlist defaults to false (not implemented)
+    };
+
+    const mockClient = {
+      setVapidDetails: vi.fn(),
+      sendNotification: vi.fn(async (sub: { endpoint: string }) => {
+        sentTo.push(sub.endpoint);
+      }),
+    };
+
+    const channel = new WebPushChannel({
+      vapidSubject: 'mailto:test@example.com',
+      vapidPublicKey: 'test-public',
+      vapidPrivateKey: 'test-private',
+      store,
+      client: mockClient,
+    });
+
+    // Alert with no ticker at all
+    await channel.send(makeAlert({
+      ticker: undefined,
+      enrichment: undefined,
+      event: {
+        id: 'evt-no-ticker',
+        source: 'whitehouse',
+        type: 'executive-order',
+        title: 'New executive order',
+        body: 'Policy announcement',
+        timestamp: new Date(),
+        metadata: {},
+      },
+    }));
+
+    // No-ticker alert should not be sent to anyone since push_non_watchlist=false
+    expect(sentTo).toHaveLength(0);
+  });
+
+  it('sends no-ticker alerts to users with push_non_watchlist=true', async () => {
+    const sentTo: string[] = [];
+
+    const store: PushSubscriptionStore = {
+      async listActiveSubscriptions(): Promise<ReadonlyArray<StoredPushSubscription>> {
+        return [makeSub('user-1', 'sub-1'), makeSub('user-2', 'sub-2')];
+      },
+      async disableSubscription() {},
+      async getWatchlistTickers(userId: string): Promise<string[]> {
+        return userId === 'user-1' ? ['AAPL'] : [];
+      },
+      async getPushNonWatchlist(userId: string): Promise<boolean> {
+        // Only user-2 opted in for all alerts
+        return userId === 'user-2';
+      },
+    };
+
+    const mockClient = {
+      setVapidDetails: vi.fn(),
+      sendNotification: vi.fn(async (sub: { endpoint: string }) => {
+        sentTo.push(sub.endpoint);
+      }),
+    };
+
+    const channel = new WebPushChannel({
+      vapidSubject: 'mailto:test@example.com',
+      vapidPublicKey: 'test-public',
+      vapidPrivateKey: 'test-private',
+      store,
+      client: mockClient,
+    });
+
+    await channel.send(makeAlert({
+      ticker: undefined,
+      enrichment: undefined,
+      event: {
+        id: 'evt-no-ticker',
+        source: 'whitehouse',
+        type: 'executive-order',
+        title: 'New executive order',
+        body: 'Policy announcement',
+        timestamp: new Date(),
+        metadata: {},
+      },
+    }));
+
+    // Only user-2 (push_non_watchlist=true) should receive no-ticker alerts
+    expect(sentTo).toHaveLength(1);
+    expect(sentTo).toContain('https://push.example.com/sub-2');
+  });
+
   it('broadcasts to all when store does not implement getWatchlistTickers', async () => {
     const sentTo: string[] = [];
 
