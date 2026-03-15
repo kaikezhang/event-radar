@@ -182,6 +182,20 @@ export const llmEnrichmentDurationSeconds = new Histogram({
   registers: [registry],
 });
 
+/** Counter: pushes suppressed during quiet hours */
+export const pushQuietSuppressedTotal = new Counter({
+  name: 'push_quiet_suppressed_total',
+  help: 'Total push notifications suppressed by user quiet hours',
+  registers: [registry],
+});
+
+/** Counter: pushes suppressed after hitting the daily cap */
+export const pushCapSuppressedTotal = new Counter({
+  name: 'push_cap_suppressed_total',
+  help: 'Total push notifications suppressed by user daily cap',
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -204,4 +218,6 @@ export function resetMetrics(): void {
   llmEnrichmentTotal.reset();
   llmEnrichmentDurationSeconds.reset();
   pipelineQueueDroppedTotal.reset();
+  pushQuietSuppressedTotal.reset();
+  pushCapSuppressedTotal.reset();
 }

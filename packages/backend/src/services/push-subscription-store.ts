@@ -1,7 +1,12 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { StoredPushSubscription } from '@event-radar/delivery';
 import type { Database } from '../db/connection.js';
-import { pushSubscriptions, watchlist } from '../db/schema.js';
+import { pushSubscriptions, userPreferences, watchlist } from '../db/schema.js';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizePreferenceTime,
+  type NotificationPreferences,
+} from './user-preferences-store.js';
 
 export interface UpsertPushSubscriptionInput {
   userId: string;
@@ -17,6 +22,8 @@ export interface PushSubscriptionStore {
   upsertSubscription(input: UpsertPushSubscriptionInput): Promise<void>;
   removeSubscription(userId: string, endpoint: string): Promise<boolean>;
   getWatchlistTickers(userId: string): Promise<string[]>;
+  getPushNonWatchlist(userId: string): Promise<boolean>;
+  getUserPreferences(userId: string): Promise<NotificationPreferences>;
 }
 
 export function createPushSubscriptionStore(db: Database): PushSubscriptionStore {
@@ -91,6 +98,37 @@ export function createPushSubscriptionStore(db: Database): PushSubscriptionStore
         .where(eq(watchlist.userId, userId));
 
       return rows.map((r) => r.ticker);
+    },
+
+    async getPushNonWatchlist(userId: string) {
+      const [row] = await db
+        .select({ pushNonWatchlist: userPreferences.pushNonWatchlist })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId))
+        .limit(1);
+
+      return row?.pushNonWatchlist ?? DEFAULT_NOTIFICATION_PREFERENCES.pushNonWatchlist;
+    },
+
+    async getUserPreferences(userId: string) {
+      const [row] = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, userId))
+        .limit(1);
+
+      if (!row) {
+        return { ...DEFAULT_NOTIFICATION_PREFERENCES };
+      }
+
+      return {
+        quietStart: normalizePreferenceTime(row.quietStart),
+        quietEnd: normalizePreferenceTime(row.quietEnd),
+        timezone: row.timezone,
+        dailyPushCap: row.dailyPushCap,
+        pushNonWatchlist: row.pushNonWatchlist,
+        updatedAt: row.updatedAt,
+      };
     },
   };
 }

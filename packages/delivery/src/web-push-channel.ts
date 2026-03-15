@@ -5,6 +5,9 @@ import type { AlertEvent, DeliveryService } from './types.js';
 const INVALID_SUBSCRIPTION_STATUS_CODES = new Set([404, 410]);
 const DEFAULT_TTL_SECONDS = 60;
 const MAX_BODY_LENGTH = 240;
+const DEFAULT_TIMEZONE = 'America/New_York';
+const DEFAULT_DAILY_PUSH_CAP = 20;
+const HIGH_QUALITY_SETUP_ACTION = '🔴 High-Quality Setup';
 
 const URGENCY_BY_SEVERITY: Record<Severity, 'low' | 'normal' | 'high'> = {
   CRITICAL: 'high',
@@ -26,6 +29,15 @@ export interface PushSubscriptionStore {
   disableSubscription(subscriptionId: string): Promise<void>;
   getWatchlistTickers?(userId: string): Promise<string[]>;
   getPushNonWatchlist?(userId: string): Promise<boolean>;
+  getUserPreferences?(userId: string): Promise<UserPushPreferences | undefined>;
+}
+
+export interface UserPushPreferences {
+  quietStart: string | null;
+  quietEnd: string | null;
+  timezone: string;
+  dailyPushCap: number;
+  pushNonWatchlist: boolean;
 }
 
 export interface WebPushClient {
@@ -53,6 +65,9 @@ export interface WebPushChannelConfig {
   vapidPrivateKey: string;
   store: PushSubscriptionStore;
   client?: WebPushClient;
+  now?: () => Date;
+  onQuietSuppressed?: (userId: string) => void;
+  onCapSuppressed?: (userId: string) => void;
 }
 
 export interface WebPushNotificationPayload {
@@ -70,10 +85,17 @@ export class WebPushChannel implements DeliveryService {
   readonly name = 'webPush';
   private readonly client: WebPushClient;
   private readonly store: PushSubscriptionStore;
+  private readonly now: () => Date;
+  private readonly onQuietSuppressed?: (userId: string) => void;
+  private readonly onCapSuppressed?: (userId: string) => void;
+  private readonly dailyUserCounts = new Map<string, { date: string; count: number }>();
 
   constructor(config: WebPushChannelConfig) {
     this.client = config.client ?? webpush;
     this.store = config.store;
+    this.now = config.now ?? (() => new Date());
+    this.onQuietSuppressed = config.onQuietSuppressed;
+    this.onCapSuppressed = config.onCapSuppressed;
     this.client.setVapidDetails(
       config.vapidSubject,
       config.vapidPublicKey,
@@ -90,82 +112,91 @@ export class WebPushChannel implements DeliveryService {
     // Extract event tickers for watchlist matching
     const alertTickers = extractAlertTickers(alert);
 
-    // Filter subscriptions by watchlist if the store supports it
-    let targetSubscriptions = subscriptions;
-    if (this.store.getWatchlistTickers) {
-      const alertTickerSet = new Set(alertTickers.map((t) => t.toUpperCase()));
-      const hasAlertTickers = alertTickerSet.size > 0;
-
-      // Group subscriptions by userId to batch watchlist lookups
-      const userIds = [...new Set(subscriptions.map((s) => s.userId))];
-      const userWatchlists = new Map<string, Set<string>>();
-      const userPushNonWatchlist = new Map<string, boolean>();
-
-      await Promise.all(
-        userIds.map(async (userId) => {
-          const [tickers, pushNonWatchlist] = await Promise.all([
-            this.store.getWatchlistTickers!(userId),
-            this.store.getPushNonWatchlist?.(userId) ?? Promise.resolve(false),
-          ]);
-          userWatchlists.set(userId, new Set(tickers.map((t) => t.toUpperCase())));
-          userPushNonWatchlist.set(userId, pushNonWatchlist);
-        }),
-      );
-
-      targetSubscriptions = subscriptions.filter((sub) => {
-        const userTickers = userWatchlists.get(sub.userId);
-        const pushAll = userPushNonWatchlist.get(sub.userId) ?? false;
-
-        if (!hasAlertTickers) {
-          // No-ticker alert: only send to users who opted in for untargeted alerts
-          return pushAll;
-        }
-
-        if (!userTickers || userTickers.size === 0) {
-          // User has no watchlist: only send if they opted in for all alerts
-          return pushAll;
-        }
-
-        // Send if any alert ticker is in the user's watchlist
-        return [...alertTickerSet].some((t) => userTickers.has(t));
-      });
-    }
-
-    if (targetSubscriptions.length === 0) {
-      return;
-    }
-
     const payload = JSON.stringify(buildWebPushPayload(alert));
     const topic = `event-radar-${alert.storedEventId ?? alert.event.id}`;
-    let deliveredCount = 0;
+    const now = this.now();
+    const alertTickerSet = new Set(alertTickers.map((ticker) => ticker.toUpperCase()));
+    const hasAlertTickers = alertTickerSet.size > 0;
+    const subscriptionsByUser = groupSubscriptionsByUser(subscriptions);
+    const userIds = [...subscriptionsByUser.keys()];
+    const userContexts = new Map<
+      string,
+      { watchlist: Set<string>; preferences: UserPushPreferences }
+    >();
     let transientError: Error | undefined;
 
-    await Promise.all(targetSubscriptions.map(async (subscription) => {
-      try {
-        await this.client.sendNotification(
-          {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: subscription.p256dh,
-              auth: subscription.auth,
-            },
-          },
-          payload,
-          {
-            TTL: DEFAULT_TTL_SECONDS,
-            urgency: URGENCY_BY_SEVERITY[alert.severity],
-            topic,
-          },
-        );
-        deliveredCount += 1;
-      } catch (error) {
-        const normalized = error instanceof Error ? error : new Error(String(error));
-        if (isInvalidSubscriptionError(error)) {
-          await this.store.disableSubscription(subscription.id);
-          return;
-        }
+    await Promise.all(userIds.map(async (userId) => {
+      const [watchlistTickers, preferences, legacyPushNonWatchlist] = await Promise.all([
+        this.store.getWatchlistTickers?.(userId) ?? Promise.resolve([]),
+        this.store.getUserPreferences?.(userId),
+        this.store.getPushNonWatchlist?.(userId),
+      ]);
 
-        transientError ??= normalized;
+      userContexts.set(userId, {
+        watchlist: new Set(watchlistTickers.map((ticker) => ticker.toUpperCase())),
+        preferences: resolveUserPreferences(preferences, legacyPushNonWatchlist),
+      });
+    }));
+
+    let deliveredCount = 0;
+
+    await Promise.all(userIds.map(async (userId) => {
+      const userSubscriptions = subscriptionsByUser.get(userId) ?? [];
+      const userContext = userContexts.get(userId);
+      if (userSubscriptions.length === 0 || !userContext) {
+        return;
+      }
+
+      if (!shouldSendForWatchlist(alertTickerSet, hasAlertTickers, userContext.watchlist, userContext.preferences)) {
+        return;
+      }
+
+      if (shouldSuppressForQuietHours(now, userContext.preferences, alert)) {
+        this.onQuietSuppressed?.(userId);
+        console.info(`[webPush] suppressed by quiet hours for user ${userId}`);
+        return;
+      }
+
+      if (shouldSuppressForDailyCap(now, userId, userContext.preferences, this.dailyUserCounts, alert)) {
+        this.onCapSuppressed?.(userId);
+        console.info(`[webPush] suppressed by daily cap for user ${userId}`);
+        return;
+      }
+
+      let deliveredForUser = false;
+
+      await Promise.all(userSubscriptions.map(async (subscription) => {
+        try {
+          await this.client.sendNotification(
+            {
+              endpoint: subscription.endpoint,
+              keys: {
+                p256dh: subscription.p256dh,
+                auth: subscription.auth,
+              },
+            },
+            payload,
+            {
+              TTL: DEFAULT_TTL_SECONDS,
+              urgency: URGENCY_BY_SEVERITY[alert.severity],
+              topic,
+            },
+          );
+          deliveredForUser = true;
+          deliveredCount += 1;
+        } catch (error) {
+          const normalized = error instanceof Error ? error : new Error(String(error));
+          if (isInvalidSubscriptionError(error)) {
+            await this.store.disableSubscription(subscription.id);
+            return;
+          }
+
+          transientError ??= normalized;
+        }
+      }));
+
+      if (deliveredForUser) {
+        incrementDailyCount(this.dailyUserCounts, userId, now);
       }
     }));
 
@@ -243,4 +274,161 @@ function isInvalidSubscriptionError(error: unknown): boolean {
 
   const statusCode = Reflect.get(error, 'statusCode');
   return typeof statusCode === 'number' && INVALID_SUBSCRIPTION_STATUS_CODES.has(statusCode);
+}
+
+function resolveUserPreferences(
+  preferences: UserPushPreferences | undefined,
+  legacyPushNonWatchlist: boolean | undefined,
+): UserPushPreferences {
+  return {
+    quietStart: preferences?.quietStart ?? null,
+    quietEnd: preferences?.quietEnd ?? null,
+    timezone: preferences?.timezone ?? DEFAULT_TIMEZONE,
+    dailyPushCap: preferences?.dailyPushCap ?? DEFAULT_DAILY_PUSH_CAP,
+    pushNonWatchlist: preferences?.pushNonWatchlist ?? legacyPushNonWatchlist ?? false,
+  };
+}
+
+function groupSubscriptionsByUser(
+  subscriptions: ReadonlyArray<StoredPushSubscription>,
+): Map<string, StoredPushSubscription[]> {
+  const grouped = new Map<string, StoredPushSubscription[]>();
+
+  for (const subscription of subscriptions) {
+    grouped.set(subscription.userId, [...(grouped.get(subscription.userId) ?? []), subscription]);
+  }
+
+  return grouped;
+}
+
+function shouldSendForWatchlist(
+  alertTickerSet: Set<string>,
+  hasAlertTickers: boolean,
+  userTickers: Set<string>,
+  preferences: UserPushPreferences,
+): boolean {
+  if (!hasAlertTickers) {
+    return preferences.pushNonWatchlist;
+  }
+
+  if (userTickers.size === 0) {
+    return preferences.pushNonWatchlist;
+  }
+
+  return [...alertTickerSet].some((ticker) => userTickers.has(ticker));
+}
+
+function shouldSuppressForQuietHours(
+  now: Date,
+  preferences: UserPushPreferences,
+  alert: AlertEvent,
+): boolean {
+  if (isHighQualitySetup(alert)) {
+    return false;
+  }
+
+  if (!preferences.quietStart || !preferences.quietEnd) {
+    return false;
+  }
+
+  const startMinutes = parseTimeToMinutes(preferences.quietStart);
+  const endMinutes = parseTimeToMinutes(preferences.quietEnd);
+  if (startMinutes == null || endMinutes == null || startMinutes === endMinutes) {
+    return false;
+  }
+
+  const localMinutes = getLocalMinutes(now, preferences.timezone);
+  if (localMinutes == null) {
+    return false;
+  }
+
+  if (startMinutes < endMinutes) {
+    return localMinutes >= startMinutes && localMinutes < endMinutes;
+  }
+
+  return localMinutes >= startMinutes || localMinutes < endMinutes;
+}
+
+function shouldSuppressForDailyCap(
+  now: Date,
+  userId: string,
+  preferences: UserPushPreferences,
+  counts: Map<string, { date: string; count: number }>,
+  alert: AlertEvent,
+): boolean {
+  if (isHighQualitySetup(alert) || preferences.dailyPushCap === 0) {
+    return false;
+  }
+
+  return getDailyCount(counts, userId, now) >= preferences.dailyPushCap;
+}
+
+function isHighQualitySetup(alert: AlertEvent): boolean {
+  return alert.enrichment?.action === HIGH_QUALITY_SETUP_ACTION;
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const [hoursString, minutesString] = value.split(':');
+  const hours = Number(hoursString);
+  const minutes = Number(minutesString);
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    return null;
+  }
+
+  return (hours * 60) + minutes;
+}
+
+function getLocalMinutes(now: Date, timezone: string): number | null {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const parts = formatter.formatToParts(now);
+    const hours = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minutes = Number(parts.find((part) => part.type === 'minute')?.value);
+
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+      return null;
+    }
+
+    return (hours * 60) + minutes;
+  } catch {
+    return null;
+  }
+}
+
+function getDailyCount(
+  counts: Map<string, { date: string; count: number }>,
+  userId: string,
+  now: Date,
+): number {
+  const date = now.toISOString().slice(0, 10);
+  const current = counts.get(userId);
+
+  if (!current || current.date !== date) {
+    counts.set(userId, { date, count: 0 });
+    return 0;
+  }
+
+  return current.count;
+}
+
+function incrementDailyCount(
+  counts: Map<string, { date: string; count: number }>,
+  userId: string,
+  now: Date,
+): void {
+  const date = now.toISOString().slice(0, 10);
+  const current = counts.get(userId);
+
+  if (!current || current.date !== date) {
+    counts.set(userId, { date, count: 1 });
+    return;
+  }
+
+  counts.set(userId, { date, count: current.count + 1 });
 }

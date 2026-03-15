@@ -1,7 +1,22 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { Settings } from './Settings.js';
 import { renderWithRouter } from '../test/render.js';
+
+const {
+  getPreferences,
+  updatePreferences,
+} = vi.hoisted(() => ({
+  getPreferences: vi.fn(async () => ({
+    quietStart: null,
+    quietEnd: null,
+    timezone: 'America/New_York',
+    dailyPushCap: 20,
+    pushNonWatchlist: false,
+  })),
+  updatePreferences: vi.fn(async (payload: unknown) => payload),
+}));
 
 vi.mock('../lib/web-push.js', () => ({
   getWebPushDeviceState: vi.fn(async () => ({
@@ -29,6 +44,11 @@ vi.mock('../lib/web-push.js', () => ({
   WebPushError: class WebPushError extends Error {
     code = 'backend-registration-failed' as const;
   },
+}));
+
+vi.mock('../lib/api.js', () => ({
+  getNotificationPreferences: getPreferences,
+  updateNotificationPreferences: updatePreferences,
 }));
 
 describe('Settings page', () => {
@@ -61,5 +81,39 @@ describe('Settings page', () => {
     expect(await screen.findByText(/tap enable push alerts/i)).toBeInTheDocument();
     expect(screen.getByText(/allow browser notifications in the prompt/i)).toBeInTheDocument();
     expect(screen.getByText(/return to your watchlist to keep alerts focused/i)).toBeInTheDocument();
+  });
+
+  it('renders notification budget and quiet-hours controls', async () => {
+    renderSettings();
+
+    expect(await screen.findByRole('heading', { name: /notification timing/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/enable quiet hours/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/timezone/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/daily push limit/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/alert me for tickers outside my watchlist/i)).toBeInTheDocument();
+  });
+
+  it('autosaves notification preference changes after a short debounce', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderSettings();
+    const nonWatchlistToggle = await screen.findByLabelText(/alert me for tickers outside my watchlist/i);
+
+    await user.click(nonWatchlistToggle);
+    await vi.advanceTimersByTimeAsync(500);
+
+    await waitFor(() => {
+      expect(updatePreferences).toHaveBeenCalledWith({
+        quietStart: null,
+        quietEnd: null,
+        timezone: 'America/New_York',
+        dailyPushCap: 20,
+        pushNonWatchlist: true,
+      });
+    });
+
+    expect(screen.getByText(/preferences saved/i)).toBeInTheDocument();
+    vi.useRealTimers();
   });
 });

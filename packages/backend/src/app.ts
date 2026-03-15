@@ -57,6 +57,7 @@ import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
+import { registerPreferencesRoutes } from './routes/preferences.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
@@ -97,6 +98,8 @@ import {
   deliveryErrorsTotal,
   llmEnrichmentTotal,
   llmEnrichmentDurationSeconds,
+  pushQuietSuppressedTotal,
+  pushCapSuppressedTotal,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
@@ -283,6 +286,12 @@ function buildAlertRouter(db?: Database): AlertRouterType {
             vapidPublicKey: webPushVapidPublicKey,
             vapidPrivateKey: webPushVapidPrivateKey,
             store: pushSubscriptionStore,
+            onQuietSuppressed: () => {
+              pushQuietSuppressedTotal.inc();
+            },
+            onCapSuppressed: () => {
+              pushCapSuppressedTotal.inc();
+            },
           })
         : undefined,
   });
@@ -1132,6 +1141,7 @@ export function buildApp(options?: {
     registerWatchlistRoutes(server, db, { apiKey });
     registerOnboardingRoutes(server, db, { apiKey });
     registerPushSubscriptionRoutes(server, db, { apiKey });
+    registerPreferencesRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {

@@ -9,6 +9,7 @@ import {
   integer,
   decimal,
   date,
+  time,
   index,
   primaryKey,
   boolean,
@@ -279,6 +280,18 @@ export const users = pgTable(
   },
   (table) => [index('idx_users_created_at').on(table.createdAt)],
 );
+
+export const userPreferences = pgTable('user_preferences', {
+  userId: varchar('user_id', { length: 100 })
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  quietStart: time('quiet_start'),
+  quietEnd: time('quiet_end'),
+  timezone: varchar('timezone', { length: 50 }).notNull().default('America/New_York'),
+  dailyPushCap: integer('daily_push_cap').notNull().default(20),
+  pushNonWatchlist: boolean('push_non_watchlist').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const magicLinkTokens = pgTable(
   'magic_link_tokens',
