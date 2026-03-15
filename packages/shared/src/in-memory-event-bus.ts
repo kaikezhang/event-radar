@@ -20,6 +20,8 @@ export class InMemoryEventBus implements EventBus {
   }
 
   subscribe(handler: Handler): () => void {
+    const existing = this.handlerWrappers.get(handler);
+    if (existing) this.emitter.off(EVENT_KEY, existing);
     const wrapped = (event: RawEvent) => {
       this.runHandler(handler, event, '[EventBus] Unhandled error in subscriber:');
     };
@@ -41,6 +43,8 @@ export class InMemoryEventBus implements EventBus {
       topicWrappers = new Map();
       this.topicHandlerWrappers.set(topic, topicWrappers);
     }
+    const existingTopic = topicWrappers.get(handler);
+    if (existingTopic) this.emitter.off(topicKey(topic), existingTopic);
     topicWrappers.set(handler, wrapped);
     this.emitter.on(topicKey(topic), wrapped);
     return () => this.unsubscribeTopic(topic, handler);

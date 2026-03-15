@@ -96,6 +96,7 @@ export class AlertFilter {
   private readonly socialMinUpvotes: number;
   private readonly socialMinComments: number;
   private readonly tickerCooldownMs: number;
+  private readonly maxMapSize: number;
   private readonly insiderMinValue: number;
   private readonly maxAgeMs: number;
   readonly enabled: boolean;
@@ -114,6 +115,7 @@ export class AlertFilter {
     this.socialMinUpvotes = config?.socialMinUpvotes ?? num('SOCIAL_MIN_UPVOTES', 1000);
     this.socialMinComments = config?.socialMinComments ?? num('SOCIAL_MIN_COMMENTS', 500);
     this.tickerCooldownMs = (config?.tickerCooldownMinutes ?? num('TICKER_COOLDOWN_MINUTES', 60)) * 60_000;
+    this.maxMapSize = 10_000;
     this.insiderMinValue = config?.insiderMinValue ?? num('INSIDER_MIN_VALUE', 1_000_000);
     this.maxAgeMs = (config?.maxAgeMinutes ?? num('MAX_EVENT_AGE_MINUTES', 120)) * 60_000;
     this.enabled = config?.enabled ?? process.env.ALERT_FILTER_ENABLED !== 'false';
@@ -406,7 +408,9 @@ export class AlertFilter {
 
     const writeKey = eventType ? `${ticker}:${eventType}` : ticker;
     this.cooldownMap.set(writeKey, now);
-    this.pruneExpired(now);
+    if (this.cooldownMap.size > this.maxMapSize) {
+      this.pruneExpired(now);
+    }
     this.saveCooldowns();
     return result;
   }
