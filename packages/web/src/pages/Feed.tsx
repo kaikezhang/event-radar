@@ -88,6 +88,7 @@ export function Feed() {
 
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
   const tabInitializedRef = useRef(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Resolve default tab after auth + watchlist queries settle
   useEffect(() => {
@@ -129,8 +130,6 @@ export function Feed() {
   };
 
   const isWatchlistMode = activeTab === 'watchlist';
-
-  const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse filter state from URL
   const activeSeverities = useMemo(() => {
