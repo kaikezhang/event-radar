@@ -4,6 +4,7 @@ import { getFeed } from '../lib/api.js';
 import type { AlertSummary } from '../types/index.js';
 import { useAlertSound } from './useAlertSound.js';
 import { useWebSocket, type WebSocketStatus } from './useWebSocket.js';
+import { useSetConnectionStatus } from '../contexts/ConnectionContext.js';
 
 interface UseAlertsResult {
   alerts: AlertSummary[];
@@ -74,6 +75,8 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
   const watchlistRef = useRef(watchlist);
   watchlistRef.current = watchlist;
 
+  const setGlobalConnectionStatus = useSetConnectionStatus();
+
   const { status: connectionStatus } = useWebSocket<AlertSummary>({
     onEvent: (alert) => {
       if (seenAlertIdsRef.current.has(alert.id)) {
@@ -98,6 +101,11 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
       setPendingAlerts((current) => mergeAlerts([alert], current));
     },
   });
+
+  // Sync connection status to shared context so header can display it
+  useEffect(() => {
+    setGlobalConnectionStatus(connectionStatus);
+  }, [connectionStatus, setGlobalConnectionStatus]);
 
   useEffect(() => {
     const syncScrollState = () => {

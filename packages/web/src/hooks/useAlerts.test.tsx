@@ -26,6 +26,7 @@ vi.mock('./useWebSocket.js', () => ({
 }));
 
 import { useAlerts } from './useAlerts.js';
+import { ConnectionProvider } from '../contexts/ConnectionContext.js';
 
 function createAlert(id: string): AlertSummary {
   return {
@@ -50,7 +51,11 @@ function createWrapper() {
   });
 
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ConnectionProvider>{children}</ConnectionProvider>
+      </QueryClientProvider>
+    );
   };
 }
 

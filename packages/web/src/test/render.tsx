@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
 import { AuthProvider } from '../contexts/AuthContext.js';
+import { ConnectionProvider } from '../contexts/ConnectionContext.js';
 
 export function renderWithQuery(
   ui: ReactElement,
@@ -19,7 +20,9 @@ export function renderWithQuery(
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ConnectionProvider>{children}</ConnectionProvider>
+        </AuthProvider>
       </QueryClientProvider>
     );
   }
@@ -51,7 +54,9 @@ export function renderWithRouter(
   const result = render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <ConnectionProvider>
+          <RouterProvider router={router} />
+        </ConnectionProvider>
       </AuthProvider>
     </QueryClientProvider>,
   );

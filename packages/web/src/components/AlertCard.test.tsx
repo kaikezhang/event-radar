@@ -43,8 +43,8 @@ describe('AlertCard', () => {
     );
 
     expect(screen.getByText(sampleAlert.title)).toBeInTheDocument();
-    expect(screen.getByText(sampleAlert.source)).toBeInTheDocument();
-    expect(screen.getByText(/\$NVDA/)).toBeInTheDocument();
+    expect(screen.getByText(/SEC Filing/)).toBeInTheDocument();
+    expect(screen.getByText('NVDA')).toBeInTheDocument();
     expect(screen.getByText(sampleAlert.summary)).toBeInTheDocument();
   });
 

@@ -12,8 +12,8 @@ const navItems = [
 
 export function BottomNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/8 bg-bg-primary/95 backdrop-blur-md">
-      <div className="mx-auto grid max-w-3xl grid-cols-5 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2">
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border-default bg-bg-primary/95 backdrop-blur-xl">
+      <div className="mx-auto grid max-w-lg grid-cols-5 pb-[env(safe-area-inset-bottom)] pt-1.5">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -21,13 +21,22 @@ export function BottomNav() {
             end={end}
             className={({ isActive }) =>
               cn(
-                'flex min-h-11 flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] font-medium text-text-secondary transition focus:outline-none focus:ring-2 focus:ring-accent-default',
-                isActive && 'bg-white/6 text-text-primary',
+                'flex flex-col items-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors',
+                isActive
+                  ? 'text-accent-default'
+                  : 'text-text-tertiary',
               )
             }
           >
-            <Icon className="mb-1 h-4 w-4" aria-hidden="true" />
-            <span>{label}</span>
+            {({ isActive }) => (
+              <>
+                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 1.5} />
+                <span>{label}</span>
+                {isActive && (
+                  <span className="mt-0.5 h-0.5 w-4 rounded-full bg-accent-default" />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </div>
