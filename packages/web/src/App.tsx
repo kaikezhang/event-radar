@@ -10,6 +10,7 @@ import { Scorecard } from './pages/Scorecard.js';
 import { Search } from './pages/Search.js';
 import { Settings } from './pages/Settings.js';
 import { TickerProfile } from './pages/TickerProfile.js';
+import { Onboarding } from './pages/Onboarding.js';
 import { Watchlist } from './pages/Watchlist.js';
 
 function AppShell() {
@@ -62,6 +63,7 @@ const router = createBrowserRouter([
       { path: 'scorecard', element: <Scorecard /> },
       { path: 'event/:id', element: <EventDetail /> },
       { path: 'ticker/:symbol', element: <TickerProfile /> },
+      { path: 'onboarding', element: <Onboarding /> },
       { path: 'watchlist', element: <Watchlist /> },
       { path: 'search', element: <Search /> },
       { path: 'settings', element: <Settings /> },

@@ -318,6 +318,32 @@ export async function removeFromWatchlist(ticker: string): Promise<void> {
   await apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'DELETE' });
 }
 
+// ── Onboarding API ──────────────────────────────────────────────────────────
+
+export interface SuggestedTicker {
+  symbol: string;
+  eventCount7d: number;
+  latestSignal: string;
+}
+
+export interface SectorPack {
+  name: string;
+  tickers: string[];
+}
+
+export interface SuggestedTickersResponse {
+  tickers: SuggestedTicker[];
+  packs: SectorPack[];
+}
+
+export async function getSuggestedTickers(): Promise<SuggestedTickersResponse> {
+  return apiFetch('/v1/onboarding/suggested-tickers');
+}
+
+export async function bulkAddToWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
+  return apiFetch('/v1/onboarding/bulk-add', { method: 'POST', body: { tickers } });
+}
+
 export async function getEventSources(): Promise<string[]> {
   const data = await apiFetch('/events/sources');
   const raw: string[] = data.sources ?? [];
