@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EventDetail } from './EventDetail.js';
 import { renderWithRouter } from '../test/render.js';
 
@@ -135,5 +136,39 @@ describe('EventDetail page', () => {
 
     expect(heroSection).not.toBeNull();
     expect(within(heroSection as HTMLElement).getByText(/^sec filing$/i)).toBeInTheDocument();
+  });
+
+  it('sends direct notification landings back to the watchlist when there is no in-app history', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWithRouter(
+      [
+        { path: '/event/:id', element: <EventDetail /> },
+        { path: '/watchlist', element: <div>Watchlist route</div> },
+      ],
+      ['/event/evt-critical-nvda-1'],
+    );
+
+    await user.click(await screen.findByRole('button', { name: /back to watchlist/i }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/watchlist');
+    });
+  });
+
+  it('keeps normal back navigation when the detail page was opened inside the app', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWithRouter(
+      [
+        { path: '/', element: <div>Feed route</div> },
+        { path: '/event/:id', element: <EventDetail /> },
+      ],
+      ['/', '/event/evt-critical-nvda-1'],
+    );
+
+    await user.click(await screen.findByRole('button', { name: /^back$/i }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/');
+    });
   });
 });

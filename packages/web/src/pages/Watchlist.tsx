@@ -5,6 +5,7 @@ import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useWatchlist } from '../hooks/useWatchlist.js';
 
 const SUGGESTED_TICKERS = ['AAPL', 'NVDA', 'TSLA'] as const;
+const PUSH_SETTINGS_PATH = '/settings?from=watchlist#push-alerts';
 
 export function Watchlist() {
   const { items, isLoading, addAsync, remove, isAdding } = useWatchlist();
@@ -159,10 +160,10 @@ export function Watchlist() {
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <Link
-              to="/settings"
+              to={PUSH_SETTINGS_PATH}
               className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-4 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
             >
-              Set up push alerts
+              Enable push alerts
             </Link>
             <Link
               to="/search"
@@ -188,10 +189,10 @@ export function Watchlist() {
                     the feed.
                   </p>
                   <Link
-                    to="/settings"
+                    to={PUSH_SETTINGS_PATH}
                     className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-300/15 focus:outline-none focus:ring-2 focus:ring-emerald-300"
                   >
-                    Enable push for {firstTickerAdded} alerts
+                    Enable push alerts on this device
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>
                 </div>
