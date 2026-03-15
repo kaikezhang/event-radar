@@ -505,6 +505,7 @@ export function registerDashboardRoutes(
       limit?: string;
       before?: string;
       ticker?: string;
+      watchlist?: string;
     };
   }>('/api/v1/feed', async (request, reply) => {
     if (!deps.db) {
@@ -516,6 +517,7 @@ export function registerDashboardRoutes(
       ? Math.min(Math.floor(rawLimit), 200)
       : 50;
     const ticker = request.query.ticker?.trim().toUpperCase();
+    const watchlistFilter = request.query.watchlist === 'true';
     const cursor = request.query.before
       ? decodeFeedCursor(request.query.before)
       : null;
@@ -526,9 +528,35 @@ export function registerDashboardRoutes(
 
     try {
       const { sql: sqlTag } = await import('drizzle-orm');
+      const { eq } = await import('drizzle-orm');
+      const { watchlist } = await import('../db/schema.js');
+      const { resolveRequestUserId } = await import('./user-context.js');
+
       const conds: ReturnType<typeof sqlTag>[] = [
         sqlTag`pa.outcome = 'delivered'`,
       ];
+
+      if (watchlistFilter) {
+        const userId = resolveRequestUserId(request);
+        const watchlistRows = await deps.db
+          .select({ ticker: watchlist.ticker })
+          .from(watchlist)
+          .where(eq(watchlist.userId, userId));
+        const tickers = watchlistRows.map((w) => w.ticker);
+
+        if (tickers.length > 0) {
+          const tickerConditions = tickers.map(
+            (t) => sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}`,
+          );
+          const combined = tickerConditions.reduce(
+            (acc, cond) => sqlTag`${acc} OR ${cond}`,
+          );
+          conds.push(sqlTag`(${combined})`);
+        } else {
+          // No watchlist items — return empty
+          return reply.send({ events: [], cursor: null, total: 0 });
+        }
+      }
 
       if (ticker) {
         conds.push(sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${ticker}`);
@@ -616,9 +644,112 @@ export function registerDashboardRoutes(
   });
 
   /**
+   * GET /api/v1/feed/watchlist-summary
+   * Per-ticker summary for authenticated user's watchlist
+   */
+  server.get('/api/v1/feed/watchlist-summary', async (request, reply) => {
+    if (!deps.db) {
+      return reply.code(503).send({ error: 'Database not configured' });
+    }
+
+    try {
+      const { eq } = await import('drizzle-orm');
+      const { watchlist } = await import('../db/schema.js');
+      const { resolveRequestUserId } = await import('./user-context.js');
+
+      const userId = resolveRequestUserId(request);
+      const watchlistRows = await deps.db
+        .select({ ticker: watchlist.ticker })
+        .from(watchlist)
+        .where(eq(watchlist.userId, userId));
+
+      if (watchlistRows.length === 0) {
+        return reply.send({ tickers: [] });
+      }
+
+      const tickers = watchlistRows.map((w) => w.ticker);
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const { sql: sqlTag } = await import('drizzle-orm');
+
+      // Query per-ticker stats from delivered events in last 24h
+      const tickerConditions = tickers.map(
+        (t) => sqlTag`UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}`,
+      );
+      const tickerWhere = tickerConditions.reduce(
+        (acc, cond) => sqlTag`${acc} OR ${cond}`,
+      );
+
+      const rows = (await deps.db.execute(sqlTag`
+        SELECT
+          UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) AS ticker,
+          COUNT(*)::int AS event_count,
+          MAX(pa.created_at) AS latest_at,
+          (array_agg(e.title ORDER BY pa.created_at DESC))[1] AS latest_title,
+          (array_agg(e.severity ORDER BY pa.created_at DESC))[1] AS latest_severity,
+          MAX(
+            CASE e.severity
+              WHEN 'CRITICAL' THEN 4
+              WHEN 'HIGH' THEN 3
+              WHEN 'MEDIUM' THEN 2
+              WHEN 'LOW' THEN 1
+              ELSE 0
+            END
+          ) AS max_severity_rank
+        FROM pipeline_audit pa
+        INNER JOIN events e ON e.source_event_id = pa.event_id
+        WHERE pa.outcome = 'delivered'
+          AND pa.created_at >= ${since24h}
+          AND (${tickerWhere})
+        GROUP BY UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', ''))
+      `)) as unknown as { rows: Array<{
+        ticker: string;
+        event_count: number;
+        latest_at: string | Date;
+        latest_title: string;
+        latest_severity: string;
+        max_severity_rank: number;
+      }> };
+
+      const severitySignal: Record<number, string> = {
+        4: '🔴',
+        3: '🔴',
+        2: '🟡',
+        1: '🟢',
+        0: '🟢',
+      };
+
+      const tickerMap = new Map(rows.rows.map((r) => [r.ticker, r]));
+
+      const result = tickers.map((ticker) => {
+        const row = tickerMap.get(ticker);
+        return {
+          ticker,
+          eventCount24h: row?.event_count ?? 0,
+          latestEvent: row
+            ? {
+                title: row.latest_title,
+                severity: row.latest_severity ?? 'MEDIUM',
+                timestamp: new Date(row.latest_at).toISOString(),
+              }
+            : null,
+          highestSignal: row
+            ? severitySignal[row.max_severity_rank] ?? '🟢'
+            : '🟢',
+        };
+      });
+
+      return reply.send({ tickers: result });
+    } catch (err) {
+      server.log.error({ err, msg: 'watchlist summary query failed' });
+      return reply.code(500).send({ error: 'Watchlist summary query failed' });
+    }
+  });
+
+  /**
    * GET /api/v1/audit
    * Query pipeline audit trail — see every event's journey through the pipeline.
-   * 
+   *
    * Query params:
    *   limit (default 50, max 200)
    *   outcome (delivered|filtered|deduped|grace_period|error)

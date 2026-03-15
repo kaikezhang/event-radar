@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWatchlist, addToWatchlist, removeFromWatchlist } from '../lib/api.js';
+import { getWatchlist, addToWatchlist, removeFromWatchlist, getWatchlistSummary } from '../lib/api.js';
 import type { WatchlistItem } from '../types/index.js';
+import type { WatchlistTickerSummary } from '../lib/api.js';
 
 export function useWatchlist() {
   const queryClient = useQueryClient();
@@ -38,4 +39,14 @@ export function useWatchlist() {
     isRemoving: removeMutation.isPending,
     isOnWatchlist,
   };
+}
+
+export function useWatchlistSummary() {
+  const { data: summary = [], isLoading } = useQuery<WatchlistTickerSummary[]>({
+    queryKey: ['watchlist-summary'],
+    queryFn: getWatchlistSummary,
+    staleTime: 30_000,
+  });
+
+  return { summary, isLoading };
 }

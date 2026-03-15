@@ -1,18 +1,23 @@
 import { useState, useMemo, useCallback } from 'react';
 import { X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../components/EmptyState.js';
 import { AlertCard } from '../components/AlertCard.js';
 import { PillBanner } from '../components/PillBanner.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useAlerts } from '../hooks/useAlerts.js';
+import { useAuth } from '../contexts/AuthContext.js';
+import { useWatchlist } from '../hooks/useWatchlist.js';
 import { getEventSources, getScorecardSummary } from '../lib/api.js';
 import type { FilterPreset, ScorecardSummary } from '../types/index.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 
 const PRESETS_KEY = 'event-radar-filter-presets';
+const FEED_TAB_KEY = 'event-radar-feed-tab';
+
+type FeedTab = 'watchlist' | 'all';
 
 const BUILT_IN_PRESETS: FilterPreset[] = [
   { name: 'Full Firehose', severities: [], sources: [] },
@@ -30,6 +35,19 @@ function loadCustomPresets(): FilterPreset[] {
 
 function saveCustomPresets(presets: FilterPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+}
+
+function loadFeedTab(): FeedTab | null {
+  try {
+    const raw = localStorage.getItem(FEED_TAB_KEY);
+    return raw === 'watchlist' || raw === 'all' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveFeedTab(tab: FeedTab) {
+  localStorage.setItem(FEED_TAB_KEY, tab);
 }
 
 function getTrustCue(
@@ -63,6 +81,26 @@ export function Feed() {
     queryFn: () => getScorecardSummary(),
     staleTime: 300_000,
   });
+
+  const { isAuthenticated } = useAuth();
+  const { items: watchlistItems, isLoading: isWatchlistLoading } = useWatchlist();
+  const hasWatchlist = watchlistItems.length > 0;
+
+  // Determine default tab
+  const defaultTab: FeedTab = (() => {
+    const saved = loadFeedTab();
+    if (saved) return saved;
+    return isAuthenticated && hasWatchlist ? 'watchlist' : 'all';
+  })();
+
+  const [activeTab, setActiveTab] = useState<FeedTab>(defaultTab);
+
+  const handleTabChange = (tab: FeedTab) => {
+    setActiveTab(tab);
+    saveFeedTab(tab);
+  };
+
+  const isWatchlistMode = activeTab === 'watchlist';
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -144,7 +182,7 @@ export function Feed() {
     pendingCount,
     applyPendingAlerts,
     refetch,
-  } = useAlerts(50);
+  } = useAlerts(50, { watchlist: isWatchlistMode });
   const connectionMeta = {
     connected: {
       icon: '🟢',
@@ -171,6 +209,9 @@ export function Feed() {
     }
     return result;
   }, [alerts, activeSeverities, activeSources]);
+
+  // Show onboarding CTA when watchlist mode with no watchlist items
+  const showWatchlistOnboarding = isWatchlistMode && !hasWatchlist && !isWatchlistLoading;
 
   return (
     <div className="space-y-4">
@@ -212,6 +253,36 @@ export function Feed() {
           </div>
         </div>
       </section>
+
+      {/* Feed tab toggle */}
+      <div className="flex gap-1 rounded-full border border-white/8 bg-white/[0.03] p-1" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isWatchlistMode}
+          onClick={() => handleTabChange('watchlist')}
+          className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+            isWatchlistMode
+              ? 'bg-accent-default text-white shadow-sm'
+              : 'text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          My Watchlist
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!isWatchlistMode}
+          onClick={() => handleTabChange('all')}
+          className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+            !isWatchlistMode
+              ? 'bg-accent-default text-white shadow-sm'
+              : 'text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          All Events
+        </button>
+      </div>
 
       {/* Active filter chips */}
       {hasActiveFilters && (
@@ -349,50 +420,75 @@ export function Feed() {
       {/* New alerts pill */}
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
 
+      {/* Watchlist onboarding CTA */}
+      {showWatchlistOnboarding ? (
+        <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-6 text-center shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+          <p className="text-3xl" aria-hidden="true">👀</p>
+          <h2 className="mt-3 text-[17px] font-semibold text-text-primary">
+            Your watchlist is empty
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            Add tickers to your watchlist to see personalized alerts here.
+          </p>
+          <Link
+            to="/watchlist"
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-5 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Set up your watchlist
+          </Link>
+        </section>
+      ) : null}
+
       {/* Alert list */}
-      <section className="space-y-3" aria-live="polite">
-        {isInitialLoading ? (
-          Array.from({ length: 5 }).map((_, index) => <SkeletonCard key={index} />)
-        ) : null}
+      {!showWatchlistOnboarding && (
+        <section className="space-y-3" aria-live="polite">
+          {isInitialLoading ? (
+            Array.from({ length: 5 }).map((_, index) => <SkeletonCard key={index} />)
+          ) : null}
 
-        {!isInitialLoading && error ? (
-          <EmptyState
-            icon="⚠️"
-            title="Can't reach the server"
-            description="Check your connection and try again."
-            ctaLabel="Retry"
-          />
-        ) : null}
+          {!isInitialLoading && error ? (
+            <EmptyState
+              icon="⚠️"
+              title="Can't reach the server"
+              description="Check your connection and try again."
+              ctaLabel="Retry"
+            />
+          ) : null}
 
-        {!isInitialLoading && !error && filteredAlerts.length === 0 && !isEmpty ? (
-          <EmptyState
-            icon="🔍"
-            title="No events match your filters"
-            description="Try adjusting your filter criteria."
-            ctaLabel="Clear filters"
-            ctaHref="/"
-          />
-        ) : null}
+          {!isInitialLoading && !error && filteredAlerts.length === 0 && !isEmpty ? (
+            <EmptyState
+              icon="🔍"
+              title="No events match your filters"
+              description="Try adjusting your filter criteria."
+              ctaLabel="Clear filters"
+              ctaHref="/"
+            />
+          ) : null}
 
-        {!isInitialLoading && isEmpty ? (
-          <EmptyState
-            icon="📡"
-            title="No market-moving events right now"
-            description="Event Radar monitors SEC filings, executive orders, breaking news, and more. High-impact events will appear here in real-time."
-            ctaLabel="Refresh"
-          />
-        ) : null}
+          {!isInitialLoading && isEmpty ? (
+            <EmptyState
+              icon="📡"
+              title={isWatchlistMode ? 'No watchlist events yet' : 'No market-moving events right now'}
+              description={
+                isWatchlistMode
+                  ? 'No events detected for your watchlist tickers recently. They will appear here when something happens.'
+                  : 'Event Radar monitors SEC filings, executive orders, breaking news, and more. High-impact events will appear here in real-time.'
+              }
+              ctaLabel="Refresh"
+            />
+          ) : null}
 
-        {!isInitialLoading && !error
-          ? filteredAlerts.map((alert) => (
-              <AlertCard
-                key={alert.id}
-                alert={alert}
-                trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
-              />
-            ))
-          : null}
-      </section>
+          {!isInitialLoading && !error
+            ? filteredAlerts.map((alert) => (
+                <AlertCard
+                  key={alert.id}
+                  alert={alert}
+                  trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
+                />
+              ))
+            : null}
+        </section>
+      )}
     </div>
   );
 }

@@ -32,10 +32,11 @@ function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertS
   });
 }
 
-export function useAlerts(limit = 50): UseAlertsResult {
+export function useAlerts(limit = 50, options?: { watchlist?: boolean }): UseAlertsResult {
+  const watchlist = options?.watchlist ?? false;
   const query = useQuery({
-    queryKey: ['feed', limit],
-    queryFn: () => getFeed(limit),
+    queryKey: ['feed', limit, watchlist],
+    queryFn: () => getFeed(limit, { watchlist }),
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
