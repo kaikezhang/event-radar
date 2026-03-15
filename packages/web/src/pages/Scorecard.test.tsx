@@ -39,7 +39,7 @@ describe('Scorecard page', () => {
     expect(screen.getByText('Source buckets')).toBeInTheDocument();
     expect(screen.getByText('Event type buckets')).toBeInTheDocument();
 
-    expect(screen.getByText('HIGH-QUALITY SETUP')).toBeInTheDocument();
+    expect(screen.getByText('High-Quality Setup')).toBeInTheDocument();
     expect(screen.getByText('high')).toBeInTheDocument();
     expect(screen.getByText('SEC Filing')).toBeInTheDocument();
     expect(screen.getByText('sec form 8k')).toBeInTheDocument();
