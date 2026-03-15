@@ -229,16 +229,37 @@ The SEC parsing library (edgartools) is Python. The backend is TypeScript. This 
 
 ### 7. Authentication & Security
 
-Even for single-user self-hosted deployments, auth is required — the dashboard exposes market intelligence and config contains API keys.
+Authentication uses magic link email + httpOnly cookie-based JWT tokens.
 
-**Phase 0-2**: API key authentication (header-based)
-**Phase 4+**: OAuth2/OIDC if multi-user support is added
+**Architecture**:
+- Magic link: email → 15-min token → verify → JWT + refresh token in httpOnly cookies
+- Access token: 7-day expiry, httpOnly Secure SameSite=Strict cookie
+- Refresh token: 30-day expiry, family rotation (replay attack detection)
+- CSRF: double-submit cookie pattern
+- API key: retained as fallback for self-hosted single-user deployments
+
+**Self-hosted mode** (`AUTH_REQUIRED=false`, default):
+- All routes accessible with API key authentication
+- Single-user mode, no login required
+- JWT secret auto-generated per boot
+
+**Cloud mode** (`AUTH_REQUIRED=true`):
+- JWT required for protected routes
+- Magic link signup (optionally invite-only via `SIGNUP_ALLOWLIST`)
+- Rate limiting on auth endpoints (3 magic links per email per hour)
+
+**Public routes** (no auth required):
+- `/health`, `/api/health/ping`, `/metrics` — infrastructure
+- `/api/v1/feed`, `/api/v1/feed/watchlist-summary` — delayed public feed
+- `/api/auth/magic-link`, `/api/auth/verify` — auth flow
+- `/ws/events` — WebSocket event stream
 
 **Security measures**:
+- JWT in httpOnly cookies (not localStorage) — prevents XSS token theft
+- Refresh token family rotation — detects replay attacks
 - Secrets in environment variables, never in config files
 - HTTPS everywhere (Cloudflare Tunnel provides this)
-- CSP headers on dashboard
-- Rate limiting on REST API
+- Rate limiting on REST API and auth endpoints
 - Input sanitization for user-provided filter values
 
 **Threat model**: Unauthorized access could expose: trading signals (competitive advantage leak), API keys (financial cost), and system config (infrastructure mapping)
