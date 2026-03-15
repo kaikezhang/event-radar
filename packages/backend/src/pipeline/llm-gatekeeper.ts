@@ -26,7 +26,7 @@ export function getNextSessionOpenMs(now: Date): number {
   const totalMinutes = et.getHours() * 60 + et.getMinutes();
 
   // If it's a weekday, not a holiday, and before 09:30 ET → next open is today 09:30
-  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(et)) {
+  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(now)) {
     const target = new Date(et);
     target.setHours(9, 30, 0, 0);
     return now.getTime() + (target.getTime() - et.getTime());
@@ -89,7 +89,7 @@ export function getMarketSession(now?: Date): MarketSession {
   if (day === 0 || day === 6) return 'CLOSED';
 
   // NYSE holidays
-  if (isNYSEHoliday(et)) return 'CLOSED';
+  if (isNYSEHoliday(d)) return 'CLOSED';
 
   const hours = et.getHours();
   const minutes = et.getMinutes();
