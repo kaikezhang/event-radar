@@ -91,6 +91,46 @@ describe('InMemoryEventBus', () => {
       unsub2();
       expect(bus.handlerCount).toBe(0);
     });
+
+    it('should catch async subscriber errors instead of creating unhandled rejections', async () => {
+      const bus = new InMemoryEventBus();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      bus.subscribe(async () => {
+        throw new Error('subscriber exploded');
+      });
+
+      await expect(bus.publish(makeEvent())).resolves.toBeUndefined();
+      await Promise.resolve();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[EventBus] Unhandled error in subscriber:',
+        expect.objectContaining({ message: 'subscriber exploded' }),
+      );
+
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('topics', () => {
+    it('should catch async topic subscriber errors instead of creating unhandled rejections', async () => {
+      const bus = new InMemoryEventBus();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      bus.subscribeTopic('alerts', async () => {
+        throw new Error('topic exploded');
+      });
+
+      await expect(bus.publishTopic('alerts', { ok: true })).resolves.toBeUndefined();
+      await Promise.resolve();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[EventBus] Unhandled error in topic subscriber:',
+        expect.objectContaining({ message: 'topic exploded' }),
+      );
+
+      errorSpy.mockRestore();
+    });
   });
 
   describe('unsubscribe', () => {
