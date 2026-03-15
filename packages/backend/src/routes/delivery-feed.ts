@@ -286,6 +286,7 @@ export function registerDeliveryFeedRoutes(server: FastifyInstance, db?: Databas
             analysis: typeof enrichment.summary === 'string' ? enrichment.summary : '',
             impact: typeof enrichment.impact === 'string' ? enrichment.impact : '',
             action: typeof enrichment.action === 'string' ? enrichment.action : null,
+            signal: typeof enrichment.action === 'string' ? enrichment.action : null,
             regime_context:
               typeof enrichment.regimeContext === 'string' ? enrichment.regimeContext : null,
             delivery_channels: asDeliveryChannels(row.delivery_channels),

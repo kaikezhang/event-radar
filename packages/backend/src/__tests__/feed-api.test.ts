@@ -505,7 +505,7 @@ describe('GET /api/v1/delivery/feed', () => {
         llm_enrichment: {
           summary: 'AI summary',
           impact: 'AI impact',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
           regimeContext: 'Risk appetite is supportive.',
         },
@@ -568,7 +568,8 @@ describe('GET /api/v1/delivery/feed', () => {
           tickers: ['NVDA'],
           analysis: 'AI summary',
           impact: 'AI impact',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
+          signal: '🔴 High-Quality Setup',
           regime_context: 'Risk appetite is supportive.',
           delivery_channels: [
             { channel: 'discord', ok: true },

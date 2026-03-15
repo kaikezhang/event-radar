@@ -238,6 +238,7 @@ export {
   LLMEventTypeSchema,
   LLMDirectionSchema,
   LLMSeveritySchema,
+  normalizeLegacyActionLabel,
   type LLMClassification,
   type LLMClassificationMethod,
   type LLMEnrichment,

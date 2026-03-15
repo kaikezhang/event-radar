@@ -257,7 +257,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -286,7 +286,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -313,7 +313,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
       }),
@@ -325,12 +325,12 @@ describe('DiscordWebhook', () => {
       (field: { name: string }) => field.name === 'Tickers',
     );
     const actionField = embed.fields.find(
-      (field: { name: string }) => field.name === 'Action',
+      (field: { name: string }) => field.name === 'Signal',
     );
 
     expect(tickerField.value).toContain('@ $187.34');
-    expect(actionField.value).toBe('🔴 ACT NOW');
-    expect(fieldNames.indexOf('Action')).toBe(fieldNames.indexOf('Tickers') + 1);
+    expect(actionField.value).toBe('🔴 High-Quality Setup');
+    expect(fieldNames.indexOf('Signal')).toBe(fieldNames.indexOf('Tickers') + 1);
   });
 
   it('places the source link immediately after AI analysis and before historical and regime fields', async () => {
@@ -341,7 +341,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
         },
         historicalContext: {
@@ -475,7 +475,7 @@ describe('DiscordWebhook', () => {
         enrichment: {
           summary: 'Apple CEO departure triggers uncertainty',
           impact: 'Leadership vacuum at critical time for iPhone launch',
-          action: '🔴 ACT NOW',
+          action: '🔴 High-Quality Setup',
           tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
           regimeContext: 'Risk-off tape could deepen the reaction.',
         },

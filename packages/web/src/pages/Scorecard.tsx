@@ -136,8 +136,8 @@ export function Scorecard() {
       </section>
 
       <BucketSection
-        title="Action buckets"
-        description="Outcome quality grouped by the product action labels users see first."
+        title="Signal buckets"
+        description="Outcome quality grouped by the product signal labels users see first."
         group="action"
         buckets={data.actionBuckets}
       />

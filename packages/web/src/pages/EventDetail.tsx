@@ -80,7 +80,7 @@ export function EventDetail() {
     { label: 'Tickers', value: data.tickers.join(', ') || 'No ticker tagged' },
     {
       label: 'Alert label',
-      value: data.scorecard?.originalAlert.actionLabel ?? 'Initial action label not captured',
+      value: data.scorecard?.originalAlert.actionLabel ?? 'Initial signal label not captured',
     },
     {
       label: 'Confidence bucket',
@@ -296,7 +296,7 @@ export function EventDetail() {
           <>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <InfoField
-                label="Original action label"
+                label="Original signal label"
                 value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
               />
               <InfoField

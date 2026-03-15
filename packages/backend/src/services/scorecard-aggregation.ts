@@ -20,6 +20,23 @@ import {
   toNumber,
 } from './scorecard-semantics.js';
 
+/** Canonical label for each emoji-prefix tier. */
+const EMOJI_PREFIX_CANONICAL: Record<string, string> = {
+  '🔴': '🔴 High-Quality Setup',
+  '🟡': '🟡 Monitor',
+  '🟢': '🟢 Background',
+};
+
+/**
+ * Extract the emoji prefix bucket from an action label.
+ * Both legacy ("🔴 ACT NOW") and canonical ("🔴 High-Quality Setup")
+ * labels resolve to the same canonical bucket.
+ */
+function actionToBucket(actionLabel: string): string {
+  const prefix = [...actionLabel][0]; // first Unicode char (emoji)
+  return EMOJI_PREFIX_CANONICAL[prefix] ?? actionLabel;
+}
+
 const ScorecardAggregateMetricsSchema = z.object({
   totalAlerts: z.number().int().nonnegative(),
   alertsWithUsableVerdicts: z.number().int().nonnegative(),
@@ -116,7 +133,7 @@ export class ScorecardAggregationService {
       totals: this.finalizeAggregate(this.aggregateRows(normalizedRows)),
       actionBuckets: this.buildBuckets(
         normalizedRows,
-        (row) => row.actionLabel,
+        (row) => row.actionLabel ? actionToBucket(row.actionLabel) : null,
         (left, right) =>
           right.totalAlerts - left.totalAlerts || left.bucket.localeCompare(right.bucket),
       ),

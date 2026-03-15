@@ -187,9 +187,12 @@ function buildAuditLlmEnrichment(metadataValue: unknown): {
     : [];
   const judge = asRecord(metadata['llm_judge']);
 
+  const action = typeof enrichment['action'] === 'string' ? enrichment['action'] : null;
+
   return {
     analysis,
-    action: typeof enrichment['action'] === 'string' ? enrichment['action'] : null,
+    action,
+    signal: action,
     tickers,
     regimeContext: typeof enrichment['regimeContext'] === 'string' ? enrichment['regimeContext'] : null,
     confidence: parseConfidence(judge['confidence']),

@@ -47,6 +47,7 @@ const ScorecardThesisSchema = z.object({
 
 const OriginalAlertSchema = z.object({
   actionLabel: z.string().nullable(),
+  signalLabel: z.string().nullable(),
   direction: AccuracyDirectionSchema.nullable(),
   confidence: z.number().min(0).max(1).nullable(),
   confidenceBucket: ConfidenceLevelSchema.nullable(),
@@ -182,6 +183,7 @@ export class AlertScorecardService {
       eventTimestamp: (row.eventTime ?? row.receivedAt).toISOString(),
       originalAlert: {
         actionLabel: enrichment?.action ?? null,
+        signalLabel: enrichment?.action ?? null,
         direction,
         confidence,
         confidenceBucket,
@@ -242,7 +244,7 @@ export class AlertScorecardService {
     }
 
     if (actionLabel) {
-      items.push(`Original action label: ${actionLabel}.`);
+      items.push(`Original signal label: ${actionLabel}.`);
     }
     if (confidenceBucket) {
       items.push(`Confidence bucket: ${confidenceBucket}.`);

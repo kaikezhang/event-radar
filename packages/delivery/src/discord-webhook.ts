@@ -100,7 +100,7 @@ export class DiscordWebhook implements DeliveryService {
     }
 
     if (enrichment?.action) {
-      fields.push({ name: 'Action', value: enrichment.action, inline: true });
+      fields.push({ name: 'Signal', value: enrichment.action, inline: true });
     }
 
     // --- Items (e.g., 8-K item types) ---

@@ -250,7 +250,7 @@ describe('LLM enrichment schemas', () => {
       currentSetup: 'Ticker is stretched into resistance with elevated volume.',
       historicalContext: 'Historical analogs skew constructive over 20 days.',
       risks: 'Management commentary can reverse the first reaction.',
-      action: '🟡 WATCH',
+      action: '🟡 Monitor',
       tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
       regimeContext: 'Risk-on tape can cushion the downside reaction.',
     });
@@ -265,9 +265,28 @@ describe('LLM enrichment schemas', () => {
   });
 
   it('accepts the English action labels', () => {
-    expect(LLMEnrichmentActionSchema.safeParse('🔴 ACT NOW').success).toBe(true);
-    expect(LLMEnrichmentActionSchema.safeParse('🟡 WATCH').success).toBe(true);
-    expect(LLMEnrichmentActionSchema.safeParse('🟢 FYI').success).toBe(true);
+    expect(LLMEnrichmentActionSchema.safeParse('🔴 High-Quality Setup').success).toBe(true);
+    expect(LLMEnrichmentActionSchema.safeParse('🟡 Monitor').success).toBe(true);
+    expect(LLMEnrichmentActionSchema.safeParse('🟢 Background').success).toBe(true);
+  });
+
+  it('normalizes legacy DB labels to the canonical signal labels', () => {
+    for (const [legacy, canonical] of [
+      ['🔴 ACT NOW', '🔴 High-Quality Setup'],
+      ['🟡 WATCH', '🟡 Monitor'],
+      ['🟢 FYI', '🟢 Background'],
+    ] as const) {
+      const result = LLMEnrichmentSchema.safeParse({
+        summary: 'Summary',
+        impact: 'Impact',
+        action: legacy,
+        tickers: [],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.action).toBe(canonical);
+      }
+    }
   });
 
   it('falls back invalid actions to the English FYI label', () => {
@@ -280,7 +299,7 @@ describe('LLM enrichment schemas', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.action).toBe('🟢 FYI');
+      expect(result.data.action).toBe('🟢 Background');
       expect(result.data.tickers).toEqual([]);
     }
   });
@@ -293,7 +312,7 @@ describe('LLM enrichment schemas', () => {
       currentSetup: '',
       historicalContext: '\n',
       risks: '\t',
-      action: '🟢 FYI',
+      action: '🟢 Background',
       tickers: [],
     });
 

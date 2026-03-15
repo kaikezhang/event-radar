@@ -141,7 +141,7 @@ function makeLlmPayload(overrides?: Record<string, unknown>): Record<string, unk
     currentSetup: 'NVDA is already extended with elevated volume and RSI near the upper end of its recent range.',
     historicalContext: 'Comparable restructuring filings produced positive 20-day follow-through in roughly two-thirds of matches.',
     risks: 'If management frames this as a one-off cleanup with stable demand, the initial read-through can fade quickly.',
-    action: '🟡 WATCH',
+    action: '🟡 Monitor',
     tickers: [{ symbol: 'NVDA', direction: 'bearish' }],
     regimeContext: 'An overbought tape can amplify disappointment and mute dip-buying early.',
     ...overrides,
@@ -325,7 +325,7 @@ describe('LLMEnricher.enrich', () => {
       currentSetup: expect.stringContaining('RSI'),
       historicalContext: expect.stringContaining('two-thirds'),
       risks: expect.stringContaining('fade quickly'),
-      action: '🟡 WATCH',
+      action: '🟡 Monitor',
     });
   });
 
@@ -348,7 +348,7 @@ describe('LLMEnricher.enrich', () => {
     const result = await enricher.enrich(makeEvent());
 
     expect(result).toMatchObject({
-      action: '🟢 FYI',
+      action: '🟢 Background',
       tickers: [],
       whyNow: expect.any(String),
       currentSetup: expect.any(String),
@@ -457,7 +457,7 @@ describe('LLMEnricher.enrich', () => {
     };
     expect(request.messages[0]?.content).toContain('English');
     expect(request.messages[0]?.content).toContain('trader-usable');
-    expect(request.messages[0]?.content).toContain('Do not use BUY, SELL, or HOLD');
+    expect(request.messages[0]?.content).toContain('Do not use BUY, SELL, HOLD');
   });
 
   it('returns null when the llm payload fails runtime validation', async () => {
@@ -465,7 +465,7 @@ describe('LLMEnricher.enrich', () => {
       makeChatCompletion({
         summary: null,
         impact: 'AI impact',
-        action: '🟡 WATCH',
+        action: '🟡 Monitor',
         tickers: [],
       }),
     );
