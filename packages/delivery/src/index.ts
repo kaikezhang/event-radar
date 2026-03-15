@@ -5,7 +5,15 @@ export { DiscordWebhook, type DiscordConfig } from './discord-webhook.js';
 export { TelegramDelivery } from './telegram.js';
 export { WebhookDelivery } from './webhook.js';
 export {
+  decideAlertRouting,
+  type AlertRoutingDecision,
+  type AlertPushTier,
+  type PushMode,
+} from './push-policy.js';
+export {
   AlertRouter,
+  type AlertRouteResult,
   type AlertRouterConfig,
+  type ChannelDeliveryResult,
   type ChannelName,
 } from './alert-router.js';
