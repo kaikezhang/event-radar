@@ -39,6 +39,7 @@ function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
     timestamp: new Date('2026-03-10T14:30:00.000Z'),
     metadata: {
       ticker: 'AAPL',
+      eventType: 'sec_form_8k',
       direction: 'bullish',
       llm_enrichment: {
         summary: 'AI summary',
@@ -325,6 +326,231 @@ describe('scorecard aggregation service', () => {
     ]);
   });
 
+  it('aggregates source buckets from stored event sources', async () => {
+    await seedAggregatedEvent({
+      event: {
+        source: 'sec-edgar',
+        metadata: {
+          ticker: 'AAPL',
+          eventType: 'sec_form_8k',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.82 },
+      outcome: {
+        changeT20: 10,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+    await seedAggregatedEvent({
+      event: {
+        source: 'sec-edgar',
+        metadata: {
+          ticker: 'MSFT',
+          eventType: 'sec_form_8k',
+          direction: 'bearish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🟡 WATCH',
+            tickers: [{ symbol: 'MSFT', direction: 'bearish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bearish', confidence: 0.57 },
+      outcome: {
+        changeT5: -4,
+        evaluatedT5At: '2026-03-13T14:30:00.000Z',
+      },
+    });
+    await seedAggregatedEvent({
+      event: {
+        source: 'breaking-news',
+        metadata: {
+          ticker: 'NVDA',
+          eventType: 'news_breaking',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.76 },
+      outcome: {
+        changeT20: -6,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+
+    const summary = await createService().getSummary();
+
+    expect(summary.sourceBuckets).toEqual([
+      {
+        bucket: 'sec-edgar',
+        totalAlerts: 2,
+        alertsWithUsableVerdicts: 2,
+        directionalCorrectCount: 2,
+        directionalHitRate: 1,
+        setupWorkedCount: 2,
+        setupWorkedRate: 1,
+        avgT5Move: -4,
+        avgT20Move: 10,
+        medianT20Move: 10,
+      },
+      {
+        bucket: 'breaking-news',
+        totalAlerts: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
+        setupWorkedCount: 0,
+        setupWorkedRate: 0,
+        avgT5Move: null,
+        avgT20Move: -6,
+        medianT20Move: -6,
+      },
+    ]);
+  });
+
+  it('aggregates event-type buckets from normalized event metadata', async () => {
+    await seedAggregatedEvent({
+      event: {
+        metadata: {
+          ticker: 'AAPL',
+          eventType: 'sec_form_8k',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.82 },
+      outcome: {
+        changeT20: 11,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+    await seedAggregatedEvent({
+      event: {
+        source: 'breaking-news',
+        metadata: {
+          ticker: 'TSLA',
+          eventType: 'news_breaking',
+          direction: 'bearish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🟡 WATCH',
+            tickers: [{ symbol: 'TSLA', direction: 'bearish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bearish', confidence: 0.61 },
+      outcome: {
+        changeT5: -5,
+        evaluatedT5At: '2026-03-13T14:30:00.000Z',
+      },
+    });
+    await seedAggregatedEvent({
+      event: {
+        source: 'earnings',
+        metadata: {
+          ticker: 'NVDA',
+          eventType: 'earnings_beat',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.88 },
+      outcome: {
+        changeT20: 7,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+
+    const summary = await createService().getSummary();
+
+    expect(summary.eventTypeBuckets).toEqual([
+      {
+        bucket: 'earnings_beat',
+        totalAlerts: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 1,
+        directionalHitRate: 1,
+        setupWorkedCount: 1,
+        setupWorkedRate: 1,
+        avgT5Move: null,
+        avgT20Move: 7,
+        medianT20Move: 7,
+      },
+      {
+        bucket: 'news_breaking',
+        totalAlerts: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 1,
+        directionalHitRate: 1,
+        setupWorkedCount: 1,
+        setupWorkedRate: 1,
+        avgT5Move: -5,
+        avgT20Move: null,
+        medianT20Move: null,
+      },
+      {
+        bucket: 'sec_form_8k',
+        totalAlerts: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 1,
+        directionalHitRate: 1,
+        setupWorkedCount: 1,
+        setupWorkedRate: 1,
+        avgT5Move: null,
+        avgT20Move: 11,
+        medianT20Move: 11,
+      },
+    ]);
+  });
+
   it('filters alerts by a recent days window', async () => {
     await seedAggregatedEvent({
       event: {
@@ -411,6 +637,77 @@ describe('scorecard aggregation service', () => {
     expect(summary.confidenceBuckets).toEqual([]);
   });
 
+  it('excludes alerts without an event type from event-type bucket aggregation', async () => {
+    await seedAggregatedEvent({
+      event: {
+        source: 'sec-edgar',
+        metadata: {
+          ticker: 'AAPL',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.82 },
+      outcome: {
+        changeT20: 5,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+    await seedAggregatedEvent({
+      event: {
+        source: 'breaking-news',
+        metadata: {
+          ticker: 'NVDA',
+          eventType: 'news_breaking',
+          direction: 'bullish',
+          llm_enrichment: {
+            summary: 'AI summary',
+            impact: 'AI impact',
+            whyNow: 'Why now',
+            currentSetup: 'Current setup',
+            historicalContext: 'Historical context',
+            risks: 'Risks',
+            action: '🔴 ACT NOW',
+            tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
+          },
+        },
+      },
+      prediction: { direction: 'bullish', confidence: 0.79 },
+      outcome: {
+        changeT20: 9,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+
+    const summary = await createService().getSummary();
+
+    expect(summary.totals.totalAlerts).toBe(2);
+    expect(summary.sourceBuckets).toHaveLength(2);
+    expect(summary.eventTypeBuckets).toEqual([
+      {
+        bucket: 'news_breaking',
+        totalAlerts: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 1,
+        directionalHitRate: 1,
+        setupWorkedCount: 1,
+        setupWorkedRate: 1,
+        avgT5Move: null,
+        avgT20Move: 9,
+        medianT20Move: 9,
+      },
+    ]);
+  });
+
   it('returns an empty summary when there are no alerts', async () => {
     const summary = await createService().getSummary();
 
@@ -429,6 +726,8 @@ describe('scorecard aggregation service', () => {
       },
       actionBuckets: [],
       confidenceBuckets: [],
+      sourceBuckets: [],
+      eventTypeBuckets: [],
     });
   });
 });
@@ -507,6 +806,34 @@ describe('scorecard summary route', () => {
       confidenceBuckets: [
         {
           bucket: 'high',
+          totalAlerts: 1,
+          alertsWithUsableVerdicts: 1,
+          directionalCorrectCount: 1,
+          directionalHitRate: 1,
+          setupWorkedCount: 1,
+          setupWorkedRate: 1,
+          avgT5Move: null,
+          avgT20Move: 8,
+          medianT20Move: 8,
+        },
+      ],
+      sourceBuckets: [
+        {
+          bucket: 'sec-edgar',
+          totalAlerts: 1,
+          alertsWithUsableVerdicts: 1,
+          directionalCorrectCount: 1,
+          directionalHitRate: 1,
+          setupWorkedCount: 1,
+          setupWorkedRate: 1,
+          avgT5Move: null,
+          avgT20Move: 8,
+          medianT20Move: 8,
+        },
+      ],
+      eventTypeBuckets: [
+        {
+          bucket: 'sec_form_8k',
           totalAlerts: 1,
           alertsWithUsableVerdicts: 1,
           directionalCorrectCount: 1,

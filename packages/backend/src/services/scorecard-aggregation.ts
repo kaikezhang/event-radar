@@ -12,7 +12,9 @@ import {
   buildDirectionVerdict,
   buildSetupVerdict,
   getEnrichment,
+  getString,
   resolveConfidenceBucket,
+  resolveProductEventType,
   resolveScorecardDirection,
   selectVerdictWindow,
   toNumber,
@@ -39,6 +41,8 @@ export const ScorecardSummarySchema = z.object({
   totals: ScorecardAggregateMetricsSchema,
   actionBuckets: z.array(BucketSummarySchema),
   confidenceBuckets: z.array(BucketSummarySchema),
+  sourceBuckets: z.array(BucketSummarySchema),
+  eventTypeBuckets: z.array(BucketSummarySchema),
 });
 
 export type ScorecardSummary = z.infer<typeof ScorecardSummarySchema>;
@@ -53,6 +57,8 @@ interface SummaryOptions {
 
 interface AggregationQueryRow {
   eventId: string;
+  source: string;
+  rawPayload: unknown;
   metadata: unknown;
   receivedAt: Date;
   eventTime: Date | null;
@@ -64,6 +70,8 @@ interface AggregationQueryRow {
 
 interface NormalizedAlertScorecardRow {
   timestamp: Date;
+  source: string | null;
+  eventType: string | null;
   actionLabel: string | null;
   confidenceBucket: ConfidenceLevel | null;
   directionVerdict: 'correct' | 'incorrect' | 'unclear';
@@ -119,6 +127,18 @@ export class ScorecardAggregationService {
           CONFIDENCE_BUCKET_ORDER.indexOf(left.bucket as ConfidenceLevel)
           - CONFIDENCE_BUCKET_ORDER.indexOf(right.bucket as ConfidenceLevel),
       ),
+      sourceBuckets: this.buildBuckets(
+        normalizedRows,
+        (row) => row.source,
+        (left, right) =>
+          right.totalAlerts - left.totalAlerts || left.bucket.localeCompare(right.bucket),
+      ),
+      eventTypeBuckets: this.buildBuckets(
+        normalizedRows,
+        (row) => row.eventType,
+        (left, right) =>
+          right.totalAlerts - left.totalAlerts || left.bucket.localeCompare(right.bucket),
+      ),
     });
   }
 
@@ -126,6 +146,8 @@ export class ScorecardAggregationService {
     return this.db
       .select({
         eventId: events.id,
+        source: events.source,
+        rawPayload: events.rawPayload,
         metadata: events.metadata,
         receivedAt: events.receivedAt,
         eventTime: eventOutcomes.eventTime,
@@ -157,6 +179,11 @@ export class ScorecardAggregationService {
 
     return {
       timestamp: row.eventTime ?? row.receivedAt,
+      source: getString(row.source),
+      eventType: resolveProductEventType({
+        metadata,
+        rawPayload: row.rawPayload,
+      }),
       actionLabel: enrichment?.action ?? null,
       confidenceBucket: resolveConfidenceBucket(row.predictionConfidence),
       directionVerdict: buildDirectionVerdict(
