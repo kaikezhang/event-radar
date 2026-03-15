@@ -3,6 +3,7 @@ import type {
   ChartRange,
   EventDetailData,
   PriceChartData,
+  ScorecardSummary,
   TickerProfileData,
   WatchlistItem,
 } from '../types/index.js';
@@ -224,6 +225,11 @@ export async function getEventSources(): Promise<string[]> {
   return [...new Set(raw.map(mapSource))].sort();
 }
 
+export async function getScorecardSummary(days?: number): Promise<ScorecardSummary> {
+  const query = days == null ? '' : `?days=${days}`;
+  return apiFetch(`/v1/scorecards/summary${query}`);
+}
+
 function mapSource(source: string): string {
   const MAP: Record<string, string> = {
     'sec-edgar': 'SEC Filing',
@@ -245,4 +251,20 @@ function mapSource(source: string): string {
     'warn': 'WARN Act',
   };
   return MAP[source] ?? source;
+}
+
+export function formatScorecardBucketLabel(group: 'action' | 'confidence' | 'source' | 'eventType', bucket: string): string {
+  if (group === 'source') {
+    return mapSource(bucket);
+  }
+
+  if (group === 'action') {
+    return bucket.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  }
+
+  if (group === 'eventType') {
+    return bucket.replaceAll('_', ' ');
+  }
+
+  return bucket;
 }
