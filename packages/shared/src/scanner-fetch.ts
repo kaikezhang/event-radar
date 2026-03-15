@@ -27,6 +27,7 @@ export async function scannerFetch(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { timeoutMs: _timeoutMs, signal: _existingSignal, ...fetchOptions } = options ?? {};
     return await fetch(url, { ...fetchOptions, signal });
   } catch (error) {
