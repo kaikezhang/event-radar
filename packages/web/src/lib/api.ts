@@ -243,3 +243,19 @@ function mapSource(source: string): string {
   };
   return MAP[source] ?? source;
 }
+
+export function formatScorecardBucketLabel(group: 'action' | 'confidence' | 'source' | 'eventType', bucket: string): string {
+  if (group === 'source') {
+    return mapSource(bucket);
+  }
+
+  if (group === 'action') {
+    return bucket.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  }
+
+  if (group === 'eventType') {
+    return bucket.replaceAll('_', ' ');
+  }
+
+  return bucket;
+}

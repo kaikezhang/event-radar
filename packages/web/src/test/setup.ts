@@ -94,36 +94,105 @@ const SCORECARD = {
   },
 };
 
-const SCORECARD_SUMMARY = {
-  days: null,
+const SCORECARD_SUMMARY_90D = {
+  days: 90,
   totals: {
-    totalAlerts: 12,
-    alertsWithUsableVerdicts: 8,
-    directionalCorrectCount: 5,
-    directionalHitRate: 0.625,
-    setupWorkedCount: 6,
-    setupWorkedRate: 0.75,
-    avgT5Move: 1.2,
-    avgT20Move: 2.8,
-    medianT20Move: 2.1,
+    totalAlerts: 124,
+    alertsWithUsableVerdicts: 96,
+    directionalCorrectCount: 65,
+    directionalHitRate: 0.677,
+    setupWorkedCount: 57,
+    setupWorkedRate: 0.589,
+    avgT5Move: 1.8,
+    avgT20Move: 4.3,
+    medianT20Move: 3.2,
   },
-  actionBuckets: [],
-  confidenceBuckets: [],
+  actionBuckets: [
+    {
+      bucket: '🔴 ACT NOW',
+      totalAlerts: 38,
+      alertsWithUsableVerdicts: 34,
+      directionalCorrectCount: 25,
+      directionalHitRate: 0.735,
+      setupWorkedCount: 21,
+      setupWorkedRate: 0.618,
+      avgT5Move: 3.2,
+      avgT20Move: 8.1,
+      medianT20Move: 7.4,
+    },
+  ],
+  confidenceBuckets: [
+    {
+      bucket: 'high',
+      totalAlerts: 51,
+      alertsWithUsableVerdicts: 46,
+      directionalCorrectCount: 34,
+      directionalHitRate: 0.7391,
+      setupWorkedCount: 29,
+      setupWorkedRate: 0.6304,
+      avgT5Move: 2.5,
+      avgT20Move: 6.4,
+      medianT20Move: 5.7,
+    },
+  ],
   sourceBuckets: [
     {
       bucket: 'sec-edgar',
-      totalAlerts: 4,
-      alertsWithUsableVerdicts: 3,
-      directionalCorrectCount: 2,
-      directionalHitRate: 0.6667,
-      setupWorkedCount: 2,
-      setupWorkedRate: 0.6667,
-      avgT5Move: -1.8,
-      avgT20Move: -3.4,
-      medianT20Move: -3.4,
+      totalAlerts: 29,
+      alertsWithUsableVerdicts: 24,
+      directionalCorrectCount: 17,
+      directionalHitRate: 0.7083,
+      setupWorkedCount: 14,
+      setupWorkedRate: 0.5833,
+      avgT5Move: 1.9,
+      avgT20Move: 4.6,
+      medianT20Move: 4.2,
     },
   ],
-  eventTypeBuckets: [],
+  eventTypeBuckets: [
+    {
+      bucket: 'sec_form_8k',
+      totalAlerts: 16,
+      alertsWithUsableVerdicts: 14,
+      directionalCorrectCount: 11,
+      directionalHitRate: 0.7857,
+      setupWorkedCount: 9,
+      setupWorkedRate: 0.6429,
+      avgT5Move: 2.1,
+      avgT20Move: 5.1,
+      medianT20Move: 4.9,
+    },
+  ],
+};
+
+const SCORECARD_SUMMARY_ALL = {
+  ...SCORECARD_SUMMARY_90D,
+  days: null,
+  totals: {
+    ...SCORECARD_SUMMARY_90D.totals,
+    totalAlerts: 248,
+    alertsWithUsableVerdicts: 202,
+    directionalCorrectCount: 133,
+    directionalHitRate: 0.6584,
+    setupWorkedCount: 122,
+    setupWorkedRate: 0.604,
+    avgT20Move: 5.1,
+    medianT20Move: 3.8,
+  },
+  sourceBuckets: [
+    {
+      bucket: 'sec-edgar',
+      totalAlerts: 52,
+      alertsWithUsableVerdicts: 39,
+      directionalCorrectCount: 26,
+      directionalHitRate: 0.6667,
+      setupWorkedCount: 24,
+      setupWorkedRate: 0.6154,
+      avgT5Move: 1.4,
+      avgT20Move: 3.7,
+      medianT20Move: 3.3,
+    },
+  ],
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -167,14 +236,6 @@ beforeEach(() => {
           },
         ],
       });
-    }
-
-    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
-      return jsonResponse(SCORECARD);
-    }
-
-    if (url.pathname === '/api/v1/scorecards/summary') {
-      return jsonResponse(SCORECARD_SUMMARY);
     }
 
     if (url.pathname === '/api/events' && url.searchParams.get('ticker') === 'NVDA') {
@@ -234,6 +295,36 @@ beforeEach(() => {
     // Sources endpoint
     if (url.pathname === '/api/events/sources') {
       return jsonResponse({ sources: ['sec-edgar', 'fed', 'breaking-news'] });
+    }
+
+    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
+      return jsonResponse(SCORECARD);
+    }
+
+    if (url.pathname === '/api/v1/scorecards/summary') {
+      const days = url.searchParams.get('days');
+      if (days === '90') {
+        return jsonResponse(SCORECARD_SUMMARY_90D);
+      }
+      if (days === '30') {
+        return jsonResponse({
+          ...SCORECARD_SUMMARY_90D,
+          days: 30,
+          totals: {
+            ...SCORECARD_SUMMARY_90D.totals,
+            totalAlerts: 41,
+            alertsWithUsableVerdicts: 33,
+            directionalCorrectCount: 24,
+            directionalHitRate: 0.7273,
+            setupWorkedCount: 20,
+            setupWorkedRate: 0.6061,
+            avgT20Move: 6.8,
+            medianT20Move: 5.4,
+          },
+        });
+      }
+
+      return jsonResponse(SCORECARD_SUMMARY_ALL);
     }
 
     return jsonResponse({ error: 'Not found' }, 404);
