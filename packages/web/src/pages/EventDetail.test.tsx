@@ -168,6 +168,45 @@ describe('EventDetail page', () => {
     });
   });
 
+  it('renders the "Why this alert" provenance section with source and filter path', async () => {
+    renderDetail();
+
+    const heading = await screen.findByRole('heading', { name: /why this alert/i });
+    const section = heading.closest('section');
+
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText(/sec filing/i)).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText(/filter path/i)).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText(/l2 llm judge \(confidence 0\.82\)/i)).toBeInTheDocument();
+  });
+
+  it('shows "Also reported by" in the provenance section when confirmation count > 1', async () => {
+    renderDetail();
+
+    const heading = await screen.findByRole('heading', { name: /why this alert/i });
+    const section = heading.closest('section');
+
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText(/also reported by/i)).toBeInTheDocument();
+  });
+
+  it('shows classification confidence in the provenance section', async () => {
+    renderDetail();
+
+    const heading = await screen.findByRole('heading', { name: /why this alert/i });
+    const section = heading.closest('section');
+
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText(/82%/)).toBeInTheDocument();
+  });
+
+  it('renders the "Why this alert" quick link in navigation', async () => {
+    renderDetail();
+
+    const quickLinks = await screen.findByRole('navigation', { name: /event detail quick links/i });
+    expect(within(quickLinks).getByRole('link', { name: /why this alert/i })).toHaveAttribute('href', '#why-this-alert');
+  });
+
   it('keeps normal back navigation when the detail page was opened inside the app', async () => {
     const user = userEvent.setup();
     const { router } = renderWithRouter(

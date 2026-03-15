@@ -51,7 +51,7 @@ export function AlertCard({
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <SeverityBadge severity={alert.severity} className="min-h-9 bg-transparent px-0 py-0" />
-        <SourceBadge source={alert.source} />
+        <SourceBadge source={alert.source} time={alert.time} />
         <div className="flex flex-wrap gap-2">
           {alert.tickers.map((ticker) => (
             <TickerChip key={ticker} symbol={ticker} className="px-2.5 py-1.5 text-xs" />

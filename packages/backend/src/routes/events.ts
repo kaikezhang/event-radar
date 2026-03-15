@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, sql, and, count, gte, lte, asc } from 'drizzle-orm';
-import { events, watchlist } from '../db/schema.js';
+import { events, pipelineAudit, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
 import { resolveRequestUserId } from './user-context.js';
@@ -349,6 +349,28 @@ export function registerEventRoutes(
             .orderBy(asc(events.createdAt))
         : [];
 
+    // Fetch pipeline audit trail for this event (join on sourceEventId)
+    const auditRows = event.sourceEventId
+      ? await db
+          .select({
+            outcome: pipelineAudit.outcome,
+            stoppedAt: pipelineAudit.stoppedAt,
+            reason: pipelineAudit.reason,
+            confidence: pipelineAudit.confidence,
+            historicalMatch: pipelineAudit.historicalMatch,
+            historicalConfidence: pipelineAudit.historicalConfidence,
+            deliveryChannels: pipelineAudit.deliveryChannels,
+            durationMs: pipelineAudit.durationMs,
+            createdAt: pipelineAudit.createdAt,
+          })
+          .from(pipelineAudit)
+          .where(eq(pipelineAudit.eventId, event.sourceEventId))
+          .orderBy(asc(pipelineAudit.createdAt))
+          .limit(1)
+      : [];
+
+    const auditRecord = auditRows[0] ?? null;
+
     const confirmedSources = uniqueStrings([
       event.source,
       ...((event.confirmedSources as string[] | null) ?? []),
@@ -360,6 +382,18 @@ export function registerEventRoutes(
       ...event,
       confirmationCount,
       confirmedSources,
+      audit: auditRecord
+        ? {
+            outcome: auditRecord.outcome,
+            stoppedAt: auditRecord.stoppedAt,
+            reason: auditRecord.reason,
+            confidence: auditRecord.confidence ? Number(auditRecord.confidence) : null,
+            historicalMatch: auditRecord.historicalMatch,
+            historicalConfidence: auditRecord.historicalConfidence,
+            deliveryChannels: auditRecord.deliveryChannels,
+            enrichedAt: auditRecord.createdAt?.toISOString() ?? null,
+          }
+        : null,
       provenance: provenanceRows.map((row) => {
         const urls = Array.isArray(row.sourceUrls)
           ? row.sourceUrls

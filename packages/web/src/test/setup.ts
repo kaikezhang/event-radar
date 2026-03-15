@@ -223,6 +223,16 @@ beforeEach(() => {
         data: {
           ...FEED_EVENT,
           sourceUrls: ['https://example.com/sec/nvda-export-filing'],
+          audit: {
+            outcome: 'delivered',
+            stoppedAt: 'delivery',
+            reason: null,
+            confidence: 0.82,
+            historicalMatch: true,
+            historicalConfidence: 'medium',
+            deliveryChannels: [{ channel: 'discord', ok: true }],
+            enrichedAt: '2026-03-12T20:05:30.000Z',
+          },
           provenance: [
             {
               id: 'evt-critical-nvda-1',

@@ -58,6 +58,16 @@ export interface EventDetailData {
     winRate: number | null;
     similarEvents: SimilarEvent[];
   };
+  audit?: {
+    outcome: string;
+    stoppedAt: string;
+    reason: string | null;
+    confidence: number | null;
+    historicalMatch: boolean | null;
+    historicalConfidence: string | null;
+    deliveryChannels: unknown;
+    enrichedAt: string | null;
+  } | null;
   scorecard?: EventScorecard | null;
 }
 

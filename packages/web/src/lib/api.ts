@@ -196,6 +196,21 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       // No similar events available
     }
 
+    // Map audit trail data if present
+    const rawAudit = e.audit as Record<string, unknown> | null | undefined;
+    const audit = rawAudit
+      ? {
+          outcome: (rawAudit.outcome as string) ?? 'unknown',
+          stoppedAt: (rawAudit.stoppedAt as string) ?? 'unknown',
+          reason: (rawAudit.reason as string | null) ?? null,
+          confidence: typeof rawAudit.confidence === 'number' ? rawAudit.confidence : null,
+          historicalMatch: typeof rawAudit.historicalMatch === 'boolean' ? rawAudit.historicalMatch : null,
+          historicalConfidence: (rawAudit.historicalConfidence as string | null) ?? null,
+          deliveryChannels: rawAudit.deliveryChannels ?? null,
+          enrichedAt: (rawAudit.enrichedAt as string | null) ?? null,
+        }
+      : null;
+
     return {
       id: e.id as string,
       severity: (e.severity as string) ?? 'MEDIUM',
@@ -245,6 +260,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
         winRate: null,
         similarEvents,
       },
+      audit,
     };
   } catch {
     return null;
