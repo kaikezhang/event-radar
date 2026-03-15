@@ -195,13 +195,15 @@ function getScannerSchedule(scannerName: string): ScheduleCategory {
 /**
  * Get the current hour and day-of-week in America/New_York timezone.
  */
+const etFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: 'numeric',
+  hourCycle: 'h23',
+  weekday: 'short',
+});
+
 function getETComponents(now: Date): { hour: number; dayOfWeek: number } {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: 'numeric',
-    hourCycle: 'h23',
-    weekday: 'short',
-  });
+  const fmt = etFormatter;
   const parts = fmt.formatToParts(now);
   const hourPart = parts.find(p => p.type === 'hour');
   const weekdayPart = parts.find(p => p.type === 'weekday');
@@ -252,11 +254,11 @@ function computeHealthScore(
   // Grace period penalty
   if (gracePeriodActive) score -= 10;
 
-  // Anomaly penalty
+  // Anomaly penalty — info-level anomalies (e.g. expected off-schedule silence) don't penalize
   for (const a of anomalies) {
     if (a.severity === 'critical') score -= 10;
     else if (a.severity === 'warning') score -= 5;
-    else score -= 2;
+    // info severity: no penalty (expected behavior like weekend silence)
   }
 
   score = Math.max(0, Math.min(100, score));
