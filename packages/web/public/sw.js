@@ -28,23 +28,33 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const relativeUrl = event.notification.data?.url || '/';
-  const targetUrl = new URL(relativeUrl, self.location.origin).toString();
+  const targetUrl = resolveNotificationTargetUrl(event.notification.data);
 
   event.waitUntil((async () => {
     const windowClients = await self.clients.matchAll({
       type: 'window',
       includeUncontrolled: true,
     });
+    const exactMatch = windowClients.find((client) => client.url === targetUrl);
+    if (exactMatch && 'focus' in exactMatch) {
+      await exactMatch.focus();
+      return;
+    }
 
-    for (const client of windowClients) {
-      if ('focus' in client) {
-        if ('navigate' in client) {
-          await client.navigate(targetUrl);
-        }
-        await client.focus();
-        return;
+    const appClient = windowClients.find((client) => {
+      try {
+        return new URL(client.url).origin === self.location.origin;
+      } catch (_error) {
+        return false;
       }
+    });
+
+    if (appClient && 'focus' in appClient) {
+      if ('navigate' in appClient && appClient.url !== targetUrl) {
+        await appClient.navigate(targetUrl);
+      }
+      await appClient.focus();
+      return;
     }
 
     if (self.clients.openWindow) {
@@ -64,5 +74,15 @@ function parsePushPayload(event) {
     return {
       body: event.data.text(),
     };
+  }
+}
+
+function resolveNotificationTargetUrl(data) {
+  const relativeUrl = data?.url || (data?.eventId ? `/event/${data.eventId}` : '/');
+
+  try {
+    return new URL(relativeUrl, self.location.origin).toString();
+  } catch (_error) {
+    return new URL('/', self.location.origin).toString();
   }
 }
