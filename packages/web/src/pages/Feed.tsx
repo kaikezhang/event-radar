@@ -178,10 +178,11 @@ export function Feed() {
 
   const isWatchlistMode = activeTab === 'watchlist';
 
-  // Parse filter state from URL
+  // Parse filter state from URL — default to HIGH+CRITICAL when no severity param present
   const activeSeverities = useMemo(() => {
     const param = searchParams.get('severity');
-    return param ? param.split(',') : [];
+    if (param !== null) return param.length > 0 ? param.split(',') : [];
+    return ['HIGH', 'CRITICAL'];
   }, [searchParams]);
 
   const activeSources = useMemo(() => {
@@ -219,7 +220,11 @@ export function Feed() {
     updateFilters(activeSeverities, next);
   };
 
-  const clearFilters = () => updateFilters([], []);
+  const clearFilters = () => {
+    const params = new URLSearchParams();
+    params.set('severity', '');
+    setSearchParams(params, { replace: true });
+  };
 
   const applyPreset = (preset: FilterPreset) => {
     updateFilters(preset.severities, preset.sources);
@@ -244,8 +249,10 @@ export function Feed() {
     saveCustomPresets(updated);
   };
 
-  const hasActiveFilters = activeSeverities.length > 0 || activeSources.length > 0;
-  const activeFilterCount = activeSeverities.length + activeSources.length;
+  // Filters are "active" (user-customized) when severity param is explicitly set in URL or sources selected
+  const isDefaultSeverity = !searchParams.has('severity');
+  const hasActiveFilters = (!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0;
+  const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + activeSources.length;
 
   const {
     alerts,
@@ -253,10 +260,13 @@ export function Feed() {
     isEmpty,
     isInitialLoading,
     isRefreshing,
+    isLoadingMore,
+    hasMore,
     pendingCount,
     applyPendingAlerts,
     refetch,
-  } = useAlerts(50, {
+    loadMore,
+  } = useAlerts(10, {
     watchlist: isWatchlistMode,
     watchlistTickers: isWatchlistMode ? watchlistItems.map((w) => w.ticker) : undefined,
   });
@@ -278,6 +288,23 @@ export function Feed() {
 
   // Show onboarding CTA when watchlist mode with no watchlist items
   const showWatchlistOnboarding = isWatchlistMode && !hasWatchlist && !isWatchlistLoading;
+
+  // Infinite scroll sentinel
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          void loadMore();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, loadMore]);
 
   // Pull-to-refresh
   const [pullDistance, setPullDistance] = useState(0);
@@ -646,6 +673,15 @@ export function Feed() {
                   </div>
                 </div>
               ))}
+
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} className="h-px" />
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-6">
+                  <RefreshCw className="h-4 w-4 animate-spin text-text-tertiary" />
+                  <span className="ml-2 text-xs text-text-tertiary">Loading more...</span>
+                </div>
+              )}
             </div>
           )}
         </section>
