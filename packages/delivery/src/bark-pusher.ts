@@ -67,11 +67,11 @@ export class BarkPusher implements DeliveryService {
     let title: string;
     if (enrichment) {
       const ticker = enrichment.tickers[0]?.symbol ?? '';
-      title = `${enrichment.action} ${ticker}`.trim();
+      title = `[${sourceTag}] ${enrichment.action} ${ticker}`.trim();
     } else {
       const sev = SEVERITY_EMOJI[alert.severity];
       const ticker = alert.ticker ? ` $${alert.ticker}` : '';
-      title = `${sev}${ticker} ${sourceTag}`;
+      title = `[${sourceTag}] ${sev}${ticker}`;
     }
 
     if ((alert.confirmationCount ?? 1) > 1) {

@@ -1,4 +1,5 @@
 import { cn } from '../lib/utils.js';
+import { formatRelativeTime } from '../lib/format.js';
 
 const sourceTone: Record<string, string> = {
   'SEC Filing': 'border-accent-default/30 bg-accent-default/10 text-accent-default',
@@ -21,9 +22,11 @@ const defaultTone = 'border-gray-400/25 bg-gray-400/10 text-gray-300';
 
 export function SourceBadge({
   source,
+  time,
   className,
 }: {
   source: string;
+  time?: string;
   className?: string;
 }) {
   return (
@@ -35,6 +38,9 @@ export function SourceBadge({
       )}
     >
       {source}
+      {time && (
+        <span className="ml-1 opacity-70">· {formatRelativeTime(time)}</span>
+      )}
     </span>
   );
 }

@@ -50,7 +50,7 @@ describe('BarkPusher', () => {
     expect(url).toBe('https://api.day.app/my-key');
   });
 
-  it('should send formatted title with severity emoji, ticker, and source tag', async () => {
+  it('should send formatted title with source tag prefix, severity emoji, and ticker', async () => {
     const pusher = new BarkPusher({ key: 'k' });
 
     await pusher.send(makeAlert({ severity: 'HIGH' }));
@@ -58,9 +58,9 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
-    // New format: emoji + $TICKER + source tag
+    // Format: [source] emoji $TICKER
+    expect(body.title).toMatch(/^\[📋SEC\]/);
     expect(body.title).toContain('$AAPL');
-    expect(body.title).toContain('📋SEC');
     expect(body.body).toBe('8-K: Apple Inc. (AAPL)');
     expect(body.level).toBe('timeSensitive');
     expect(body.group).toBe('event-radar-high');
@@ -180,7 +180,7 @@ describe('BarkPusher', () => {
     expect(body.title).toContain('[2 sources]');
   });
 
-  it('should use enrichment action as title when LLM enrichment is present', async () => {
+  it('should use enrichment action as title with source tag prefix when LLM enrichment is present', async () => {
     const pusher = new BarkPusher({ key: 'k' });
 
     await pusher.send(
@@ -197,6 +197,7 @@ describe('BarkPusher', () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
 
+    expect(body.title).toMatch(/^\[📋SEC\]/);
     expect(body.title).toContain('🔴 High-Quality Setup');
     expect(body.title).toContain('AAPL');
     expect(body.body).toBe('Apple CEO departure triggers uncertainty');

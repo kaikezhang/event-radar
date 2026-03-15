@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
+import { events } from '../db/schema.js';
 import { createTestDb, safeClose, safeCloseServer, cleanTestDb } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { RawEvent } from '@event-radar/shared';
@@ -277,6 +279,66 @@ describe('GET /api/events/:id', () => {
     expect(body.id).toBe(storedEventId);
     expect(body.title).toBe('Detail Test Event');
     expect(body.severity).toBe('HIGH');
+  });
+
+  it('should return audit trail when pipeline_audit has a matching record', async () => {
+    // Seed an audit record keyed on sourceEventId
+    const [event] = await sharedDb
+      .select()
+      .from(events)
+      .where(eq(events.id, storedEventId))
+      .limit(1);
+
+    if (event?.sourceEventId) {
+      await sharedClient.query(
+        `INSERT INTO pipeline_audit (event_id, source, title, outcome, stopped_at, confidence, historical_match, historical_confidence)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [event.sourceEventId, 'sec-edgar', 'Detail Test Event', 'delivered', 'delivery', '0.82', true, 'medium'],
+      );
+    }
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${storedEventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.audit).not.toBeNull();
+    expect(body.audit.outcome).toBe('delivered');
+    expect(body.audit.stoppedAt).toBe('delivery');
+    expect(body.audit.confidence).toBe(0.82);
+    expect(body.audit.historicalMatch).toBe(true);
+    expect(body.audit.historicalConfidence).toBe('medium');
+  });
+
+  it('should return null audit when no pipeline_audit record exists', async () => {
+    await cleanTestDb(sharedDb);
+    const eventId = await storeEvent(sharedDb, {
+      event: makeEvent({ title: 'No Audit Event' }),
+      severity: 'LOW',
+    });
+
+    // Rebuild app for the clean DB state
+    const ctx2 = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx2.server.ready();
+
+    const response = await ctx2.server.inject({
+      method: 'GET',
+      url: `/api/events/${eventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.audit).toBeNull();
+
+    await safeCloseServer(ctx2.server);
   });
 
   it('should return 404 for nonexistent event', async () => {

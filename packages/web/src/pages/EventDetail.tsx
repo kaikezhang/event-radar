@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp, CircleCheckBig } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp, CircleCheckBig, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { SeverityBadge } from '../components/SeverityBadge.js';
@@ -60,6 +60,37 @@ function buildTrustSummary(data: NonNullable<ReturnType<typeof useEventDetail>['
   }
 
   return 'This alert is currently relying on live source context rather than a closed scorecard outcome.';
+}
+
+function buildFilterPath(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string {
+  const steps: string[] = [];
+  const audit = data.audit;
+
+  steps.push('Passed L1 rule filter');
+
+  if (audit?.confidence != null) {
+    steps.push(`L2 LLM judge (confidence ${audit.confidence.toFixed(2)})`);
+  }
+
+  if (audit?.historicalMatch || data.historicalPattern.matchCount > 0) {
+    steps.push('Enriched with market context');
+  }
+
+  if (audit?.outcome === 'delivered') {
+    steps.push('Delivered');
+  }
+
+  return steps.join(' → ');
+}
+
+function buildHistoricalRationale(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string | null {
+  const pattern = data.historicalPattern;
+  if (pattern.matchCount === 0) return null;
+
+  const eventType = data.scorecard?.originalAlert.thesis?.historicalContext
+    ?? `${pattern.matchCount} similar events`;
+
+  return `Matched ${eventType} with ${pattern.confidence} confidence`;
 }
 
 function InfoField({ label, value }: { label: string; value: string }) {
@@ -236,6 +267,12 @@ export function EventDetail() {
             className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
           >
             Trust check
+          </a>
+          <a
+            href="#why-this-alert"
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Why this alert
           </a>
         </nav>
       </section>
@@ -427,6 +464,66 @@ export function EventDetail() {
               label="Pattern confidence"
               value={formatTrustLabel(data.historicalPattern.confidence)}
             />
+          </div>
+        )}
+      </section>
+
+      {/* Why This Alert — provenance + audit trail */}
+      <section id="why-this-alert" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-accent-default" />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Alert provenance
+            </p>
+            <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
+              Why this alert
+            </h2>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <InfoField
+            label="Source"
+            value={`${data.source} · ${formatRelativeTime(data.time)}`}
+          />
+          <InfoField
+            label="Filter path"
+            value={buildFilterPath(data)}
+          />
+          {buildHistoricalRationale(data) && (
+            <InfoField
+              label="Historical match"
+              value={buildHistoricalRationale(data)!}
+            />
+          )}
+          {data.audit?.confidence != null && (
+            <InfoField
+              label="Classification confidence"
+              value={`${(data.audit.confidence * 100).toFixed(0)}%`}
+            />
+          )}
+        </div>
+
+        {data.confirmationCount > 1 && (
+          <div className="mt-4 rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
+            <p className="text-sm font-medium text-emerald-200">
+              Also reported by: {data.confirmedSources.filter((s) => s !== data.source).join(', ')}
+              {data.provenance.length > 1 && (
+                <span className="text-text-secondary">
+                  {' '}({formatProvenanceOffset(data.provenance[0]?.receivedAt ?? data.time, data.provenance[data.provenance.length - 1]?.receivedAt ?? data.time)})
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {data.audit?.reason && (
+          <div className="mt-3 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Pipeline note
+            </p>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">{data.audit.reason}</p>
           </div>
         )}
       </section>
