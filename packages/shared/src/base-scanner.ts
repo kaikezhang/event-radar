@@ -15,7 +15,12 @@ export interface BaseScannerOptions {
 const DEGRADED_THRESHOLD = 1;
 const DOWN_THRESHOLD = 3;
 const BACKOFF_THRESHOLD = 5;
+const TIMEOUT_BACKOFF_THRESHOLD = 3;
 const MAX_BACKOFF_MS = 1_800_000; // 30 minutes
+
+function isTimeoutError(error: Error): boolean {
+  return error.name === 'AbortError';
+}
 
 export abstract class BaseScanner implements Scanner {
   readonly name: string;
@@ -28,6 +33,8 @@ export abstract class BaseScanner implements Scanner {
   private _lastScanAt: Date | null = null;
   private _errorCount = 0;
   private _consecutiveErrors = 0;
+  private _consecutiveNonTimeoutErrors = 0;
+  private _timeoutErrors = 0;
   private _running = false;
   private _inBackoff = false;
 
@@ -41,10 +48,18 @@ export abstract class BaseScanner implements Scanner {
   protected abstract poll(): Promise<Result<RawEvent[], Error>>;
 
   private get currentIntervalMs(): number {
-    if (this._consecutiveErrors < BACKOFF_THRESHOLD) {
+    if (this._timeoutErrors >= TIMEOUT_BACKOFF_THRESHOLD) {
+      const doublings = this._timeoutErrors - TIMEOUT_BACKOFF_THRESHOLD + 1;
+      const backoff = this.pollIntervalMs * Math.pow(2, doublings);
+      return Math.min(backoff, MAX_BACKOFF_MS);
+    }
+
+    if (this._consecutiveNonTimeoutErrors < BACKOFF_THRESHOLD) {
       return this.pollIntervalMs;
     }
-    const doublings = this._consecutiveErrors - BACKOFF_THRESHOLD + 1;
+
+    const doublings =
+      this._consecutiveNonTimeoutErrors - BACKOFF_THRESHOLD + 1;
     const backoff = this.pollIntervalMs * Math.pow(2, doublings);
     return Math.min(backoff, MAX_BACKOFF_MS);
   }
@@ -62,42 +77,69 @@ export abstract class BaseScanner implements Scanner {
   async scan(): Promise<Result<RawEvent[], Error>> {
     try {
       const result = await this.poll();
+      this._lastScanAt = new Date();
 
       if (result.ok) {
-        if (this._inBackoff) {
-          console.log(`[${this.name}] Backoff reset after successful poll`);
-        }
-        this._errorCount = 0;
-        this._consecutiveErrors = 0;
-        this._inBackoff = false;
-        this._lastScanAt = new Date();
+        this.handleSuccess();
 
         for (const event of result.value) {
           await this.eventBus.publish(event);
         }
       } else {
-        this._errorCount++;
-        this._consecutiveErrors++;
-        this._lastScanAt = new Date();
-        this.checkBackoff();
+        this.handleFailure(result.error);
       }
 
       return result;
     } catch (e) {
-      this._errorCount++;
-      this._consecutiveErrors++;
       this._lastScanAt = new Date();
-      this.checkBackoff();
       const error = e instanceof Error ? e : new Error(String(e));
+      this.handleFailure(error);
       return err(error);
     }
   }
 
+  private handleSuccess(): void {
+    if (this._inBackoff) {
+      console.log(`[${this.name}] Backoff reset after successful poll`);
+    }
+    this._errorCount = 0;
+    this._consecutiveErrors = 0;
+    this._consecutiveNonTimeoutErrors = 0;
+    this._timeoutErrors = 0;
+    this._inBackoff = false;
+  }
+
+  private handleFailure(error: Error): void {
+    this._errorCount++;
+    this._consecutiveErrors++;
+
+    if (isTimeoutError(error)) {
+      this._timeoutErrors++;
+      this._consecutiveNonTimeoutErrors = 0;
+      const timeoutMessage = error.message.replace(/^Request/, 'request');
+      console.warn(`[${this.name}] ${timeoutMessage}`);
+    } else {
+      this._timeoutErrors = 0;
+      this._consecutiveNonTimeoutErrors++;
+      console.warn(`[${this.name}] network error: ${error.message}`);
+    }
+
+    this.checkBackoff();
+  }
+
   private checkBackoff(): void {
-    if (this._consecutiveErrors >= BACKOFF_THRESHOLD && !this._inBackoff) {
+    const enteringTimeoutBackoff =
+      this._timeoutErrors >= TIMEOUT_BACKOFF_THRESHOLD;
+    const enteringErrorBackoff =
+      this._consecutiveNonTimeoutErrors >= BACKOFF_THRESHOLD;
+
+    if ((enteringTimeoutBackoff || enteringErrorBackoff) && !this._inBackoff) {
       this._inBackoff = true;
+      const description = enteringTimeoutBackoff
+        ? `${this._timeoutErrors} consecutive timeouts`
+        : `${this._consecutiveNonTimeoutErrors} consecutive errors`;
       console.log(
-        `[${this.name}] Entering backoff: ${this._consecutiveErrors} consecutive errors, next poll in ${this.currentIntervalMs}ms`,
+        `[${this.name}] Entering backoff: ${description}, next poll in ${this.currentIntervalMs}ms`,
       );
     }
   }
@@ -105,7 +147,7 @@ export abstract class BaseScanner implements Scanner {
   start(): void {
     if (this._running) return;
     this._running = true;
-    this.scheduleNext();
+    void this.tick();
   }
 
   stop(): void {

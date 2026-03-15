@@ -2,6 +2,7 @@ import {
   BaseScanner,
   err,
   ok,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -421,7 +422,8 @@ export class SecEdgarScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1000, 'sec-edgar');
   private lastForm4PollAt: number | null = null;
 
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -469,6 +471,7 @@ export class SecEdgarScanner extends BaseScanner {
 
   private async fetchFeed(url: string): Promise<EdgarAtomEntry[]> {
     const response = await this.fetchFn(url, {
+      timeoutMs: 30_000,
       headers: {
         'User-Agent': SEC_USER_AGENT,
         Accept: SEC_XML_ACCEPT,

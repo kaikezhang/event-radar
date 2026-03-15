@@ -1,129 +1,136 @@
-# Phase 0: Technical Debt Cleanup
+# TASK.md — WP5a-5c: Scanner Reliability Hardening
 
-Follow `docs/plans/2026-03-14-phase-0.md` for detailed specifications.
+> Reference: `docs/plans/2026-03-15-phase3-productization-v2.md` (WP5a, WP5b, WP5c)
 
-## Tasks
+## Goal
+Fix three scanner reliability issues: immediate first poll, fetch timeouts, and NYSE holiday computation.
 
-### Task 1: Unify Event Taxonomy (3 days)
+## WP5a: Immediate First Poll
 
-Expand `LLMEventTypeSchema` from 7 to ~20 types:
+### File: `packages/shared/src/base-scanner.ts`
+
+Change `start()` to do an immediate first poll instead of waiting one full interval:
 
 ```typescript
-// packages/shared/src/schemas/llm-types.ts
-export const LLMEventTypeSchema = z.enum([
-  // Earnings
-  'earnings_beat',
-  'earnings_miss',
-  'earnings_guidance',
-  
-  // SEC / Corporate Filings
-  'sec_form_8k',
-  'sec_form_4',
-  'sec_form_10q',
-  'sec_form_10k',
-  
-  // Regulatory
-  'fda_approval',
-  'fda_rejection',
-  'fda_orphan_drug',
-  'ftc_antitrust',
-  'doj_settlement',
-  
-  // Government
-  'executive_order',
-  'congress_bill',
-  'federal_register',
-  
-  // Macro
-  'economic_data',
-  'fed_announcement',
-  
-  // Technical / Flow
-  'unusual_options',
-  'insider_large_trade',
-  'short_interest',
-  
-  // Sentiment
-  'social_volume_spike',
-  'reddit_trending',
-  'news_breaking',
-]);
+start(): void {
+  if (this._running) return;
+  this._running = true;
+  void this.tick(); // immediate first poll, then schedule next
+}
 ```
 
-**Steps:**
-1. Update `packages/shared/src/schemas/llm-types.ts` — expand enum
-2. Update `packages/shared/src/schemas/llm-classification.ts` — use unified enum
-3. Map scanner outputs to new types in scanner files
-4. Fix `packages/backend/src/pipeline/event-type-mapper.ts` — remove exclusions for fda/congress/doj/whitehouse
-5. Update LLM classification prompt in `llm-gatekeeper.ts`
+Currently it calls `this.scheduleNext()` which sets a `setTimeout` — meaning after restart, scanners are blind for their full poll interval (5-30 minutes).
 
-### Task 2: Add T+5 / T+20 Outcome Tracking (2 days)
+**Note**: The app has a 90-second delivery grace period (`app.ts:~600`) that suppresses delivery on startup. Events from the immediate first poll will be stored to DB but not delivered during grace period. This is fine — the grace period audit record already marks them as `outcome: 'grace_period'`. No changes needed there.
 
-**Steps:**
-1. Add columns to schema (`packages/backend/src/db/schema.ts`):
-   - `price_t5`, `price_t20` (numeric)
-   - `change_t5`, `change_t20` (numeric)
-   - `evaluated_t5_at`, `evaluated_t20_at` (timestamp)
+### Tests
+- Update `base-scanner.test.ts` if it asserts on `scheduleNext()` behavior in `start()`
+- Add test: scanner polls immediately on start (not after interval)
 
-2. Update `packages/backend/src/services/outcome-tracker.ts`:
-   ```typescript
-   { hours: 120, column: 'price_t5', changeCol: 'change_t5', label: 'T+5d' },
-   { hours: 480, column: 'price_t20', changeCol: 'change_t20', label: 'T+20d' },
-   ```
+## WP5b: Fetch Timeout
 
-3. Run migration: `pnpm --filter @event-radar/backend migration:generate add_t5_t20`
+### New File: `packages/shared/src/scanner-fetch.ts`
 
-4. Fix `packages/backend/src/pipeline/historical-enricher.ts` — remove incorrect mapping from `change1d` to `avgAlphaT5`
+Create a `scannerFetch()` utility that wraps `fetch()` with an `AbortController` timeout:
 
-### Task 3: Fix LLM Output: Chinese → English (1 day)
-
-**Steps:**
-1. Update action labels in `packages/shared/src/schemas/llm-types.ts`:
-   ```typescript
-   export const LLMEnrichmentActionSchema = z.enum([
-     '🔴 ACT NOW',
-     '🟡 WATCH',
-     '🟢 FYI',
-   ]);
-   ```
-
-2. Update enrichment prompt in `packages/backend/src/pipeline/llm-enricher.ts`:
-   - Change "Chinese summary" → "English summary"
-   - Remove Chinese fallbacks
-
-3. Update delivery channels (`packages/delivery/src/*.ts`) to use English labels
-
-### Task 4: Document Scanner Latency (0.5 day)
-
-Create `docs/SCANNERS.md` with:
-- Table of all scanners with poll intervals
-- Typical latency per scanner
-- SLA targets for swing traders vs day traders
-
-### Task 5: Fix Source Naming Inconsistency (1 day)
-
-**Steps:**
-1. Audit all scanners for `source` field values
-2. Add alias mapping in `packages/shared/src/scanner-registry.ts`:
-   ```typescript
-   const SOURCE_ALIASES: Record<string, string> = {
-     'x': 'x-scanner',
-     'twitter': 'x-scanner',
-     'form-4': 'sec-edgar-scanner',
-     '8k': 'sec-edgar-scanner',
-   };
-   ```
-
-## Verification
-
-Before each commit, run:
-```bash
-pnpm build && pnpm --filter @event-radar/backend lint
+```typescript
+export async function scannerFetch(
+  url: string | URL,
+  options?: RequestInit & { timeoutMs?: number },
+): Promise<Response> {
+  const timeoutMs = options?.timeoutMs ?? 30_000;
+  const controller = new AbortController();
+  // Compose with any existing signal from caller
+  const existingSignal = options?.signal;
+  const signal = existingSignal
+    ? AbortSignal.any([existingSignal, controller.signal])
+    : controller.signal;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const { timeoutMs: _, ...fetchOptions } = options ?? {};
+    return await fetch(url, { ...fetchOptions, signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 ```
 
-## Output
+### Update `base-scanner.ts` — Timeout vs Backoff
+In `scan()`, catch `AbortError` (timeout) separately from network errors:
+- Timeout errors should NOT trigger aggressive exponential backoff
+- Add `_timeoutErrors` counter
+- Only trigger backoff after **3 consecutive** timeouts (more lenient)
+- Log timeout differently: "Scanner X: request timed out after 30s" vs "Scanner X: network error"
 
-- Create branch: `fix/phase-0-cleanup`
-- One commit per task
-- Single PR at the end combining all fixes
-- DO NOT merge — create PR and stop
+### Update Scanners
+Replace `fetch()` with `scannerFetch()` in these HTTP scanners (browser-based scanners already have Crawlee timeouts):
+- `packages/backend/src/scanners/congress-scanner.ts` — timeoutMs: 60_000 (slow API)
+- `packages/backend/src/scanners/newswire-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/fda-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/sec-edgar-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/federal-register-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/whitehouse-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/doj-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/reddit-scanner.ts` — timeoutMs: 15_000
+- `packages/backend/src/scanners/stocktwits-scanner.ts` — timeoutMs: 15_000
+- `packages/backend/src/scanners/econ-calendar-scanner.ts` — timeoutMs: 30_000
+- `packages/backend/src/scanners/halt-scanner.ts` — timeoutMs: 15_000
+- `packages/backend/src/scanners/earnings-scanner.ts` — timeoutMs: 30_000
+
+Do NOT change browser-based scanners (x-scanner, truth-social-scanner) — they use Crawlee.
+
+### Tests
+- Unit test for `scannerFetch()`: verify timeout fires, verify abort signal composition
+- Integration: verify BaseScanner doesn't enter aggressive backoff on timeout
+
+## WP5c: NYSE Holiday Dynamic Computation
+
+### File: `packages/backend/src/pipeline/llm-gatekeeper.ts`
+
+Replace hardcoded `NYSE_HOLIDAYS_2026` with a dynamic computation function.
+
+#### Requirements
+1. Fixed holidays (with observed rules — Sat→preceding Fri, Sun→following Mon):
+   - New Year's Day (Jan 1)
+   - MLK Day (3rd Monday of January)
+   - Presidents' Day (3rd Monday of February)
+   - Juneteenth (June 19, since 2022)
+   - Independence Day (July 4)
+   - Labor Day (1st Monday of September)
+   - Thanksgiving (4th Thursday of November)
+   - Christmas (December 25)
+
+2. Good Friday (variable — needs Easter/Computus algorithm):
+   - Easter Sunday is the first Sunday after the first full moon on or after March 21
+   - Use the anonymous Gregorian algorithm (Computus) to compute Easter date
+   - Good Friday = Easter Sunday - 2 days
+   - NYSE always closes for Good Friday
+
+3. Early closings (1:00 PM ET):
+   - Day before Independence Day (July 3, if weekday)
+   - Day after Thanksgiving (Black Friday)
+   - Christmas Eve (Dec 24, if weekday)
+   - Add `isEarlyClose(date: Date): boolean` function
+   - Add `getMarketCloseTime(date: Date): Date` function (returns 1pm ET for early close, 4pm ET normally)
+
+#### Implementation
+- Create a new file: `packages/backend/src/pipeline/market-calendar.ts`
+- Export: `isNYSEHoliday(date: Date): boolean`, `isEarlyClose(date: Date): boolean`, `getMarketCloseTime(date: Date): Date`, `getNYSEHolidaysForYear(year: number): string[]`
+- Update `llm-gatekeeper.ts` to import from `market-calendar.ts` instead of using hardcoded set
+- Update `getMarketSession()` to use `getMarketCloseTime()` for early close awareness
+
+#### Tests — THOROUGH!
+- Verify 2025 holidays (known dates)
+- Verify 2026 holidays (matches the current hardcoded set)
+- Verify 2027 holidays
+- Verify 2028 holidays (leap year)
+- Verify Good Friday dates: 2025-04-18, 2026-04-03, 2027-03-26, 2028-04-14
+- Verify observed rules: e.g., July 4 on Saturday → July 3 closed; Christmas on Sunday → Dec 26 closed
+- Verify early closings
+- Edge case: New Year's Day on Saturday (2028) → Dec 31, 2027 closed
+
+## PR
+- Branch: `feat/wp5-scanner-hardening` (already created)
+- Title: "feat: scanner reliability hardening — immediate poll, fetch timeout, dynamic NYSE calendar"
+- Run ALL tests before creating PR: `pnpm --filter @event-radar/backend test && pnpm --filter @event-radar/shared test`
+- Create PR and STOP. Do not merge.

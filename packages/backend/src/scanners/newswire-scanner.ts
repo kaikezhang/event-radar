@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -89,7 +90,8 @@ export class NewswireScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1000, 'newswire');
   private readonly feeds: NewswireFeedConfig[];
   /** Override for testing */
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus, feeds?: NewswireFeedConfig[]) {
     super({
@@ -108,6 +110,7 @@ export class NewswireScanner extends BaseScanner {
       for (const feed of this.feeds) {
         try {
           const response = await this.fetchFn(feed.url, {
+            timeoutMs: 30_000,
             headers: {
               'User-Agent': 'EventRadar/1.0',
               Accept: 'application/rss+xml, application/xml, text/xml',

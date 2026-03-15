@@ -163,6 +163,7 @@ export {
   type ReclassificationCandidate,
 } from './schemas/adaptive-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
+export { scannerFetch, type ScannerFetchOptions } from './scanner-fetch.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
 export {

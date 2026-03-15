@@ -17,6 +17,14 @@ function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   };
 }
 
+function makeAbortError(
+  message = 'Request timed out after 30000ms',
+): Error {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
 class SuccessScanner extends BaseScanner {
   callCount = 0;
 
@@ -202,13 +210,21 @@ describe('BaseScanner', () => {
       expect(scanner.running).toBe(false);
     });
 
-    it('should start polling on start()', async () => {
-      const scanner = makeSuccessScanner();
+    it('should poll immediately on start()', async () => {
+      const scanner = makeSuccessScanner() as SuccessScanner;
       scanner.start();
       expect(scanner.running).toBe(true);
+      expect(scanner.callCount).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(1000);
+      await Promise.resolve();
       expect(scanner.health().lastScanAt).not.toBeNull();
+      expect(scanner.callCount).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(scanner.callCount).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(scanner.callCount).toBe(2);
 
       scanner.stop();
     });
@@ -259,7 +275,7 @@ describe('BaseScanner', () => {
       });
 
       scanner.start();
-      await vi.advanceTimersByTimeAsync(1000); // first poll (fails)
+      await Promise.resolve(); // first poll (fails immediately)
       expect(scanner.health().errorCount).toBe(1);
 
       await vi.advanceTimersByTimeAsync(1000); // second poll (succeeds)
@@ -285,7 +301,7 @@ describe('BaseScanner', () => {
       });
 
       scanner.start();
-      await vi.advanceTimersByTimeAsync(1000); // first poll (throws)
+      await Promise.resolve(); // first poll (throws immediately)
       expect(scanner.health().errorCount).toBe(1);
 
       await vi.advanceTimersByTimeAsync(1000); // second poll (succeeds)
@@ -407,8 +423,10 @@ describe('BaseScanner', () => {
 
       scanner.start();
 
-      // First 5 polls at 1000ms each
-      for (let i = 0; i < 5; i++) {
+      expect(calls).toBe(1); // immediate first poll
+
+      // Next 4 polls at 1000ms each
+      for (let i = 0; i < 4; i++) {
         await vi.advanceTimersByTimeAsync(1000);
       }
       expect(calls).toBe(5);
@@ -443,8 +461,10 @@ describe('BaseScanner', () => {
 
       scanner.start();
 
-      // 5 failures at normal interval
-      for (let i = 0; i < 5; i++) {
+      expect(calls).toBe(1); // immediate first failure
+
+      // 4 more failures at normal interval
+      for (let i = 0; i < 4; i++) {
         await vi.advanceTimersByTimeAsync(1000);
       }
       expect(calls).toBe(5);
@@ -511,6 +531,54 @@ describe('BaseScanner', () => {
       );
       expect(backoffLogs).toHaveLength(1);
       logSpy.mockRestore();
+    });
+
+    it('should not enter backoff before 3 consecutive timeouts', async () => {
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          return err(makeAbortError());
+        }
+      })({
+        name: 'timeout-threshold',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      await scanner.scan();
+      await scanner.scan();
+
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(2);
+      expect(h.inBackoff).toBe(false);
+      expect(h.currentIntervalMs).toBe(1000);
+    });
+
+    it('should enter backoff after 3 consecutive timeouts', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const scanner = new (class extends BaseScanner {
+        protected async poll(): Promise<Result<RawEvent[], Error>> {
+          return err(makeAbortError('Request timed out after 15000ms'));
+        }
+      })({
+        name: 'timeout-backoff',
+        source: 'test',
+        pollIntervalMs: 1000,
+        eventBus,
+      });
+
+      await scanner.scan();
+      await scanner.scan();
+      await scanner.scan();
+
+      const h = scanner.health();
+      expect(h.consecutiveErrors).toBe(3);
+      expect(h.inBackoff).toBe(true);
+      expect(h.currentIntervalMs).toBe(2000);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[timeout-backoff] request timed out after 15000ms',
+      );
+      vi.restoreAllMocks();
     });
   });
 });

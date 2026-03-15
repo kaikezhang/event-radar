@@ -3,6 +3,7 @@ import {
   BaseScanner,
   err,
   ok,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -391,7 +392,8 @@ function hasResumeInfo(record: NasdaqTradeHaltRecord): boolean {
 
 export class HaltScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1_000, 'trading-halt');
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -407,6 +409,7 @@ export class HaltScanner extends BaseScanner {
 
     try {
       const response = await this.fetchFn(NASDAQ_TRADE_HALTS_RSS_URL, {
+        timeoutMs: 15_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/rss+xml, application/xml, text/xml',
@@ -428,6 +431,7 @@ export class HaltScanner extends BaseScanner {
 
     try {
       const response = await this.fetchFn(NASDAQ_TRADE_HALTS_JSON_URL, {
+        timeoutMs: 15_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/json',

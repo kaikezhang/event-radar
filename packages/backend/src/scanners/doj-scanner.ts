@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -79,7 +80,8 @@ function mapDojEventType(
 export class DojScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'doj');
   /** Override for testing */
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -93,6 +95,7 @@ export class DojScanner extends BaseScanner {
   protected async poll(): Promise<Result<RawEvent[], Error>> {
     try {
       const response = await this.fetchFn(DOJ_ATR_RSS_URL, {
+        timeoutMs: 30_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/rss+xml, application/xml, text/xml',
