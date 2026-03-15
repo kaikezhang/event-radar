@@ -150,6 +150,28 @@ export async function getWatchlistSummary(): Promise<WatchlistTickerSummary[]> {
   return (res.tickers ?? []) as WatchlistTickerSummary[];
 }
 
+export interface NotificationPreferences {
+  quietStart: string | null;
+  quietEnd: string | null;
+  timezone: string;
+  dailyPushCap: number;
+  pushNonWatchlist: boolean;
+  updatedAt?: string | null;
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  return apiFetch('/v1/preferences');
+}
+
+export async function updateNotificationPreferences(
+  preferences: NotificationPreferences,
+): Promise<NotificationPreferences> {
+  return apiFetch('/v1/preferences', {
+    method: 'PUT',
+    body: preferences,
+  });
+}
+
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
   try {
     const data = await apiFetch(`/events/${id}`);

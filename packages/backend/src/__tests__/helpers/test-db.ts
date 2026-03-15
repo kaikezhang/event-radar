@@ -28,6 +28,7 @@ export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM delivery_kill_switch`);
   await db.execute(sql`DELETE FROM pipeline_audit`);
   await db.execute(sql`DELETE FROM push_subscriptions`);
+  await db.execute(sql`DELETE FROM user_preferences`);
   await db.execute(sql`DELETE FROM refresh_tokens`);
   await db.execute(sql`DELETE FROM magic_link_tokens`);
   await db.execute(sql`DELETE FROM watchlist`);
@@ -86,6 +87,18 @@ export async function createTestDb(): Promise<{
       expires_at TIMESTAMPTZ NOT NULL,
       revoked_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id VARCHAR(100) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      quiet_start TIME,
+      quiet_end TIME,
+      timezone VARCHAR(50) NOT NULL DEFAULT 'America/New_York',
+      daily_push_cap INTEGER NOT NULL DEFAULT 20,
+      push_non_watchlist BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 

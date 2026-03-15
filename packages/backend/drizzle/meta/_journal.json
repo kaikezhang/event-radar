@@ -29,6 +29,13 @@
       "when": 1773584857397,
       "tag": "0003_clammy_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773586800000,
+      "tag": "0004_dapper_wolfsbane",
+      "breakpoints": true
     }
   ]
 }

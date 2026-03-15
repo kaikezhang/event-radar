@@ -75,7 +75,7 @@ describe('useAlerts', () => {
     });
 
     await waitFor(() => {
-      expect(getFeedMock).toHaveBeenCalledWith(50);
+      expect(getFeedMock).toHaveBeenCalledWith(50, { watchlist: false });
       expect(latestOnEvent).toBeTypeOf('function');
     });
 

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { buildApp } from '../app.js';
 import { createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
@@ -11,6 +11,8 @@ const TEST_API_KEY = 'admin-test-key';
 describe('Admin delivery routes', () => {
   let db: Database;
   let client: PGlite;
+  const previousAuthRequired = process.env.AUTH_REQUIRED;
+  const previousJwtSecret = process.env.JWT_SECRET;
 
   beforeAll(async () => {
     const result = await createTestDb();
@@ -18,8 +20,23 @@ describe('Admin delivery routes', () => {
     client = result.client;
   });
 
+  beforeEach(() => {
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+  });
+
   afterEach(async () => {
     await db.execute(sql`DELETE FROM delivery_kill_switch`);
+    if (previousAuthRequired == null) {
+      delete process.env.AUTH_REQUIRED;
+    } else {
+      process.env.AUTH_REQUIRED = previousAuthRequired;
+    }
+    if (previousJwtSecret == null) {
+      delete process.env.JWT_SECRET;
+    } else {
+      process.env.JWT_SECRET = previousJwtSecret;
+    }
   });
 
   afterAll(async () => {

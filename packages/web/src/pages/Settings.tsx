@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAlertSound } from '../hooks/useAlertSound.js';
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from '../lib/api.js';
 import {
   getWebPushDeviceState,
   getWebPushStatusDetails,
@@ -12,6 +17,33 @@ import {
   WebPushError,
 } from '../lib/web-push.js';
 
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  quietStart: null,
+  quietEnd: null,
+  timezone: 'America/New_York',
+  dailyPushCap: 20,
+  pushNonWatchlist: false,
+};
+
+const US_TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'Pacific/Honolulu',
+];
+
+function serializeNotificationPreferences(preferences: NotificationPreferences): string {
+  return JSON.stringify({
+    quietStart: preferences.quietStart,
+    quietEnd: preferences.quietEnd,
+    timezone: preferences.timezone,
+    dailyPushCap: preferences.dailyPushCap,
+    pushNonWatchlist: preferences.pushNonWatchlist,
+  });
+}
+
 export function Settings() {
   const location = useLocation();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
@@ -22,6 +54,11 @@ export function Settings() {
   const [backendRegistrationFailed, setBackendRegistrationFailed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(() => getWebPushSupport().supported);
   const [isPushActionPending, setIsPushActionPending] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +94,109 @@ export function Settings() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNotificationPreferences(): Promise<void> {
+      try {
+        const loaded = await getNotificationPreferences();
+        if (cancelled) {
+          return;
+        }
+
+        baselinePreferencesRef.current = serializeNotificationPreferences(loaded);
+        setNotificationPreferences(loaded);
+      } catch {
+        if (!cancelled) {
+          setNotificationError('Could not load notification preferences.');
+          setNotificationPreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES });
+        }
+      }
+    }
+
+    void loadNotificationPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [toastMessage]);
+
+  const notificationKey = notificationPreferences
+    ? serializeNotificationPreferences(notificationPreferences)
+    : null;
+
+  useEffect(() => {
+    if (!notificationPreferences || notificationKey == null) {
+      return undefined;
+    }
+
+    if (notificationKey === baselinePreferencesRef.current) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveState('saving');
+      void updateNotificationPreferences(notificationPreferences)
+        .then((saved) => {
+          baselinePreferencesRef.current = serializeNotificationPreferences(saved);
+          setNotificationPreferences(saved);
+          setNotificationError(null);
+          setSaveState('saved');
+          setToastMessage('Preferences saved');
+        })
+        .catch(() => {
+          setSaveState('error');
+          setNotificationError('Could not save notification preferences.');
+          setToastMessage('Could not save preferences');
+        });
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [notificationPreferences, notificationKey]);
+
+  function updatePreferencesState(
+    updater: (current: NotificationPreferences) => NotificationPreferences,
+  ): void {
+    setNotificationPreferences((current) => (
+      current ? updater(current) : current
+    ));
+    setSaveState('idle');
+  }
+
+  function toggleQuietHours(enabled: boolean): void {
+    updatePreferencesState((current) => {
+      if (!enabled) {
+        return {
+          ...current,
+          quietStart: null,
+          quietEnd: null,
+        };
+      }
+
+      return {
+        ...current,
+        quietStart: current.quietStart ?? '23:00',
+        quietEnd: current.quietEnd ?? '08:00',
+      };
+    });
+  }
 
   async function enableWebPush(): Promise<void> {
     try {
@@ -110,6 +250,8 @@ export function Settings() {
     danger: 'border-rose-300/20 bg-rose-300/10 text-rose-100',
   }[pushDetails.tone];
   const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
+  const quietHoursEnabled =
+    notificationPreferences?.quietStart != null && notificationPreferences.quietEnd != null;
 
   return (
     <section className="space-y-4">
@@ -235,6 +377,165 @@ export function Settings() {
       </div>
 
       <div className="space-y-4 rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
+              Notification budget
+            </p>
+            <h2 className="mt-3 text-[22px] font-semibold text-text-primary">
+              Notification timing
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Control when Event Radar can ping you and how much push volume you allow each day.
+            </p>
+          </div>
+          <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
+          </div>
+        </div>
+
+        {notificationError ? (
+          <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+            {notificationError}
+          </div>
+        ) : null}
+
+        {!notificationPreferences ? (
+          <div className="rounded-2xl border border-white/8 bg-bg-elevated/40 p-4 text-sm text-text-secondary">
+            Loading notification preferences…
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Quiet hours</p>
+                <p className="mt-2 text-sm leading-6 text-text-secondary">
+                  During quiet hours, only 🔴 High-Quality Setup alerts will push through.
+                </p>
+              </div>
+
+              <label className="flex items-center justify-between gap-4" htmlFor="quiet-hours-toggle">
+                <span className="text-sm font-medium text-text-primary">Enable quiet hours</span>
+                <input
+                  id="quiet-hours-toggle"
+                  type="checkbox"
+                  checked={quietHoursEnabled}
+                  onChange={(event) => toggleQuietHours(event.target.checked)}
+                  className="h-5 w-5 rounded border-white/15 bg-transparent text-accent-default focus:ring-accent-default"
+                />
+              </label>
+
+              {quietHoursEnabled ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="block space-y-2" htmlFor="quiet-hours-start">
+                    <span className="block text-sm font-medium text-text-primary">Quiet hours start</span>
+                    <input
+                      id="quiet-hours-start"
+                      type="time"
+                      value={notificationPreferences.quietStart ?? '23:00'}
+                      onChange={(event) => updatePreferencesState((current) => ({
+                        ...current,
+                        quietStart: event.target.value,
+                      }))}
+                      className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                    />
+                  </label>
+
+                  <label className="block space-y-2" htmlFor="quiet-hours-end">
+                    <span className="block text-sm font-medium text-text-primary">Quiet hours end</span>
+                    <input
+                      id="quiet-hours-end"
+                      type="time"
+                      value={notificationPreferences.quietEnd ?? '08:00'}
+                      onChange={(event) => updatePreferencesState((current) => ({
+                        ...current,
+                        quietEnd: event.target.value,
+                      }))}
+                      className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                    />
+                  </label>
+
+                  <label className="block space-y-2" htmlFor="notification-timezone">
+                    <span className="block text-sm font-medium text-text-primary">Timezone</span>
+                    <select
+                      id="notification-timezone"
+                      value={notificationPreferences.timezone}
+                      onChange={(event) => updatePreferencesState((current) => ({
+                        ...current,
+                        timezone: event.target.value,
+                      }))}
+                      className="min-h-11 w-full rounded-2xl border border-white/10 bg-[#111723] px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                    >
+                      {US_TIMEZONES.map((timezone) => (
+                        <option key={timezone} value={timezone}>
+                          {timezone}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div>
+                <label className="block text-sm font-medium text-text-primary" htmlFor="daily-push-limit">
+                  Daily push limit
+                </label>
+                <p className="mt-2 text-sm leading-6 text-text-secondary">
+                  🔴 High-Quality Setup alerts always push regardless of daily limit.
+                </p>
+              </div>
+
+              <select
+                id="daily-push-limit"
+                value={String(notificationPreferences.dailyPushCap)}
+                onChange={(event) => updatePreferencesState((current) => ({
+                  ...current,
+                  dailyPushCap: Number(event.target.value),
+                }))}
+                className="min-h-11 w-full rounded-2xl border border-white/10 bg-[#111723] px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+              >
+                <option value="5">5 alerts</option>
+                <option value="10">10 alerts</option>
+                <option value="20">20 alerts</option>
+                <option value="50">50 alerts</option>
+                <option value="0">Unlimited</option>
+              </select>
+            </div>
+
+            <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Non-watchlist alerts</p>
+                <p className="mt-2 text-sm leading-6 text-text-secondary">
+                  When enabled, high-confidence alerts for any ticker will push to you.
+                </p>
+              </div>
+
+              <label
+                className="flex items-center justify-between gap-4"
+                htmlFor="push-non-watchlist-toggle"
+              >
+                <span className="text-sm font-medium text-text-primary">
+                  Alert me for tickers outside my watchlist
+                </span>
+                <input
+                  id="push-non-watchlist-toggle"
+                  type="checkbox"
+                  checked={notificationPreferences.pushNonWatchlist}
+                  onChange={(event) => updatePreferencesState((current) => ({
+                    ...current,
+                    pushNonWatchlist: event.target.checked,
+                  }))}
+                  className="h-5 w-5 rounded border-white/15 bg-transparent text-accent-default focus:ring-accent-default"
+                />
+              </label>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-4 rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
             Sound
@@ -303,6 +604,12 @@ export function Settings() {
           </label>
         </div>
       </div>
+
+      {toastMessage ? (
+        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${saveState === 'error' ? 'border-rose-400/20 bg-[#240d0d] text-rose-100' : 'border-emerald-400/20 bg-[#0d241d] text-emerald-100'}`}>
+          {toastMessage}
+        </div>
+      ) : null}
     </section>
   );
 }
