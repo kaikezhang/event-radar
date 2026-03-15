@@ -1,7 +1,8 @@
-import { Home, RadioTower } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav.js';
-import { AuthProvider } from './contexts/AuthContext.js';
+import { AuthProvider, useAuth } from './contexts/AuthContext.js';
+import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { AuthVerify } from './pages/AuthVerify.js';
 import { EventDetail } from './pages/EventDetail.js';
 import { Feed } from './pages/Feed.js';
@@ -13,43 +14,64 @@ import { TickerProfile } from './pages/TickerProfile.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Watchlist } from './pages/Watchlist.js';
 
+function AppHeader() {
+  const { user } = useAuth();
+  const connectionStatus = useConnectionStatus();
+
+  const statusConfig = {
+    connected: { label: 'Live', dotClass: 'bg-success animate-pulse' },
+    reconnecting: { label: 'Reconnecting', dotClass: 'bg-warning animate-pulse' },
+    disconnected: { label: 'Offline', dotClass: 'bg-severity-critical' },
+  }[connectionStatus];
+
+  return (
+    <header className="flex h-12 items-center justify-between">
+      <Link to="/" className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-accent-default" />
+        <span className="text-sm font-semibold tracking-tight text-text-primary">
+          Event Radar
+        </span>
+      </Link>
+
+      <div className="flex items-center gap-3">
+        <span className="flex items-center gap-1.5 text-[10px] font-medium text-text-tertiary">
+          <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
+          {statusConfig.label}
+        </span>
+
+        {user ? (
+          <Link
+            to="/settings"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-elevated text-xs font-semibold text-text-secondary"
+          >
+            {user.displayName?.[0]?.toUpperCase() ?? user.email[0]?.toUpperCase() ?? '?'}
+          </Link>
+        ) : (
+          <Link to="/login" className="text-xs font-medium text-accent-default">
+            Sign in
+          </Link>
+        )}
+      </div>
+    </header>
+  );
+}
+
 function AppShell() {
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-bg-primary text-text-primary">
-        <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-28 pt-[calc(env(safe-area-inset-top)+16px)]">
-          <header className="mb-4 flex items-center justify-between gap-3">
-            <Link
-              to="/"
-              className="inline-flex min-h-11 items-center gap-3 rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-text-primary transition hover:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-default/12 text-accent-default">
-                <RadioTower className="h-4 w-4" />
-              </span>
-              <span>
-                <span className="block text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
-                  Event Radar
-                </span>
-                <span className="block text-sm text-text-secondary">Delayed public feed</span>
-              </span>
-            </Link>
+      <ConnectionProvider>
+        <div className="min-h-screen bg-bg-primary text-text-primary">
+          <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-20 pt-[calc(env(safe-area-inset-top)+8px)]">
+            <AppHeader />
 
-            <Link
-              to="/"
-              className="inline-flex min-h-11 items-center rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              <Home className="mr-2 h-4 w-4" />
-              Feed
-            </Link>
-          </header>
-
-          <main className="flex-1">
-            <Outlet />
-          </main>
+            <main className="flex-1">
+              <Outlet />
+            </main>
+          </div>
+          <BottomNav />
+          <ScrollRestoration />
         </div>
-        <BottomNav />
-        <ScrollRestoration />
-      </div>
+      </ConnectionProvider>
     </AuthProvider>
   );
 }
