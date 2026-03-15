@@ -3,8 +3,6 @@ import {
   AccuracyDirectionSchema,
   ClassificationMethodSchema,
   ConfidenceLevelSchema,
-  LLMEnrichmentSchema,
-  deriveConfidenceLevel,
   type AccuracyDirection,
 } from '@event-radar/shared';
 import { z } from 'zod';
@@ -14,6 +12,20 @@ import {
   events,
   eventOutcomes,
 } from '../db/schema.js';
+import {
+  asRecord,
+  buildDirectionVerdict,
+  buildSetupVerdict,
+  capitalize,
+  extractTicker,
+  formatMove,
+  getEnrichment,
+  resolveConfidenceBucket,
+  resolveScorecardDirection,
+  selectVerdictWindow,
+  toNumber,
+  type SelectedScorecardWindow,
+} from './scorecard-semantics.js';
 
 const DirectionVerdictSchema = z.enum(['correct', 'incorrect', 'unclear']);
 const SetupVerdictSchema = z.enum(['worked', 'failed', 'insufficient-data']);
@@ -142,19 +154,22 @@ export class AlertScorecardService {
   private toScorecard(row: ScorecardQueryRow): AlertScorecard {
     const metadata = asRecord(row.metadata);
     const enrichment = getEnrichment(metadata?.['llm_enrichment']);
-    const direction = this.getDirection(row, metadata, enrichment);
+    const direction = resolveScorecardDirection({
+      predictedDirection: row.predictedDirection,
+      metadata,
+      enrichment,
+    });
     const confidence = toNumber(row.predictionConfidence);
-    const confidenceBucket =
-      confidence != null ? deriveConfidenceLevel(confidence) : null;
+    const confidenceBucket = resolveConfidenceBucket(row.predictionConfidence);
     const selectedWindow = selectVerdictWindow(
       toNumber(row.changeT5),
       toNumber(row.changeT20),
     );
-    const directionVerdict = this.buildDirectionVerdict(
+    const directionVerdict = buildDirectionVerdict(
       direction,
       selectedWindow?.movePercent ?? null,
     );
-    const setupVerdict = this.buildSetupVerdict(
+    const setupVerdict = buildSetupVerdict(
       direction,
       selectedWindow?.movePercent ?? null,
     );
@@ -207,51 +222,9 @@ export class AlertScorecardService {
     };
   }
 
-  private getDirection(
-    row: ScorecardQueryRow,
-    metadata: Record<string, unknown> | null,
-    enrichment: z.infer<typeof LLMEnrichmentSchema> | null,
-  ): AccuracyDirection | null {
-    return (
-      normalizeDirection(row.predictedDirection)
-      ?? normalizeDirection(metadata?.['direction'])
-      ?? normalizeDirection(enrichment?.tickers[0]?.direction)
-    );
-  }
-
-  private buildDirectionVerdict(
-    direction: AccuracyDirection | null,
-    movePercent: number | null,
-  ): z.infer<typeof DirectionVerdictSchema> {
-    if (direction == null || direction === 'neutral' || movePercent == null) {
-      return 'unclear';
-    }
-
-    if (direction === 'bullish') {
-      return movePercent > 0 ? 'correct' : 'incorrect';
-    }
-
-    return movePercent < 0 ? 'correct' : 'incorrect';
-  }
-
-  private buildSetupVerdict(
-    direction: AccuracyDirection | null,
-    movePercent: number | null,
-  ): z.infer<typeof SetupVerdictSchema> {
-    if (direction == null || direction === 'neutral' || movePercent == null) {
-      return 'insufficient-data';
-    }
-
-    if (direction === 'bullish') {
-      return movePercent > 0 ? 'worked' : 'failed';
-    }
-
-    return movePercent < 0 ? 'worked' : 'failed';
-  }
-
   private buildNotes(input: {
     direction: AccuracyDirection | null;
-    selectedWindow: SelectedWindow | null;
+    selectedWindow: SelectedScorecardWindow | null;
     directionVerdict: z.infer<typeof DirectionVerdictSchema>;
     setupVerdict: z.infer<typeof SetupVerdictSchema>;
     actionLabel: string | null;
@@ -302,91 +275,9 @@ export class AlertScorecardService {
   }
 }
 
-interface SelectedWindow {
-  label: z.infer<typeof VerdictWindowSchema>;
-  movePercent: number;
-}
-
-function selectVerdictWindow(
-  changeT5: number | null,
-  changeT20: number | null,
-): SelectedWindow | null {
-  if (changeT20 != null) {
-    return { label: 'T+20', movePercent: changeT20 };
-  }
-
-  if (changeT5 != null) {
-    return { label: 'T+5', movePercent: changeT5 };
-  }
-
-  return null;
-}
-
 function parseClassificationMethod(
   value: string | null,
 ): z.infer<typeof ClassificationMethodSchema> | null {
   const parsed = ClassificationMethodSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
-}
-
-function getEnrichment(
-  value: unknown,
-): z.infer<typeof LLMEnrichmentSchema> | null {
-  const parsed = LLMEnrichmentSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
-
-function normalizeDirection(value: unknown): AccuracyDirection | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const lowered = value.trim().toLowerCase();
-  const parsed = AccuracyDirectionSchema.safeParse(lowered);
-  return parsed.success ? parsed.data : null;
-}
-
-function extractTicker(
-  metadata: Record<string, unknown> | null,
-  enrichment: z.infer<typeof LLMEnrichmentSchema> | null,
-): string | null {
-  const directTicker = metadata?.['ticker'];
-  if (typeof directTicker === 'string' && directTicker.trim().length > 0) {
-    return directTicker.trim().toUpperCase();
-  }
-
-  const tickers = metadata?.['tickers'];
-  if (Array.isArray(tickers)) {
-    const first = tickers.find((value) => typeof value === 'string' && value.trim().length > 0);
-    if (typeof first === 'string') {
-      return first.trim().toUpperCase();
-    }
-  }
-
-  const enrichmentTicker = enrichment?.tickers[0]?.symbol;
-  return typeof enrichmentTicker === 'string' && enrichmentTicker.trim().length > 0
-    ? enrichmentTicker.trim().toUpperCase()
-    : null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value != null && typeof value === 'object' ? value as Record<string, unknown> : null;
-}
-
-function toNumber(value: string | number | null): number | null {
-  if (value == null) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function formatMove(value: number): string {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
 }
