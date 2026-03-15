@@ -161,6 +161,7 @@ function asStringArray(value: unknown): string[] {
 function buildAuditLlmEnrichment(metadataValue: unknown): {
   analysis: string;
   action: string | null;
+  signal: string | null;
   tickers: string[];
   regimeContext: string | null;
   confidence: number | null;
