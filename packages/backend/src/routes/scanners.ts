@@ -5,6 +5,7 @@ import type { ScannerRegistry } from '@event-radar/shared';
 import { normalizeScannerId } from '@event-radar/shared/scanner-registry';
 import type { Database } from '../db/connection.js';
 import { events } from '../db/schema.js';
+import { getRuntimeScannerStatus } from '../utils/scanner-runtime-status.js';
 
 export function registerScannerRoutes(
   server: FastifyInstance,
@@ -19,22 +20,10 @@ export function registerScannerRoutes(
    */
   server.get('/api/scanners/status', async (_request, reply) => {
     const healthList = registry.healthAll();
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const nowMs = Date.now();
 
     const scanners = healthList.map((h) => {
-      let status: 'healthy' | 'degraded' | 'down' = h.status;
-
-      // Override status based on last scan time
-      if (h.lastScanAt) {
-        const lastScan = new Date(h.lastScanAt).getTime();
-        if (lastScan < fiveMinutesAgo) {
-          status = 'down';
-        } else if (h.errorCount > 5) {
-          status = 'degraded';
-        }
-      } else if (h.errorCount > 0) {
-        status = 'down';
-      }
+      const status = getRuntimeScannerStatus(h, nowMs);
 
       return {
         name: h.scanner,

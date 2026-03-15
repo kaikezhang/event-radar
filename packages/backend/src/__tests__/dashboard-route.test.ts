@@ -1,9 +1,11 @@
+import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
-import type { RegimeSnapshot } from '@event-radar/shared';
+import type { RegimeSnapshot, ScannerHealth } from '@event-radar/shared';
 import { buildApp } from '../app.js';
 import type { Database } from '../db/connection.js';
 import { deliveriesSentTotal, resetMetrics } from '../metrics.js';
+import { registerDashboardRoutes } from '../routes/dashboard.js';
 import { createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 import type { PGlite } from '@electric-sql/pglite';
 
@@ -23,6 +25,7 @@ describe('GET /api/v1/dashboard', () => {
     await db.execute(sql`DELETE FROM pipeline_audit`);
     await db.execute(sql`DELETE FROM events`);
     await db.execute(sql`DELETE FROM delivery_kill_switch`);
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -190,5 +193,115 @@ describe('GET /api/v1/dashboard', () => {
       },
     });
     await safeCloseServer(ctx.server);
+  });
+
+  async function requestDashboardWithHealth(healthList: ScannerHealth[]) {
+    const server = Fastify({ logger: false });
+    registerDashboardRoutes(server, {
+      apiKey: TEST_API_KEY,
+      scannerRegistry: {
+        healthAll: () => healthList,
+      } as never,
+      startTime: Date.now() - 3_600_000,
+      version: '1.0.0',
+      marketRegimeService: {
+        getRegimeSnapshot: vi.fn().mockResolvedValue(null),
+      } as never,
+    });
+    await server.ready();
+
+    try {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/dashboard',
+      });
+
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    } finally {
+      await safeCloseServer(server);
+    }
+  }
+
+  it('keeps low-frequency scanners healthy when their last scan is within an interval-derived threshold', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+
+    const body = await requestDashboardWithHealth([
+      {
+        scanner: 'fedwatch',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T11:40:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 15 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    expect(body.scanners).toMatchObject({
+      total: 1,
+      healthy: 1,
+      down: 0,
+      details: [
+        {
+          name: 'fedwatch',
+          status: 'healthy',
+        },
+      ],
+    });
+    expect(body.alerts).not.toContainEqual(
+      expect.objectContaining({ message: 'fedwatch scanner is DOWN' }),
+    );
+  });
+
+  it('marks scanners down once they exceed the interval-derived stale threshold', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+
+    const body = await requestDashboardWithHealth([
+      {
+        scanner: 'fedwatch',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T11:29:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 15 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    expect(body.scanners.details).toContainEqual(
+      expect.objectContaining({
+        name: 'fedwatch',
+        status: 'down',
+      }),
+    );
+    expect(body.alerts).toContainEqual(
+      expect.objectContaining({ message: 'fedwatch scanner is DOWN' }),
+    );
+  });
+
+  it('falls back to a 5 minute stale threshold when the scanner interval is unavailable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+
+    const body = await requestDashboardWithHealth([
+      {
+        scanner: 'reddit',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T11:54:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        inBackoff: false,
+      },
+    ]);
+
+    expect(body.scanners.details).toContainEqual(
+      expect.objectContaining({
+        name: 'reddit',
+        status: 'down',
+      }),
+    );
   });
 });
