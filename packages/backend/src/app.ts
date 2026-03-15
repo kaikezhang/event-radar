@@ -424,6 +424,9 @@ export function buildApp(options?: {
         '/api/health/delivery-stats',
         '/api/auth/magic-link',
         '/api/auth/verify',
+        '/api/auth/me',
+        '/api/auth/refresh',
+        '/api/auth/logout',
       ],
     });
   });

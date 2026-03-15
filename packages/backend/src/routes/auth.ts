@@ -365,6 +365,14 @@ export function registerAuthRoutes(
     const accessToken = cookies['er_access'];
 
     if (!accessToken) {
+      // In AUTH_REQUIRED=false mode, return default user for unauthenticated requests
+      if (process.env.AUTH_REQUIRED !== 'true') {
+        return reply.send({
+          id: 'default',
+          email: null,
+          displayName: null,
+        });
+      }
       return reply.status(401).send({ error: 'Not authenticated' });
     }
 
