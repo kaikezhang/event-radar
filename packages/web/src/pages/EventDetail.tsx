@@ -11,6 +11,32 @@ import { submitFeedback } from '../lib/api.js';
 import { useEventDetail } from '../hooks/useEventDetail.js';
 import { cn } from '../lib/utils.js';
 
+function formatTrustLabel(value: string | null | undefined, fallback = 'Not available') {
+  if (!value) {
+    return fallback;
+  }
+
+  return value
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatTrustMove(value: number | null) {
+  return value == null ? 'Pending' : formatPercent(value, 2);
+}
+
+function TrustField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+        {label}
+      </p>
+      <p className="mt-2 text-[15px] font-medium leading-6 text-text-primary">{value}</p>
+    </div>
+  );
+}
+
 export function EventDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -101,6 +127,68 @@ export function EventDetail() {
         <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Summary</h2>
         <p className="mt-3 text-[15px] leading-7 text-text-secondary">{data.aiAnalysis.summary}</p>
       </section>
+
+      {data.scorecard && (
+        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">
+                Trust and Verification
+              </h2>
+              <p className="mt-2 text-[15px] leading-6 text-text-secondary">
+                {data.scorecard.notes.summary}
+              </p>
+            </div>
+            {data.scorecard.notes.verdictWindow && (
+              <div className="inline-flex w-fit min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
+                {data.scorecard.notes.verdictWindow} window
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <TrustField
+              label="Original action label"
+              value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
+            />
+            <TrustField
+              label="Direction verdict"
+              value={formatTrustLabel(data.scorecard.outcome.directionVerdict)}
+            />
+            <TrustField
+              label="Setup verdict"
+              value={formatTrustLabel(data.scorecard.outcome.setupVerdict)}
+            />
+            <TrustField
+              label="Primary verdict window"
+              value={data.scorecard.notes.verdictWindow ?? 'Pending'}
+            />
+            <TrustField
+              label="T+5 move"
+              value={formatTrustMove(data.scorecard.outcome.tPlus5.movePercent)}
+            />
+            <TrustField
+              label="T+20 move"
+              value={formatTrustMove(data.scorecard.outcome.tPlus20.movePercent)}
+            />
+          </div>
+
+          {data.scorecard.notes.items.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                Verification notes
+              </h3>
+              <div className="mt-3 space-y-2">
+                {data.scorecard.notes.items.map((item) => (
+                  <p key={item} className="text-sm leading-6 text-text-secondary">
+                    {item}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Market Context */}
       {data.aiAnalysis.tickerDirections.length > 0 && (

@@ -19,4 +19,12 @@ describe('Feed page', () => {
       expect(screen.getByRole('article', { name: /nvda export filing flags china exposure risk/i })).toBeInTheDocument();
     });
   });
+
+  it('renders a lightweight trust cue on feed cards when summary data is available', async () => {
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+
+    await waitFor(() => {
+      expect(screen.getByText(/source hit rate 67%/i)).toBeInTheDocument();
+    });
+  });
 });

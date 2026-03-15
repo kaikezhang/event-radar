@@ -1,8 +1,10 @@
 import type {
   AlertSummary,
   ChartRange,
+  EventScorecard,
   EventDetailData,
   PriceChartData,
+  ScorecardSummary,
   TickerProfileData,
   WatchlistItem,
 } from '../types/index.js';
@@ -26,23 +28,7 @@ export interface FeedResponse {
 export async function getFeed(limit = 50): Promise<FeedResponse> {
   const res = await apiFetch(`/v1/feed?limit=${limit}`, { public: true });
   const events: Record<string, unknown>[] = res.events ?? [];
-
-  const alerts: AlertSummary[] = events.map((event: Record<string, unknown>) => {
-    const source = (event.source as string) ?? 'unknown';
-    return {
-      id: event.id as string,
-      severity: (event.severity as string) ?? 'MEDIUM',
-      source: mapSource(source),
-      title: (event.title as string) ?? '',
-      tickers: (event.tickers as string[]) ?? [],
-      summary: (event.summary as string) ?? '',
-      time: (event.time as string) ?? new Date().toISOString(),
-      saved: false,
-      direction: typeof event.metadata === 'object' && event.metadata && 'direction' in event.metadata
-        ? (event.metadata as Record<string, unknown>).direction as string
-        : undefined,
-    };
-  });
+  const alerts = events.map(mapAlertSummary);
 
   return {
     alerts,
@@ -79,6 +65,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       id: e.id as string,
       severity: (e.severity as string) ?? 'MEDIUM',
       source: mapSource(source),
+      sourceKey: source,
       title: (e.title as string) ?? '',
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
@@ -106,6 +93,23 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
   }
 }
 
+export async function getEventScorecard(id: string): Promise<EventScorecard | null> {
+  try {
+    return await apiFetch(`/v1/scorecards/${id}`) as EventScorecard;
+  } catch {
+    return null;
+  }
+}
+
+export async function getScorecardSummary(days?: number): Promise<ScorecardSummary | null> {
+  try {
+    const query = days == null ? '' : `?days=${days}`;
+    return await apiFetch(`/v1/scorecards/summary${query}`) as ScorecardSummary;
+  } catch {
+    return null;
+  }
+}
+
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
     const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20`);
@@ -113,21 +117,7 @@ export async function getTickerProfile(symbol: string): Promise<TickerProfileDat
 
     if (events.length === 0) return null;
 
-    const alerts: AlertSummary[] = events.map((e: Record<string, unknown>) => {
-      const meta = (e.metadata ?? {}) as Record<string, unknown>;
-      const tickers: string[] = (meta.tickers as string[]) ?? (meta.ticker ? [meta.ticker as string] : []);
-      return {
-        id: e.id as string,
-        severity: (e.severity as string) ?? 'MEDIUM',
-        source: mapSource((e.source as string) ?? 'unknown'),
-        title: (e.title as string) ?? '',
-        tickers,
-        summary: (e.summary as string) ?? '',
-        time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
-        saved: false,
-        direction: (meta.direction as string | undefined) ?? 'neutral',
-      };
-    });
+    const alerts = events.map(mapAlertSummary);
 
     const firstMeta = ((events[0] as Record<string, unknown> | undefined)?.metadata ?? {}) as Record<string, unknown>;
     const companyName =
@@ -155,21 +145,7 @@ export async function submitFeedback(_eventId: string, _helpful: boolean) {
 export async function searchEvents(q: string, limit = 20): Promise<AlertSummary[]> {
   const data = await apiFetch(`/events/search?q=${encodeURIComponent(q)}&limit=${limit}`);
   const events = data.data ?? [];
-  return events.map((e: Record<string, unknown>) => {
-    const meta = (e.metadata ?? {}) as Record<string, unknown>;
-    const tickers: string[] = (meta.tickers as string[]) ?? (meta.ticker ? [meta.ticker as string] : []);
-    return {
-      id: e.id as string,
-      severity: (e.severity as string) ?? 'MEDIUM',
-      source: mapSource((e.source as string) ?? 'unknown'),
-      title: (e.title as string) ?? '',
-      tickers,
-      summary: (e.summary as string) ?? '',
-      time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
-      saved: false,
-      direction: (meta.direction as string | undefined) ?? 'neutral',
-    };
-  });
+  return events.map(mapAlertSummary);
 }
 
 export async function getTickerPrice(symbol: string, range: ChartRange): Promise<PriceChartData> {
@@ -222,6 +198,27 @@ export async function getEventSources(): Promise<string[]> {
   const data = await apiFetch('/events/sources');
   const raw: string[] = data.sources ?? [];
   return [...new Set(raw.map(mapSource))].sort();
+}
+
+function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
+  const source = (event.source as string) ?? 'unknown';
+  const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+  const tickers = (event.tickers as string[] | undefined)
+    ?? (metadata.tickers as string[] | undefined)
+    ?? (metadata.ticker ? [metadata.ticker as string] : []);
+
+  return {
+    id: event.id as string,
+    severity: (event.severity as string) ?? 'MEDIUM',
+    source: mapSource(source),
+    sourceKey: source,
+    title: (event.title as string) ?? '',
+    tickers,
+    summary: (event.summary as string) ?? '',
+    time: (event.time as string) ?? (event.receivedAt as string) ?? (event.createdAt as string) ?? new Date().toISOString(),
+    saved: false,
+    direction: (metadata.direction as string | undefined) ?? undefined,
+  };
 }
 
 function mapSource(source: string): string {

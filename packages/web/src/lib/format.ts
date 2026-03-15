@@ -18,8 +18,8 @@ export function formatRelativeTime(timestamp: string) {
   return `${Math.floor(diffSeconds / 86400)}d ago`;
 }
 
-export function formatPercent(value: number) {
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+export function formatPercent(value: number, fractionDigits = 1) {
+  return `${value > 0 ? '+' : ''}${value.toFixed(fractionDigits)}%`;
 }
 
 export function formatNumber(value: number) {

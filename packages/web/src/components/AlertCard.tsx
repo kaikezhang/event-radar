@@ -18,12 +18,22 @@ const severityBarClassName = {
 
 interface AlertCardProps {
   alert: AlertSummary;
+  trustCue?: {
+    label: string;
+    tone: 'positive' | 'mixed' | 'caution';
+  };
   showWatchlistButton?: boolean;
   isOnWatchlist?: boolean;
   onToggleWatchlist?: (ticker: string) => void;
 }
 
-export function AlertCard({ alert, showWatchlistButton, isOnWatchlist, onToggleWatchlist }: AlertCardProps) {
+export function AlertCard({
+  alert,
+  trustCue,
+  showWatchlistButton,
+  isOnWatchlist,
+  onToggleWatchlist,
+}: AlertCardProps) {
   const primaryTicker = alert.tickers[0];
 
   return (
@@ -47,6 +57,20 @@ export function AlertCard({ alert, showWatchlistButton, isOnWatchlist, onToggleW
             <TickerChip key={ticker} symbol={ticker} className="px-2.5 py-1.5 text-xs" />
           ))}
         </div>
+        {trustCue && (
+          <span
+            className={cn(
+              'inline-flex min-h-8 items-center rounded-full border px-2.5 py-1 text-[11px] font-medium tracking-wide',
+              trustCue.tone === 'positive'
+                ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200'
+                : trustCue.tone === 'mixed'
+                ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+                : 'border-white/10 bg-white/6 text-text-secondary',
+            )}
+          >
+            {trustCue.label}
+          </span>
+        )}
         {showWatchlistButton && primaryTicker && onToggleWatchlist && (
           <button
             type="button"
