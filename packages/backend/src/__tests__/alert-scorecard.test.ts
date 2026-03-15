@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { PGlite } from '@electric-sql/pglite';
@@ -6,6 +7,7 @@ import type { RawEvent } from '@event-radar/shared';
 import { buildApp, type AppContext } from '../app.js';
 import type { Database } from '../db/connection.js';
 import { storeEvent } from '../db/event-store.js';
+import { registerAlertScorecardRoutes } from '../routes/alert-scorecard.js';
 import {
   cleanTestDb,
   createTestDb,
@@ -156,13 +158,17 @@ describe('alert scorecard route', () => {
 
   it('returns 401 without an api key', async () => {
     const eventId = await seedScorecardEvent();
+    const server = Fastify({ logger: false });
+    registerAlertScorecardRoutes(server, sharedDb, { apiKey: TEST_API_KEY });
+    await server.ready();
 
-    const response = await ctx.server.inject({
+    const response = await server.inject({
       method: 'GET',
       url: `/api/v1/scorecards/${eventId}`,
     });
 
     expect(response.statusCode).toBe(401);
+    await safeCloseServer(server);
   });
 
   it('builds a bullish scorecard as correct and worked from T+20 data', async () => {

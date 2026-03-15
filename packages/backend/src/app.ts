@@ -1015,7 +1015,7 @@ export function buildApp(options?: {
     registerEventsHistoryRoutes(server, db, { apiKey });
     registerEventImpactRoutes(server, db, { apiKey });
     registerHistoricalRoutes(server, db, { apiKey });
-    registerAlertScorecardRoutes(server, db);
+    registerAlertScorecardRoutes(server, db, { apiKey });
     registerOutcomeRoutes(server, db);
     registerWinRateRoutes(server, db);
     registerStoryGroupRoutes(server, db);
