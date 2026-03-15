@@ -606,7 +606,7 @@ export function Settings() {
       </div>
 
       {toastMessage ? (
-        <div className="fixed bottom-5 right-5 rounded-full border border-emerald-400/20 bg-[#0d241d] px-4 py-2 text-sm font-medium text-emerald-100 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${saveState === 'error' ? 'border-rose-400/20 bg-[#240d0d] text-rose-100' : 'border-emerald-400/20 bg-[#0d241d] text-emerald-100'}`}>
           {toastMessage}
         </div>
       ) : null}
