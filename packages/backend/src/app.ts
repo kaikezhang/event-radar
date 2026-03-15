@@ -55,6 +55,7 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
+import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
@@ -1129,6 +1130,7 @@ export function buildApp(options?: {
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
     registerWatchlistRoutes(server, db, { apiKey });
+    registerOnboardingRoutes(server, db, { apiKey });
     registerPushSubscriptionRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {

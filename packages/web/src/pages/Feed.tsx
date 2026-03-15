@@ -95,6 +95,17 @@ export function Feed() {
     if (tabInitializedRef.current) return;
     tabInitializedRef.current = true;
 
+    // Check for explicit tab override from query params (e.g. after onboarding)
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'watchlist' || tabParam === 'all') {
+      setActiveTab(tabParam);
+      if (isAuthenticated) saveFeedTab(tabParam);
+      // Clean up the query param
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+      return;
+    }
+
     // Only honor localStorage for authenticated users
     if (isAuthenticated) {
       const saved = loadFeedTab();
@@ -108,7 +119,7 @@ export function Feed() {
       }
     }
     // Unauthenticated or no watchlist → stay on 'all'
-  }, [isAuthLoading, isWatchlistLoading, isAuthenticated, hasWatchlist]);
+  }, [isAuthLoading, isWatchlistLoading, isAuthenticated, hasWatchlist, searchParams, setSearchParams]);
 
   const handleTabChange = (tab: FeedTab) => {
     setActiveTab(tab);
@@ -451,7 +462,7 @@ export function Feed() {
             Add tickers to your watchlist to see personalized alerts here.
           </p>
           <Link
-            to="/watchlist"
+            to="/onboarding"
             className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-5 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
           >
             Set up your watchlist
