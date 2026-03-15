@@ -74,7 +74,7 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() => useWebSocket());
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0]?.url).toBe('ws://localhost:3000/ws/events?apiKey=er-dev-2026');
+    expect(MockWebSocket.instances[0]?.url).toBe('ws://localhost:3000/ws/events');
     expect(result.current.status).toBe('disconnected');
 
     act(() => {

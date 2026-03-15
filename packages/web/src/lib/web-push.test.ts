@@ -188,9 +188,9 @@ describe('sendPushSubscriptionToBackend', () => {
 
     expect(fetchImpl).toHaveBeenCalledWith('/api/push-subscriptions', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'X-Api-Key': 'er-dev-2026',
       },
       body: JSON.stringify({
         endpoint: 'https://push.example.test/subscriptions/3',

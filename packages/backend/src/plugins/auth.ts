@@ -1,19 +1,24 @@
 import { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import { validateApiKeyValue } from '../routes/auth-middleware.js';
+import { verifyAccessToken, parseCookies } from '../routes/auth.js';
 
 /**
- * API Key Authentication Plugin
- * 
- * Requires X-API-Key header for protected routes.
- * - Env var: API_KEY (required)
- * - Header: X-API-Key: <key>
- * - Returns 401 if missing or invalid
- * - /health is always public (no auth required)
+ * Auth Plugin — cookie-based JWT + API key fallback
+ *
+ * Priority:
+ * 1. er_access cookie → JWT verify → set request.userId
+ * 2. X-Api-Key header → if valid → request.userId = 'default'
+ * 3. AUTH_REQUIRED=false (default) → allow through as 'default'
+ * 4. AUTH_REQUIRED=true and neither → 401
+ *
+ * CSRF: POST/PUT/DELETE require X-CSRF-Token matching er_csrf cookie.
+ * CORS: specific origin with credentials support.
  */
 
 declare module 'fastify' {
   interface FastifyRequest {
     apiKeyAuthenticated: boolean;
+    userId?: string;
   }
 }
 
@@ -28,12 +33,15 @@ export async function registerAuthPlugin(
 ): Promise<void> {
   const publicRoutes = new Set(options.publicRoutes ?? []);
   const configuredApiKey = process.env.API_KEY ?? options.apiKey;
+  const authRequired = process.env.AUTH_REQUIRED === 'true';
+  const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
 
   // CORS headers for all responses
   server.addHook('onSend', async (_request, reply) => {
-    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Origin', corsOrigin);
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', '*');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-CSRF-Token');
+    reply.header('Access-Control-Allow-Credentials', 'true');
   });
 
   server.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -41,37 +49,75 @@ export async function registerAuthPlugin(
 
     // CORS preflight — always allow
     if (request.method === 'OPTIONS') {
-      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Origin', corsOrigin);
       reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      reply.header('Access-Control-Allow-Headers', '*');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-CSRF-Token');
+      reply.header('Access-Control-Allow-Credentials', 'true');
       return reply.status(204).send();
     }
 
     const pathname = request.url.split('?')[0] ?? request.url;
+
+    // Auth routes are always public
+    if (pathname.startsWith('/api/auth/')) {
+      return;
+    }
+
     if (publicRoutes.has(pathname)) {
       return;
     }
 
+    // 1. Try cookie-based JWT auth
+    const cookies = parseCookies(request);
+    const accessToken = cookies['er_access'];
+    if (accessToken) {
+      const payload = await verifyAccessToken(accessToken);
+      if (payload) {
+        request.userId = payload.sub;
+
+        // CSRF check for state-changing methods
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+          const csrfHeader = request.headers['x-csrf-token'];
+          const csrfCookie = cookies['er_csrf'];
+          if (csrfCookie && csrfHeader !== csrfCookie) {
+            return reply.status(403).send({ error: 'CSRF token mismatch' });
+          }
+        }
+
+        return;
+      }
+    }
+
+    // 2. Try API key auth
     const providedKey = typeof request.headers['x-api-key'] === 'string'
       ? request.headers['x-api-key']
       : undefined;
     const validation = validateApiKeyValue(providedKey, configuredApiKey);
 
-    if (!validation.ok && validation.message === 'Missing API key') {
+    if (validation.ok) {
+      request.apiKeyAuthenticated = true;
+      request.userId = 'default';
+      return;
+    }
+
+    // 3. AUTH_REQUIRED=false → allow as default
+    if (!authRequired) {
+      request.userId = 'default';
+      return;
+    }
+
+    // 4. Nothing worked → 401
+    if (!providedKey) {
       return reply.status(401).send({
         error: 'Unauthorized',
-        message: 'Missing X-API-Key header',
+        message: 'Authentication required',
       });
     }
 
-    if (!validation.ok) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-        message: validation.message ?? 'Invalid API key',
-      });
-    }
-
-    request.apiKeyAuthenticated = true;
+    return reply.status(401).send({
+      error: 'Unauthorized',
+      message: validation.message ?? 'Invalid credentials',
+    });
   });
 }
 

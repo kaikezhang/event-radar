@@ -270,7 +270,7 @@ describe('EventChart', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/price/NVDA?range=1y',
       expect.objectContaining({
-        headers: { 'X-Api-Key': 'er-dev-2026' },
+        credentials: 'include',
       }),
     );
   });

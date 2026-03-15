@@ -10,14 +10,109 @@ import type {
 } from '../types/index.js';
 
 const API_BASE = '/api';
-export const API_KEY = 'er-dev-2026';
 
-async function apiFetch(path: string, options?: { public?: boolean }) {
-  const headers = options?.public ? undefined : { 'X-Api-Key': API_KEY };
-  const res = await fetch(`${API_BASE}${path}`, { headers });
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)er_csrf=([^;]*)/);
+  return match ? match[1]! : null;
+}
+
+async function apiFetch(path: string, options?: { public?: boolean; method?: string; body?: unknown }) {
+  const headers: Record<string, string> = {};
+
+  if (options?.body) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const method = options?.method ?? 'GET';
+
+  // Add CSRF token for state-changing requests
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrf = getCsrfToken();
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    credentials: 'include',
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    // Try refresh
+    const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    if (refreshRes.ok) {
+      // Retry original request with new cookies
+      const retryHeaders: Record<string, string> = {};
+      if (options?.body) retryHeaders['Content-Type'] = 'application/json';
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const csrf = getCsrfToken();
+        if (csrf) retryHeaders['X-CSRF-Token'] = csrf;
+      }
+
+      const retryRes = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: retryHeaders,
+        credentials: 'include',
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (!retryRes.ok) throw new Error(`API error: ${retryRes.status}`);
+      return retryRes.json();
+    }
+
+    // Refresh failed → redirect to login
+    window.location.href = '/login';
+    throw new Error('Session expired');
+  }
+
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+// ── Auth API ────────────────────────────────────────────────────────────────
+
+export async function sendMagicLink(email: string): Promise<{ ok: boolean; message: string }> {
+  return apiFetch('/auth/magic-link', { method: 'POST', body: { email } });
+}
+
+export async function verifyMagicLink(token: string): Promise<{ ok: boolean; user: { id: string; email: string; displayName: string | null } }> {
+  return apiFetch('/auth/verify', { method: 'POST', body: { token } });
+}
+
+export async function authRefresh(): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Refresh failed');
+  return res.json();
+}
+
+export async function authLogout(): Promise<void> {
+  await fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+}
+
+export async function authMe(): Promise<{ id: string; email: string; displayName: string | null } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ── Feed / Events ───────────────────────────────────────────────────────────
 
 export interface FeedResponse {
   alerts: AlertSummary[];
@@ -175,23 +270,11 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
 }
 
 export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
-  const headers: Record<string, string> = { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' };
-  const res = await fetch(`${API_BASE}/watchlist`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ ticker: ticker.toUpperCase() }),
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  return apiFetch('/watchlist', { method: 'POST', body: { ticker: ticker.toUpperCase() } });
 }
 
 export async function removeFromWatchlist(ticker: string): Promise<void> {
-  const headers: Record<string, string> = { 'X-Api-Key': API_KEY };
-  const res = await fetch(`${API_BASE}/watchlist/${ticker.toUpperCase()}`, {
-    method: 'DELETE',
-    headers,
-  });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  await apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'DELETE' });
 }
 
 export async function getEventSources(): Promise<string[]> {

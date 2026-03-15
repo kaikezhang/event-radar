@@ -267,11 +267,50 @@ export const users = pgTable(
   'users',
   {
     id: varchar('id', { length: 100 }).primaryKey(),
+    email: varchar('email', { length: 255 }).unique(),
+    displayName: varchar('display_name', { length: 100 }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [index('idx_users_created_at').on(table.createdAt)],
+);
+
+export const magicLinkTokens = pgTable(
+  'magic_link_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: varchar('email', { length: 255 }).notNull(),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index('idx_magic_link_token').on(table.tokenHash)],
+);
+
+export const refreshTokens = pgTable(
+  'refresh_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: varchar('user_id', { length: 100 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    familyId: uuid('family_id').notNull(),
+    replacedBy: uuid('replaced_by'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_refresh_tokens_user').on(table.userId),
+    index('idx_refresh_tokens_family').on(table.familyId),
+  ],
 );
 
 export const reclassificationQueue = pgTable(

@@ -14,9 +14,9 @@ describe('Scorecard page', () => {
       expect(screen.getByRole('heading', { name: /scorecard/i })).toBeInTheDocument();
     });
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=90', {
-      headers: { 'X-Api-Key': 'er-dev-2026' },
-    });
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=90',
+      expect.objectContaining({ credentials: 'include' }),
+    );
 
     expect(screen.getByText('Topline calibration')).toBeInTheDocument();
     expect(screen.getByText('124')).toBeInTheDocument();
@@ -57,9 +57,9 @@ describe('Scorecard page', () => {
     await user.click(allButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary', {
-        headers: { 'X-Api-Key': 'er-dev-2026' },
-      });
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary',
+        expect.objectContaining({ credentials: 'include' }),
+      );
     });
 
     expect(screen.getByText('Full-history scorecard')).toBeInTheDocument();
