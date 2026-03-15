@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getFeed } from '../lib/api.js';
 import type { AlertSummary } from '../types/index.js';
@@ -14,9 +14,12 @@ interface UseAlertsResult {
   isInitialLoading: boolean;
   isRefreshing: boolean;
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   pendingCount: number;
   refetch: () => Promise<unknown>;
   applyPendingAlerts: () => void;
+  loadMore: () => void;
 }
 
 function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertSummary[] {
@@ -33,7 +36,7 @@ function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertS
   });
 }
 
-export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlistTickers?: string[] }): UseAlertsResult {
+export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlistTickers?: string[] }): UseAlertsResult {
   const watchlist = options?.watchlist ?? false;
   const watchlistTickers = options?.watchlistTickers;
   const query = useQuery({
@@ -49,6 +52,11 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
   const prevWatchlistRef = useRef(watchlist);
   const { playForSeverity } = useAlertSound();
 
+  // Infinite scroll state
+  const [cursorRef, setCursorState] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   // Clear state when switching between watchlist/all tabs
   useEffect(() => {
     if (prevWatchlistRef.current !== watchlist) {
@@ -56,6 +64,8 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
       setVisibleAlerts([]);
       setPendingAlerts([]);
       seenAlertIdsRef.current = new Set();
+      setCursorState(null);
+      setHasMore(true);
     }
   }, [watchlist]);
 
@@ -128,6 +138,12 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
       return;
     }
 
+    // Update cursor from initial/refetch response
+    if (query.data.cursor !== undefined) {
+      setCursorState(query.data.cursor);
+      setHasMore(query.data.alerts.length >= limit);
+    }
+
     if (visibleAlerts.length === 0) {
       rememberAlerts(query.data.alerts);
       setVisibleAlerts((current) => mergeAlerts(query.data.alerts, current));
@@ -145,7 +161,7 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
         setPendingAlerts((current) => mergeAlerts(incoming, current));
       }
     }
-  }, [isAtTop, query.data, visibleAlerts]);
+  }, [isAtTop, query.data, visibleAlerts, limit]);
 
   useEffect(() => {
     if (isAtTop && pendingAlerts.length > 0) {
@@ -164,6 +180,31 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !cursorRef) return;
+    setIsLoadingMore(true);
+    try {
+      const result = await getFeed(limit, { watchlist, before: cursorRef });
+      if (result.alerts.length < limit) {
+        setHasMore(false);
+      }
+      if (result.cursor) {
+        setCursorState(result.cursor);
+      }
+      if (result.alerts.length > 0) {
+        rememberAlerts(result.alerts);
+        // Append older alerts at the end
+        setVisibleAlerts((current) => {
+          const currentIds = new Set(current.map((a) => a.id));
+          const newAlerts = result.alerts.filter((a) => !currentIds.has(a.id));
+          return [...current, ...newAlerts];
+        });
+      }
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, cursorRef, limit, watchlist]);
+
   const pendingCount = pendingAlerts.length;
   const isInitialLoading = query.isLoading && visibleAlerts.length === 0;
   const isEmpty = !isInitialLoading && !query.error && visibleAlerts.length === 0;
@@ -176,8 +217,11 @@ export function useAlerts(limit = 50, options?: { watchlist?: boolean; watchlist
     isEmpty,
     isRefreshing: query.isRefetching && !query.isLoading,
     isLoading: query.isLoading,
+    isLoadingMore,
+    hasMore,
     pendingCount,
     refetch: query.refetch,
     applyPendingAlerts,
+    loadMore,
   };
 }
