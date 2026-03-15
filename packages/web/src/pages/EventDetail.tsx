@@ -1,6 +1,7 @@
 import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp, CircleCheckBig, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
 import { SeverityBadge } from '../components/SeverityBadge.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { StatCard } from '../components/StatCard.js';
@@ -149,11 +150,11 @@ export function EventDetail() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="sticky top-0 z-20 flex items-center justify-between rounded-[24px] border border-white/8 bg-bg-primary/90 px-4 py-3 backdrop-blur-md">
+        <div className="sticky top-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur-md">
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/8 px-4 py-2 text-sm text-text-primary"
+            className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm text-text-primary"
           >
             <ArrowLeft className="h-4 w-4" />
             {shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
@@ -180,11 +181,11 @@ export function EventDetail() {
   return (
     <div className="space-y-4">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 flex items-center justify-between rounded-[24px] border border-white/8 bg-bg-primary/90 px-4 py-3 backdrop-blur-md">
+      <div className="sticky top-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur-md">
         <button
           type="button"
           onClick={handleBack}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/8 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
         >
           <ArrowLeft className="h-4 w-4" />
           {shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
@@ -198,7 +199,7 @@ export function EventDetail() {
             }
             void navigator.clipboard?.writeText(window.location.href);
           }}
-          className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/8 px-3 py-2 text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-white/10 bg-bg-elevated/70 px-3 py-2 text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
           aria-label="Share alert"
         >
           <Share2 className="h-5 w-5" />
@@ -206,8 +207,11 @@ export function EventDetail() {
       </div>
 
       {/* Header card */}
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-        <SeverityBadge severity={data.severity} />
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <SeverityBadge
+          severity={data.severity}
+          className="min-h-7 px-2.5 py-1 text-[10px] tracking-[0.14em]"
+        />
         <h1 className="mt-4 text-[20px] font-semibold leading-7 text-text-primary">{data.title}</h1>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
           <span>{data.source}</span>
@@ -225,7 +229,7 @@ export function EventDetail() {
         )}
       </section>
 
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
@@ -277,47 +281,77 @@ export function EventDetail() {
         </nav>
       </section>
 
-      <section id="what-happened" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-          Catalyst / event summary
-        </p>
-        <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">What happened</h2>
-        <p className="mt-3 text-[15px] leading-7 text-text-secondary">{data.aiAnalysis.summary}</p>
-      </section>
+      <CollapsiblePanel
+        id="what-happened"
+        title="What happened"
+        eyebrow="Catalyst / event summary"
+        description="Start with the source-backed summary before scanning the market context."
+        defaultOpen
+        className="scroll-mt-24"
+      >
+        <p className="text-[15px] leading-7 text-text-secondary">{data.aiAnalysis.summary}</p>
+      </CollapsiblePanel>
 
-      <section id="why-now" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-          Market timing
-        </p>
-        <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
-          Why this matters now
-        </h2>
-        <p className="mt-3 text-[15px] leading-7 text-text-secondary">{whyNow}</p>
-      </section>
+      <CollapsiblePanel
+        id="why-now"
+        title="Why now"
+        eyebrow="Market timing"
+        description="Why this matters now"
+        defaultOpen
+        className="scroll-mt-24"
+      >
+        <p className="text-[15px] leading-7 text-text-secondary">{whyNow}</p>
+      </CollapsiblePanel>
 
-      <section id="why-notified" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Alert routing context
-            </p>
-            <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
-              Why you were notified
-            </h2>
-          </div>
-          <p className="max-w-md text-sm leading-6 text-text-secondary">
-            This block explains the metadata behind the push so you can decide whether to keep reading or move immediately.
-          </p>
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+        <h2 className="text-base font-semibold text-text-primary">Was this useful?</h2>
+        <p className="mt-1 text-sm leading-6 text-text-secondary">
+          Rate the explanation before you move to routing and trust details.
+        </p>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            onClick={() => { setFeedback('up'); void submitFeedback(data.id, true); }}
+            className={cn(
+              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
+              feedback === 'up'
+                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+                : 'border-white/10 text-text-primary hover:bg-white/6',
+            )}
+          >
+            <ThumbsUp className="h-4 w-4" /> Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => { setFeedback('down'); void submitFeedback(data.id, false); }}
+            className={cn(
+              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
+              feedback === 'down'
+                ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical'
+                : 'border-white/10 text-text-primary hover:bg-white/6',
+            )}
+          >
+            <ThumbsDown className="h-4 w-4" /> No
+          </button>
         </div>
+      </section>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <CollapsiblePanel
+        id="why-notified"
+        title="Why notified"
+        eyebrow="Alert routing context"
+        description="The metadata behind the push, so you can decide whether to keep reading or move immediately."
+        defaultOpen
+        className="scroll-mt-24"
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {notificationReasons.map((item) => (
             <InfoField key={item.label} label={item.label} value={item.value} />
           ))}
         </div>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="scroll-mt-24 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
@@ -381,27 +415,22 @@ export function EventDetail() {
         )}
       </section>
 
-      <section id="trust-check" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Trust / scorecard context
-            </p>
-            <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">
-              Trust and Verification
-            </h2>
-            <p className="mt-2 text-[15px] leading-6 text-text-secondary">
-              {trustSummary}
-            </p>
-          </div>
-          {data.scorecard?.notes.verdictWindow && (
+      <CollapsiblePanel
+        id="trust-check"
+        title="Trust"
+        eyebrow="Trust / scorecard context"
+        description={trustSummary}
+        defaultOpen
+        className="scroll-mt-24"
+        headerSlot={
+          data.scorecard?.notes.verdictWindow ? (
             <div className="inline-flex w-fit min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
               {data.scorecard.notes.verdictWindow} window
             </div>
-          )}
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+          ) : null
+        }
+      >
+        <div className="rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
             How to read this scorecard
           </h3>
@@ -439,7 +468,7 @@ export function EventDetail() {
               />
             </div>
 
-            {data.scorecard.notes.items.length > 0 && (
+            {data.scorecard.notes.items.length > 0 ? (
               <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
                   Verification notes
@@ -452,7 +481,7 @@ export function EventDetail() {
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
           </>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -466,23 +495,19 @@ export function EventDetail() {
             />
           </div>
         )}
-      </section>
+      </CollapsiblePanel>
 
       {/* Why This Alert — provenance + audit trail */}
-      <section id="why-this-alert" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-accent-default" />
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Alert provenance
-            </p>
-            <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
-              Why this alert
-            </h2>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <CollapsiblePanel
+        id="why-this-alert"
+        title="Why this alert"
+        eyebrow="Alert provenance"
+        description="Source, filter path, and pipeline context for why this alert made it to you."
+        defaultOpen
+        className="scroll-mt-24"
+        headerSlot={<ShieldCheck className="h-5 w-5 text-accent-default" />}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <InfoField
             label="Source"
             value={`${data.source} · ${formatRelativeTime(data.time)}`}
@@ -526,11 +551,11 @@ export function EventDetail() {
             <p className="mt-2 text-sm leading-6 text-text-secondary">{data.audit.reason}</p>
           </div>
         )}
-      </section>
+      </CollapsiblePanel>
 
       {/* Market Context */}
       {data.aiAnalysis.tickerDirections.length > 0 && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Market Context</h2>
           <div className="mt-4 space-y-3">
             {data.aiAnalysis.tickerDirections.map((td) => (
@@ -559,7 +584,7 @@ export function EventDetail() {
 
       {/* Historical Pattern */}
       {data.historicalPattern.matchCount > 0 && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Historical Pattern</h2>
             <div className="rounded-full bg-white/6 px-3 py-1 text-sm font-medium text-text-primary">
@@ -584,7 +609,7 @@ export function EventDetail() {
 
       {/* Similar Events */}
       {similarEvents.length > 0 && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Similar Events</h2>
           <div className="mt-4 space-y-3">
             {visibleSimilarEvents.map((event, i) => (
@@ -613,7 +638,7 @@ export function EventDetail() {
 
       {/* Source link */}
       {data.url && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <a
             href={data.url}
             target="_blank"
@@ -625,49 +650,23 @@ export function EventDetail() {
         </section>
       )}
 
-      {/* Feedback */}
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <h2 className="text-base font-semibold text-text-primary">Was this useful?</h2>
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            onClick={() => { setFeedback('up'); void submitFeedback(data.id, true); }}
-            className={cn(
-              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
-              feedback === 'up'
-                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
-                : 'border-white/10 text-text-primary hover:bg-white/6',
-            )}
-          >
-            <ThumbsUp className="h-4 w-4" /> Yes
-          </button>
-          <button
-            type="button"
-            onClick={() => { setFeedback('down'); void submitFeedback(data.id, false); }}
-            className={cn(
-              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
-              feedback === 'down'
-                ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical'
-                : 'border-white/10 text-text-primary hover:bg-white/6',
-            )}
-          >
-            <ThumbsDown className="h-4 w-4" /> No
-          </button>
-        </div>
-      </section>
-
       {/* Legal disclaimer */}
-      <footer className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4 text-xs leading-5 text-text-secondary">
-        <p className="font-semibold">⚖️ Disclaimer</p>
-        <p className="mt-1">
-          Event Radar provides AI-processed market event notifications for informational purposes only. 
-          Content may be generated or summarized by AI and could contain errors or inaccuracies. 
-          This is not investment advice or financial advice, and should not be relied upon as the sole basis for any 
-          investment decision. Always verify information with official sources and consult a qualified 
-          financial advisor before making investment decisions. Past performance and historical patterns 
-          are not indicative of future results.
+      <CollapsiblePanel
+        id="disclaimer"
+        title="Disclaimer"
+        eyebrow="Informational only"
+        description="Short legal context. Expanded only when you need it."
+        className="bg-bg-muted/88 p-3 shadow-none"
+      >
+        <p className="text-xs leading-5 text-text-secondary">
+          Event Radar provides AI-processed market event notifications for informational purposes only.
+          Content may be generated or summarized by AI and could contain errors or inaccuracies. This is
+          not investment advice or financial advice, and should not be relied upon as the sole basis for
+          any investment decision. Always verify information with official sources and consult a qualified
+          financial advisor before making investment decisions. Past performance and historical patterns are
+          not indicative of future results.
         </p>
-      </footer>
+      </CollapsiblePanel>
     </div>
   );
 }

@@ -71,8 +71,8 @@ describe('Settings page', () => {
   it('keeps push setup at the top of the page', async () => {
     renderSettings();
 
-    const pushHeading = await screen.findByRole('heading', { name: /push alerts on this device/i });
-    const soundHeading = screen.getByRole('heading', { name: /sound alerts/i });
+    const pushHeading = await screen.findByRole('button', { name: /web push/i });
+    const soundHeading = screen.getByRole('button', { name: /sound alerts.*short tones/i });
 
     expect(pushHeading.compareDocumentPosition(soundHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
@@ -96,7 +96,10 @@ describe('Settings page', () => {
     const user = userEvent.setup();
     renderSettings();
 
-    expect(await screen.findByRole('heading', { name: /notification timing/i })).toBeInTheDocument();
+    const budgetToggle = await screen.findByRole('button', { name: /notification budget.*quiet hours/i });
+    await user.click(budgetToggle);
+
+    expect(screen.getByRole('heading', { name: /notification timing/i })).toBeInTheDocument();
     const quietHoursToggle = screen.getByLabelText(/enable quiet hours/i);
     expect(quietHoursToggle).toBeInTheDocument();
     await user.click(quietHoursToggle);
@@ -109,6 +112,7 @@ describe('Settings page', () => {
     const user = userEvent.setup();
 
     renderSettings();
+    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
     const nonWatchlistToggle = await screen.findByLabelText(/alert me for tickers outside my watchlist/i);
 
     await user.click(nonWatchlistToggle);
@@ -124,5 +128,17 @@ describe('Settings page', () => {
     }, { timeout: 1500 });
 
     expect(await screen.findByText(/preferences saved/i)).toBeInTheDocument();
+  });
+
+  it('renders settings groups as collapsible sections', async () => {
+    renderSettings();
+
+    const pushToggle = await screen.findByRole('button', { name: /web push/i });
+    const soundToggle = screen.getByRole('button', { name: /sound alerts.*short tones/i });
+    const budgetToggle = screen.getByRole('button', { name: /notification budget.*quiet hours/i });
+
+    expect(pushToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(soundToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(budgetToggle).toHaveAttribute('aria-expanded', 'false');
   });
 });

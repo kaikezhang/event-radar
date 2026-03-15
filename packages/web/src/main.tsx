@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@fontsource/inter/index.css';
 import { App } from './App.js';
 import { registerPwaServiceWorker } from './lib/pwa.js';
 import './index.css';

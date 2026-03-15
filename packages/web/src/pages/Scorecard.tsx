@@ -35,7 +35,7 @@ export function Scorecard() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <section className="rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <section className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
           <div className="h-5 w-28 animate-pulse rounded-full bg-white/8" />
           <div className="mt-3 h-8 w-48 animate-pulse rounded-full bg-white/8" />
           <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-white/6" />
@@ -44,7 +44,8 @@ export function Scorecard() {
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className="h-24 animate-pulse rounded-[24px] border border-white/8 bg-bg-surface/95"
+              data-testid="scorecard-skeleton-card"
+              className="relative h-24 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96"
             />
           ))}
         </section>
@@ -56,9 +57,21 @@ export function Scorecard() {
     return (
       <EmptyState
         icon="📉"
-        title="Scorecard unavailable"
-        description="The summary API did not return scorecard data. Try again in a moment."
-        ctaLabel="Back to feed"
+        title="Scorecard data is taking a beat"
+        description="We could not load the calibration view right now. Jump back to the live feed and try again after the next refresh."
+        ctaLabel="Return to live feed"
+        ctaHref="/"
+      />
+    );
+  }
+
+  if (data.totals.totalAlerts === 0) {
+    return (
+      <EmptyState
+        icon="🧭"
+        title="No closed alerts yet"
+        description="The scorecard unlocks once enough alerts have aged into verdict windows. Check the live feed while the first cohort matures."
+        ctaLabel="Open live feed"
         ctaHref="/"
       />
     );
@@ -66,10 +79,10 @@ export function Scorecard() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(145deg,rgba(34,197,94,0.10),rgba(15,23,42,0.94))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+            <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
               <Target className="h-3.5 w-3.5" />
               Scorecard
             </p>
@@ -87,7 +100,7 @@ export function Scorecard() {
             </p>
           </div>
 
-          <div className="hidden rounded-3xl border border-white/10 bg-white/6 p-3 text-text-secondary sm:block">
+          <div className="hidden rounded-2xl border border-white/10 bg-white/6 p-3 text-text-secondary sm:block">
             <CalendarRange className="h-5 w-5" />
           </div>
         </div>
@@ -104,7 +117,7 @@ export function Scorecard() {
               }}
               className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                 windowValue === option.value
-                  ? 'border-emerald-400/30 bg-emerald-400/14 text-emerald-200'
+                  ? 'border-accent-default/30 bg-accent-default/14 text-accent-default'
                   : 'border-white/10 bg-white/6 text-text-secondary hover:bg-white/8'
               }`}
             >
@@ -121,9 +134,9 @@ export function Scorecard() {
         <StatCard value={formatMove(data.totals.avgT20Move)} label="Avg T+20 move" />
       </section>
 
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-accent-default/10 text-accent-default">
             <AlertTriangle className="h-4 w-4" />
           </span>
           <div>
@@ -175,7 +188,7 @@ function BucketSection({
   buckets: ScorecardBucketSummary[];
 }) {
   return (
-    <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <div className="mb-4">
         <h2 className="text-[17px] font-semibold leading-6 text-text-primary">{title}</h2>
         <p className="mt-1 text-sm leading-6 text-text-secondary">{description}</p>
@@ -185,7 +198,7 @@ function BucketSection({
         {buckets.map((bucket) => (
           <article
             key={`${group}-${bucket.bucket}`}
-            className="rounded-[24px] border border-white/8 bg-black/16 p-4"
+            className="rounded-2xl border border-white/8 bg-bg-elevated/52 p-4"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -196,7 +209,7 @@ function BucketSection({
                   {bucket.alertsWithUsableVerdicts} usable verdicts
                 </p>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium text-text-secondary">
+              <span className="rounded-full border border-white/10 bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
                 {bucket.totalAlerts} alerts
               </span>
             </div>

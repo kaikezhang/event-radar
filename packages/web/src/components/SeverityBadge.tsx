@@ -51,7 +51,7 @@ export function SeverityBadge({
   return (
     <span
       className={cn(
-        'inline-flex min-h-11 items-center gap-2 rounded-full bg-bg-elevated/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em]',
+        'inline-flex min-h-9 items-center gap-2 rounded-full border border-white/10 bg-bg-elevated/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]',
         config.color,
         className,
       )}

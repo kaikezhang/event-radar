@@ -60,7 +60,7 @@ export function Watchlist() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(34,197,94,0.12),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">
           Watchlist
         </p>
@@ -79,7 +79,7 @@ export function Watchlist() {
         )}
       </section>
 
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-[17px] font-semibold text-text-primary">
@@ -117,23 +117,30 @@ export function Watchlist() {
         </form>
 
         {isEmpty ? (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Quick add
+            </p>
+            <div className="flex flex-wrap gap-2">
             {SUGGESTED_TICKERS.map((ticker) => (
               <button
                 key={ticker}
                 type="button"
                 onClick={() => setTickerInput(ticker)}
-                className="inline-flex min-h-10 items-center rounded-full border border-white/10 bg-white/5 px-3 text-sm font-medium text-text-secondary transition hover:bg-white/8 hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-default"
+                aria-label={`Quick add ${ticker}`}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-bg-elevated/72 px-3.5 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
               >
+                <Plus className="h-3.5 w-3.5 text-accent-default" />
                 {ticker}
               </button>
             ))}
+            </div>
           </div>
         ) : null}
       </section>
 
       {isEmpty ? (
-        <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
           <div className="flex items-start gap-3">
             <span className="mt-1 inline-flex h-11 w-11 items-center justify-center rounded-full bg-accent-default/12 text-accent-default">
               <Bell className="h-5 w-5" />
@@ -223,7 +230,7 @@ export function Watchlist() {
             return (
               <div
                 key={item.id}
-                className="rounded-[28px] border border-border-default bg-bg-surface/95 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
+                className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
               >
                 <div className="flex items-center justify-between">
                   <Link

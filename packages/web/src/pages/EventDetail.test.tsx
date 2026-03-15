@@ -25,10 +25,10 @@ describe('EventDetail page', () => {
   it('renders the top-level sections in alert-consumption order', async () => {
     renderDetail();
 
-    const whatHappened = await screen.findByRole('heading', { name: /what happened/i });
-    const whyNow = screen.getByRole('heading', { name: /why this matters now/i });
-    const whyNotified = screen.getByRole('heading', { name: /why you were notified/i });
-    const trust = screen.getByRole('heading', { name: /trust and verification/i });
+    const whatHappened = await screen.findByRole('button', { name: /what happened/i });
+    const whyNow = screen.getByRole('button', { name: /why now/i });
+    const whyNotified = screen.getByRole('button', { name: /why notified/i });
+    const trust = screen.getByRole('button', { name: /trust/i });
 
     expect(whatHappened.compareDocumentPosition(whyNow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(whyNow.compareDocumentPosition(whyNotified)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -39,28 +39,28 @@ describe('EventDetail page', () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /what happened/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /what happened/i })).toBeInTheDocument();
     });
 
     expect(screen.getByRole('heading', { name: /market context/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /historical pattern/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /similar events/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /yes/i })).toBeInTheDocument();
-    expect(screen.getByText(/not investment advice/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /disclaimer/i })).toBeInTheDocument();
   });
 
   it('surfaces why the alert matters now near the top of the page', async () => {
     renderDetail();
 
-    expect(await screen.findByRole('heading', { name: /why this matters now/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /why now/i })).toBeInTheDocument();
     expect(screen.getByText(/export controls may pressure near-term demand expectations/i)).toBeInTheDocument();
   });
 
   it('explains why the user was notified with alert metadata', async () => {
     renderDetail();
 
-    const heading = await screen.findByRole('heading', { name: /why you were notified/i });
-    const section = heading.closest('section');
+    const toggle = await screen.findByRole('button', { name: /why notified/i });
+    const section = toggle.closest('section');
 
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText(/high severity/i)).toBeInTheDocument();
@@ -93,8 +93,8 @@ describe('EventDetail page', () => {
   it('renders the trust block when scorecard data is available', async () => {
     renderDetail();
 
-    const heading = await screen.findByRole('heading', { name: /trust and verification/i });
-    const section = heading.closest('section');
+    const toggle = await screen.findByRole('button', { name: /trust/i });
+    const section = toggle.closest('section');
 
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getAllByText(/fade the headline/i).length).toBeGreaterThan(0);
@@ -171,20 +171,20 @@ describe('EventDetail page', () => {
   it('renders the "Why this alert" provenance section with source and filter path', async () => {
     renderDetail();
 
-    const heading = await screen.findByRole('heading', { name: /why this alert/i });
-    const section = heading.closest('section');
+    const toggle = await screen.findByRole('button', { name: /why this alert/i });
+    const section = toggle.closest('section');
 
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText(/sec filing/i)).toBeInTheDocument();
-    expect(within(section as HTMLElement).getByText(/filter path/i)).toBeInTheDocument();
+    expect(within(section as HTMLElement).getAllByText(/filter path/i).length).toBeGreaterThan(0);
     expect(within(section as HTMLElement).getByText(/l2 llm judge \(confidence 0\.82\)/i)).toBeInTheDocument();
   });
 
   it('shows "Also reported by" in the provenance section when confirmation count > 1', async () => {
     renderDetail();
 
-    const heading = await screen.findByRole('heading', { name: /why this alert/i });
-    const section = heading.closest('section');
+    const toggle = await screen.findByRole('button', { name: /why this alert/i });
+    const section = toggle.closest('section');
 
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText(/also reported by/i)).toBeInTheDocument();
@@ -193,8 +193,8 @@ describe('EventDetail page', () => {
   it('shows classification confidence in the provenance section', async () => {
     renderDetail();
 
-    const heading = await screen.findByRole('heading', { name: /why this alert/i });
-    const section = heading.closest('section');
+    const toggle = await screen.findByRole('button', { name: /why this alert/i });
+    const section = toggle.closest('section');
 
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText(/82%/)).toBeInTheDocument();
@@ -222,5 +222,46 @@ describe('EventDetail page', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/');
     });
+  });
+
+  it('lets readers collapse and re-open the primary explainer sections', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    const toggle = await screen.findByRole('button', { name: /what happened/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/nvidia corporation flagged heightened export exposure/i)).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/nvidia corporation flagged heightened export exposure/i)).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/nvidia corporation flagged heightened export exposure/i)).toBeInTheDocument();
+  });
+
+  it('moves feedback directly below the why-now section', async () => {
+    renderDetail();
+
+    const whyNowToggle = await screen.findByRole('button', { name: /why now/i });
+    const feedbackHeading = screen.getByRole('heading', { name: /was this useful/i });
+    const whyNotifiedToggle = screen.getByRole('button', { name: /why notified/i });
+
+    expect(whyNowToggle.compareDocumentPosition(feedbackHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(feedbackHeading.compareDocumentPosition(whyNotifiedToggle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('keeps the disclaimer collapsed by default', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    const disclaimerToggle = await screen.findByRole('button', { name: /disclaimer/i });
+    expect(disclaimerToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/consult a qualified financial advisor/i)).not.toBeInTheDocument();
+
+    await user.click(disclaimerToggle);
+    expect(disclaimerToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/consult a qualified financial advisor/i)).toBeInTheDocument();
   });
 });
