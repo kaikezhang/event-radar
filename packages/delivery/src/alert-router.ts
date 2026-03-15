@@ -1,7 +1,19 @@
 import type { Severity } from '@event-radar/shared';
+import { decideAlertRouting, type AlertRoutingDecision } from './push-policy.js';
 import type { AlertEvent, DeliveryService } from './types.js';
 
 export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook';
+
+export interface ChannelDeliveryResult {
+  channel: string;
+  ok: boolean;
+  error?: Error;
+}
+
+export interface AlertRouteResult {
+  decision: AlertRoutingDecision;
+  deliveries: ChannelDeliveryResult[];
+}
 
 export interface AlertRouterConfig {
   bark?: DeliveryService;
@@ -43,9 +55,10 @@ export class AlertRouter {
   /** Route an alert to the appropriate channels. Returns per-channel results. */
   async route(
     alert: AlertEvent,
-  ): Promise<{ channel: string; ok: boolean; error?: Error }[]> {
+  ): Promise<AlertRouteResult> {
+    const decision = decideAlertRouting(alert);
     const targets = ROUTING_TABLE[alert.severity];
-    const results: { channel: string; ok: boolean; error?: Error }[] = [];
+    const results: ChannelDeliveryResult[] = [];
 
     const promises = targets.map(async (channelName) => {
       const service = this.channels.get(channelName);
@@ -64,6 +77,9 @@ export class AlertRouter {
     });
 
     await Promise.all(promises);
-    return results;
+    return {
+      decision,
+      deliveries: results,
+    };
   }
 }

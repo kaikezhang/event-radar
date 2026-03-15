@@ -1,4 +1,4 @@
-import type { LLMEnrichment, RawEvent, Severity, RegimeSnapshot } from '@event-radar/shared';
+import type { ConfidenceLevel, LLMEnrichment, RawEvent, RegimeSnapshot, Severity } from '@event-radar/shared';
 
 /** Historical context from the similarity engine. */
 export interface HistoricalContext {
@@ -52,6 +52,10 @@ export interface AlertEvent {
   readonly event: RawEvent;
   readonly severity: Severity;
   readonly ticker?: string;
+  /** Classification confidence score from the alert pipeline when available. */
+  readonly classificationConfidence?: number;
+  /** Confidence bucket derived from the classification score. */
+  readonly confidenceBucket?: ConfidenceLevel;
   /** AI-generated enrichment, present when LLM processing succeeded. */
   readonly enrichment?: LLMEnrichment;
   /** Historical pattern context from similarity engine. */
