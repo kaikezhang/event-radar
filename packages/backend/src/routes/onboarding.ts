@@ -46,7 +46,13 @@ export function registerOnboardingRoutes(
             else 0
           end)
         )::int`,
-        latestSignal: sql<string>`max(${events.severity})`,
+        latestSignal: sql<string>`(array['LOW','MEDIUM','HIGH','CRITICAL'])[max(case
+            when ${events.severity} = 'CRITICAL' then 4
+            when ${events.severity} = 'HIGH' then 3
+            when ${events.severity} = 'MEDIUM' then 2
+            when ${events.severity} = 'LOW' then 1
+            else 0
+          end)]`,
       })
       .from(events)
       .where(
@@ -91,7 +97,8 @@ export function registerOnboardingRoutes(
       },
     },
   }, async (request) => {
-    const { tickers } = request.body as { tickers: string[] };
+    const { tickers: rawTickers } = request.body as { tickers: string[] };
+    const tickers = [...new Set(rawTickers)];
     const userId = resolveRequestUserId(request);
 
     await ensureUserExists(db, userId);

@@ -64,7 +64,7 @@ export function Onboarding() {
     if (!canContinue) return;
     const tickers = [...selectedTickers];
     await bulkAddMutation.mutateAsync(tickers);
-    navigate('/');
+    navigate('/?tab=watchlist');
   };
 
   // Already on watchlist (from a prior session)

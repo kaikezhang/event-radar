@@ -93,14 +93,17 @@ describe('GET /api/v1/onboarding/suggested-tickers', () => {
     // NVDA should be first (highest weighted score)
     expect(body.tickers[0].symbol).toBe('NVDA');
     expect(body.tickers[0].eventCount7d).toBe(3);
+    expect(body.tickers[0].latestSignal).toBe('CRITICAL');
 
     // AAPL second
     expect(body.tickers[1].symbol).toBe('AAPL');
     expect(body.tickers[1].eventCount7d).toBe(2);
+    expect(body.tickers[1].latestSignal).toBe('HIGH');
 
     // TSLA third
     expect(body.tickers[2].symbol).toBe('TSLA');
     expect(body.tickers[2].eventCount7d).toBe(1);
+    expect(body.tickers[2].latestSignal).toBe('MEDIUM');
   });
 
   it('returns sector packs', async () => {
@@ -177,6 +180,20 @@ describe('POST /api/v1/onboarding/bulk-add', () => {
     const body = response.json();
     expect(body.added).toBe(2); // Only NVDA and TSLA are new
     expect(body.total).toBe(3); // Total is 3
+  });
+
+  it('deduplicates input tickers', async () => {
+    const response = await ctx.server.inject({
+      method: 'POST',
+      url: '/api/v1/onboarding/bulk-add',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: { tickers: ['AAPL', 'AAPL', 'NVDA', 'NVDA', 'NVDA'] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.added).toBe(2); // Only AAPL and NVDA (deduplicated)
+    expect(body.total).toBe(2);
   });
 
   it('validates ticker format', async () => {
