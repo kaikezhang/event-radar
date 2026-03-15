@@ -1,25 +1,27 @@
 import type { Severity } from '@event-radar/shared';
 import type { AlertEvent, DeliveryService } from './types.js';
 
-export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook';
+export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook' | 'webPush';
 
 export interface AlertRouterConfig {
   bark?: DeliveryService;
   discord?: DeliveryService;
   telegram?: DeliveryService;
   webhook?: DeliveryService;
+  webPush?: DeliveryService;
 }
 
 /**
  * Routes based on severity per DELIVERY.md:
  *   CRITICAL → Bark + Telegram + Discord + Webhook
- *   HIGH     → Bark + Telegram + Discord + Webhook
+ *              + Web Push
+ *   HIGH     → Bark + Telegram + Discord + Webhook + Web Push
  *   MEDIUM   → Telegram + Discord + Webhook
  *   LOW      → Discord + Webhook
  */
 const ROUTING_TABLE: Record<Severity, ChannelName[]> = {
-  CRITICAL: ['bark', 'discord', 'telegram', 'webhook'],
-  HIGH: ['bark', 'discord', 'telegram', 'webhook'],
+  CRITICAL: ['bark', 'discord', 'telegram', 'webhook', 'webPush'],
+  HIGH: ['bark', 'discord', 'telegram', 'webhook', 'webPush'],
   MEDIUM: ['discord', 'telegram', 'webhook'],
   LOW: ['discord', 'webhook'],
 };
@@ -33,6 +35,7 @@ export class AlertRouter {
     if (config.discord) this.channels.set('discord', config.discord);
     if (config.telegram) this.channels.set('telegram', config.telegram);
     if (config.webhook) this.channels.set('webhook', config.webhook);
+    if (config.webPush) this.channels.set('webPush', config.webPush);
   }
 
   /** Returns true if at least one delivery channel is configured. */
