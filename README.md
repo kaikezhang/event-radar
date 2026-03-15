@@ -2,7 +2,7 @@
 
 **AI-powered market intelligence — right events, right time, right context.**
 
-Event Radar monitors real-time data sources across government filings, news, and social sentiment, then uses AI to filter noise, enrich context, and deliver only what matters — as a clear, actionable alert on your phone.
+Event Radar monitors real-time data sources across government filings, news, and social sentiment, then uses AI to filter noise, enrich context, and deliver only what matters — as clear, contextual intelligence on your phone.
 
 > SEC files an 8-K at 4:05 PM. CNBC covers it at 6 PM. You had it at 4:05 with AI analysis and historical context.
 
@@ -23,7 +23,7 @@ Instead of raw data dumps, you get:
 >
 > 📊 12 similar events: +8.3% avg alpha T+20, 67% win rate
 >
-> **Action:** Watch for entry on initial dip. Similar events (META 2022, MSFT 2023) bottomed within 3 days.
+> **Signal:** 🔴 High-Quality Setup — Similar events (META 2022, MSFT 2023) bottomed within 3 days.
 
 ---
 
@@ -36,7 +36,7 @@ Real-time event stream on mobile. Each alert shows severity, source, AI summary,
 GPT-4o-mini reads every event and produces:
 - **Summary** — what happened in plain language
 - **Impact** — why it matters for the market
-- **Action** — 🔴 Act Now / 🟡 Watch / 🟢 FYI
+- **Signal** — 🔴 High-Quality Setup / 🟡 Monitor / 🟢 Background
 - **Tickers** — affected symbols + direction (bullish/bearish)
 
 ### 📊 Historical Intelligence

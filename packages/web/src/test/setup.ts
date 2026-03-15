@@ -108,7 +108,7 @@ const SCORECARD_SUMMARY_90D = {
   },
   actionBuckets: [
     {
-      bucket: '🔴 ACT NOW',
+      bucket: '🔴 High-Quality Setup',
       totalAlerts: 38,
       alertsWithUsableVerdicts: 34,
       directionalCorrectCount: 25,

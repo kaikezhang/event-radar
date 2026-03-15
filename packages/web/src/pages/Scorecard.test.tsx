@@ -32,14 +32,14 @@ describe('Scorecard page', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Action buckets')).toBeInTheDocument();
+      expect(screen.getByText('Signal buckets')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Confidence buckets')).toBeInTheDocument();
     expect(screen.getByText('Source buckets')).toBeInTheDocument();
     expect(screen.getByText('Event type buckets')).toBeInTheDocument();
 
-    expect(screen.getByText('ACT NOW')).toBeInTheDocument();
+    expect(screen.getByText('HIGH-QUALITY SETUP')).toBeInTheDocument();
     expect(screen.getByText('high')).toBeInTheDocument();
     expect(screen.getByText('SEC Filing')).toBeInTheDocument();
     expect(screen.getByText('sec form 8k')).toBeInTheDocument();

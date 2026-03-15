@@ -22,7 +22,7 @@ export function decideAlertRouting(alert: AlertEvent): AlertRoutingDecision {
   const hasStrongSupport = supportCount >= STRONG_SUPPORT_MATCH_COUNT;
 
   if (
-    action === '🔴 ACT NOW'
+    action?.startsWith('🔴')
     && confidenceBucket === 'high'
     && hasStrongSupport
   ) {
@@ -43,7 +43,7 @@ export function decideAlertRouting(alert: AlertEvent): AlertRoutingDecision {
       tier: 'medium',
       shouldPush: true,
       pushMode: 'silent',
-      reason: action === '🟡 WATCH'
+      reason: action?.startsWith('🟡')
         ? 'watch_meaningful_support'
         : 'act_now_meaningful_support',
     };
@@ -79,7 +79,7 @@ function resolveConfidenceBucket(alert: AlertEvent): ConfidenceLevel {
 }
 
 function isActionable(action: LLMEnrichmentAction | undefined): boolean {
-  return action === '🔴 ACT NOW' || action === '🟡 WATCH';
+  return action?.startsWith('🔴') === true || action?.startsWith('🟡') === true;
 }
 
 function isActionableConfidence(confidenceBucket: ConfidenceLevel): boolean {

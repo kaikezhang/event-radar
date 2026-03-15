@@ -60,7 +60,7 @@ describe('Rich Delivery Format', () => {
           enrichment: {
             summary: 'Apple CEO departure triggers uncertainty',
             impact: 'Leadership vacuum at critical time for iPhone launch',
-            action: '🔴 ACT NOW',
+            action: '🔴 High-Quality Setup',
             tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
             regimeContext: 'In a neutral market, leadership changes have standard impact',
           },
@@ -127,7 +127,7 @@ describe('Rich Delivery Format', () => {
           enrichment: {
             summary: 'Summary',
             impact: 'Impact',
-            action: '🟢 FYI',
+            action: '🟢 Background',
             tickers: [],
           },
         }),
@@ -167,7 +167,7 @@ describe('Rich Delivery Format', () => {
           enrichment: {
             summary: 'NVDA files 8-K restructuring',
             impact: 'Major impact',
-            action: '🔴 ACT NOW',
+            action: '🔴 High-Quality Setup',
             tickers: [{ symbol: 'NVDA', direction: 'bearish' }],
           },
           ticker: 'NVDA',
@@ -223,7 +223,7 @@ describe('Rich Delivery Format', () => {
           enrichment: {
             summary: '12 similar restructuring events: 67% positive at T+20',
             impact: 'Cost-cutting viewed favorably',
-            action: '🟡 WATCH',
+            action: '🟡 Monitor',
             tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
           },
           regimeSnapshot: makeRegimeSnapshot({ score: 10, label: 'neutral' }),
@@ -260,7 +260,7 @@ describe('Rich Delivery Format', () => {
           enrichment: {
             summary: 'CEO departure',
             impact: 'Leadership gap',
-            action: '🔴 ACT NOW',
+            action: '🔴 High-Quality Setup',
             tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
             regimeContext: 'Neutral market context',
           },

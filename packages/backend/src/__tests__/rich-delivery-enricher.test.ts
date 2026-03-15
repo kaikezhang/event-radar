@@ -139,7 +139,7 @@ describe('LLMEnricher.enrich', () => {
             content: JSON.stringify({
               summary: 'Summary',
               impact: 'Impact',
-              action: '🟡 WATCH',
+              action: '🟡 Monitor',
               tickers: [],
             }),
           },
@@ -166,7 +166,7 @@ describe('LLMEnricher.enrich', () => {
       messages: Array<{ role: string; content: string }>;
     };
     expect(request.messages[0]?.content).toContain('English summary');
-    expect(request.messages[0]?.content).toContain('🔴 ACT NOW');
+    expect(request.messages[0]?.content).toContain('🔴 High-Quality Setup');
     expect(request.messages[1]?.content).toContain('## Market Context');
     expect(request.messages[1]?.content).toContain('Current regime: overbought');
   });
@@ -205,7 +205,7 @@ describe('LLMEnricher.enrich', () => {
     expect(result).toEqual({
       summary: 'AI summary',
       impact: 'AI impact',
-      action: '🟢 FYI',
+      action: '🟢 Background',
       tickers: [],
       regimeContext: 'Regime note',
     });
@@ -224,7 +224,7 @@ describe('LLMEnricher.enrich', () => {
                   content: JSON.stringify({
                     summary: null,
                     impact: 'AI impact',
-                    action: '🔴 ACT NOW',
+                    action: '🔴 High-Quality Setup',
                     tickers: [],
                   }),
                 },

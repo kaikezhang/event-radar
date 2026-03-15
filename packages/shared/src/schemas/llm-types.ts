@@ -48,9 +48,9 @@ export const LLMClassificationMethodSchema = z.enum(['rule', 'llm', 'hybrid']);
 export type LLMClassificationMethod = z.infer<typeof LLMClassificationMethodSchema>;
 
 export const LLMEnrichmentActionSchema = z.enum([
-  '🔴 ACT NOW',
-  '🟡 WATCH',
-  '🟢 FYI',
+  '🔴 High-Quality Setup',
+  '🟡 Monitor',
+  '🟢 Background',
 ]);
 export type LLMEnrichmentAction = z.infer<typeof LLMEnrichmentActionSchema>;
 
@@ -60,7 +60,7 @@ export const LLMEnrichmentTickerSchema = z.object({
 });
 export type LLMEnrichmentTicker = z.infer<typeof LLMEnrichmentTickerSchema>;
 
-const DEFAULT_ENRICHMENT_ACTION: LLMEnrichmentAction = '🟢 FYI';
+const DEFAULT_ENRICHMENT_ACTION: LLMEnrichmentAction = '🟢 Background';
 const OptionalEnrichmentFieldSchema = z.preprocess(
   (value) => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined,
   z.string().min(1).optional(),

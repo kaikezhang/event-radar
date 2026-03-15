@@ -54,7 +54,7 @@ async function seedJudgeAudit(input: {
   llmEnrichment?: {
     summary: string;
     impact: string;
-    action: '🔴 ACT NOW' | '🟡 WATCH' | '🟢 FYI';
+    action: '🔴 High-Quality Setup' | '🟡 Monitor' | '🟢 Background';
     tickers: Array<{ symbol: string; direction: 'bullish' | 'bearish' | 'neutral' }>;
     regimeContext?: string;
   };
@@ -404,7 +404,7 @@ describe('judge routes', () => {
       llmEnrichment: {
         summary: 'Nvidia disclosed a material customer commitment.',
         impact: 'Revenue visibility improves and peers may rerate.',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [{ symbol: 'NVDA', direction: 'bullish' }],
         regimeContext: 'Risk-on tape could amplify the reaction.',
       },
@@ -424,7 +424,7 @@ describe('judge routes', () => {
           title: 'Judge enrichment event',
           llm_enrichment: {
             analysis: 'Nvidia disclosed a material customer commitment.\n\nRevenue visibility improves and peers may rerate.',
-            action: '🔴 ACT NOW',
+            action: '🔴 High-Quality Setup',
             tickers: ['NVDA'],
             regimeContext: 'Risk-on tape could amplify the reaction.',
             confidence: 0.93,

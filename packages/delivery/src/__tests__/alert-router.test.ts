@@ -39,7 +39,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [],
       },
       historicalContext: {
@@ -75,7 +75,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🟡 WATCH',
+        action: '🟡 Monitor',
         tickers: [],
       },
       historicalContext: {
@@ -110,7 +110,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🟢 FYI',
+        action: '🟢 Background',
         tickers: [],
       },
     }));
@@ -135,7 +135,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [],
       },
     }));
@@ -198,7 +198,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [],
       },
       historicalContext: {
@@ -260,7 +260,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🟡 WATCH',
+        action: '🟡 Monitor',
         tickers: [],
       },
       historicalContext: {
@@ -306,7 +306,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [],
       },
     }));
@@ -437,7 +437,7 @@ describe('AlertRouter', () => {
         currentSetup: 'Setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [],
       },
     }));

@@ -46,7 +46,7 @@ function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
         currentSetup: 'Current setup',
         historicalContext: 'Historical context',
         risks: 'Risks',
-        action: '🔴 ACT NOW',
+        action: '🔴 High-Quality Setup',
         tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
       },
     },
@@ -197,7 +197,7 @@ describe('alert scorecard route', () => {
       ticker: 'AAPL',
       source: 'sec-edgar',
       originalAlert: {
-        actionLabel: '🔴 ACT NOW',
+        actionLabel: '🔴 High-Quality Setup',
         direction: 'bullish',
         confidence: 0.82,
         confidenceBucket: 'high',
