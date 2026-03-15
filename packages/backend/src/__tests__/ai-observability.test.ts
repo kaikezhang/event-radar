@@ -127,6 +127,32 @@ describe('AI Observability runtime and alias handling', () => {
     `);
   }
 
+  async function seedStoredEvent(
+    source: string,
+    createdAt: string,
+    receivedAt: string,
+  ) {
+    await db.execute(sql`
+      INSERT INTO events (
+        id,
+        source,
+        source_event_id,
+        title,
+        metadata,
+        created_at,
+        received_at
+      ) VALUES (
+        ${crypto.randomUUID()},
+        ${source},
+        ${crypto.randomUUID()},
+        ${`${source} stored event`},
+        ${JSON.stringify({ publication_date: receivedAt })}::jsonb,
+        ${createdAt},
+        ${receivedAt}
+      )
+    `);
+  }
+
   async function requestPulse(healthList: ScannerHealth[]) {
     const server = Fastify({ logger: false });
     registerAiObservabilityRoutes(server, {
@@ -272,5 +298,42 @@ describe('AI Observability runtime and alias handling', () => {
       }),
     );
     expect(body.scanners.map((scanner: { name: string }) => scanner.name)).not.toContain('x');
+  });
+
+  it('treats future-dated stored federal-register events as active based on row creation time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+    await seedStoredEvent(
+      'federal-register',
+      '2026-03-15T11:40:00.000Z',
+      '2026-03-16T00:00:00.000Z',
+    );
+
+    const body = await requestPulse([
+      {
+        scanner: 'federal-register',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T11:58:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 15 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    expect(body.scanners).toContainEqual(
+      expect.objectContaining({
+        name: 'federal-register',
+        eventsInWindow: 1,
+        lastSeenAt: '2026-03-15T11:40:00.000Z',
+        status: 'active',
+        activityStatus: 'active',
+        runtimeStatus: 'healthy',
+        sources: ['federal-register'],
+      }),
+    );
+    expect(body.health.alerts).not.toContainEqual(
+      expect.objectContaining({ code: 'scanner_silent', scanner: 'federal-register' }),
+    );
   });
 });
