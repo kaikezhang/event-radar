@@ -287,6 +287,7 @@ export async function createTestDb(): Promise<{
       historical_match BOOLEAN,
       historical_confidence VARCHAR(20),
       duration_ms INTEGER,
+      confidence DECIMAL(5, 4),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);

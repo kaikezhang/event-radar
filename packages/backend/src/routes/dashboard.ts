@@ -8,6 +8,7 @@ import { toDashboardMarketRegime } from '../services/market-regime.js';
 import { validateApiKeyValue } from './auth-middleware.js';
 import { registry as metricsRegistry } from '../metrics.js';
 import { asRecord, parseConfidence, parseJsonValue } from './route-utils.js';
+import { getRuntimeScannerStatus } from '../utils/scanner-runtime-status.js';
 
 export interface DashboardDeps {
   apiKey: string;
@@ -297,15 +298,9 @@ export function registerDashboardRoutes(
 
     // Scanner status
     const healthList = deps.scannerRegistry.healthAll();
-    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const nowMs = Date.now();
     const scannerDetails = healthList.map(h => {
-      let status: string = h.status;
-      if (h.lastScanAt) {
-        const lastScan = new Date(h.lastScanAt).getTime();
-        if (lastScan < fiveMinAgo) status = 'down';
-        else if (h.errorCount > 5) status = 'degraded';
-      } else if (h.errorCount > 0) status = 'down';
-
+      const status = getRuntimeScannerStatus(h, nowMs);
       return {
         name: h.scanner,
         status,
