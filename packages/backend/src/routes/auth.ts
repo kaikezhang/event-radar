@@ -4,7 +4,6 @@ import { SignJWT, jwtVerify } from 'jose';
 import { eq, and, isNull, gt, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import * as schema from '../db/schema.js';
-import { ensureUserExists } from './user-context.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
