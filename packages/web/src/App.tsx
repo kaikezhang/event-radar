@@ -3,6 +3,7 @@ import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } 
 import { BottomNav } from './components/BottomNav.js';
 import { EventDetail } from './pages/EventDetail.js';
 import { Feed } from './pages/Feed.js';
+import { Scorecard } from './pages/Scorecard.js';
 import { Search } from './pages/Search.js';
 import { Settings } from './pages/Settings.js';
 import { TickerProfile } from './pages/TickerProfile.js';
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Feed /> },
+      { path: 'scorecard', element: <Scorecard /> },
       { path: 'event/:id', element: <EventDetail /> },
       { path: 'ticker/:symbol', element: <TickerProfile /> },
       { path: 'watchlist', element: <Watchlist /> },
