@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { StoredPushSubscription } from '@event-radar/delivery';
 import type { Database } from '../db/connection.js';
-import { pushSubscriptions } from '../db/schema.js';
+import { pushSubscriptions, watchlist } from '../db/schema.js';
 
 export interface UpsertPushSubscriptionInput {
   userId: string;
@@ -16,6 +16,7 @@ export interface PushSubscriptionStore {
   disableSubscription(subscriptionId: string): Promise<void>;
   upsertSubscription(input: UpsertPushSubscriptionInput): Promise<void>;
   removeSubscription(userId: string, endpoint: string): Promise<boolean>;
+  getWatchlistTickers(userId: string): Promise<string[]>;
 }
 
 export function createPushSubscriptionStore(db: Database): PushSubscriptionStore {
@@ -81,6 +82,15 @@ export function createPushSubscriptionStore(db: Database): PushSubscriptionStore
         .returning({ id: pushSubscriptions.id });
 
       return deleted.length > 0;
+    },
+
+    async getWatchlistTickers(userId: string) {
+      const rows = await db
+        .select({ ticker: watchlist.ticker })
+        .from(watchlist)
+        .where(eq(watchlist.userId, userId));
+
+      return rows.map((r) => r.ticker);
     },
   };
 }

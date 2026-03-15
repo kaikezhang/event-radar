@@ -24,6 +24,8 @@ export interface StoredPushSubscription {
 export interface PushSubscriptionStore {
   listActiveSubscriptions(): Promise<ReadonlyArray<StoredPushSubscription>>;
   disableSubscription(subscriptionId: string): Promise<void>;
+  getWatchlistTickers?(userId: string): Promise<string[]>;
+  getPushNonWatchlist?(userId: string): Promise<boolean>;
 }
 
 export interface WebPushClient {
@@ -85,12 +87,60 @@ export class WebPushChannel implements DeliveryService {
       return;
     }
 
+    // Extract event tickers for watchlist matching
+    const alertTickers = extractAlertTickers(alert);
+
+    // Filter subscriptions by watchlist if the store supports it
+    let targetSubscriptions = subscriptions;
+    if (this.store.getWatchlistTickers) {
+      const alertTickerSet = new Set(alertTickers.map((t) => t.toUpperCase()));
+      const hasAlertTickers = alertTickerSet.size > 0;
+
+      // Group subscriptions by userId to batch watchlist lookups
+      const userIds = [...new Set(subscriptions.map((s) => s.userId))];
+      const userWatchlists = new Map<string, Set<string>>();
+      const userPushNonWatchlist = new Map<string, boolean>();
+
+      await Promise.all(
+        userIds.map(async (userId) => {
+          const [tickers, pushNonWatchlist] = await Promise.all([
+            this.store.getWatchlistTickers!(userId),
+            this.store.getPushNonWatchlist?.(userId) ?? Promise.resolve(false),
+          ]);
+          userWatchlists.set(userId, new Set(tickers.map((t) => t.toUpperCase())));
+          userPushNonWatchlist.set(userId, pushNonWatchlist);
+        }),
+      );
+
+      targetSubscriptions = subscriptions.filter((sub) => {
+        const userTickers = userWatchlists.get(sub.userId);
+        const pushAll = userPushNonWatchlist.get(sub.userId) ?? false;
+
+        if (!hasAlertTickers) {
+          // No-ticker alert: only send to users who opted in for untargeted alerts
+          return pushAll;
+        }
+
+        if (!userTickers || userTickers.size === 0) {
+          // User has no watchlist: only send if they opted in for all alerts
+          return pushAll;
+        }
+
+        // Send if any alert ticker is in the user's watchlist
+        return [...alertTickerSet].some((t) => userTickers.has(t));
+      });
+    }
+
+    if (targetSubscriptions.length === 0) {
+      return;
+    }
+
     const payload = JSON.stringify(buildWebPushPayload(alert));
     const topic = `event-radar-${alert.storedEventId ?? alert.event.id}`;
     let deliveredCount = 0;
     let transientError: Error | undefined;
 
-    await Promise.all(subscriptions.map(async (subscription) => {
+    await Promise.all(targetSubscriptions.map(async (subscription) => {
       try {
         await this.client.sendNotification(
           {
@@ -140,6 +190,41 @@ export function buildWebPushPayload(alert: AlertEvent): WebPushNotificationPaylo
     ticker: alert.ticker ?? null,
     source: alert.event.source,
   };
+}
+
+export function extractAlertTickers(alert: AlertEvent): string[] {
+  const tickers: string[] = [];
+
+  // Primary ticker from alert
+  if (alert.ticker) {
+    tickers.push(alert.ticker);
+  }
+
+  // Tickers from enrichment
+  if (alert.enrichment?.tickers) {
+    for (const t of alert.enrichment.tickers) {
+      if (t.symbol && !tickers.includes(t.symbol)) {
+        tickers.push(t.symbol);
+      }
+    }
+  }
+
+  // Ticker from event metadata
+  const metadata = alert.event.metadata as Record<string, unknown> | undefined;
+  if (metadata) {
+    if (typeof metadata.ticker === 'string' && !tickers.includes(metadata.ticker)) {
+      tickers.push(metadata.ticker);
+    }
+    if (Array.isArray(metadata.tickers)) {
+      for (const t of metadata.tickers) {
+        if (typeof t === 'string' && !tickers.includes(t)) {
+          tickers.push(t);
+        }
+      }
+    }
+  }
+
+  return tickers;
 }
 
 function truncate(value: string, maxLength: number): string {

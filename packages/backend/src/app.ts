@@ -410,6 +410,7 @@ export function buildApp(options?: {
         '/api/events/ingest',
         '/api/v1/dashboard',
         '/api/v1/feed',
+        '/api/v1/feed/watchlist-summary',
         '/api/v1/delivery/feed',
         '/api/v1/scanners/:name/events',
         '/api/v1/audit',

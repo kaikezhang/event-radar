@@ -2,19 +2,37 @@ import { useState } from 'react';
 import { ArrowUpRight, Bell, CheckCircle2, Plus, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SkeletonCard } from '../components/SkeletonCard.js';
-import { useWatchlist } from '../hooks/useWatchlist.js';
+import { useWatchlist, useWatchlistSummary } from '../hooks/useWatchlist.js';
 
 const SUGGESTED_TICKERS = ['AAPL', 'NVDA', 'TSLA'] as const;
 const PUSH_SETTINGS_PATH = '/settings?from=watchlist#push-alerts';
 
+const SEVERITY_COLORS: Record<string, string> = {
+  CRITICAL: 'bg-red-500/20 text-red-400 border-red-500/30',
+  HIGH: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  MEDIUM: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  LOW: 'bg-green-500/20 text-green-400 border-green-500/30',
+};
+
+function timeAgo(isoString: string): string {
+  const ms = Date.now() - new Date(isoString).getTime();
+  if (ms < 60_000) return 'just now';
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`;
+  return `${Math.round(ms / 86_400_000)}d ago`;
+}
+
 export function Watchlist() {
   const { items, isLoading, addAsync, remove, isAdding } = useWatchlist();
+  const { summary } = useWatchlistSummary();
   const [tickerInput, setTickerInput] = useState('');
   const [firstTickerAdded, setFirstTickerAdded] = useState<string | null>(null);
 
   const isEmpty = items.length === 0;
   const hasFirstTickerSuccess =
     firstTickerAdded !== null && items.some((item) => item.ticker === firstTickerAdded);
+
+  const summaryMap = new Map(summary.map((s) => [s.ticker, s]));
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,32 +218,73 @@ export function Watchlist() {
             </div>
           ) : null}
 
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between rounded-[28px] border border-border-default bg-bg-surface/95 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
-            >
-              <Link
-                to={`/ticker/${item.ticker}`}
-                className="flex-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-default"
+          {items.map((item) => {
+            const tickerSummary = summaryMap.get(item.ticker);
+            return (
+              <div
+                key={item.id}
+                className="rounded-[28px] border border-border-default bg-bg-surface/95 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
               >
-                <span className="text-[17px] font-semibold text-text-primary">
-                  ${item.ticker}
-                </span>
-                {item.notes && (
-                  <span className="ml-2 text-sm text-text-secondary">{item.notes}</span>
+                <div className="flex items-center justify-between">
+                  <Link
+                    to={`/ticker/${item.ticker}`}
+                    className="flex-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-default"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-[17px] font-semibold text-text-primary">
+                        ${item.ticker}
+                      </span>
+                      {tickerSummary && tickerSummary.eventCount24h > 0 && (
+                        <span className="text-lg" aria-label={`Signal: ${tickerSummary.highestSignal}`}>
+                          {tickerSummary.highestSignal}
+                        </span>
+                      )}
+                    </div>
+                    {item.notes && (
+                      <span className="text-sm text-text-secondary">{item.notes}</span>
+                    )}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => remove(item.ticker)}
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-white/6 p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
+                    aria-label={`Remove ${item.ticker} from watchlist`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {tickerSummary && tickerSummary.eventCount24h > 0 && (
+                  <div className="mt-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-text-secondary">
+                        {tickerSummary.eventCount24h} event{tickerSummary.eventCount24h !== 1 ? 's' : ''} (24h)
+                      </span>
+                      {tickerSummary.latestEvent && (
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                            SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
+                          }`}
+                        >
+                          {tickerSummary.latestEvent.severity}
+                        </span>
+                      )}
+                    </div>
+                    {tickerSummary.latestEvent && (
+                      <p className="mt-1.5 text-sm leading-5 text-text-primary line-clamp-2">
+                        {tickerSummary.latestEvent.title}
+                      </p>
+                    )}
+                    {tickerSummary.latestEvent && (
+                      <p className="mt-1 text-xs text-text-secondary">
+                        {timeAgo(tickerSummary.latestEvent.timestamp)}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </Link>
-              <button
-                type="button"
-                onClick={() => remove(item.ticker)}
-                className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-white/6 p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
-                aria-label={`Remove ${item.ticker} from watchlist`}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </section>
       )}
     </div>

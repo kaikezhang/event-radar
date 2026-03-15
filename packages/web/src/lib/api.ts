@@ -120,8 +120,10 @@ export interface FeedResponse {
   total: number;
 }
 
-export async function getFeed(limit = 50): Promise<FeedResponse> {
-  const res = await apiFetch(`/v1/feed?limit=${limit}`, { public: true });
+export async function getFeed(limit = 50, options?: { watchlist?: boolean }): Promise<FeedResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options?.watchlist) params.set('watchlist', 'true');
+  const res = await apiFetch(`/v1/feed?${params.toString()}`, { public: true });
   const events: Record<string, unknown>[] = res.events ?? [];
   const alerts = events.map(mapAlertSummary);
 
@@ -130,6 +132,22 @@ export async function getFeed(limit = 50): Promise<FeedResponse> {
     cursor: (res.cursor as string | null) ?? null,
     total: typeof res.total === 'number' ? res.total : alerts.length,
   };
+}
+
+export interface WatchlistTickerSummary {
+  ticker: string;
+  eventCount24h: number;
+  latestEvent: {
+    title: string;
+    severity: string;
+    timestamp: string;
+  } | null;
+  highestSignal: string;
+}
+
+export async function getWatchlistSummary(): Promise<WatchlistTickerSummary[]> {
+  const res = await apiFetch('/v1/feed/watchlist-summary');
+  return (res.tickers ?? []) as WatchlistTickerSummary[];
 }
 
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
