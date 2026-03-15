@@ -74,6 +74,10 @@ export class BarkPusher implements DeliveryService {
       title = `${sev}${ticker} ${sourceTag}`;
     }
 
+    if ((alert.confirmationCount ?? 1) > 1) {
+      title = `${title} [${alert.confirmationCount} sources]`;
+    }
+
     // Body: AI summary + regime label + historical one-liner
     let bodyText = enrichment
       ? enrichment.summary

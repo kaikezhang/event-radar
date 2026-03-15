@@ -10,12 +10,16 @@ const FEED_EVENT = {
   tickers: ['NVDA'],
   time: '2026-03-12T20:05:00.000Z',
   receivedAt: '2026-03-12T20:05:00.000Z',
+  confirmationCount: 3,
+  confirmedSources: ['sec-edgar', 'pr-newswire', 'reuters'],
   metadata: {
     tickers: ['NVDA'],
     ticker: 'NVDA',
     companyName: 'NVIDIA Corporation',
     direction: 'bearish',
     url: 'https://example.com/sec/nvda-export-filing',
+    confirmationCount: 3,
+    confirmedSources: ['sec-edgar', 'pr-newswire', 'reuters'],
   },
 };
 
@@ -219,6 +223,29 @@ beforeEach(() => {
         data: {
           ...FEED_EVENT,
           sourceUrls: ['https://example.com/sec/nvda-export-filing'],
+          provenance: [
+            {
+              id: 'evt-critical-nvda-1',
+              source: 'sec-edgar',
+              title: 'NVDA export filing flags China exposure risk',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              url: 'https://example.com/sec/nvda-export-filing',
+            },
+            {
+              id: 'evt-critical-nvda-2',
+              source: 'pr-newswire',
+              title: 'PR Newswire repeats NVIDIA China demand warning',
+              receivedAt: '2026-03-12T20:06:00.000Z',
+              url: 'https://example.com/pr/nvda-warning',
+            },
+            {
+              id: 'evt-critical-nvda-3',
+              source: 'reuters',
+              title: 'Reuters confirms NVIDIA export demand pressure',
+              receivedAt: '2026-03-12T20:08:00.000Z',
+              url: 'https://example.com/reuters/nvda-pressure',
+            },
+          ],
         },
       });
     }

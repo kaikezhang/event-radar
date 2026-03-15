@@ -56,6 +56,8 @@ export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
   source: varchar('source', { length: 100 }).notNull(),
   sourceEventId: varchar('source_event_id', { length: 255 }),
+  ticker: varchar('ticker', { length: 10 }),
+  eventType: varchar('event_type', { length: 50 }),
   title: text('title').notNull(),
   summary: text('summary'),
   rawPayload: jsonb('raw_payload'),
@@ -74,7 +76,9 @@ export const events = pgTable('events', {
   // Multi-source confirmation fields
   confirmedSources: jsonb('confirmed_sources').$type<string[]>(),
   confirmationCount: integer('confirmation_count').default(1),
-});
+}, (table) => [
+  index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt),
+]);
 
 export const priceCache = pgTable(
   'price_cache',

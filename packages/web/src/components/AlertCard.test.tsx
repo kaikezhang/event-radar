@@ -27,6 +27,13 @@ const sampleAlert2: AlertSummary = {
   saved: false,
 };
 
+const confirmedAlert: AlertSummary = {
+  ...sampleAlert,
+  id: 'test-3',
+  confirmationCount: 3,
+  confirmedSources: ['SEC Filing', 'PR Newswire', 'Reuters'],
+};
+
 describe('AlertCard', () => {
   it('renders title, source, summary, and tickers', () => {
     render(
@@ -56,5 +63,15 @@ describe('AlertCard', () => {
     await user.click(screen.getByRole('link', { name: /open alert/i }));
 
     expect(screen.getByText('Detail page')).toBeInTheDocument();
+  });
+
+  it('renders a confirmation badge for multi-source events', () => {
+    render(
+      <MemoryRouter>
+        <AlertCard alert={confirmedAlert} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/confirmed by 3 sources/i)).toBeInTheDocument();
   });
 });

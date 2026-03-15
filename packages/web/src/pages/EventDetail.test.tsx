@@ -73,8 +73,21 @@ describe('EventDetail page', () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: /view original source/i })).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: /view original source/i }).length).toBeGreaterThan(0);
     });
+  });
+
+  it('renders provenance details for confirmed events', async () => {
+    renderDetail();
+
+    const heading = await screen.findByRole('heading', { name: /provenance/i });
+    const section = heading.closest('section');
+
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText(/confirmed by 3 sources/i)).toBeInTheDocument();
+    expect(within(section as HTMLElement).getAllByText(/pr newswire/i).length).toBeGreaterThan(0);
+    expect(within(section as HTMLElement).getAllByText(/1m later/i).length).toBeGreaterThan(0);
+    expect(within(section as HTMLElement).getAllByText(/reuters/i).length).toBeGreaterThan(0);
   });
 
   it('renders the trust block when scorecard data is available', async () => {

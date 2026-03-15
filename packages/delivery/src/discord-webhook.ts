@@ -103,6 +103,14 @@ export class DiscordWebhook implements DeliveryService {
       fields.push({ name: 'Signal', value: enrichment.action, inline: true });
     }
 
+    if ((alert.confirmationCount ?? 1) > 1) {
+      fields.push({
+        name: `✓ Confirmed by ${alert.confirmationCount} sources`,
+        value: (alert.confirmedSources ?? []).join(', '),
+        inline: false,
+      });
+    }
+
     // --- Items (e.g., 8-K item types) ---
     const items = this.extractItems(alert);
     if (items) {

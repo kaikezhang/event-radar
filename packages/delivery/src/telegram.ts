@@ -77,6 +77,13 @@ export class TelegramDelivery implements DeliveryService {
       lines.push('', `*Ticker:* \`${alert.ticker}\``);
     }
 
+    if ((alert.confirmationCount ?? 1) > 1 && alert.confirmedSources?.length) {
+      lines.push(
+        '',
+        escapeMarkdown(`✓ Confirmed by: ${alert.confirmedSources.join(', ')}`),
+      );
+    }
+
     lines.push(
       '',
       `*Source:* ${escapeMarkdown(alert.event.source)}`,

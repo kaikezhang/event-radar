@@ -53,6 +53,10 @@ export interface AlertEvent {
   readonly event: RawEvent;
   readonly severity: Severity;
   readonly ticker?: string;
+  /** Multi-source confirmation count for the correlated event cluster. */
+  readonly confirmationCount?: number;
+  /** Distinct sources that confirmed the same event. */
+  readonly confirmedSources?: string[];
   /** Classification confidence score from the alert pipeline when available. */
   readonly classificationConfidence?: number;
   /** Confidence bucket derived from the classification score. */

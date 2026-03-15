@@ -113,6 +113,8 @@ interface FeedRow {
   summary: string | null;
   metadata: unknown;
   source_urls: unknown;
+  confirmation_count: number | null;
+  confirmed_sources: unknown;
   received_at: string | Date;
   created_at: string | Date;
   audit_ticker: string | null;
@@ -563,6 +565,8 @@ export function registerDashboardRoutes(
           e.summary,
           e.metadata,
           e.source_urls,
+          e.confirmation_count,
+          e.confirmed_sources,
           e.received_at,
           e.created_at
         FROM pipeline_audit pa
@@ -599,6 +603,14 @@ export function registerDashboardRoutes(
             time: new Date(timeValue).toISOString(),
             category: inferFeedCategory(row.source, metadata),
             llmReason: row.llm_reason ?? '',
+            confirmationCount:
+              row.confirmation_count
+              ?? (typeof metadata['confirmationCount'] === 'number'
+                ? metadata['confirmationCount']
+                : 1),
+            confirmedSources: asStringArray(row.confirmed_sources).length > 0
+              ? asStringArray(row.confirmed_sources)
+              : asStringArray(metadata['confirmedSources']),
           };
         }),
         cursor: hasMore && lastRow
