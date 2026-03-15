@@ -4,6 +4,7 @@ export interface AlertSummary {
   id: string;
   severity: string;
   source: string;
+  sourceKey?: string;
   title: string;
   summary: string;
   tickers: string[];
@@ -28,6 +29,7 @@ export interface EventDetailData {
   id: string;
   severity: string;
   source: string;
+  sourceKey?: string;
   title: string;
   tickers: string[];
   time: string;
@@ -44,6 +46,49 @@ export interface EventDetailData {
     avgMoveT20: number | null;
     winRate: number | null;
     similarEvents: SimilarEvent[];
+  };
+  scorecard?: EventScorecard | null;
+}
+
+export interface EventScorecardWindow {
+  price: number | null;
+  movePercent: number | null;
+  evaluatedAt: string | null;
+}
+
+export interface EventScorecard {
+  eventId: string;
+  title: string;
+  ticker: string | null;
+  source: string;
+  eventTimestamp: string;
+  originalAlert: {
+    actionLabel: string | null;
+    direction: string | null;
+    confidence: number | null;
+    confidenceBucket: string | null;
+    classifiedBy: string | null;
+    classifiedAt: string | null;
+    summary: string | null;
+    thesis: {
+      impact: string | null;
+      whyNow: string | null;
+      currentSetup: string | null;
+      historicalContext: string | null;
+      risks: string | null;
+    };
+  };
+  outcome: {
+    entryPrice: number | null;
+    tPlus5: EventScorecardWindow;
+    tPlus20: EventScorecardWindow;
+    directionVerdict: string;
+    setupVerdict: string;
+  };
+  notes: {
+    summary: string;
+    items: string[];
+    verdictWindow: string | null;
   };
 }
 

@@ -24,4 +24,19 @@ describe('EventDetail page', () => {
       expect(screen.getByRole('link', { name: /view original source/i })).toBeInTheDocument();
     });
   });
+
+  it('renders the trust block when scorecard data is available', async () => {
+    renderWithRouter([{ path: '/event/:id', element: <EventDetail /> }], ['/event/evt-critical-nvda-1']);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /trust and verification/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText(/fade the headline/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/correct/i)).toBeInTheDocument();
+    expect(screen.getByText(/worked/i)).toBeInTheDocument();
+    expect(screen.getByText(/-5\.05%/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/-10\.10%/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/used t\+20 as the primary verdict window/i)).toBeInTheDocument();
+  });
 });

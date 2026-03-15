@@ -7,8 +7,8 @@ import { AlertCard } from '../components/AlertCard.js';
 import { PillBanner } from '../components/PillBanner.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useAlerts } from '../hooks/useAlerts.js';
-import { getEventSources } from '../lib/api.js';
-import type { FilterPreset } from '../types/index.js';
+import { getEventSources, getScorecardSummary } from '../lib/api.js';
+import type { FilterPreset, ScorecardSummary } from '../types/index.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 
@@ -32,11 +32,36 @@ function saveCustomPresets(presets: FilterPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
 }
 
+function getTrustCue(
+  sourceKey: string | undefined,
+  summary: ScorecardSummary | null | undefined,
+): { label: string; tone: 'positive' | 'mixed' | 'caution' } | undefined {
+  if (!sourceKey || !summary) {
+    return undefined;
+  }
+
+  const bucket = summary.sourceBuckets.find((item) => item.bucket === sourceKey);
+  if (!bucket || bucket.directionalHitRate == null || bucket.alertsWithUsableVerdicts === 0) {
+    return undefined;
+  }
+
+  const hitRate = Math.round(bucket.directionalHitRate * 100);
+  return {
+    label: `Source hit rate ${hitRate}%`,
+    tone: hitRate >= 65 ? 'positive' : hitRate >= 45 ? 'mixed' : 'caution',
+  };
+}
+
 export function Feed() {
   const { data: sources = [] } = useQuery<string[]>({
     queryKey: ['event-sources'],
     queryFn: getEventSources,
     staleTime: 60_000,
+  });
+  const { data: scorecardSummary = null } = useQuery({
+    queryKey: ['scorecard-summary'],
+    queryFn: () => getScorecardSummary(),
+    staleTime: 300_000,
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -359,7 +384,13 @@ export function Feed() {
         ) : null}
 
         {!isInitialLoading && !error
-          ? filteredAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)
+          ? filteredAlerts.map((alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
+              />
+            ))
           : null}
       </section>
     </div>

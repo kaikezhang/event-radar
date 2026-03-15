@@ -46,6 +46,53 @@ const PRICE_CANDLES = [
   },
 ];
 
+const SCORECARD = {
+  eventId: 'evt-critical-nvda-1',
+  title: FEED_EVENT.title,
+  ticker: 'NVDA',
+  source: FEED_EVENT.source,
+  eventTimestamp: FEED_EVENT.time,
+  originalAlert: {
+    actionLabel: 'Fade the headline',
+    direction: 'bearish',
+    confidence: 0.74,
+    confidenceBucket: 'high',
+    classifiedBy: 'llm',
+    classifiedAt: '2026-03-12T20:06:00.000Z',
+    summary: FEED_EVENT.summary,
+    thesis: {
+      impact: 'Export controls may pressure near-term demand expectations.',
+      whyNow: null,
+      currentSetup: null,
+      historicalContext: null,
+      risks: null,
+    },
+  },
+  outcome: {
+    entryPrice: 124.7,
+    tPlus5: {
+      price: 118.4,
+      movePercent: -5.05,
+      evaluatedAt: '2026-03-17T20:05:00.000Z',
+    },
+    tPlus20: {
+      price: 112.1,
+      movePercent: -10.1,
+      evaluatedAt: '2026-04-01T20:05:00.000Z',
+    },
+    directionVerdict: 'correct',
+    setupVerdict: 'worked',
+  },
+  notes: {
+    summary: 'Bearish setup matched the T+20 move (-10.10%).',
+    items: [
+      'Used T+20 as the primary verdict window.',
+      'Original action label: Fade the headline.',
+      'Confidence bucket: high.',
+    ],
+    verdictWindow: 'T+20',
+  },
+};
 const SCORECARD_SUMMARY_90D = {
   days: 90,
   totals: {
@@ -128,9 +175,24 @@ const SCORECARD_SUMMARY_ALL = {
     directionalHitRate: 0.6584,
     setupWorkedCount: 122,
     setupWorkedRate: 0.604,
+    avgT5Move: 2.4,
     avgT20Move: 5.1,
     medianT20Move: 3.8,
   },
+  sourceBuckets: [
+    {
+      bucket: 'sec-edgar',
+      totalAlerts: 35,
+      alertsWithUsableVerdicts: 30,
+      directionalCorrectCount: 20,
+      directionalHitRate: 0.6667,
+      setupWorkedCount: 18,
+      setupWorkedRate: 0.6,
+      avgT5Move: -1.8,
+      avgT20Move: -3.4,
+      medianT20Move: -3.4,
+    },
+  ],
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -174,6 +236,10 @@ beforeEach(() => {
           },
         ],
       });
+    }
+
+    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
+      return jsonResponse(SCORECARD);
     }
 
     if (url.pathname === '/api/events' && url.searchParams.get('ticker') === 'NVDA') {
