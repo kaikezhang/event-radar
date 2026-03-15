@@ -420,6 +420,7 @@ export function buildApp(options?: {
         '/api/events/ingest',
         '/api/v1/feed',
         '/api/v1/feed/watchlist-summary',
+        '/api/v1/scorecards/summary',
         '/api/health/delivery-stats',
         '/api/auth/magic-link',
         '/api/auth/verify',
