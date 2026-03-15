@@ -20,6 +20,10 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
   return value != null && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
+export function getString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 export function toNumber(value: string | number | null): number | null {
   if (value == null) {
     return null;
@@ -32,6 +36,16 @@ export function toNumber(value: string | number | null): number | null {
 export function getEnrichment(value: unknown): LLMEnrichment | null {
   const parsed = LLMEnrichmentSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+export function resolveProductEventType(input: {
+  metadata: Record<string, unknown> | null;
+  rawPayload: unknown;
+}): string | null {
+  const rawPayload = asRecord(input.rawPayload);
+
+  return getString(input.metadata?.['eventType'])
+    ?? getString(rawPayload?.['eventType']);
 }
 
 export function normalizeDirection(value: unknown): AccuracyDirection | null {
