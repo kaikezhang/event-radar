@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAlertSound } from '../hooks/useAlertSound.js';
 import {
   getWebPushDeviceState,
@@ -12,6 +13,7 @@ import {
 } from '../lib/web-push.js';
 
 export function Settings() {
+  const location = useLocation();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
   const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
     ...getWebPushSupport(),
@@ -107,6 +109,7 @@ export function Settings() {
     warning: 'border-amber-300/20 bg-amber-300/10 text-amber-100',
     danger: 'border-rose-300/20 bg-rose-300/10 text-rose-100',
   }[pushDetails.tone];
+  const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
 
   return (
     <section className="space-y-4">
@@ -115,14 +118,135 @@ export function Settings() {
           Settings
         </p>
         <h1 className="mt-3 text-[22px] font-semibold text-text-primary">
-          Sound alerts
+          Alerts and notifications
         </h1>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          Play a short tone for new HIGH and CRITICAL live events after you interact with the page.
+          Keep your watchlist alerts understandable on the page and reachable when the app is backgrounded.
         </p>
       </div>
 
+      <div
+        id="push-alerts"
+        className="space-y-4 rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
+            Web Push
+          </p>
+          <h2 className="mt-3 text-[22px] font-semibold text-text-primary">
+            Push alerts on this device
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            Enable push alerts so important Event Radar events can reach this device when the app is backgrounded.
+          </p>
+        </div>
+
+        {fromWatchlist ? (
+          <div className="rounded-2xl border border-accent-default/20 bg-accent-default/10 p-4">
+            <p className="text-sm font-semibold text-text-primary">Finish your watchlist setup</p>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Turn on push for this device, then return to your watchlist so the names you care about stay tight and readable.
+            </p>
+          </div>
+        ) : null}
+
+        <div className={`rounded-2xl border p-4 ${pushToneClassName}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                {pushDetails.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-current/80">
+                {pushDetails.description}
+              </p>
+            </div>
+            <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-current/80">
+              {pushDetails.state.replaceAll('-', ' ')}
+            </div>
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-[0.16em] text-current/70">
+            Permission: {pushState.permission}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            Enable push in under a minute
+          </p>
+          <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+            <li className="flex gap-3">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                1
+              </span>
+              <span>Tap {pushDetails.enableLabel}.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                2
+              </span>
+              <span>Allow browser notifications in the prompt.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                3
+              </span>
+              <span>Return to your watchlist to keep alerts focused.</span>
+            </li>
+          </ol>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => {
+              void enableWebPush();
+            }}
+            disabled={!pushDetails.canEnable}
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pushDetails.enableLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void disableWebPush();
+            }}
+            disabled={!pushDetails.canDisable}
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pushDetails.disableLabel}
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Link
+            to="/watchlist"
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Review watchlist
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Open live feed
+          </Link>
+        </div>
+      </div>
+
       <div className="space-y-4 rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
+            Sound
+          </p>
+          <h2 className="mt-3 text-[22px] font-semibold text-text-primary">
+            Sound alerts
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            Play a short tone for new HIGH and CRITICAL live events after you interact with the page.
+          </p>
+        </div>
+
         <label className="flex items-center justify-between gap-4">
           <span>
             <span className="block text-sm font-medium text-text-primary">Enable sound alerts</span>
@@ -177,62 +301,6 @@ export function Settings() {
               className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
             />
           </label>
-        </div>
-      </div>
-
-      <div className="space-y-4 rounded-[28px] border border-white/8 bg-bg-surface/95 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
-            Web Push
-          </p>
-          <h2 className="mt-3 text-[22px] font-semibold text-text-primary">
-            Browser notifications
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            Enable push alerts so important Event Radar notifications can reach this device when the app is backgrounded.
-          </p>
-        </div>
-
-        <div className={`rounded-2xl border p-4 ${pushToneClassName}`}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-medium">
-                {pushDetails.title}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-current/80">
-                {pushDetails.description}
-              </p>
-            </div>
-            <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-current/80">
-              {pushDetails.state.replaceAll('-', ' ')}
-            </div>
-          </div>
-          <p className="mt-4 text-xs uppercase tracking-[0.16em] text-current/70">
-            Permission: {pushState.permission}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => {
-              void enableWebPush();
-            }}
-            disabled={!pushDetails.canEnable}
-            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {pushDetails.enableLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void disableWebPush();
-            }}
-            disabled={!pushDetails.canDisable}
-            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {pushDetails.disableLabel}
-          </button>
         </div>
       </div>
     </section>

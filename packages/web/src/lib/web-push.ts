@@ -322,8 +322,8 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
       tone: 'warning',
       canEnable: false,
       canDisable: false,
-      enableLabel: 'Enable browser push',
-      disableLabel: 'Disable browser push',
+      enableLabel: 'Enable push alerts',
+      disableLabel: 'Disable push alerts',
     };
   }
 
@@ -349,7 +349,7 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
       canEnable: true,
       canDisable: true,
       enableLabel: 'Try again',
-      disableLabel: 'Disable browser push',
+      disableLabel: 'Disable push alerts',
     };
   }
 
@@ -362,7 +362,7 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
       canEnable: false,
       canDisable: false,
       enableLabel: 'Notifications blocked',
-      disableLabel: 'Disable browser push',
+      disableLabel: 'Disable push alerts',
     };
   }
 
@@ -374,8 +374,8 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
       tone: 'neutral',
       canEnable: true,
       canDisable: false,
-      enableLabel: 'Enable browser push',
-      disableLabel: 'Disable browser push',
+      enableLabel: 'Enable push alerts',
+      disableLabel: 'Disable push alerts',
     };
   }
 
@@ -388,7 +388,7 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
       canEnable: false,
       canDisable: true,
       enableLabel: 'Enabled on this device',
-      disableLabel: 'Disable browser push',
+      disableLabel: 'Disable push alerts',
     };
   }
 
@@ -399,8 +399,8 @@ export function getWebPushStatusDetails(state: WebPushDeviceState & {
     tone: 'warning',
     canEnable: true,
     canDisable: false,
-    enableLabel: 'Enable browser push',
-    disableLabel: 'Disable browser push',
+    enableLabel: 'Enable push alerts',
+    disableLabel: 'Disable push alerts',
   };
 }
 

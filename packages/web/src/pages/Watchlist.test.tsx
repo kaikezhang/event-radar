@@ -29,7 +29,10 @@ describe('Watchlist page', () => {
     });
 
     expect(screen.getByText(/event radar works best when you follow a small set of names/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /set up push alerts/i })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: /enable push alerts/i })).toHaveAttribute(
+      'href',
+      '/settings?from=watchlist#push-alerts',
+    );
   });
 
   it('shows a first-ticker success state after adding the first symbol', async () => {
@@ -82,6 +85,9 @@ describe('Watchlist page', () => {
     });
 
     expect(screen.getByRole('link', { name: '$NVDA' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /enable push for nvda alerts/i })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: /enable push alerts on this device/i })).toHaveAttribute(
+      'href',
+      '/settings?from=watchlist#push-alerts',
+    );
   });
 });
