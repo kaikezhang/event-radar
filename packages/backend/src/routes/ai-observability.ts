@@ -11,6 +11,8 @@ import {
 
 // ---- Types ----
 
+type ScheduleCategory = 'market-hours' | 'government' | 'always' | 'manual';
+
 interface ScannerStatus {
   name: string;
   eventsInWindow: number;
@@ -22,6 +24,8 @@ interface ScannerStatus {
   runtimeCurrentIntervalMs: number | null;
   runtimeStaleAfterMs: number | null;
   sources: string[];
+  schedule: ScheduleCategory;
+  withinSchedule: boolean;
 }
 
 interface TrendData {
@@ -162,6 +166,72 @@ function computeTrend(current: number, previous: number | null): TrendData {
   return { previous, current, delta, deltaPercent, direction };
 }
 
+// ---- Scanner Schedule ----
+
+const SCANNER_SCHEDULE: Record<string, ScheduleCategory> = {
+  'trading-halt': 'market-hours',
+  'sec-edgar': 'market-hours',
+  'dilution-monitor': 'market-hours',
+  'newswire': 'market-hours',
+  'ir-monitor': 'market-hours',
+  'federal-register': 'government',
+  'fed': 'government',
+  'fda': 'government',
+  'sec-regulatory': 'government',
+  'ftc': 'government',
+  'whitehouse': 'government',
+  'econ-calendar': 'government',
+  'stocktwits': 'always',
+  'breaking-news': 'always',
+  'reddit': 'always',
+  'manual': 'manual',
+  'dummy': 'manual',
+};
+
+function getScannerSchedule(scannerName: string): ScheduleCategory {
+  return SCANNER_SCHEDULE[scannerName] ?? 'always';
+}
+
+/**
+ * Get the current hour and day-of-week in America/New_York timezone.
+ */
+function getETComponents(now: Date): { hour: number; dayOfWeek: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    hourCycle: 'h23',
+    weekday: 'short',
+  });
+  const parts = fmt.formatToParts(now);
+  const hourPart = parts.find(p => p.type === 'hour');
+  const weekdayPart = parts.find(p => p.type === 'weekday');
+  const hour = Number(hourPart?.value ?? 0);
+  const dayMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  const dayOfWeek = dayMap[weekdayPart?.value ?? 'Mon'] ?? 1;
+  return { hour, dayOfWeek };
+}
+
+export function isWithinSchedule(scannerName: string, now: Date): boolean {
+  const schedule = getScannerSchedule(scannerName);
+  if (schedule === 'always') return true;
+  if (schedule === 'manual') return false;
+
+  const { hour, dayOfWeek } = getETComponents(now);
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+  if (schedule === 'market-hours') {
+    // Mon-Fri 6am-8pm ET (pre-market through after-hours)
+    return isWeekday && hour >= 6 && hour < 20;
+  }
+  if (schedule === 'government') {
+    // Mon-Fri 8am-6pm ET (business hours)
+    return isWeekday && hour >= 8 && hour < 18;
+  }
+  return true;
+}
+
 function computeHealthScore(
   scanners: ScannerStatus[],
   anomalies: AnomalyRecord[],
@@ -169,11 +239,14 @@ function computeHealthScore(
 ): { score: number; status: 'healthy' | 'degraded' | 'unhealthy' } {
   let score = 100;
 
-  // Scanner coverage penalty
-  const totalScanners = scanners.length;
-  const silentScanners = scanners.filter(s => s.status !== 'active').length;
-  if (totalScanners > 0) {
-    score -= Math.round((silentScanners / totalScanners) * 30);
+  // Scanner coverage penalty — exclude manual scanners entirely,
+  // and only penalize silent scanners that are within their expected schedule
+  const scorableScanners = scanners.filter(s => s.schedule !== 'manual');
+  const silentInSchedule = scorableScanners.filter(
+    s => s.status !== 'active' && s.withinSchedule,
+  ).length;
+  if (scorableScanners.length > 0) {
+    score -= Math.round((silentInSchedule / scorableScanners.length) * 30);
   }
 
   // Grace period penalty
@@ -442,6 +515,9 @@ export function registerAiObservabilityRoutes(
       ]);
       const runtimeStatus = runtime?.status ?? 'unknown';
 
+      const schedule = getScannerSchedule(name);
+      const withinSchedule = isWithinSchedule(name, now);
+
       scanners.push({
         name,
         eventsInWindow,
@@ -453,6 +529,8 @@ export function registerAiObservabilityRoutes(
         runtimeCurrentIntervalMs: runtime?.currentIntervalMs ?? null,
         runtimeStaleAfterMs: runtime?.staleAfterMs ?? null,
         sources: [...sources].sort(),
+        schedule,
+        withinSchedule,
       });
     }
     scanners.sort((a, b) => b.eventsInWindow - a.eventsInWindow);
@@ -565,14 +643,30 @@ export function registerAiObservabilityRoutes(
     // 7. Anomaly detection
     const anomalies: AnomalyRecord[] = [];
 
-    // Scanner silence
+    // Scanner silence — schedule-aware
     const silentScanners = scanners.filter(
-      s => s.activityStatus === 'silent' && s.runtimeStatus !== 'down',
+      s => s.activityStatus === 'silent' && s.runtimeStatus !== 'down' && s.schedule !== 'manual',
     );
     for (const s of silentScanners) {
       if (!s.lastSeenAt) continue;
       const silentMs = now.getTime() - new Date(s.lastSeenAt).getTime();
       const silentHours = silentMs / 3_600_000;
+
+      // Outside schedule → downgrade to info
+      if (!s.withinSchedule) {
+        if (silentHours > 6) {
+          anomalies.push({
+            type: 'scanner_silent',
+            severity: 'info',
+            scanner: s.name,
+            detail: `Scanner ${s.name} silent for ${Math.round(silentHours)}h (expected — outside schedule)`,
+            detectedAt: now.toISOString(),
+          });
+        }
+        continue;
+      }
+
+      // Within schedule — normal severity
       if (silentHours > 6) {
         anomalies.push({
           type: 'scanner_silent',
