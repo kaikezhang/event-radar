@@ -32,6 +32,7 @@ export function useWatchlist() {
     items,
     isLoading,
     add: addMutation.mutate,
+    addAsync: addMutation.mutateAsync,
     remove: removeMutation.mutate,
     isAdding: addMutation.isPending,
     isRemoving: removeMutation.isPending,
