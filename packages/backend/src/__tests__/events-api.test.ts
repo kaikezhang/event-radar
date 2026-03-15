@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
 import { createTestDb, safeClose, safeCloseServer, cleanTestDb } from './helpers/test-db.js';
@@ -40,10 +41,10 @@ describe('Event Store', () => {
 
   it('should store an event and return the DB id', async () => {
     const event = makeEvent();
-    const id = await storeEvent(sharedDb, { event, severity: 'MEDIUM' });
+    const result = await storeEvent(sharedDb, { event, severity: 'MEDIUM' });
 
-    expect(id).toBeDefined();
-    expect(typeof id).toBe('string');
+    expect(result.id).toBeDefined();
+    expect(typeof result.id).toBe('string');
   });
 
   it('should store event fields correctly', async () => {
@@ -53,7 +54,7 @@ describe('Event Store', () => {
       body: 'Specific Body',
     });
 
-    const id = await storeEvent(sharedDb, { event, severity: 'HIGH' });
+    const { id } = await storeEvent(sharedDb, { event, severity: 'HIGH' });
 
     const { rows } = await sharedClient.query(
       'SELECT * FROM events WHERE id = $1',
@@ -70,7 +71,7 @@ describe('Event Store', () => {
 
   it('should store event without severity', async () => {
     const event = makeEvent();
-    const id = await storeEvent(sharedDb, { event });
+    const { id } = await storeEvent(sharedDb, { event });
 
     const { rows } = await sharedClient.query(
       'SELECT severity FROM events WHERE id = $1',
@@ -238,10 +239,10 @@ describe('GET /api/events/:id', () => {
   beforeAll(async () => {
     await cleanTestDb(sharedDb);
 
-    storedEventId = await storeEvent(sharedDb, {
+    storedEventId = (await storeEvent(sharedDb, {
       event: makeEvent({ title: 'Detail Test Event' }),
       severity: 'HIGH',
-    });
+    })).id;
 
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
@@ -291,6 +292,75 @@ describe('GET /api/events/:id', () => {
     expect(response.statusCode).toBe(404);
     const body = response.json();
     expect(body.error).toBe('Event not found');
+  });
+});
+
+describe('GET /api/events/:id provenance window', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  beforeEach(async () => {
+    await cleanTestDb(sharedDb);
+  });
+
+  afterAll(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('only includes backward-looking provenance rows for the requested event', async () => {
+    const olderId = (await storeEvent(sharedDb, {
+      event: makeEvent({
+        id: '10000000-0000-0000-0000-000000000001',
+        source: 'sec-edgar',
+        title: 'Older Apple filing',
+        timestamp: new Date('2026-03-15T10:00:00.000Z'),
+        metadata: { ticker: 'AAPL', eventType: 'sec_form_8k' },
+      }),
+      severity: 'HIGH',
+      ticker: 'AAPL',
+      eventType: 'sec_form_8k',
+    })).id;
+    await sharedDb.execute(sql`
+      UPDATE events
+      SET created_at = NOW() - INTERVAL '10 minutes'
+      WHERE id = ${olderId}
+    `);
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        id: '10000000-0000-0000-0000-000000000002',
+        source: 'newswire',
+        title: 'Newswire confirms Apple filing',
+        timestamp: new Date('2026-03-15T10:05:00.000Z'),
+        metadata: { ticker: 'AAPL', eventType: 'sec_form_8k' },
+      }),
+      severity: 'HIGH',
+      ticker: 'AAPL',
+      eventType: 'sec_form_8k',
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${olderId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.confirmationCount).toBe(2);
+    expect(body.confirmedSources).toEqual(['sec-edgar', 'newswire']);
+    expect(body.provenance).toHaveLength(1);
+    expect(body.provenance[0]).toMatchObject({
+      id: olderId,
+      source: 'sec-edgar',
+      title: 'Older Apple filing',
+    });
   });
 });
 

@@ -61,7 +61,7 @@ async function seedOutcome(input: {
   change1m?: number | null;
 }): Promise<{ eventId: string; rawEventId: string }> {
   const rawEventId = input.rawEventId ?? crypto.randomUUID();
-  const eventId = await storeEvent(db, {
+  const { id: eventId } = await storeEvent(db, {
     event: makeEvent({
       id: rawEventId,
       source: input.source,

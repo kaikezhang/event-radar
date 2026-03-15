@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { storeEvent } from '../db/event-store.js';
@@ -44,36 +45,39 @@ describe('storeEvent multi-source confirmation', () => {
   });
 
   it('confirms the oldest matching event within the 30-minute window', async () => {
-    const olderId = await storeEvent(db, {
+    const olderResult = await storeEvent(db, {
       event: makeRawEvent(),
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
     });
+    const olderId = olderResult.id;
     await db.execute(sql`
       UPDATE events
       SET created_at = NOW() - INTERVAL '10 minutes'
       WHERE id = ${olderId}
     `);
 
-    const newerId = await storeEvent(db, {
-      event: makeRawEvent({
-        id: '660e8400-e29b-41d4-a716-446655440000',
-        source: 'newswire',
-        title: 'Newswire echoes NVDA filing',
-        url: 'https://example.com/nvda-newswire',
-      }),
+    const newerEvent = makeRawEvent({
+      id: '660e8400-e29b-41d4-a716-446655440000',
+      source: 'newswire',
+      title: 'Newswire echoes NVDA filing',
+      url: 'https://example.com/nvda-newswire',
+    });
+    const newerResult = await storeEvent(db, {
+      event: newerEvent,
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
     });
+    const newerId = newerResult.id;
 
     const [olderEvent] = await db
       .select()
       .from(events)
       .where(eq(events.id, olderId))
       .limit(1);
-    const [newerEvent] = await db
+    const [storedNewerEvent] = await db
       .select()
       .from(events)
       .where(eq(events.id, newerId))
@@ -84,17 +88,70 @@ describe('storeEvent multi-source confirmation', () => {
     expect(olderEvent?.confirmationCount).toBe(2);
     expect(olderEvent?.confirmedSources).toEqual(['sec-edgar', 'newswire']);
     expect(olderEvent?.mergedFrom).toEqual([newerId]);
-    expect(newerEvent?.ticker).toBe('NVDA');
-    expect(newerEvent?.eventType).toBe('sec_form_8k');
+    expect(storedNewerEvent?.ticker).toBe('NVDA');
+    expect(storedNewerEvent?.eventType).toBe('sec_form_8k');
   });
 
-  it('does not confirm matches outside the 30-minute window', async () => {
-    const olderId = await storeEvent(db, {
+  it('returns confirmation details without writing aggregate confirmation metadata onto the newer event', async () => {
+    const olderId = (await storeEvent(db, {
       event: makeRawEvent(),
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
+    })).id;
+    await db.execute(sql`
+      UPDATE events
+      SET created_at = NOW() - INTERVAL '10 minutes'
+      WHERE id = ${olderId}
+    `);
+
+    const newerEvent = makeRawEvent({
+      id: '6f0e8400-e29b-41d4-a716-446655440000',
+      source: 'newswire',
+      title: 'Newswire confirms NVDA filing',
+      url: 'https://example.com/nvda-confirmation',
     });
+    const storeResult = await storeEvent(db, {
+      event: newerEvent,
+      severity: 'HIGH',
+      ticker: 'NVDA',
+      eventType: 'sec_form_8k',
+    });
+
+    expect(storeResult).toMatchObject({
+      id: expect.any(String),
+      confirmationCount: 2,
+      confirmedSources: ['sec-edgar', 'newswire'],
+    });
+    expect(newerEvent.metadata).toEqual({
+      ticker: 'NVDA',
+      eventType: 'sec_form_8k',
+    });
+
+    const [storedNewerEvent] = await db
+      .select()
+      .from(events)
+      .where(eq(events.id, storeResult.id))
+      .limit(1);
+
+    expect(storedNewerEvent?.confirmationCount).toBe(1);
+    expect(storedNewerEvent?.confirmedSources).toEqual(['newswire']);
+    expect(storedNewerEvent?.metadata).toMatchObject({
+      ticker: 'NVDA',
+      eventType: 'sec_form_8k',
+      confirmedEventId: olderId,
+    });
+    expect((storedNewerEvent?.metadata as Record<string, unknown>)['confirmationCount']).toBeUndefined();
+    expect((storedNewerEvent?.metadata as Record<string, unknown>)['confirmedSources']).toBeUndefined();
+  });
+
+  it('does not confirm matches outside the 30-minute window', async () => {
+    const olderId = (await storeEvent(db, {
+      event: makeRawEvent(),
+      severity: 'HIGH',
+      ticker: 'NVDA',
+      eventType: 'sec_form_8k',
+    })).id;
     await db.execute(sql`
       UPDATE events
       SET created_at = NOW() - INTERVAL '31 minutes'
@@ -123,12 +180,12 @@ describe('storeEvent multi-source confirmation', () => {
   });
 
   it('does not confirm events with a different ticker', async () => {
-    const olderId = await storeEvent(db, {
+    const olderId = (await storeEvent(db, {
       event: makeRawEvent(),
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
-    });
+    })).id;
 
     await storeEvent(db, {
       event: makeRawEvent({
@@ -152,12 +209,12 @@ describe('storeEvent multi-source confirmation', () => {
   });
 
   it('does not confirm events with a different event type', async () => {
-    const olderId = await storeEvent(db, {
+    const olderId = (await storeEvent(db, {
       event: makeRawEvent(),
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
-    });
+    })).id;
 
     await storeEvent(db, {
       event: makeRawEvent({
@@ -181,13 +238,13 @@ describe('storeEvent multi-source confirmation', () => {
   });
 
   it('leaves confirmation state unchanged when ticker or event type is missing', async () => {
-    const eventId = await storeEvent(db, {
+    const eventId = (await storeEvent(db, {
       event: makeRawEvent({
         id: 'aa0e8400-e29b-41d4-a716-446655440000',
         metadata: {},
       }),
       severity: 'HIGH',
-    });
+    })).id;
 
     const [storedEvent] = await db
       .select()
@@ -202,7 +259,7 @@ describe('storeEvent multi-source confirmation', () => {
   });
 
   it('stores the initial source URL for provenance tracking', async () => {
-    const eventId = await storeEvent(db, {
+    const eventId = (await storeEvent(db, {
       event: makeRawEvent({
         id: 'bb0e8400-e29b-41d4-a716-446655440000',
         url: 'https://example.com/source/primary',
@@ -210,7 +267,7 @@ describe('storeEvent multi-source confirmation', () => {
       severity: 'HIGH',
       ticker: 'NVDA',
       eventType: 'sec_form_8k',
-    });
+    })).id;
 
     const [storedEvent] = await db
       .select()
@@ -272,5 +329,25 @@ describe('storeEvent multi-source confirmation', () => {
 
     expect(legacyEvent?.ticker).toBe('NVDA');
     expect(legacyEvent?.eventType).toBe('sec_form_8k');
+  });
+
+  it('keeps the ticker/type/time confirmation index aligned on ASC created_at', async () => {
+    const migrationPath = join(process.cwd(), 'src/db/migrations/004-add-event-ticker-type-confirmation.sql');
+    const testDbPath = join(process.cwd(), 'src/__tests__/helpers/test-db.ts');
+    const schemaPath = join(process.cwd(), 'src/db/schema.ts');
+    const [migration, testDbSource] = await Promise.all([
+      readFile(migrationPath, 'utf8'),
+      readFile(testDbPath, 'utf8'),
+    ]);
+    const normalizedMigration = migration.replace(/\s+/g, ' ');
+    const normalizedTestDb = testDbSource.replace(/\s+/g, ' ');
+    const normalizedSchema = (await readFile(schemaPath, 'utf8')).replace(/\s+/g, ' ');
+
+    expect(normalizedMigration).toContain('CREATE INDEX idx_events_ticker_type_time ON events(ticker, event_type, created_at);');
+    expect(normalizedMigration).not.toContain('created_at DESC');
+    expect(normalizedTestDb).toContain('ON events (ticker, event_type, created_at)');
+    expect(normalizedTestDb).not.toContain('created_at DESC');
+    expect(normalizedSchema).toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt)");
+    expect(normalizedSchema).not.toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt.desc())");
   });
 });

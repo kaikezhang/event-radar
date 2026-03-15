@@ -202,6 +202,24 @@ describe('DiscordWebhook', () => {
     expect(confirmationField.value).toContain('reuters');
   });
 
+  it('omits the confirmation field when the source list is empty', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        confirmationCount: 2,
+        confirmedSources: [],
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const confirmationField = embed.fields.find(
+      (field: { name: string }) => field.name.includes('Confirmed by'),
+    );
+
+    expect(confirmationField).toBeUndefined();
+  });
+
   it('should truncate long descriptions to 2048 chars', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
     const longBody = 'x'.repeat(3000);

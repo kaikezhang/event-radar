@@ -344,7 +344,7 @@ export function registerEventRoutes(
               ${events.ticker} = ${event.ticker}
               AND ${events.eventType} = ${event.eventType}
               AND ${events.createdAt} >= ${new Date(event.createdAt.getTime() - CONFIRMATION_WINDOW_MS)}
-              AND ${events.createdAt} <= ${new Date(event.createdAt.getTime() + CONFIRMATION_WINDOW_MS)}
+              AND ${events.createdAt} <= ${event.createdAt}
             `)
             .orderBy(asc(events.createdAt))
         : [];

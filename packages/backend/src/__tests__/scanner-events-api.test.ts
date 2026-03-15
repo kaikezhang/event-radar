@@ -46,7 +46,7 @@ async function seedScannerEvent(input: {
 }): Promise<string> {
   const tickers = input.tickers ?? ['AAPL'];
 
-  return storeEvent(sharedDb, {
+  return (await storeEvent(sharedDb, {
     event: makeEvent({
       source: input.source,
       title: input.title,
@@ -59,7 +59,7 @@ async function seedScannerEvent(input: {
       },
     }),
     severity: input.severity ?? 'MEDIUM',
-  });
+  })).id;
 }
 
 describe('GET /api/v1/scanners/:name/events', () => {

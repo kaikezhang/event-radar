@@ -10,6 +10,12 @@ export interface StoreEventInput {
   eventType?: string;
 }
 
+export interface StoreEventResult {
+  id: string;
+  confirmationCount?: number;
+  confirmedSources?: string[];
+}
+
 const CONFIRMATION_WINDOW_MS = 30 * 60 * 1000;
 
 interface ConfirmationCandidateRow {
@@ -68,7 +74,7 @@ function toStringArray(value: unknown): string[] {
 export async function storeEvent(
   db: Database,
   input: StoreEventInput,
-): Promise<string> {
+): Promise<StoreEventResult> {
   const { event, severity } = input;
   const ticker = normalizeTicker(input.ticker ?? event.metadata?.['ticker']);
   const eventType = normalizeString(input.eventType ?? event.metadata?.['eventType']);
@@ -80,8 +86,6 @@ export async function storeEvent(
   if (eventType) {
     metadata['eventType'] = eventType;
   }
-
-  event.metadata = metadata;
 
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -104,7 +108,7 @@ export async function storeEvent(
       .returning({ id: events.id, createdAt: events.createdAt });
 
     if (!ticker || !eventType) {
-      return row.id;
+      return { id: row.id };
     }
 
     const windowStart = new Date(row.createdAt.getTime() - CONFIRMATION_WINDOW_MS);
@@ -128,7 +132,7 @@ export async function storeEvent(
     const candidate = (candidateResult as unknown as { rows?: ConfirmationCandidateRow[] }).rows?.[0];
 
     if (!candidate) {
-      return row.id;
+      return { id: row.id };
     }
 
     const updatedSources = [...new Set([
@@ -156,20 +160,22 @@ export async function storeEvent(
       })
       .where(eq(events.id, candidate.id));
 
-    event.metadata = {
+    const confirmedMetadata = {
       ...metadata,
-      confirmationCount,
-      confirmedSources: updatedSources,
       confirmedEventId: candidate.id,
     };
 
     await tx
       .update(events)
       .set({
-        metadata: event.metadata,
+        metadata: confirmedMetadata,
       })
       .where(eq(events.id, row.id));
 
-    return row.id;
+    return {
+      id: row.id,
+      confirmationCount,
+      confirmedSources: updatedSources,
+    };
   });
 }

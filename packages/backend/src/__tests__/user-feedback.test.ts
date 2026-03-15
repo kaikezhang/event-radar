@@ -74,7 +74,7 @@ describe('UserFeedbackService', () => {
 
   it('submits feedback for an event', async () => {
     const service = new UserFeedbackService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     await service.submitFeedback(eventId, 'correct', 'Spot on!');
 
@@ -87,7 +87,7 @@ describe('UserFeedbackService', () => {
 
   it('upserts feedback on duplicate submission', async () => {
     const service = new UserFeedbackService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     await service.submitFeedback(eventId, 'correct');
     await service.submitFeedback(eventId, 'incorrect', 'Changed my mind');
@@ -105,7 +105,7 @@ describe('UserFeedbackService', () => {
 
   it('submits feedback without a note', async () => {
     const service = new UserFeedbackService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     await service.submitFeedback(eventId, 'partially_correct');
 
@@ -117,9 +117,9 @@ describe('UserFeedbackService', () => {
   it('computes feedback stats', async () => {
     const service = new UserFeedbackService(db);
 
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
-    const e3 = await storeEvent(db, { event: makeRawEvent({ source: 's3' }), severity: 'HIGH' });
+    const { id: e1 } = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
+    const { id: e2 } = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
+    const { id: e3 } = await storeEvent(db, { event: makeRawEvent({ source: 's3' }), severity: 'HIGH' });
 
     await service.submitFeedback(e1, 'correct');
     await service.submitFeedback(e2, 'incorrect');
@@ -148,13 +148,13 @@ describe('UserFeedbackService', () => {
     const service = new UserFeedbackService(db);
 
     // Event where prediction matches outcome (auto says correct)
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
+    const { id: e1 } = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e1, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e1, makeOutcome({ actualDirection: 'bullish' }));
     await service.submitFeedback(e1, 'correct'); // agrees with auto
 
     // Event where prediction does NOT match outcome (auto says incorrect)
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
+    const { id: e2 } = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e2, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e2, makeOutcome({ actualDirection: 'bearish' }));
     await service.submitFeedback(e2, 'correct'); // disagrees with auto
@@ -196,7 +196,7 @@ describe('Feedback API', () => {
   });
 
   it('submits feedback via API', async () => {
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     const response = await apiServer.inject({
       method: 'POST',
@@ -210,7 +210,7 @@ describe('Feedback API', () => {
   });
 
   it('retrieves feedback via API', async () => {
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     const service = new UserFeedbackService(db);
     await service.submitFeedback(eventId, 'incorrect', 'Bad call');
 

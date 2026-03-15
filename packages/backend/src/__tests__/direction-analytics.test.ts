@@ -86,7 +86,7 @@ describe('DirectionAnalyticsService', () => {
     const accuracy = new ClassificationAccuracyService(db);
     const service = new DirectionAnalyticsService(db);
 
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await accuracy.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eventId, makeOutcome({
       priceChangePercent1h: 0.5,  // neutral (< 1%)
@@ -113,7 +113,7 @@ describe('DirectionAnalyticsService', () => {
     const accuracy = new ClassificationAccuracyService(db);
     const service = new DirectionAnalyticsService(db);
 
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await accuracy.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eventId, makeOutcome({
       priceChangePercent1h: -2.0,  // bearish
@@ -137,12 +137,12 @@ describe('DirectionAnalyticsService', () => {
     const service = new DirectionAnalyticsService(db);
 
     // TP: bullish predicted, bullish actual
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
+    const { id: e1 } = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e1, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e1, makeOutcome({ priceChangePercent1d: 5.0 }));
 
     // FP: bullish predicted, bearish actual
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
+    const { id: e2 } = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e2, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e2, makeOutcome({ priceChangePercent1d: -5.0 }));
 
@@ -158,7 +158,7 @@ describe('DirectionAnalyticsService', () => {
     const accuracy = new ClassificationAccuracyService(db);
     const service = new DirectionAnalyticsService(db);
 
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await accuracy.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eventId, makeOutcome({
       priceChangePercent1h: 1.0,   // exactly 1% = neutral (not > 1%)
@@ -177,12 +177,12 @@ describe('DirectionAnalyticsService', () => {
     const service = new DirectionAnalyticsService(db);
 
     // High confidence correct prediction
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
+    const { id: e1 } = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e1, makePrediction({ confidence: 0.9, predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e1, makeOutcome({ priceChangePercent1d: 5.0 }));
 
     // High confidence wrong prediction
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
+    const { id: e2 } = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e2, makePrediction({ confidence: 0.85, predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e2, makeOutcome({ priceChangePercent1d: -5.0 }));
 
@@ -214,20 +214,20 @@ describe('DirectionAnalyticsService', () => {
 
     // Setup: 3 correct predictions in 0.8-1.0 bucket to make bucket accuracy high (75%)
     for (let i = 0; i < 3; i++) {
-      const eid = await storeEvent(db, { event: makeRawEvent({ source: `correct-hi-${i}` }), severity: 'HIGH' });
+      const { id: eid } = await storeEvent(db, { event: makeRawEvent({ source: `correct-hi-${i}` }), severity: 'HIGH' });
       await accuracy.recordPrediction(eid, makePrediction({ confidence: 0.85, predictedDirection: 'bullish' }));
       await accuracy.recordOutcome(eid, makeOutcome({ priceChangePercent1d: 5.0 })); // correct
     }
 
     // Misprediction A: confidence=0.9, bucket 0.8-1.0 (bucket accuracy = 3/4 = 0.75)
     // calibration delta = |0.9 - 0.75| = 0.15
-    const eA = await storeEvent(db, { event: makeRawEvent({ source: 'misA', title: 'Mis A high conf' }), severity: 'HIGH' });
+    const { id: eA } = await storeEvent(db, { event: makeRawEvent({ source: 'misA', title: 'Mis A high conf' }), severity: 'HIGH' });
     await accuracy.recordPrediction(eA, makePrediction({ confidence: 0.9, predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eA, makeOutcome({ priceChangePercent1d: -5.0 })); // wrong
 
     // Misprediction B: confidence=0.55, bucket 0.4-0.6 (bucket accuracy = 0/1 = 0.0)
     // calibration delta = |0.55 - 0.0| = 0.55
-    const eB = await storeEvent(db, { event: makeRawEvent({ source: 'misB', title: 'Mis B low conf' }), severity: 'HIGH' });
+    const { id: eB } = await storeEvent(db, { event: makeRawEvent({ source: 'misB', title: 'Mis B low conf' }), severity: 'HIGH' });
     await accuracy.recordPrediction(eB, makePrediction({ confidence: 0.55, predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eB, makeOutcome({ priceChangePercent1d: -3.0 })); // wrong
 
@@ -245,7 +245,7 @@ describe('DirectionAnalyticsService', () => {
     const service = new DirectionAnalyticsService(db);
 
     for (let i = 0; i < 5; i++) {
-      const eventId = await storeEvent(db, {
+      const { id: eventId } = await storeEvent(db, {
         event: makeRawEvent({ source: `s${i}` }),
         severity: 'HIGH',
       });
@@ -265,7 +265,7 @@ describe('DirectionAnalyticsService', () => {
     const service = new DirectionAnalyticsService(db);
 
     // Old event
-    const e1 = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
+    const { id: e1 } = await storeEvent(db, { event: makeRawEvent({ source: 's1' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e1, makePrediction({
       predictedDirection: 'bullish',
       classifiedAt: '2025-01-01T12:00:00.000Z',
@@ -276,7 +276,7 @@ describe('DirectionAnalyticsService', () => {
     }));
 
     // Recent event
-    const e2 = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
+    const { id: e2 } = await storeEvent(db, { event: makeRawEvent({ source: 's2' }), severity: 'HIGH' });
     await accuracy.recordPrediction(e2, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(e2, makeOutcome({ priceChangePercent1d: 5.0 }));
 
@@ -317,7 +317,7 @@ describe('Direction analytics API', () => {
 
   it('returns direction breakdown from API', async () => {
     const accuracy = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await accuracy.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
     await accuracy.recordOutcome(eventId, makeOutcome({ priceChangePercent1d: 5.0 }));
 

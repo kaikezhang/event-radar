@@ -86,7 +86,7 @@ async function seedDeliveredEvent(input: {
         ...input.metadata,
       },
     });
-  const eventId = await storeEvent(sharedDb, {
+  const { id: eventId } = await storeEvent(sharedDb, {
     event: rawEvent,
     severity: input.severity ?? 'HIGH',
   });
@@ -136,7 +136,7 @@ async function seedNonDeliveredAudit(input: {
   auditTime: string;
   outcome: 'filtered' | 'deduped' | 'grace_period' | 'error';
 }): Promise<string> {
-  const eventId = await storeEvent(sharedDb, {
+  const { id: eventId } = await storeEvent(sharedDb, {
     event: makeEvent({
       title: input.title,
       body: `${input.title} body`,

@@ -79,7 +79,7 @@ async function seedAggregatedEvent(input?: {
   } | null;
 }): Promise<string> {
   const rawEvent = makeRawEvent(input?.event);
-  const eventId = await storeEvent(sharedDb, {
+  const { id: eventId } = await storeEvent(sharedDb, {
     event: rawEvent,
     severity: input?.severity ?? 'HIGH',
   });

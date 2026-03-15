@@ -35,7 +35,7 @@ async function createStoredEvent(
   db: Database,
   overrides: Partial<RawEvent> = {},
 ): Promise<string> {
-  return storeEvent(db, { event: makeRawEvent(overrides) });
+  return (await storeEvent(db, { event: makeRawEvent(overrides) })).id;
 }
 
 describe('AlertBudgetService', () => {

@@ -569,6 +569,13 @@ export function buildApp(options?: {
 
     // Step 6: Store to DB (if available)
     let eventId: string | undefined;
+    let storeResult:
+      | {
+        id: string;
+        confirmationCount?: number;
+        confirmedSources?: string[];
+      }
+      | undefined;
 
     if (db) {
       const ticker =
@@ -590,12 +597,13 @@ export function buildApp(options?: {
         };
       }
 
-      eventId = await storeEvent(db, {
+      storeResult = await storeEvent(db, {
         event,
         severity: result.severity,
         ticker: typeof ticker === 'string' ? ticker : undefined,
         eventType: typeof classifiedEventType === 'string' ? classifiedEventType : undefined,
       });
+      eventId = storeResult.id;
 
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
@@ -915,13 +923,8 @@ export function buildApp(options?: {
         event,
         severity: result.severity,
         ticker,
-        confirmationCount:
-          typeof event.metadata?.['confirmationCount'] === 'number'
-            ? event.metadata['confirmationCount'] as number
-            : undefined,
-        confirmedSources: Array.isArray(event.metadata?.['confirmedSources'])
-          ? (event.metadata['confirmedSources'] as string[])
-          : undefined,
+        confirmationCount: storeResult?.confirmationCount,
+        confirmedSources: storeResult?.confirmedSources,
         classificationConfidence: result.confidence,
         confidenceBucket: result.confidenceLevel,
         enrichment,

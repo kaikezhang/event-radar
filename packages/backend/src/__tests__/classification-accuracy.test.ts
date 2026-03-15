@@ -82,7 +82,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('records predictions', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     await service.recordPrediction(eventId, makePrediction());
 
@@ -93,7 +93,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('records outcomes', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
 
     await service.recordOutcome(eventId, makeOutcome());
 
@@ -104,7 +104,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('evaluates bullish direction as a true positive', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await service.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
     await service.recordOutcome(eventId, makeOutcome({ actualDirection: 'bullish' }));
 
@@ -114,7 +114,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('evaluates bearish direction as a true negative', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await service.recordPrediction(
       eventId,
       makePrediction({ predictedDirection: 'bearish', predictedSeverity: 'MEDIUM' }),
@@ -135,8 +135,8 @@ describe('ClassificationAccuracyService', () => {
 
   it('counts false positives and false negatives', async () => {
     const service = new ClassificationAccuracyService(db);
-    const bullishEventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
-    const bearishEventId = await storeEvent(
+    const { id: bullishEventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: bearishEventId } = await storeEvent(
       db,
       { event: makeRawEvent({ source: 'truth-social' }), severity: 'HIGH' },
     );
@@ -166,7 +166,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('computes severity accuracy from price move magnitude', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await service.recordPrediction(eventId, makePrediction({ predictedSeverity: 'CRITICAL' }));
     await service.recordOutcome(
       eventId,
@@ -193,11 +193,11 @@ describe('ClassificationAccuracyService', () => {
 
   it('groups accuracy by source', async () => {
     const service = new ClassificationAccuracyService(db);
-    const firstId = await storeEvent(db, {
+    const { id: firstId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar' }),
       severity: 'HIGH',
     });
-    const secondId = await storeEvent(db, {
+    const { id: secondId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'reddit' }),
       severity: 'LOW',
     });
@@ -222,11 +222,11 @@ describe('ClassificationAccuracyService', () => {
 
   it('groups accuracy by event type', async () => {
     const service = new ClassificationAccuracyService(db);
-    const filingId = await storeEvent(db, {
+    const { id: filingId } = await storeEvent(db, {
       event: makeRawEvent({ type: '8-K' }),
       severity: 'HIGH',
     });
-    const postId = await storeEvent(db, {
+    const { id: postId } = await storeEvent(db, {
       event: makeRawEvent({ type: 'political-post', source: 'truth-social' }),
       severity: 'HIGH',
     });
@@ -243,8 +243,8 @@ describe('ClassificationAccuracyService', () => {
 
   it('filters stats by time window', async () => {
     const service = new ClassificationAccuracyService(db);
-    const oldId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
-    const recentId = await storeEvent(
+    const { id: oldId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: recentId } = await storeEvent(
       db,
       { event: makeRawEvent({ source: 'fed' }), severity: 'HIGH' },
     );
@@ -268,11 +268,11 @@ describe('ClassificationAccuracyService', () => {
 
   it('filters stats by prediction classification time instead of outcome evaluation time', async () => {
     const service = new ClassificationAccuracyService(db);
-    const oldPredictionId = await storeEvent(db, {
+    const { id: oldPredictionId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar' }),
       severity: 'HIGH',
     });
-    const recentPredictionId = await storeEvent(db, {
+    const { id: recentPredictionId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'fed' }),
       severity: 'HIGH',
     });
@@ -297,7 +297,7 @@ describe('ClassificationAccuracyService', () => {
 
   it('computes confidence calibration', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
+    const { id: eventId } = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
     await service.recordPrediction(eventId, makePrediction({ confidence: 0.9 }));
     await service.recordOutcome(eventId, makeOutcome({ actualDirection: 'bearish' }));
 
@@ -312,7 +312,7 @@ describe('ClassificationAccuracyService', () => {
         storeEvent(db, {
           event: makeRawEvent({ source: `source-${index}` }),
           severity: 'HIGH',
-        }),
+        }).then(({ id }) => id),
       ),
     );
 
@@ -336,11 +336,11 @@ describe('ClassificationAccuracyService', () => {
 
   it('excludes neutral predictions and outcomes from binary direction metrics', async () => {
     const service = new ClassificationAccuracyService(db);
-    const bullishEventId = await storeEvent(db, {
+    const { id: bullishEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar' }),
       severity: 'HIGH',
     });
-    const neutralEventId = await storeEvent(db, {
+    const { id: neutralEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'fed' }),
       severity: 'LOW',
     });
@@ -384,7 +384,7 @@ describe('ClassificationAccuracyService', () => {
     const eventBus = new InMemoryEventBus();
     const service = new ClassificationAccuracyService(db, { eventBus });
     const statsSpy = vi.spyOn(service, 'getAccuracyStats');
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar' }),
       severity: 'HIGH',
     });
@@ -403,7 +403,7 @@ describe('ClassificationAccuracyService', () => {
     const service = new ClassificationAccuracyService(db, { eventBus });
 
     for (let index = 0; index < 100; index++) {
-      const eventId = await storeEvent(db, {
+      const { id: eventId } = await storeEvent(db, {
         event: makeRawEvent({ source: `source-${index}` }),
         severity: 'HIGH',
       });
@@ -452,7 +452,7 @@ describe('Classification accuracy API and pipeline integration', () => {
   }, 10000);
 
   it('records outcomes from the outcome tracker and evaluates accuracy', async () => {
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent(),
       severity: 'HIGH',
     });
@@ -496,7 +496,7 @@ describe('Classification accuracy API and pipeline integration', () => {
 
   it('returns accuracy stats from the API', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', type: '8-K' }),
       severity: 'HIGH',
     });
@@ -519,7 +519,7 @@ describe('Classification accuracy API and pipeline integration', () => {
 
   it('returns prediction versus outcome for a single event', async () => {
     const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', type: '8-K' }),
       severity: 'HIGH',
     });

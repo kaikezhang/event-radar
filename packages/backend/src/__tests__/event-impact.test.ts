@@ -43,7 +43,7 @@ function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
 }
 
 async function seedImpactFixture(db: Database): Promise<void> {
-  const appleImpactId = await storeEvent(db, {
+  const { id: appleImpactId } = await storeEvent(db, {
     event: makeEvent({
       title: 'Apple expands AI server capacity',
       timestamp: new Date('2026-03-01T14:00:00.000Z'),
@@ -77,7 +77,7 @@ async function seedImpactFixture(db: Database): Promise<void> {
     change1w: '5.7500',
   });
 
-  const secondAppleImpactId = await storeEvent(db, {
+  const { id: secondAppleImpactId } = await storeEvent(db, {
     event: makeEvent({
       source: 'businesswire',
       type: 'Press Release',
@@ -113,7 +113,7 @@ async function seedImpactFixture(db: Database): Promise<void> {
     change1w: '-1.7500',
   });
 
-  const nvidiaImpactId = await storeEvent(db, {
+  const { id: nvidiaImpactId } = await storeEvent(db, {
     event: makeEvent({
       source: 'fed',
       type: 'Macro',

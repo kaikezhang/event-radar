@@ -80,7 +80,7 @@ async function seedJudgeAudit(input: {
         ...(input.llmEnrichment ? { llm_enrichment: input.llmEnrichment } : {}),
       },
   });
-  const eventId = await storeEvent(sharedDb, {
+  const { id: eventId } = await storeEvent(sharedDb, {
     event: rawEvent,
     severity: input.severity,
   });

@@ -70,7 +70,7 @@ async function seedEvaluatedEvents(
   },
 ): Promise<void> {
   for (let index = 0; index < options.count; index += 1) {
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({
         source: options.source,
         id: randomUUID(),
@@ -359,14 +359,14 @@ describe('AdaptiveClassifierService', () => {
       },
     });
 
-    const feedbackEventId = await storeEvent(db, {
+    const { id: feedbackEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
       severity: 'HIGH',
     });
     await accuracyService.recordPrediction(feedbackEventId, makePrediction({ confidence: 0.93 }));
     await feedbackService.submitFeedback(feedbackEventId, 'incorrect');
 
-    const lowConfidenceEventId = await storeEvent(db, {
+    const { id: lowConfidenceEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
       severity: 'HIGH',
     });
@@ -380,7 +380,7 @@ describe('AdaptiveClassifierService', () => {
       confidence: 0.41,
     });
 
-    const lowAccuracyEventId = await storeEvent(db, {
+    const { id: lowAccuracyEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'reddit', id: randomUUID() }),
       severity: 'HIGH',
     });
@@ -416,14 +416,14 @@ describe('AdaptiveClassifierService', () => {
       feedbackService,
     });
 
-    const firstEventId = await storeEvent(db, {
+    const { id: firstEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
       severity: 'HIGH',
     });
     await accuracyService.recordPrediction(firstEventId, makePrediction({ confidence: 0.88 }));
     await feedbackService.submitFeedback(firstEventId, 'incorrect');
 
-    const secondEventId = await storeEvent(db, {
+    const { id: secondEventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'reddit', id: randomUUID() }),
       severity: 'HIGH',
     });
@@ -441,7 +441,7 @@ describe('AdaptiveClassifierService', () => {
   it('re-enqueues the same event idempotently', async () => {
     const accuracyService = new ClassificationAccuracyService(db);
     const service = new AdaptiveClassifierService(db, { accuracyService });
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
       severity: 'HIGH',
     });
@@ -522,7 +522,7 @@ describe('Adaptive API', () => {
   it('returns the pending queue via the API', async () => {
     const accuracyService = new ClassificationAccuracyService(db);
     const service = new AdaptiveClassifierService(db, { accuracyService });
-    const eventId = await storeEvent(db, {
+    const { id: eventId } = await storeEvent(db, {
       event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
       severity: 'HIGH',
     });

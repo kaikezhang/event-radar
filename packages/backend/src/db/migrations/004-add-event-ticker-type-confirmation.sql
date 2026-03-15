@@ -1,7 +1,7 @@
 ALTER TABLE events ADD COLUMN ticker VARCHAR(10);
 ALTER TABLE events ADD COLUMN event_type VARCHAR(50);
 
-CREATE INDEX idx_events_ticker_type_time ON events(ticker, event_type, created_at DESC);
+CREATE INDEX idx_events_ticker_type_time ON events(ticker, event_type, created_at);
 
 UPDATE events
 SET

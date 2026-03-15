@@ -77,7 +77,7 @@ export const events = pgTable('events', {
   confirmedSources: jsonb('confirmed_sources').$type<string[]>(),
   confirmationCount: integer('confirmation_count').default(1),
 }, (table) => [
-  index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt),
+  index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt.desc()),
 ]);
 
 export const priceCache = pgTable(
