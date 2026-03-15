@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowUpRight, Bell, CheckCircle2, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CheckCircle2, LogIn, Plus, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SkeletonCard } from '../components/SkeletonCard.js';
+import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist, useWatchlistSummary } from '../hooks/useWatchlist.js';
 
 const SUGGESTED_TICKERS = ['AAPL', 'NVDA', 'TSLA'] as const;
@@ -23,6 +24,7 @@ function timeAgo(isoString: string): string {
 }
 
 export function Watchlist() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { items, isLoading, addAsync, remove, isAdding } = useWatchlist();
   const { summary } = useWatchlistSummary();
   const [tickerInput, setTickerInput] = useState('');
@@ -49,7 +51,33 @@ export function Watchlist() {
     }
   };
 
-  if (isLoading) {
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">
+            Watchlist
+          </p>
+          <h1 className="mb-1 text-[20px] font-semibold leading-7 text-text-primary">
+            Sign in to create your watchlist
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            Build a focused watchlist so Event Radar can push the highest
+            confidence alerts for the names you care about.
+          </p>
+          <Link
+            to="/login"
+            className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-accent-default px-5 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            <LogIn className="h-4 w-4" />
+            Sign in
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  if (isLoading || authLoading) {
     return (
       <div className="space-y-4">
         <SkeletonCard />

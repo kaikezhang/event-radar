@@ -27,6 +27,35 @@ export interface SimilarEvent {
   move: string;
 }
 
+export interface LlmEnrichment {
+  summary: string | null;
+  impact: string | null;
+  whyNow: string | null;
+  risks: string | null;
+  action: string | null;
+  tickers: EnrichmentTicker[];
+  regimeContext: string | null;
+  filingItems?: string[];
+}
+
+export interface EnrichmentTicker {
+  symbol: string;
+  direction: string;
+  context?: string;
+}
+
+export interface HistoricalContext {
+  patternLabel: string | null;
+  confidence: string | null;
+  matchCount: number;
+  avgAlphaT5: number | null;
+  avgAlphaT20: number | null;
+  winRateT20: number | null;
+  bestCase: { ticker: string; move: number } | null;
+  worstCase: { ticker: string; move: number } | null;
+  similarEvents: SimilarEvent[];
+}
+
 export interface EventDetailData {
   id: string;
   severity: string;
@@ -50,6 +79,8 @@ export interface EventDetailData {
     impact: string | null;
     tickerDirections: TickerDirection[];
   };
+  enrichment: LlmEnrichment | null;
+  historical: HistoricalContext | null;
   historicalPattern: {
     matchCount: number;
     confidence: string;

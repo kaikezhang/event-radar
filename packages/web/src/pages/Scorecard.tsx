@@ -1,6 +1,7 @@
 import { startTransition, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarRange, Target } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState.js';
 import { StatCard } from '../components/StatCard.js';
 import { formatScorecardBucketLabel, getScorecardSummary } from '../lib/api.js';
@@ -74,6 +75,43 @@ export function Scorecard() {
         ctaLabel="Open live feed"
         ctaHref="/"
       />
+    );
+  }
+
+  if (data.totals.alertsWithUsableVerdicts === 0) {
+    return (
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+          <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
+            <Target className="h-3.5 w-3.5" />
+            Scorecard
+          </p>
+          <h1 className="mt-3 text-[24px] font-semibold leading-8 text-text-primary">
+            Scorecard is building
+          </h1>
+        </section>
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-6">
+          <div className="flex flex-col items-center text-center">
+            <span className="text-5xl">📊</span>
+            <h2 className="mt-4 text-[17px] font-semibold text-text-primary">
+              Tracking outcomes for every alert
+            </h2>
+            <p className="mt-3 max-w-md text-sm leading-6 text-text-secondary">
+              Event Radar is monitoring T+5 and T+20 price moves for each alert it sends.
+              Once enough time has passed, accuracy data will appear here automatically.
+            </p>
+            <p className="mt-2 text-sm text-text-secondary">
+              {data.totals.totalAlerts} alert{data.totals.totalAlerts !== 1 ? 's' : ''} being tracked — check back in a few days.
+            </p>
+            <Link
+              to="/"
+              className="mt-5 inline-flex min-h-11 items-center rounded-full bg-accent-default px-5 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
+            >
+              Open live feed
+            </Link>
+          </div>
+        </section>
+      </div>
     );
   }
 
