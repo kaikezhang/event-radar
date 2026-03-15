@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { Settings } from './Settings.js';
 import { renderWithRouter } from '../test/render.js';
 
@@ -52,6 +52,15 @@ vi.mock('../lib/api.js', () => ({
 }));
 
 describe('Settings page', () => {
+  beforeEach(() => {
+    getPreferences.mockClear();
+    updatePreferences.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function renderSettings(initialEntry = '/settings') {
     return renderWithRouter(
       [{ path: '/settings', element: <Settings /> }],
@@ -84,24 +93,25 @@ describe('Settings page', () => {
   });
 
   it('renders notification budget and quiet-hours controls', async () => {
+    const user = userEvent.setup();
     renderSettings();
 
     expect(await screen.findByRole('heading', { name: /notification timing/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/enable quiet hours/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/timezone/i)).toBeInTheDocument();
+    const quietHoursToggle = screen.getByLabelText(/enable quiet hours/i);
+    expect(quietHoursToggle).toBeInTheDocument();
+    await user.click(quietHoursToggle);
+    expect(await screen.findByLabelText(/timezone/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/daily push limit/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/alert me for tickers outside my watchlist/i)).toBeInTheDocument();
   });
 
   it('autosaves notification preference changes after a short debounce', async () => {
-    vi.useFakeTimers();
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
     renderSettings();
     const nonWatchlistToggle = await screen.findByLabelText(/alert me for tickers outside my watchlist/i);
 
     await user.click(nonWatchlistToggle);
-    await vi.advanceTimersByTimeAsync(500);
 
     await waitFor(() => {
       expect(updatePreferences).toHaveBeenCalledWith({
@@ -111,9 +121,8 @@ describe('Settings page', () => {
         dailyPushCap: 20,
         pushNonWatchlist: true,
       });
-    });
+    }, { timeout: 1500 });
 
-    expect(screen.getByText(/preferences saved/i)).toBeInTheDocument();
-    vi.useRealTimers();
+    expect(await screen.findByText(/preferences saved/i)).toBeInTheDocument();
   });
 });

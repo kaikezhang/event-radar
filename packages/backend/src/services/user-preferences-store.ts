@@ -89,8 +89,12 @@ export function createUserPreferencesStore(db: Database) {
       patch: NotificationPreferencesPatch,
     ): Promise<NotificationPreferences> {
       const current = await this.get(userId);
-      const nextQuietStart = patch.quietStart ?? current.quietStart;
-      const nextQuietEnd = patch.quietEnd ?? current.quietEnd;
+      const nextQuietStart = Object.prototype.hasOwnProperty.call(patch, 'quietStart')
+        ? patch.quietStart ?? null
+        : current.quietStart;
+      const nextQuietEnd = Object.prototype.hasOwnProperty.call(patch, 'quietEnd')
+        ? patch.quietEnd ?? null
+        : current.quietEnd;
       const now = new Date();
 
       await db

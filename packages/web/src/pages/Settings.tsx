@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAlertSound } from '../hooks/useAlertSound.js';
 import {
@@ -136,14 +136,9 @@ export function Settings() {
     };
   }, [toastMessage]);
 
-  const notificationKey = useMemo(
-    () => (
-      notificationPreferences
-        ? serializeNotificationPreferences(notificationPreferences)
-        : null
-    ),
-    [notificationPreferences],
-  );
+  const notificationKey = notificationPreferences
+    ? serializeNotificationPreferences(notificationPreferences)
+    : null;
 
   useEffect(() => {
     if (!notificationPreferences || notificationKey == null) {

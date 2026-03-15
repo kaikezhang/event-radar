@@ -147,7 +147,13 @@ export class WebPushChannel implements DeliveryService {
         return;
       }
 
-      if (!shouldSendForWatchlist(alertTickerSet, hasAlertTickers, userContext.watchlist, userContext.preferences)) {
+      if (!shouldSendForWatchlist(
+        alertTickerSet,
+        hasAlertTickers,
+        userContext.watchlist,
+        userContext.preferences,
+        this.store.getWatchlistTickers != null,
+      )) {
         return;
       }
 
@@ -306,7 +312,12 @@ function shouldSendForWatchlist(
   hasAlertTickers: boolean,
   userTickers: Set<string>,
   preferences: UserPushPreferences,
+  hasWatchlistSupport: boolean,
 ): boolean {
+  if (!hasWatchlistSupport) {
+    return true;
+  }
+
   if (!hasAlertTickers) {
     return preferences.pushNonWatchlist;
   }

@@ -12,6 +12,8 @@ describe('preferences routes', () => {
   let db: Database;
   let client: PGlite;
   let ctx: AppContext;
+  const previousAuthRequired = process.env.AUTH_REQUIRED;
+  const previousJwtSecret = process.env.JWT_SECRET;
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
@@ -23,12 +25,26 @@ describe('preferences routes', () => {
 
   beforeEach(async () => {
     await cleanTestDb(db);
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
     ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterEach(async () => {
-    await safeCloseServer(ctx.server);
+    if (ctx?.server) {
+      await safeCloseServer(ctx.server);
+    }
+    if (previousAuthRequired == null) {
+      delete process.env.AUTH_REQUIRED;
+    } else {
+      process.env.AUTH_REQUIRED = previousAuthRequired;
+    }
+    if (previousJwtSecret == null) {
+      delete process.env.JWT_SECRET;
+    } else {
+      process.env.JWT_SECRET = previousJwtSecret;
+    }
   });
 
   it('returns default preferences when no record exists', async () => {

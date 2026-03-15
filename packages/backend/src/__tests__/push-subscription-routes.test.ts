@@ -24,6 +24,8 @@ describe('push subscription routes', () => {
   let db: Database;
   let client: PGlite;
   let ctx: AppContext;
+  const previousAuthRequired = process.env.AUTH_REQUIRED;
+  const previousJwtSecret = process.env.JWT_SECRET;
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
@@ -35,12 +37,24 @@ describe('push subscription routes', () => {
 
   beforeEach(async () => {
     await cleanTestDb(db);
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
     ctx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
 
   afterEach(async () => {
     await safeCloseServer(ctx.server);
+    if (previousAuthRequired == null) {
+      delete process.env.AUTH_REQUIRED;
+    } else {
+      process.env.AUTH_REQUIRED = previousAuthRequired;
+    }
+    if (previousJwtSecret == null) {
+      delete process.env.JWT_SECRET;
+    } else {
+      process.env.JWT_SECRET = previousJwtSecret;
+    }
   });
 
   it('requires an API key to register a push subscription', async () => {
