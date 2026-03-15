@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -102,7 +103,8 @@ export function isUpcoming(reportDate: string, now: Date = new Date()): boolean 
 export class EarningsScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'earnings');
   /** Override for testing */
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -121,6 +123,7 @@ export class EarningsScanner extends BaseScanner {
         : 'https://finance.yahoo.com/calendar/earnings';
 
       const response = await this.fetchFn(url, {
+        timeoutMs: 30_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/json',

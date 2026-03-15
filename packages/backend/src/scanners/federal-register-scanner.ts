@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -60,7 +61,8 @@ const HIGH_PRIORITY_KEYWORDS = [
  */
 export class FederalRegisterScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1000, 'federal-register');
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -88,6 +90,7 @@ export class FederalRegisterScanner extends BaseScanner {
       }
 
       const response = await this.fetchFn(url.toString(), {
+        timeoutMs: 30_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/json',

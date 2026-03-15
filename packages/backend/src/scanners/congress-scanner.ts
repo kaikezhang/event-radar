@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -78,7 +79,8 @@ export function isCommitteeRelevant(trade: CongressTrade): boolean {
 export class CongressScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'congress');
   /** Override for testing */
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -94,6 +96,7 @@ export class CongressScanner extends BaseScanner {
       const response = await this.fetchFn(
         'https://www.capitoltrades.com/api/trades?page=1&pageSize=25',
         {
+          timeoutMs: 60_000,
           headers: {
             'User-Agent': 'event-radar/1.0',
             Accept: 'application/json',

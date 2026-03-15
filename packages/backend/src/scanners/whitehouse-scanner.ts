@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -114,7 +115,8 @@ export function extractTopics(doc: FederalRegisterDocument): string[] {
 export class WhiteHouseScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'whitehouse');
   /** Override for testing */
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -133,6 +135,7 @@ export class WhiteHouseScanner extends BaseScanner {
       url.searchParams.set('per_page', '25');
 
       const response = await this.fetchFn(url.toString(), {
+        timeoutMs: 30_000,
         headers: {
           'User-Agent': 'event-radar/1.0',
           Accept: 'application/json',

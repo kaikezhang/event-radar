@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -98,7 +99,8 @@ export class StockTwitsScanner extends BaseScanner {
   private previousSentiments: Map<string, number> = new Map();
   /** Symbols to track stream for (populated from trending) */
   private trackedSymbols: string[] = [];
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -135,7 +137,10 @@ export class StockTwitsScanner extends BaseScanner {
 
     const response = await this.fetchFn(
       'https://api.stocktwits.com/api/2/trending/symbols.json',
-      { headers: { 'User-Agent': 'event-radar/1.0' } },
+      {
+        timeoutMs: 15_000,
+        headers: { 'User-Agent': 'event-radar/1.0' },
+      },
     );
 
     if (!response.ok) {
@@ -180,7 +185,10 @@ export class StockTwitsScanner extends BaseScanner {
 
     const response = await this.fetchFn(
       `https://api.stocktwits.com/api/2/streams/symbol/${symbol}.json`,
-      { headers: { 'User-Agent': 'event-radar/1.0' } },
+      {
+        timeoutMs: 15_000,
+        headers: { 'User-Agent': 'event-radar/1.0' },
+      },
     );
 
     if (!response.ok) {

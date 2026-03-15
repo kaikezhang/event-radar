@@ -1,5 +1,6 @@
 import type { LLMProvider } from '../services/llm-provider.js';
 import type { RawEvent } from '@event-radar/shared';
+import { getMarketCloseTime, isNYSEHoliday } from './market-calendar.js';
 
 export interface GatekeeperResult {
   pass: boolean;
@@ -8,30 +9,6 @@ export interface GatekeeperResult {
 }
 
 export type MarketSession = 'RTH' | 'PRE' | 'POST' | 'CLOSED';
-
-/**
- * NYSE holidays for 2026.
- * Format: 'YYYY-MM-DD' in ET.
- */
-const NYSE_HOLIDAYS_2026 = new Set([
-  '2026-01-01', // New Year's Day
-  '2026-01-19', // MLK Day
-  '2026-02-16', // Presidents' Day
-  '2026-04-03', // Good Friday
-  '2026-05-25', // Memorial Day
-  '2026-07-03', // Independence Day (observed)
-  '2026-09-07', // Labor Day
-  '2026-11-26', // Thanksgiving
-  '2026-12-25', // Christmas
-]);
-
-/** Check if a date (in ET) falls on an NYSE holiday */
-function isNYSEHoliday(etDate: Date): boolean {
-  const y = etDate.getFullYear();
-  const m = String(etDate.getMonth() + 1).padStart(2, '0');
-  const d = String(etDate.getDate()).padStart(2, '0');
-  return NYSE_HOLIDAYS_2026.has(`${y}-${m}-${d}`);
-}
 
 /** Convert any Date to an ET Date object (for local field access) */
 function toET(d: Date): Date {
@@ -49,7 +26,7 @@ export function getNextSessionOpenMs(now: Date): number {
   const totalMinutes = et.getHours() * 60 + et.getMinutes();
 
   // If it's a weekday, not a holiday, and before 09:30 ET → next open is today 09:30
-  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(et)) {
+  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(now)) {
     const target = new Date(et);
     target.setHours(9, 30, 0, 0);
     return now.getTime() + (target.getTime() - et.getTime());
@@ -112,20 +89,22 @@ export function getMarketSession(now?: Date): MarketSession {
   if (day === 0 || day === 6) return 'CLOSED';
 
   // NYSE holidays
-  if (isNYSEHoliday(et)) return 'CLOSED';
+  if (isNYSEHoliday(d)) return 'CLOSED';
 
   const hours = et.getHours();
   const minutes = et.getMinutes();
   const totalMinutes = hours * 60 + minutes;
+  const closeEt = toET(getMarketCloseTime(d));
+  const closeMinutes = closeEt.getHours() * 60 + closeEt.getMinutes();
 
   // PRE:  04:00 (240) – 09:30 (570)
-  // RTH:  09:30 (570) – 16:00 (960)
-  // POST: 16:00 (960) – 20:00 (1200)
+  // RTH:  09:30 (570) – market close
+  // POST: market close – 20:00 (1200)
   // CLOSED: 00:00–04:00 and 20:00–24:00
 
-  if (totalMinutes >= 570 && totalMinutes < 960) return 'RTH';
+  if (totalMinutes >= 570 && totalMinutes < closeMinutes) return 'RTH';
   if (totalMinutes >= 240 && totalMinutes < 570) return 'PRE';
-  if (totalMinutes >= 960 && totalMinutes < 1200) return 'POST';
+  if (totalMinutes >= closeMinutes && totalMinutes < 1200) return 'POST';
   return 'CLOSED';
 }
 

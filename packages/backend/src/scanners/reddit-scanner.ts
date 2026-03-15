@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -98,7 +99,8 @@ export function isHighEngagement(
 export class RedditScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'reddit');
   private readonly responseTextCache = new WeakMap<Response, string>();
-  public fetchFn: typeof fetch = (...args) => globalThis.fetch(...args);
+  public fetchFn: typeof scannerFetch = (url, options) =>
+    scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
     super({
@@ -116,6 +118,7 @@ export class RedditScanner extends BaseScanner {
       for (const subreddit of SUBREDDITS) {
         const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`;
         const response = await this.fetchFn(url, {
+          timeoutMs: 15_000,
           headers: {
             'User-Agent': 'event-radar:v0.0.1 (by /u/event-radar-bot)',
           },
