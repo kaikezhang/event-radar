@@ -146,4 +146,29 @@ describe('Onboarding page', () => {
 
     expect(screen.getByText(/you're watching 1 ticker$/i)).toBeInTheDocument();
   });
+
+  it('renders sector packs as compact add buttons', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+
+    renderWithRouter(
+      [{ path: '/onboarding', element: <Onboarding /> }],
+      ['/onboarding'],
+    );
+
+    expect(await screen.findByRole('button', { name: /add tech leaders pack/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add biotech pack/i })).toBeInTheDocument();
+  });
+
+  it('emphasizes trending names as quick-add chips', async () => {
+    vi.stubGlobal('fetch', mockFetch());
+
+    renderWithRouter(
+      [{ path: '/onboarding', element: <Onboarding /> }],
+      ['/onboarding'],
+    );
+
+    expect(await screen.findByRole('button', { name: /quick add nvda/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick add aapl/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick add tsla/i })).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import { renderWithRouter } from '../test/render.js';
 import { Scorecard } from './Scorecard.js';
 
@@ -63,5 +64,31 @@ describe('Scorecard page', () => {
     });
 
     expect(screen.getByText('Full-history scorecard')).toBeInTheDocument();
+  });
+
+  it('shows card skeletons while the scorecard query is still loading', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(screen.getAllByTestId('scorecard-skeleton-card')).toHaveLength(4);
+  });
+
+  it('renders a more actionable error state when the summary request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'boom' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(await screen.findByText(/scorecard data is taking a beat/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
   });
 });

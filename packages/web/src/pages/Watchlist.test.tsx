@@ -90,4 +90,28 @@ describe('Watchlist page', () => {
       '/settings?from=watchlist#push-alerts',
     );
   });
+
+  it('renders compact quick-add chips for suggested tickers', async () => {
+    renderWithRouter(
+      [{ path: '/watchlist', element: <Watchlist /> }],
+      ['/watchlist'],
+    );
+
+    expect(await screen.findByRole('button', { name: /quick add aapl/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick add nvda/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /quick add tsla/i })).toBeInTheDocument();
+  });
+
+  it('loads a suggested ticker into the add form when a quick-add chip is tapped', async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(
+      [{ path: '/watchlist', element: <Watchlist /> }],
+      ['/watchlist'],
+    );
+
+    await user.click(await screen.findByRole('button', { name: /quick add nvda/i }));
+
+    expect(screen.getByLabelText('Add ticker to watchlist')).toHaveValue('NVDA');
+  });
 });

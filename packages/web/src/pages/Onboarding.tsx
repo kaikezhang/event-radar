@@ -73,7 +73,7 @@ export function Onboarding() {
   return (
     <div className="space-y-4">
       {/* Welcome header */}
-      <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(59,130,246,0.12),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">
           Welcome
         </p>
@@ -86,10 +86,10 @@ export function Onboarding() {
       </section>
 
       {/* Sector packs */}
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <h2 className="text-[17px] font-semibold text-text-primary">Sector packs</h2>
-        <p className="mt-1 text-sm text-text-secondary">One tap to add an entire sector.</p>
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <p className="mt-1 text-sm text-text-secondary">One tap to seed a whole theme.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
           {packs.map((pack) => {
             const allSelected = pack.tickers.every((t) => selectedTickers.has(t));
             return (
@@ -97,19 +97,15 @@ export function Onboarding() {
                 key={pack.name}
                 type="button"
                 onClick={() => addPack(pack.tickers)}
-                className={`rounded-2xl border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
+                aria-label={`Add ${pack.name} pack`}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-left text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                   allSelected
-                    ? 'border-accent-default/40 bg-accent-default/12'
-                    : 'border-white/8 bg-white/[0.03] hover:bg-white/[0.06]'
+                    ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
+                    : 'border-white/10 bg-bg-elevated/70 text-text-primary hover:bg-white/[0.06]'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-text-primary">{pack.name}</span>
-                  {allSelected && <Check className="h-4 w-4 text-accent-default" />}
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {pack.tickers.join(', ')}
-                </p>
+                {allSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4 text-accent-default" />}
+                <span>{pack.name}</span>
               </button>
             );
           })}
@@ -118,13 +114,13 @@ export function Onboarding() {
 
       {/* Trending tickers */}
       {trendingTickers.length > 0 && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-accent-default" />
             <h2 className="text-[17px] font-semibold text-text-primary">Trending this week</h2>
           </div>
           <p className="mt-1 text-sm text-text-secondary">
-            Tickers with the most high-signal events in the last 7 days.
+            Quick-add names with the most high-signal events in the last 7 days.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {trendingTickers.map((t) => {
@@ -136,6 +132,7 @@ export function Onboarding() {
                   type="button"
                   onClick={() => toggleTicker(t.symbol)}
                   disabled={onWatchlist}
+                  aria-label={`Quick add ${t.symbol}`}
                   className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                     isSelected || onWatchlist
                       ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
@@ -153,7 +150,7 @@ export function Onboarding() {
       )}
 
       {/* Manual input */}
-      <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <h2 className="text-[17px] font-semibold text-text-primary">Add custom ticker</h2>
         <form onSubmit={handleManualAdd} className="mt-3 flex gap-2">
           <input
@@ -177,7 +174,7 @@ export function Onboarding() {
       </section>
 
       {/* Counter + continue */}
-      <section className="sticky bottom-20 rounded-[28px] border border-white/8 bg-bg-primary/95 p-5 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-md">
+      <section className="sticky bottom-20 rounded-2xl border border-border-default bg-bg-primary/95 p-5 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[17px] font-semibold text-text-primary">
