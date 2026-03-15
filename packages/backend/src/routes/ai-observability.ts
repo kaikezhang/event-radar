@@ -278,9 +278,16 @@ export function registerAiObservabilityRoutes(
       return reply.status(503).send({ error: 'Database not available' });
     }
 
-    // Parallel batch 1: four independent pipeline queries
+    // Parallel batch 1: activity comes from stored row creation time, not business timestamps.
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
-    const [funnelRows, prevFunnelRows, scannerRateRows, allLastSeenRows] = await Promise.all([
+    const [
+      funnelRows,
+      prevFunnelRows,
+      auditScannerRateRows,
+      auditLastSeenRows,
+      eventScannerRateRows,
+      eventLastSeenRows,
+    ] = await Promise.all([
       // 1. Pipeline funnel for current window
       db.execute(sql`
         SELECT outcome, COUNT(*) as count
@@ -301,6 +308,16 @@ export function registerAiObservabilityRoutes(
         SELECT source, MAX(created_at) as last_seen
         FROM pipeline_audit WHERE created_at >= ${thirtyDaysAgo} GROUP BY source
       `),
+      // 5. Successfully stored events in the current window
+      db.execute(sql`
+        SELECT source, COUNT(*) as count, MAX(created_at) as last_seen
+        FROM events WHERE created_at >= ${windowStart} GROUP BY source
+      `),
+      // 6. Stored event last seen (bounded to 30 days)
+      db.execute(sql`
+        SELECT source, MAX(created_at) as last_seen
+        FROM events WHERE created_at >= ${thirtyDaysAgo} GROUP BY source
+      `),
     ]);
 
     const funnel: Record<string, number> = {};
@@ -319,25 +336,63 @@ export function registerAiObservabilityRoutes(
       prevIngested += Number(r.count);
     }
 
-    const scannerRates: Record<string, { count: number; lastSeen: string | null; sources: Set<string> }> = {};
-    for (const r of scannerRateRows.rows) {
+    const scannerActivity: Record<string, {
+      countBySource: Map<string, number>;
+      lastSeen: string | null;
+      sources: Set<string>;
+    }> = {};
+    for (const r of auditScannerRateRows.rows) {
       const source = String(r.source);
       const name = normalizeObservabilityScannerName(source);
       const lastSeen = toIsoString(r.last_seen);
-      if (!scannerRates[name]) {
-        scannerRates[name] = {
-          count: 0,
+      if (!scannerActivity[name]) {
+        scannerActivity[name] = {
+          countBySource: new Map<string, number>(),
           lastSeen: null,
           sources: new Set<string>(),
         };
       }
-      scannerRates[name].count += Number(r.count);
-      scannerRates[name].lastSeen = pickLatestIso(scannerRates[name].lastSeen, lastSeen);
-      scannerRates[name].sources.add(source);
+      scannerActivity[name].countBySource.set(
+        source,
+        Math.max(scannerActivity[name].countBySource.get(source) ?? 0, Number(r.count)),
+      );
+      scannerActivity[name].lastSeen = pickLatestIso(scannerActivity[name].lastSeen, lastSeen);
+      scannerActivity[name].sources.add(source);
+    }
+    for (const r of eventScannerRateRows.rows) {
+      const source = String(r.source);
+      const name = normalizeObservabilityScannerName(source);
+      const lastSeen = toIsoString(r.last_seen);
+      if (!scannerActivity[name]) {
+        scannerActivity[name] = {
+          countBySource: new Map<string, number>(),
+          lastSeen: null,
+          sources: new Set<string>(),
+        };
+      }
+      scannerActivity[name].countBySource.set(
+        source,
+        Math.max(scannerActivity[name].countBySource.get(source) ?? 0, Number(r.count)),
+      );
+      scannerActivity[name].lastSeen = pickLatestIso(scannerActivity[name].lastSeen, lastSeen);
+      scannerActivity[name].sources.add(source);
     }
 
     const allLastSeen: Record<string, { lastSeen: string | null; sources: Set<string> }> = {};
-    for (const r of allLastSeenRows.rows) {
+    for (const r of auditLastSeenRows.rows) {
+      const source = String(r.source);
+      const name = normalizeObservabilityScannerName(source);
+      const lastSeen = toIsoString(r.last_seen);
+      if (!allLastSeen[name]) {
+        allLastSeen[name] = {
+          lastSeen: null,
+          sources: new Set<string>(),
+        };
+      }
+      allLastSeen[name].lastSeen = pickLatestIso(allLastSeen[name].lastSeen, lastSeen);
+      allLastSeen[name].sources.add(source);
+    }
+    for (const r of eventLastSeenRows.rows) {
       const source = String(r.source);
       const name = normalizeObservabilityScannerName(source);
       const lastSeen = toIsoString(r.last_seen);
@@ -369,14 +424,17 @@ export function registerAiObservabilityRoutes(
     const allScannerNames = new Set([
       ...registeredScanners,
       ...Object.keys(allLastSeen),
-      ...Object.keys(scannerRates),
+      ...Object.keys(scannerActivity),
     ]);
     const scanners: ScannerStatus[] = [];
     for (const name of allScannerNames) {
-      const rate = scannerRates[name];
+      const rate = scannerActivity[name];
+      const eventsInWindow = rate
+        ? [...rate.countBySource.values()].reduce((sum, count) => sum + count, 0)
+        : 0;
       const runtime = runtimeHealthByName[name];
       const activityStatus: ScannerStatus['activityStatus'] =
-        rate && rate.count > 0 ? 'active' : 'silent';
+        eventsInWindow > 0 ? 'active' : 'silent';
       const lastSeenAt = rate?.lastSeen ?? allLastSeen[name]?.lastSeen ?? null;
       const sources = new Set<string>([
         ...(rate?.sources ?? []),
@@ -386,7 +444,7 @@ export function registerAiObservabilityRoutes(
 
       scanners.push({
         name,
-        eventsInWindow: rate?.count ?? 0,
+        eventsInWindow,
         lastSeenAt,
         activityStatus,
         status: runtimeStatus === 'down' ? 'down' : activityStatus,
