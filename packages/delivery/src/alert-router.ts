@@ -1,7 +1,19 @@
 import type { Severity } from '@event-radar/shared';
+import { decideAlertRouting, type AlertRoutingDecision } from './push-policy.js';
 import type { AlertEvent, DeliveryService } from './types.js';
 
 export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook' | 'webPush';
+
+export interface ChannelDeliveryResult {
+  channel: string;
+  ok: boolean;
+  error?: Error;
+}
+
+export interface AlertRouteResult {
+  decision: AlertRoutingDecision;
+  deliveries: ChannelDeliveryResult[];
+}
 
 export interface AlertRouterConfig {
   bark?: DeliveryService;
@@ -14,14 +26,15 @@ export interface AlertRouterConfig {
 /**
  * Routes based on severity per DELIVERY.md:
  *   CRITICAL → Bark + Telegram + Discord + Webhook
- *              + Web Push
- *   HIGH     → Bark + Telegram + Discord + Webhook + Web Push
+ *   HIGH     → Bark + Telegram + Discord + Webhook
  *   MEDIUM   → Telegram + Discord + Webhook
  *   LOW      → Discord + Webhook
+ *
+ * Web Push is gated separately by the confidence-based push policy.
  */
 const ROUTING_TABLE: Record<Severity, ChannelName[]> = {
-  CRITICAL: ['bark', 'discord', 'telegram', 'webhook', 'webPush'],
-  HIGH: ['bark', 'discord', 'telegram', 'webhook', 'webPush'],
+  CRITICAL: ['bark', 'discord', 'telegram', 'webhook'],
+  HIGH: ['bark', 'discord', 'telegram', 'webhook'],
   MEDIUM: ['discord', 'telegram', 'webhook'],
   LOW: ['discord', 'webhook'],
 };
@@ -46,9 +59,12 @@ export class AlertRouter {
   /** Route an alert to the appropriate channels. Returns per-channel results. */
   async route(
     alert: AlertEvent,
-  ): Promise<{ channel: string; ok: boolean; error?: Error }[]> {
-    const targets = ROUTING_TABLE[alert.severity];
-    const results: { channel: string; ok: boolean; error?: Error }[] = [];
+  ): Promise<AlertRouteResult> {
+    const decision = decideAlertRouting(alert);
+    const targets = decision.shouldPush
+      ? [...ROUTING_TABLE[alert.severity], 'webPush']
+      : ROUTING_TABLE[alert.severity];
+    const results: ChannelDeliveryResult[] = [];
 
     const promises = targets.map(async (channelName) => {
       const service = this.channels.get(channelName);
@@ -67,6 +83,9 @@ export class AlertRouter {
     });
 
     await Promise.all(promises);
-    return results;
+    return {
+      decision,
+      deliveries: results,
+    };
   }
 }

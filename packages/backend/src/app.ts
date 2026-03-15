@@ -861,16 +861,19 @@ export function buildApp(options?: {
       }
 
       const deliveryStart = Date.now();
-      const results = await alertRouter.route({
+      const routeResult = await alertRouter.route({
         storedEventId: eventId,
         event,
         severity: result.severity,
         ticker,
+        classificationConfidence: result.confidence,
+        confidenceBucket: result.confidenceLevel,
         enrichment,
         historicalContext,
         regimeSnapshot,
       });
       const deliveryMs = Date.now() - deliveryStart;
+      const results = routeResult.deliveries;
 
       const okCount = results.filter(r => r.ok).length;
       const failCount = results.filter(r => !r.ok).length;
@@ -897,6 +900,9 @@ export function buildApp(options?: {
         title: logTitle(event.title),
         severity: result.severity,
         channels: results.map(r => r.channel),
+        routingTier: routeResult.decision.tier,
+        pushMode: routeResult.decision.pushMode,
+        routingReason: routeResult.decision.reason,
         ok: okCount,
         fail: failCount,
         duration_ms: deliveryMs,
