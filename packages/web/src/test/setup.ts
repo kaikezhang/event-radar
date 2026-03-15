@@ -176,23 +176,27 @@ const SCORECARD_SUMMARY_ALL = {
     directionalHitRate: 0.6584,
     setupWorkedCount: 122,
     setupWorkedRate: 0.604,
+    avgT5Move: 2.4,
     avgT20Move: 5.1,
     medianT20Move: 3.8,
   },
   sourceBuckets: [
     {
       bucket: 'sec-edgar',
-      totalAlerts: 52,
-      alertsWithUsableVerdicts: 39,
-      directionalCorrectCount: 26,
+      totalAlerts: 35,
+      alertsWithUsableVerdicts: 30,
+      directionalCorrectCount: 20,
       directionalHitRate: 0.6667,
-      setupWorkedCount: 24,
-      setupWorkedRate: 0.6154,
-      avgT5Move: 1.4,
-      avgT20Move: 3.7,
-      medianT20Move: 3.3,
+      setupWorkedCount: 18,
+      setupWorkedRate: 0.6,
+      avgT5Move: -1.8,
+      avgT20Move: -3.4,
+      medianT20Move: -3.4,
     },
   ],
+};
+const SCORECARD_SUMMARY = {
+  ...SCORECARD_SUMMARY_ALL,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -236,6 +240,10 @@ beforeEach(() => {
           },
         ],
       });
+    }
+
+    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
+      return jsonResponse(SCORECARD);
     }
 
     if (url.pathname === '/api/events' && url.searchParams.get('ticker') === 'NVDA') {
@@ -324,7 +332,7 @@ beforeEach(() => {
         });
       }
 
-      return jsonResponse(SCORECARD_SUMMARY_ALL);
+      return jsonResponse(SCORECARD_SUMMARY);
     }
 
     return jsonResponse({ error: 'Not found' }, 404);

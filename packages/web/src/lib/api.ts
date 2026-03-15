@@ -93,18 +93,18 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
   }
 }
 
-export async function getEventScorecard(id: string): Promise<EventScorecard | null> {
+export async function getScorecardSummary(days?: number): Promise<ScorecardSummary | null> {
   try {
-    return await apiFetch(`/v1/scorecards/${id}`) as EventScorecard;
+    const query = days == null ? '' : `?days=${days}`;
+    return await apiFetch(`/v1/scorecards/summary${query}`) as ScorecardSummary;
   } catch {
     return null;
   }
 }
 
-export async function getScorecardSummary(days?: number): Promise<ScorecardSummary | null> {
+export async function getEventScorecard(id: string): Promise<EventScorecard | null> {
   try {
-    const query = days == null ? '' : `?days=${days}`;
-    return await apiFetch(`/v1/scorecards/summary${query}`) as ScorecardSummary;
+    return await apiFetch(`/v1/scorecards/${id}`) as EventScorecard;
   } catch {
     return null;
   }
