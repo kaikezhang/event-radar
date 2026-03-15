@@ -10,6 +10,8 @@ const topicKey = (topic: string) => `topic:${topic}`;
 
 export class InMemoryEventBus implements EventBus {
   private readonly emitter = new EventEmitter();
+  private readonly handlerWrappers = new Map<Handler, (event: RawEvent) => void>();
+  private readonly topicHandlerWrappers = new Map<string, Map<TopicHandler, (payload: unknown) => void>>();
   private _publishedCount = 0;
 
   async publish(event: RawEvent): Promise<void> {
@@ -18,7 +20,11 @@ export class InMemoryEventBus implements EventBus {
   }
 
   subscribe(handler: Handler): () => void {
-    this.emitter.on(EVENT_KEY, handler);
+    const wrapped = (event: RawEvent) => {
+      this.runHandler(handler, event, '[EventBus] Unhandled error in subscriber:');
+    };
+    this.handlerWrappers.set(handler, wrapped);
+    this.emitter.on(EVENT_KEY, wrapped);
     return () => this.unsubscribe(handler);
   }
 
@@ -27,16 +33,36 @@ export class InMemoryEventBus implements EventBus {
   }
 
   subscribeTopic(topic: string, handler: TopicHandler): () => void {
-    this.emitter.on(topicKey(topic), handler);
+    const wrapped = (payload: unknown) => {
+      this.runHandler(handler, payload, '[EventBus] Unhandled error in topic subscriber:');
+    };
+    let topicWrappers = this.topicHandlerWrappers.get(topic);
+    if (!topicWrappers) {
+      topicWrappers = new Map();
+      this.topicHandlerWrappers.set(topic, topicWrappers);
+    }
+    topicWrappers.set(handler, wrapped);
+    this.emitter.on(topicKey(topic), wrapped);
     return () => this.unsubscribeTopic(topic, handler);
   }
 
   unsubscribe(handler: Handler): void {
-    this.emitter.off(EVENT_KEY, handler);
+    const wrapped = this.handlerWrappers.get(handler);
+    if (wrapped) {
+      this.emitter.off(EVENT_KEY, wrapped);
+      this.handlerWrappers.delete(handler);
+    }
   }
 
   unsubscribeTopic(topic: string, handler: TopicHandler): void {
-    this.emitter.off(topicKey(topic), handler);
+    const wrapped = this.topicHandlerWrappers.get(topic)?.get(handler);
+    if (wrapped) {
+      this.emitter.off(topicKey(topic), wrapped);
+      this.topicHandlerWrappers.get(topic)?.delete(handler);
+      if (this.topicHandlerWrappers.get(topic)?.size === 0) {
+        this.topicHandlerWrappers.delete(topic);
+      }
+    }
   }
 
   get publishedCount(): number {
@@ -45,5 +71,19 @@ export class InMemoryEventBus implements EventBus {
 
   get handlerCount(): number {
     return this.emitter.listenerCount(EVENT_KEY);
+  }
+
+  private runHandler<T>(
+    handler: (payload: T) => void | Promise<void>,
+    payload: T,
+    errorPrefix: string,
+  ): void {
+    try {
+      Promise.resolve(handler(payload)).catch((error) => {
+        console.error(errorPrefix, error);
+      });
+    } catch (error) {
+      console.error(errorPrefix, error);
+    }
   }
 }

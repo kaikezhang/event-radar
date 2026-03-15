@@ -103,6 +103,7 @@ import { HistoricalEnricher } from './pipeline/historical-enricher.js';
 import { AuditLog } from './pipeline/audit-log.js';
 import { LLMGatekeeper } from './pipeline/llm-gatekeeper.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
+import { PipelineLimiter } from './pipeline/pipeline-limiter.js';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebsocketPlugin, toLiveFeedEvent } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
@@ -145,6 +146,11 @@ function categorizeFilterReason(reason: string): string {
   if (reason.includes('analyst')) return 'analyst';
   if (reason.includes('default')) return 'default';
   return 'other';
+}
+
+function intFromEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 export interface AppContext {
@@ -493,14 +499,26 @@ export function buildApp(options?: {
   // Helper: truncate title for logs
   const logTitle = (title: string) => title.length > 80 ? title.slice(0, 77) + '...' : title;
 
-  // Unified event pipeline: classify → dedup → store → filter → deliver
-  eventBus.subscribe(async (event) => {
-    pipelineFunnelTotal.inc({ stage: 'ingested' });
+  const pipelineLimiter = new PipelineLimiter({
+    maxConcurrent: intFromEnv('PIPELINE_MAX_CONCURRENT', 5),
+    maxQueueDepth: 100,
+    onError(error) {
+      server.log.error(
+        {
+          pipeline: true,
+          stage: 'pipeline',
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'pipeline execution failed',
+      );
+    },
+  });
 
-    // Step 1: Classify ONCE
-    const end = processingDurationSeconds.startTimer({ operation: 'classify' });
-    const result = ruleEngine.classify(event);
-    end();
+  const processPipelineEvent = async (
+    event: RawEvent,
+    result: ClassificationResult,
+  ): Promise<void> => {
+    pipelineFunnelTotal.inc({ stage: 'ingested' });
     pipelineFunnelTotal.inc({ stage: 'classified' });
 
     // Step 2: Track metrics (always, even for duplicates)
@@ -626,7 +644,10 @@ export function buildApp(options?: {
         `);
       };
 
-      const filterResult = alertFilter.check(event);
+      const filterResult = alertFilter.check(
+        event,
+        llmResult?.ok ? llmResult.value : undefined,
+      );
 
       // Categorize filter reason for metrics
       const reasonCat = categorizeFilterReason(filterResult.reason);
@@ -925,6 +946,30 @@ export function buildApp(options?: {
         confidence: typeof judgeConfidence === 'number' ? judgeConfidence : undefined,
       });
     }
+  };
+
+  // Unified event pipeline: classify → dedup → store → filter → deliver
+  eventBus.subscribe((event) => {
+    const end = processingDurationSeconds.startTimer({ operation: 'classify' });
+    const result = ruleEngine.classify(event);
+    end();
+
+    const accepted = pipelineLimiter.enqueue({
+      severity: result.severity,
+      run: async () => {
+        await processPipelineEvent(event, result);
+      },
+    });
+
+    if (!accepted) {
+      server.log.warn({
+        pipeline: true,
+        stage: 'pipeline_backpressure',
+        source: event.source,
+        severity: result.severity,
+        title: logTitle(event.title),
+      }, 'dropped event due to full pipeline queue');
+    }
   });
 
   if (adaptiveService && eventBus.subscribeTopic) {
@@ -1118,6 +1163,15 @@ export function buildApp(options?: {
 
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
+    const drained = await pipelineLimiter.drain(30_000);
+    if (!drained) {
+      server.log.warn({
+        pipeline: true,
+        stage: 'shutdown',
+      }, 'pipeline drain timed out during shutdown');
+    }
+
+    alertFilter.dispose();
     marketCache?.stop();
     healthMonitor?.stop();
     outcomeProcessingLoop?.stop();

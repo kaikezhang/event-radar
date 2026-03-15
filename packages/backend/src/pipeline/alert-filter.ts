@@ -1,4 +1,4 @@
-import type { RawEvent } from '@event-radar/shared';
+import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { getMarketSession, getNextSessionOpenMs } from './llm-gatekeeper.js';
@@ -91,6 +91,7 @@ function loadDefaultWatchlist(): string[] {
  * - Per-ticker cooldown (60 min)
  */
 export class AlertFilter {
+  private static readonly MAX_COOLDOWN_ENTRIES = 10_000;
   private readonly watchlist: Set<string>;
   private readonly socialMinUpvotes: number;
   private readonly socialMinComments: number;
@@ -105,6 +106,7 @@ export class AlertFilter {
   private static readonly COOLDOWN_PATH = '/tmp/event-radar-seen/ticker-cooldown.json';
   private cooldownDirty = false;
   private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly pruneTimer: ReturnType<typeof setInterval>;
 
   constructor(config?: AlertFilterConfig) {
     const watchlistArr = config?.watchlist ?? loadDefaultWatchlist();
@@ -117,9 +119,11 @@ export class AlertFilter {
     this.enabled = config?.enabled ?? process.env.ALERT_FILTER_ENABLED !== 'false';
     this.nowFn = config?.nowFn ?? (() => new Date());
     this.loadCooldowns();
+    this.pruneTimer = setInterval(() => this.pruneExpired(), 600_000);
+    this.pruneTimer.unref?.();
   }
 
-  check(event: RawEvent): FilterResult {
+  check(event: RawEvent, llmResult?: LlmClassificationResult): FilterResult {
     if (!this.enabled) {
       return { pass: true, reason: 'filter disabled', enrichWithLLM: false };
     }
@@ -177,16 +181,28 @@ export class AlertFilter {
 
     // Rule 7: Calendar events — only if today or tomorrow
     if (this.isCalendarEvent(event)) {
-      return this.checkCalendarEvent(event, ticker);
+      return this.checkCalendarEvent(event);
     }
 
     // Default: pass through to L2 LLM Judge with ticker cooldown
-    return this.applyTickerCooldown(ticker, { pass: true, reason: 'L1 pass', enrichWithLLM: true });
+    return this.applyTickerCooldown(event, llmResult, {
+      pass: true,
+      reason: 'L1 pass',
+      enrichWithLLM: true,
+    });
   }
 
   /** Reset cooldown map (useful for testing). */
   resetCooldowns(): void {
     this.cooldownMap.clear();
+  }
+
+  dispose(): void {
+    clearInterval(this.pruneTimer);
+    if (this.cooldownTimer) {
+      clearTimeout(this.cooldownTimer);
+      this.cooldownTimer = null;
+    }
   }
 
   /**
@@ -206,23 +222,18 @@ export class AlertFilter {
   }
 
   private loadCooldowns(): void {
-    if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
+    if (isTestRuntime()) return;
     try {
       if (!existsSync(AlertFilter.COOLDOWN_PATH)) return;
       const data = JSON.parse(readFileSync(AlertFilter.COOLDOWN_PATH, 'utf-8'));
-      if (data && typeof data === 'object') {
-        const now = Date.now();
-        for (const [ticker, ts] of Object.entries(data)) {
-          if (typeof ts === 'number' && now - ts < this.tickerCooldownMs) {
-            this.cooldownMap.set(ticker, ts);
-          }
-        }
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        this.loadCooldownEntries(data as Record<string, number>);
       }
     } catch { /* ignore corrupt file */ }
   }
 
   private saveCooldowns(): void {
-    if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
+    if (isTestRuntime()) return;
     this.cooldownDirty = true;
     if (this.cooldownTimer) return;
     this.cooldownTimer = setTimeout(() => {
@@ -232,6 +243,7 @@ export class AlertFilter {
         try {
           const dir = '/tmp/event-radar-seen';
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          this.pruneExpired();
           const obj: Record<string, number> = {};
           for (const [k, v] of this.cooldownMap) obj[k] = v;
           writeFileSync(AlertFilter.COOLDOWN_PATH, JSON.stringify(obj));
@@ -269,7 +281,7 @@ export class AlertFilter {
 
     // If we have a recognized ticker on watchlist → pass
     if (ticker && this.watchlist.has(ticker)) {
-      return this.applyTickerCooldown(ticker, {
+      return this.applyTickerCooldown(event, undefined, {
         pass: true,
         reason: `newswire watchlist ticker ${ticker}`,
         enrichWithLLM: true,
@@ -278,7 +290,7 @@ export class AlertFilter {
 
     // If there's a ticker AND a high-relevance keyword → pass
     if (ticker && hasPassKeyword) {
-      return this.applyTickerCooldown(ticker, {
+      return this.applyTickerCooldown(event, undefined, {
         pass: true,
         reason: `newswire ticker ${ticker} + keyword match`,
         enrichWithLLM: true,
@@ -292,7 +304,7 @@ export class AlertFilter {
 
     // Has ticker but no keyword → pass with LLM enrichment (let LLM Judge decide)
     if (ticker) {
-      return this.applyTickerCooldown(ticker, {
+      return this.applyTickerCooldown(event, undefined, {
         pass: true,
         reason: `newswire ticker ${ticker} (no keyword)`,
         enrichWithLLM: true,
@@ -310,12 +322,16 @@ export class AlertFilter {
 
     // High engagement flag set by scanner
     if (highEngagement) {
-      return this.applyTickerCooldown(ticker, { pass: true, reason: 'social high_engagement flag', enrichWithLLM: true });
+      return this.applyTickerCooldown(event, undefined, {
+        pass: true,
+        reason: 'social high_engagement flag',
+        enrichWithLLM: true,
+      });
     }
 
     // High engagement: >=1000 upvotes OR >=500 comments
     if (upvotes >= this.socialMinUpvotes || comments >= this.socialMinComments) {
-      return this.applyTickerCooldown(ticker, {
+      return this.applyTickerCooldown(event, undefined, {
         pass: true,
         reason: `social engagement: ${upvotes} upvotes, ${comments} comments`,
         enrichWithLLM: true,
@@ -324,7 +340,7 @@ export class AlertFilter {
 
     // Watchlist ticker with >100 upvotes
     if (ticker && this.watchlist.has(ticker) && upvotes >= 100) {
-      return this.applyTickerCooldown(ticker, {
+      return this.applyTickerCooldown(event, undefined, {
         pass: true,
         reason: `watchlist ticker ${ticker} with ${upvotes} upvotes`,
         enrichWithLLM: true,
@@ -339,7 +355,7 @@ export class AlertFilter {
     return type.includes('earnings') || type.includes('fda') || type.includes('calendar');
   }
 
-  private checkCalendarEvent(event: RawEvent, ticker: string | undefined): FilterResult {
+  private checkCalendarEvent(event: RawEvent): FilterResult {
     const eventDateStr = event.metadata?.['eventDate'] as string | undefined
       ?? event.metadata?.['date'] as string | undefined;
 
@@ -355,14 +371,30 @@ export class AlertFilter {
       }
     }
 
-    return this.applyTickerCooldown(ticker, { pass: true, reason: 'calendar event today/tomorrow', enrichWithLLM: true });
+    return this.applyTickerCooldown(event, undefined, {
+      pass: true,
+      reason: 'calendar event today/tomorrow',
+      enrichWithLLM: true,
+    });
   }
 
-  private applyTickerCooldown(ticker: string | undefined, result: FilterResult): FilterResult {
+  private applyTickerCooldown(
+    event: RawEvent,
+    llmResult: LlmClassificationResult | undefined,
+    result: FilterResult,
+  ): FilterResult {
+    const ticker = typeof event.metadata?.['ticker'] === 'string'
+      ? (event.metadata['ticker'] as string).toUpperCase()
+      : undefined;
     if (!ticker || !result.pass) return result;
 
-    const now = Date.now();
-    const lastAlert = this.cooldownMap.get(ticker);
+    const eventType = this.resolveEventType(event, llmResult);
+    const now = this.nowFn().getTime();
+    this.pruneExpired(now);
+
+    const lastAlert = this.getCooldownLookupKeys(ticker, eventType)
+      .map((key) => this.cooldownMap.get(key))
+      .find((ts): ts is number => typeof ts === 'number');
 
     if (lastAlert && now - lastAlert < this.tickerCooldownMs) {
       return {
@@ -372,9 +404,68 @@ export class AlertFilter {
       };
     }
 
-    this.cooldownMap.set(ticker, now);
+    const writeKey = eventType ? `${ticker}:${eventType}` : ticker;
+    this.cooldownMap.set(writeKey, now);
+    this.pruneExpired(now);
     this.saveCooldowns();
     return result;
+  }
+
+  private loadCooldownEntries(entries: Record<string, number>): void {
+    const now = this.nowFn().getTime();
+    for (const [key, ts] of Object.entries(entries)) {
+      if (typeof ts !== 'number' || now - ts >= this.tickerCooldownMs) {
+        continue;
+      }
+
+      const normalizedKey = key.includes(':') ? key.toUpperCase() : `${key.toUpperCase()}:*`;
+      this.cooldownMap.set(normalizedKey, ts);
+    }
+
+    this.pruneExpired(now);
+  }
+
+  private pruneExpired(now = this.nowFn().getTime()): void {
+    for (const [key, ts] of this.cooldownMap) {
+      if (now - ts >= this.tickerCooldownMs) {
+        this.cooldownMap.delete(key);
+      }
+    }
+
+    if (this.cooldownMap.size <= AlertFilter.MAX_COOLDOWN_ENTRIES) {
+      return;
+    }
+
+    const entries = [...this.cooldownMap.entries()].sort((a, b) => a[1] - b[1]);
+    const overflow = entries.length - AlertFilter.MAX_COOLDOWN_ENTRIES;
+
+    for (let i = 0; i < overflow; i++) {
+      this.cooldownMap.delete(entries[i][0]);
+    }
+  }
+
+  private resolveEventType(
+    event: RawEvent,
+    llmResult?: LlmClassificationResult,
+  ): string | undefined {
+    const metadataEventType = event.metadata?.['eventType'];
+    if (typeof metadataEventType === 'string' && metadataEventType.length > 0) {
+      return metadataEventType;
+    }
+
+    if (typeof llmResult?.eventType === 'string' && llmResult.eventType.length > 0) {
+      return llmResult.eventType;
+    }
+
+    return undefined;
+  }
+
+  private getCooldownLookupKeys(ticker: string, eventType?: string): string[] {
+    const keys = eventType
+      ? [`${ticker}:${eventType}`, ticker, `${ticker}:*`]
+      : [ticker, `${ticker}:*`];
+
+    return [...new Set(keys)];
   }
 }
 
@@ -399,4 +490,11 @@ function numMeta(event: RawEvent, key: string): number | undefined {
 
 function boolMeta(event: RawEvent, key: string): boolean {
   return event.metadata?.[key] === true;
+}
+
+function isTestRuntime(): boolean {
+  return process.env.NODE_ENV === 'test'
+    || process.env.VITEST === 'true'
+    || process.env.VITEST_WORKER_ID != null
+    || process.argv.some((arg) => arg.includes('vitest'));
 }

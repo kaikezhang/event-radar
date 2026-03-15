@@ -167,6 +167,13 @@ export const llmEnrichmentTotal = new Counter({
   registers: [registry],
 });
 
+/** Counter: events dropped from the pipeline queue due to backpressure */
+export const pipelineQueueDroppedTotal = new Counter({
+  name: 'pipeline_queue_dropped_total',
+  help: 'Events dropped from the pipeline queue due to backpressure',
+  registers: [registry],
+});
+
 /** Histogram: LLM enrichment duration */
 export const llmEnrichmentDurationSeconds = new Histogram({
   name: 'llm_enrichment_duration_seconds',
@@ -196,4 +203,5 @@ export function resetMetrics(): void {
   deliveryErrorsTotal.reset();
   llmEnrichmentTotal.reset();
   llmEnrichmentDurationSeconds.reset();
+  pipelineQueueDroppedTotal.reset();
 }

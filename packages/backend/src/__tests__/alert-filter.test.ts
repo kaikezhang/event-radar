@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AlertFilter } from '../pipeline/alert-filter.js';
-import type { RawEvent } from '@event-radar/shared';
+import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -28,6 +28,11 @@ describe('AlertFilter', () => {
       maxAgeMinutes: 120,
       enabled: true,
     });
+  });
+
+  afterEach(() => {
+    filter.dispose();
+    vi.useRealTimers();
   });
 
   describe('disabled filter', () => {
@@ -453,6 +458,114 @@ describe('AlertFilter', () => {
       expect(filter.check(event2).pass).toBe(true);
     });
 
+    it('should allow the same ticker across different event types', () => {
+      const event1 = makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
+      });
+      const event2 = makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA', eventType: 'guidance_raise' },
+      });
+
+      expect(filter.check(event1).pass).toBe(true);
+      expect(filter.check(event2).pass).toBe(true);
+    });
+
+    it('should block the same ticker and llm event type combination', () => {
+      const event1 = makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA' },
+      });
+      const event2 = makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA' },
+      });
+      const llmResult = makeLlmResult({ eventType: 'earnings_beat' });
+
+      expect(filter.check(event1, llmResult).pass).toBe(true);
+      const second = filter.check(event2, llmResult);
+      expect(second.pass).toBe(false);
+      expect(second.reason).toContain('cooldown');
+    });
+
+    it('should apply legacy ticker cooldowns across all event types after migration', () => {
+      const now = Date.now();
+      const legacyAwareFilter = new AlertFilter({
+        tickerCooldownMinutes: 60,
+        nowFn: () => new Date(now),
+      });
+
+      (legacyAwareFilter as {
+        loadCooldownEntries(entries: Record<string, number>): void;
+      }).loadCooldownEntries({
+        NVDA: now - 5_000,
+      });
+
+      const result = legacyAwareFilter.check(
+        makeEvent({
+          source: 'congress',
+          type: 'congress-trade',
+          metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
+        }),
+      );
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('cooldown');
+
+      legacyAwareFilter.dispose();
+    });
+
+    it('should prune expired cooldown entries on the runtime interval', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+
+      const pruningFilter = new AlertFilter({
+        tickerCooldownMinutes: 1,
+        nowFn: () => new Date(Date.now()),
+      });
+
+      pruningFilter.check(makeEvent({
+        source: 'congress',
+        type: 'congress-trade',
+        metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
+      }));
+
+      const cooldownMap = (pruningFilter as { cooldownMap: Map<string, number> }).cooldownMap;
+      expect(cooldownMap.size).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(600_000);
+
+      expect(cooldownMap.size).toBe(0);
+      pruningFilter.dispose();
+    });
+
+    it('should cap cooldown map size by evicting the oldest entries', () => {
+      const cappedFilter = new AlertFilter({
+        tickerCooldownMinutes: 60,
+        nowFn: () => new Date('2026-03-15T12:00:00.000Z'),
+      });
+      const cooldownMap = (cappedFilter as { cooldownMap: Map<string, number> }).cooldownMap;
+      const baseTs = Date.parse('2026-03-15T11:00:00.000Z');
+
+      for (let i = 0; i < 10_005; i++) {
+        cooldownMap.set(`TICK${i}:news_breaking`, baseTs + i);
+      }
+
+      (cappedFilter as { pruneExpired(now?: number): void }).pruneExpired(Date.parse('2026-03-15T12:00:00.000Z'));
+
+      expect(cooldownMap.size).toBe(10_000);
+      expect(cooldownMap.has('TICK0:news_breaking')).toBe(false);
+      expect(cooldownMap.has('TICK4:news_breaking')).toBe(false);
+      expect(cooldownMap.has('TICK5:news_breaking')).toBe(true);
+
+      cappedFilter.dispose();
+    });
+
     it('should not apply cooldown to events without ticker', () => {
       const event1 = makeEvent({ source: 'congress', type: 'congress-trade' });
       const event2 = makeEvent({ source: 'congress', type: 'congress-trade' });
@@ -475,3 +588,19 @@ describe('AlertFilter', () => {
     });
   });
 });
+
+function makeLlmResult(
+  overrides: Partial<LlmClassificationResult> = {},
+): LlmClassificationResult {
+  return {
+    severity: 'HIGH',
+    direction: 'BULLISH',
+    eventType: 'news_breaking',
+    confidence: 0.8,
+    reasoning: 'test',
+    tags: ['test'],
+    priority: 5,
+    matchedRules: [],
+    ...overrides,
+  };
+}
