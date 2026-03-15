@@ -4,6 +4,10 @@ import type { Database } from '../db/connection.js';
 import type { ScannerRegistry } from '@event-radar/shared';
 import { registry as metricsRegistry } from '../metrics.js';
 import { validateApiKeyValue } from './auth-middleware.js';
+import {
+  getRuntimeScannerStatus,
+  getScannerStaleThresholdMs,
+} from '../utils/scanner-runtime-status.js';
 
 // ---- Types ----
 
@@ -11,7 +15,13 @@ interface ScannerStatus {
   name: string;
   eventsInWindow: number;
   lastSeenAt: string | null;
+  activityStatus: 'active' | 'silent';
   status: 'active' | 'silent' | 'down';
+  runtimeStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
+  runtimeLastScanAt: string | null;
+  runtimeCurrentIntervalMs: number | null;
+  runtimeStaleAfterMs: number | null;
+  sources: string[];
 }
 
 interface TrendData {
@@ -103,6 +113,35 @@ const VALID_WINDOWS: Record<string, number> = {
   '6h': 6 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
 };
+
+const OBSERVABILITY_SOURCE_ALIASES: Record<string, string> = {
+  'pr-newswire': 'newswire',
+  'businesswire': 'newswire',
+  'globenewswire': 'newswire',
+  'x': 'x-elonmusk',
+  'twitter': 'x-elonmusk',
+  'company-ir': 'ir-monitor',
+  'doj': 'doj-antitrust',
+};
+
+function normalizeObservabilityScannerName(name: string): string {
+  const normalized = name.trim().toLowerCase();
+  return OBSERVABILITY_SOURCE_ALIASES[normalized] ?? normalized;
+}
+
+function toIsoString(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function pickLatestIso(current: string | null, candidate: string | null): string | null {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
+}
 
 function computeTrend(current: number, previous: number | null): TrendData {
   if (previous == null || previous === 0) {
@@ -280,38 +319,83 @@ export function registerAiObservabilityRoutes(
       prevIngested += Number(r.count);
     }
 
-    const scannerRates: Record<string, { count: number; lastSeen: string }> = {};
+    const scannerRates: Record<string, { count: number; lastSeen: string | null; sources: Set<string> }> = {};
     for (const r of scannerRateRows.rows) {
-      const ls = r.last_seen;
-      const lastSeen = ls instanceof Date ? ls.toISOString() : String(ls);
-      scannerRates[r.source as string] = {
-        count: Number(r.count),
-        lastSeen,
-      };
+      const source = String(r.source);
+      const name = normalizeObservabilityScannerName(source);
+      const lastSeen = toIsoString(r.last_seen);
+      if (!scannerRates[name]) {
+        scannerRates[name] = {
+          count: 0,
+          lastSeen: null,
+          sources: new Set<string>(),
+        };
+      }
+      scannerRates[name].count += Number(r.count);
+      scannerRates[name].lastSeen = pickLatestIso(scannerRates[name].lastSeen, lastSeen);
+      scannerRates[name].sources.add(source);
     }
 
-    const allLastSeen: Record<string, string> = {};
+    const allLastSeen: Record<string, { lastSeen: string | null; sources: Set<string> }> = {};
     for (const r of allLastSeenRows.rows) {
-      const ls = r.last_seen;
-      allLastSeen[r.source as string] = ls instanceof Date ? ls.toISOString() : String(ls);
+      const source = String(r.source);
+      const name = normalizeObservabilityScannerName(source);
+      const lastSeen = toIsoString(r.last_seen);
+      if (!allLastSeen[name]) {
+        allLastSeen[name] = {
+          lastSeen: null,
+          sources: new Set<string>(),
+        };
+      }
+      allLastSeen[name].lastSeen = pickLatestIso(allLastSeen[name].lastSeen, lastSeen);
+      allLastSeen[name].sources.add(source);
     }
 
     // Build scanner status array
-    const registeredScanners = scannerRegistry.healthAll().map(s => s.scanner);
-    const allScannerNames = new Set([...registeredScanners, ...Object.keys(allLastSeen)]);
+    const runtimeHealth = scannerRegistry.healthAll().map((health) => {
+      const name = normalizeObservabilityScannerName(health.scanner);
+      return {
+        name,
+        status: getRuntimeScannerStatus(health, now.getTime()),
+        lastScanAt: toIsoString(health.lastScanAt),
+        currentIntervalMs: health.currentIntervalMs ?? null,
+        staleAfterMs: getScannerStaleThresholdMs(health),
+      };
+    });
+    const runtimeHealthByName = Object.fromEntries(
+      runtimeHealth.map((health) => [health.name, health]),
+    );
+    const registeredScanners = runtimeHealth.map(s => s.name);
+    const allScannerNames = new Set([
+      ...registeredScanners,
+      ...Object.keys(allLastSeen),
+      ...Object.keys(scannerRates),
+    ]);
     const scanners: ScannerStatus[] = [];
     for (const name of allScannerNames) {
       const rate = scannerRates[name];
-      if (rate && rate.count > 0) {
-        scanners.push({ name, eventsInWindow: rate.count, lastSeenAt: rate.lastSeen, status: 'active' });
-      } else {
-        scanners.push({
-          name,
-          eventsInWindow: 0,
-          lastSeenAt: allLastSeen[name] ?? null,
-          status: allLastSeen[name] ? 'silent' : 'down',
-        });
-      }
+      const runtime = runtimeHealthByName[name];
+      const activityStatus: ScannerStatus['activityStatus'] =
+        rate && rate.count > 0 ? 'active' : 'silent';
+      const lastSeenAt = rate?.lastSeen ?? allLastSeen[name]?.lastSeen ?? null;
+      const sources = new Set<string>([
+        ...(rate?.sources ?? []),
+        ...(allLastSeen[name]?.sources ?? []),
+      ]);
+      const runtimeStatus = runtime?.status ?? 'unknown';
+
+      scanners.push({
+        name,
+        eventsInWindow: rate?.count ?? 0,
+        lastSeenAt,
+        activityStatus,
+        status: runtimeStatus === 'down' ? 'down' : activityStatus,
+        runtimeStatus,
+        runtimeLastScanAt: runtime?.lastScanAt ?? null,
+        runtimeCurrentIntervalMs: runtime?.currentIntervalMs ?? null,
+        runtimeStaleAfterMs: runtime?.staleAfterMs ?? null,
+        sources: [...sources].sort(),
+      });
     }
     scanners.sort((a, b) => b.eventsInWindow - a.eventsInWindow);
 
@@ -424,7 +508,9 @@ export function registerAiObservabilityRoutes(
     const anomalies: AnomalyRecord[] = [];
 
     // Scanner silence
-    const silentScanners = scanners.filter(s => s.status === 'silent');
+    const silentScanners = scanners.filter(
+      s => s.activityStatus === 'silent' && s.runtimeStatus !== 'down',
+    );
     for (const s of silentScanners) {
       if (!s.lastSeenAt) continue;
       const silentMs = now.getTime() - new Date(s.lastSeenAt).getTime();
@@ -448,6 +534,26 @@ export function registerAiObservabilityRoutes(
       }
     }
 
+    for (const s of scanners) {
+      if (s.runtimeStatus === 'down') {
+        anomalies.push({
+          type: 'scanner_runtime_down',
+          severity: 'critical',
+          scanner: s.name,
+          detail: `Scanner ${s.name} runtime health is down`,
+          detectedAt: now.toISOString(),
+        });
+      } else if (s.runtimeStatus === 'degraded') {
+        anomalies.push({
+          type: 'scanner_runtime_degraded',
+          severity: 'warning',
+          scanner: s.name,
+          detail: `Scanner ${s.name} runtime health is degraded`,
+          detectedAt: now.toISOString(),
+        });
+      }
+    }
+
     // Volume spike detection (vs 24h average)
     if (windowStr !== '24h') {
       const dayAvgRows = await db.execute(sql`
@@ -458,7 +564,8 @@ export function registerAiObservabilityRoutes(
       `);
       const dayAvgRates: Record<string, number> = {};
       for (const r of dayAvgRows.rows) {
-        dayAvgRates[r.source as string] = Number(r.events_per_hour);
+        const name = normalizeObservabilityScannerName(String(r.source));
+        dayAvgRates[name] = (dayAvgRates[name] ?? 0) + Number(r.events_per_hour);
       }
 
       const windowHours = windowMs / 3_600_000;
