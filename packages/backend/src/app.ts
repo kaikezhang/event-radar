@@ -13,6 +13,7 @@ import {
   BarkPusher,
   DiscordWebhook,
   TelegramDelivery,
+  WebPushChannel,
   WebhookDelivery,
   type AlertRouter as AlertRouterType,
 } from '@event-radar/delivery';
@@ -54,6 +55,7 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
+import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
 import { registerEventsHistoryRoutes } from './routes/events-history.js';
 import { registerEventImpactRoutes } from './routes/event-impact.js';
 import { registerHistoricalRoutes } from './routes/historical.js';
@@ -110,6 +112,7 @@ import { createMarketDataProvider } from './services/create-market-data-provider
 import { ClassificationAccuracyService } from './services/classification-accuracy.js';
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import { PatternMatcher } from './services/pattern-matcher.js';
+import { createPushSubscriptionStore } from './services/push-subscription-store.js';
 import type {
   AccuracyDirection,
   ClassificationPrediction,
@@ -227,7 +230,7 @@ export function startOutcomeProcessingLoop(
   };
 }
 
-function buildAlertRouter(): AlertRouterType {
+function buildAlertRouter(db?: Database): AlertRouterType {
   const barkKey = process.env.BARK_KEY;
   const barkServerUrl = process.env.BARK_SERVER_URL;
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -235,6 +238,10 @@ function buildAlertRouter(): AlertRouterType {
   const telegramChatId = process.env.TELEGRAM_CHAT_ID;
   const webhookUrl = process.env.WEBHOOK_URL;
   const webhookSecret = process.env.WEBHOOK_SECRET;
+  const webPushVapidSubject = process.env.WEB_PUSH_VAPID_SUBJECT;
+  const webPushVapidPublicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY;
+  const webPushVapidPrivateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY;
+  const pushSubscriptionStore = db ? createPushSubscriptionStore(db) : undefined;
 
   return new AlertRouter({
     bark: barkKey
@@ -261,6 +268,15 @@ function buildAlertRouter(): AlertRouterType {
             enabled: true,
           })
         : undefined,
+    webPush:
+      pushSubscriptionStore && webPushVapidSubject && webPushVapidPublicKey && webPushVapidPrivateKey
+        ? new WebPushChannel({
+            vapidSubject: webPushVapidSubject,
+            vapidPublicKey: webPushVapidPublicKey,
+            vapidPrivateKey: webPushVapidPrivateKey,
+            store: pushSubscriptionStore,
+          })
+        : undefined,
   });
 }
 
@@ -284,9 +300,9 @@ export function buildApp(options?: {
   const startTime = Date.now();
   const eventBus = new InMemoryEventBus();
   const registry = new ScannerRegistry();
-  const alertRouter = options?.alertRouter ?? buildAlertRouter();
-  const ruleEngine = new RuleEngine();
   const db = options?.db;
+  const alertRouter = options?.alertRouter ?? buildAlertRouter(db);
+  const ruleEngine = new RuleEngine();
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
@@ -846,6 +862,7 @@ export function buildApp(options?: {
 
       const deliveryStart = Date.now();
       const routeResult = await alertRouter.route({
+        storedEventId: eventId,
         event,
         severity: result.severity,
         ticker,
@@ -1031,6 +1048,7 @@ export function buildApp(options?: {
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
     registerWatchlistRoutes(server, db, { apiKey });
+    registerPushSubscriptionRoutes(server, db, { apiKey });
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {
         apiKey,

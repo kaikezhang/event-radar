@@ -2,7 +2,7 @@ import type { Severity } from '@event-radar/shared';
 import { decideAlertRouting, type AlertRoutingDecision } from './push-policy.js';
 import type { AlertEvent, DeliveryService } from './types.js';
 
-export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook';
+export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook' | 'webPush';
 
 export interface ChannelDeliveryResult {
   channel: string;
@@ -20,6 +20,7 @@ export interface AlertRouterConfig {
   discord?: DeliveryService;
   telegram?: DeliveryService;
   webhook?: DeliveryService;
+  webPush?: DeliveryService;
 }
 
 /**
@@ -28,6 +29,8 @@ export interface AlertRouterConfig {
  *   HIGH     → Bark + Telegram + Discord + Webhook
  *   MEDIUM   → Telegram + Discord + Webhook
  *   LOW      → Discord + Webhook
+ *
+ * Web Push is gated separately by the confidence-based push policy.
  */
 const ROUTING_TABLE: Record<Severity, ChannelName[]> = {
   CRITICAL: ['bark', 'discord', 'telegram', 'webhook'],
@@ -45,6 +48,7 @@ export class AlertRouter {
     if (config.discord) this.channels.set('discord', config.discord);
     if (config.telegram) this.channels.set('telegram', config.telegram);
     if (config.webhook) this.channels.set('webhook', config.webhook);
+    if (config.webPush) this.channels.set('webPush', config.webPush);
   }
 
   /** Returns true if at least one delivery channel is configured. */
@@ -57,7 +61,9 @@ export class AlertRouter {
     alert: AlertEvent,
   ): Promise<AlertRouteResult> {
     const decision = decideAlertRouting(alert);
-    const targets = ROUTING_TABLE[alert.severity];
+    const targets = decision.shouldPush
+      ? [...ROUTING_TABLE[alert.severity], 'webPush']
+      : ROUTING_TABLE[alert.severity];
     const results: ChannelDeliveryResult[] = [];
 
     const promises = targets.map(async (channelName) => {

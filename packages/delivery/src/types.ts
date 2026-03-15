@@ -49,6 +49,7 @@ export interface HistoricalContext {
 
 /** A RawEvent enriched with severity classification for delivery routing. */
 export interface AlertEvent {
+  readonly storedEventId?: string;
   readonly event: RawEvent;
   readonly severity: Severity;
   readonly ticker?: string;

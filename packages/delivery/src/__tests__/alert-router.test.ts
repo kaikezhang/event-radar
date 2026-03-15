@@ -181,6 +181,52 @@ describe('AlertRouter', () => {
     expect(result.deliveries).toHaveLength(4);
   });
 
+  it('should route HIGH to bark, discord, telegram, webhook, and web push when the push policy allows it', async () => {
+    const bark = mockService('bark');
+    const discord = mockService('discord');
+    const telegram = mockService('telegram');
+    const webhook = mockService('webhook');
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+
+    const result = await router.route(makeAlert('HIGH', {
+      confidenceBucket: 'high',
+      enrichment: {
+        summary: 'Summary',
+        impact: 'Impact',
+        whyNow: 'Why now',
+        currentSetup: 'Setup',
+        historicalContext: 'Historical context',
+        risks: 'Risks',
+        action: '🔴 ACT NOW',
+        tickers: [],
+      },
+      historicalContext: {
+        matchCount: 18,
+        confidence: 'high',
+        avgAlphaT5: 0.03,
+        avgAlphaT20: 0.08,
+        winRateT20: 68,
+        medianAlphaT20: 0.06,
+        topMatches: [],
+        patternSummary: '18 similar events',
+      },
+    }));
+
+    expect(bark.send).toHaveBeenCalledOnce();
+    expect(discord.send).toHaveBeenCalledOnce();
+    expect(telegram.send).toHaveBeenCalledOnce();
+    expect(webhook.send).toHaveBeenCalledOnce();
+    expect(webPush.send).toHaveBeenCalledOnce();
+    expect(result.decision).toEqual({
+      tier: 'high',
+      shouldPush: true,
+      pushMode: 'loud',
+      reason: 'act_now_high_confidence_strong_support',
+    });
+    expect(result.deliveries).toHaveLength(5);
+  });
+
   it('should route MEDIUM to discord, telegram, and webhook (not bark)', async () => {
     const bark = mockService('bark');
     const discord = mockService('discord');
@@ -195,6 +241,88 @@ describe('AlertRouter', () => {
     expect(telegram.send).toHaveBeenCalledOnce();
     expect(webhook.send).toHaveBeenCalledOnce();
     expect(result.deliveries).toHaveLength(3);
+  });
+
+  it('should route MEDIUM to discord, telegram, webhook, and web push when the push policy allows it', async () => {
+    const bark = mockService('bark');
+    const discord = mockService('discord');
+    const telegram = mockService('telegram');
+    const webhook = mockService('webhook');
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+
+    const result = await router.route(makeAlert('MEDIUM', {
+      confidenceBucket: 'medium',
+      enrichment: {
+        summary: 'Summary',
+        impact: 'Impact',
+        whyNow: 'Why now',
+        currentSetup: 'Setup',
+        historicalContext: 'Historical context',
+        risks: 'Risks',
+        action: '🟡 WATCH',
+        tickers: [],
+      },
+      historicalContext: {
+        matchCount: 11,
+        confidence: 'medium',
+        avgAlphaT5: 0.01,
+        avgAlphaT20: 0.04,
+        winRateT20: 57,
+        medianAlphaT20: 0.03,
+        topMatches: [],
+        patternSummary: '11 similar events',
+      },
+    }));
+
+    expect(bark.send).not.toHaveBeenCalled();
+    expect(discord.send).toHaveBeenCalledOnce();
+    expect(telegram.send).toHaveBeenCalledOnce();
+    expect(webhook.send).toHaveBeenCalledOnce();
+    expect(webPush.send).toHaveBeenCalledOnce();
+    expect(result.decision).toEqual({
+      tier: 'medium',
+      shouldPush: true,
+      pushMode: 'silent',
+      reason: 'watch_meaningful_support',
+    });
+    expect(result.deliveries).toHaveLength(4);
+  });
+
+  it('should keep web push disabled when the push policy downgrades an alert to feed-only', async () => {
+    const bark = mockService('bark');
+    const discord = mockService('discord');
+    const telegram = mockService('telegram');
+    const webhook = mockService('webhook');
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+
+    const result = await router.route(makeAlert('HIGH', {
+      confidenceBucket: 'high',
+      enrichment: {
+        summary: 'Summary',
+        impact: 'Impact',
+        whyNow: 'Why now',
+        currentSetup: 'Setup',
+        historicalContext: 'Historical context',
+        risks: 'Risks',
+        action: '🔴 ACT NOW',
+        tickers: [],
+      },
+    }));
+
+    expect(result.decision).toEqual({
+      tier: 'low',
+      shouldPush: false,
+      pushMode: 'none',
+      reason: 'insufficient_historical_support',
+    });
+    expect(bark.send).toHaveBeenCalledOnce();
+    expect(discord.send).toHaveBeenCalledOnce();
+    expect(telegram.send).toHaveBeenCalledOnce();
+    expect(webhook.send).toHaveBeenCalledOnce();
+    expect(webPush.send).not.toHaveBeenCalled();
+    expect(result.deliveries).toHaveLength(4);
   });
 
   it('should route LOW to discord and webhook only', async () => {
