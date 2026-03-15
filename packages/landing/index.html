@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="Event Radar detects market-moving events, adds historical context, and shows you only the setups that matter."
+    />
+    <meta name="theme-color" content="#07111f" />
+    <title>Event Radar | Not more alerts. Better setups.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"IBM Plex Sans"', "sans-serif"],
+              mono: ['"IBM Plex Mono"', "monospace"],
+            },
+            colors: {
+              radar: {
+                base: "#07111f",
+                panel: "#0b1728",
+                line: "#1c3048",
+                soft: "#8ca4bf",
+                accent: "#7dd3fc",
+                success: "#86efac",
+                warn: "#fcd34d",
+                danger: "#fda4af",
+              },
+            },
+            boxShadow: {
+              panel: "0 24px 80px rgba(2, 10, 25, 0.45)",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 28%),
+          radial-gradient(circle at 85% 18%, rgba(148, 163, 184, 0.12), transparent 24%),
+          linear-gradient(180deg, #07111f 0%, #08101b 40%, #050b14 100%);
+      }
+
+      .grid-glow {
+        background-image:
+          linear-gradient(rgba(125, 211, 252, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(125, 211, 252, 0.06) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
+      }
+
+      .panel {
+        border: 1px solid rgba(140, 164, 191, 0.18);
+        background: linear-gradient(180deg, rgba(11, 23, 40, 0.94), rgba(8, 16, 27, 0.88));
+        backdrop-filter: blur(12px);
+      }
+
+      .noise::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px),
+          radial-gradient(circle at 80% 40%, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px),
+          radial-gradient(circle at 60% 80%, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px);
+        background-size: 120px 120px;
+      }
+    </style>
+  </head>
+  <body class="min-h-full font-sans text-slate-100 antialiased">
+    <div class="fixed inset-0 grid-glow"></div>
+
+    <main class="relative overflow-x-hidden">
+      <section class="noise relative border-b border-white/10">
+        <div class="mx-auto max-w-7xl px-6 py-8">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-full border border-cyan-300/30 bg-cyan-300/10 font-mono text-sm font-semibold text-cyan-200">
+                ER
+              </div>
+              <div>
+                <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-400">
+                  Event Radar
+                </p>
+                <p class="text-sm text-slate-500">Event-driven trading intelligence</p>
+              </div>
+            </div>
+            <a
+              href="/login"
+              class="hidden rounded-full border border-cyan-300/30 bg-cyan-300/10 px-5 py-2 text-sm font-medium text-cyan-100 transition hover:border-cyan-200/60 hover:bg-cyan-300/15 md:inline-flex"
+            >
+              Try it free
+            </a>
+          </div>
+        </div>
+
+        <div class="mx-auto grid max-w-7xl gap-10 px-6 pb-20 pt-8 lg:grid-cols-[minmax(0,1fr)_31rem] lg:items-center lg:gap-14 lg:pb-28 lg:pt-12">
+          <div class="max-w-3xl">
+            <p class="mb-5 font-mono text-xs uppercase tracking-[0.45em] text-cyan-200/80">
+              For swing traders who need signal, not noise
+            </p>
+            <h1 class="max-w-2xl text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl">
+              Not more alerts. Better setups.
+            </h1>
+            <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">
+              Event Radar detects market-moving events, adds historical context, and shows you only the setups that matter — with receipts.
+            </p>
+            <div class="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <a
+                href="/login"
+                class="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-base font-semibold text-slate-950 transition hover:bg-slate-200"
+              >
+                Try it free
+              </a>
+              <p class="font-mono text-sm text-slate-400">
+                20+ primary sources. 90-day receipts. No noise theater.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel relative overflow-hidden rounded-[2rem] p-5 shadow-panel sm:p-6">
+            <div class="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-500">
+                  Example Alert
+                </p>
+                <p class="mt-2 text-lg font-semibold text-white">MRNA — High-Quality Setup</p>
+              </div>
+              <span class="rounded-full border border-rose-300/30 bg-rose-300/10 px-3 py-1 font-mono text-xs uppercase tracking-[0.25em] text-rose-200">
+                High
+              </span>
+            </div>
+
+            <div class="space-y-5 text-sm leading-7 text-slate-300 sm:text-[15px]">
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p class="font-mono text-xs uppercase tracking-[0.3em] text-slate-500">Current</p>
+                <p class="mt-2">
+                  -28% over 3 weeks | RSI 22 (severely oversold) | Vol 2.3x avg
+                </p>
+              </div>
+
+              <div class="rounded-2xl border border-cyan-300/15 bg-cyan-300/5 p-4">
+                <p class="font-mono text-xs uppercase tracking-[0.3em] text-cyan-200/80">What happened</p>
+                <p class="mt-2">
+                  FDA granted accelerated approval for Moderna's RSV vaccine. Expands TAM by ~$8B, addresses key bear thesis about pipeline depth.
+                </p>
+              </div>
+
+              <div class="rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4">
+                <p class="font-mono text-xs uppercase tracking-[0.3em] text-emerald-200/80">Historical</p>
+                <p class="mt-2">
+                  Oversold biotech + FDA catalyst | Avg move: +22.4% over 20 days | Win rate: 79% (11/14)
+                </p>
+                <p class="mt-1 text-slate-400">
+                  Best: VRTX +41% (2024) | Worst: BIIB -5% (2023)
+                </p>
+              </div>
+
+              <div class="rounded-2xl border border-amber-300/15 bg-amber-300/5 p-4">
+                <p class="font-mono text-xs uppercase tracking-[0.3em] text-amber-200/80">Setup read</p>
+                <p class="mt-2">
+                  Severely oversold + major catalyst = historically highest-conviction biotech setup. Key risk: broader market selloff overrides sector catalyst.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-white/10">
+        <div class="mx-auto max-w-5xl px-6 py-16 text-center sm:py-20">
+          <p class="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">The Problem</p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            You get 200 alerts a day. You act on 3. We show you the 3.
+          </h2>
+        </div>
+      </section>
+
+      <section class="border-b border-white/10">
+        <div class="mx-auto max-w-7xl px-6 py-16 sm:py-20">
+          <div class="max-w-2xl">
+            <p class="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">How It Works</p>
+            <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              A trading workflow, condensed into four steps.
+            </h2>
+          </div>
+
+          <div class="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <article class="panel rounded-[1.75rem] p-6">
+              <p class="font-mono text-sm text-cyan-200">01</p>
+              <h3 class="mt-6 text-xl font-semibold text-white">What happened</h3>
+              <p class="mt-3 leading-7 text-slate-300">
+                Detect events from 20+ sources seconds after they break.
+              </p>
+            </article>
+            <article class="panel rounded-[1.75rem] p-6">
+              <p class="font-mono text-sm text-cyan-200">02</p>
+              <h3 class="mt-6 text-xl font-semibold text-white">Why it matters now</h3>
+              <p class="mt-3 leading-7 text-slate-300">
+                Add current market context: RSI, volume, and regime before you decide.
+              </p>
+            </article>
+            <article class="panel rounded-[1.75rem] p-6">
+              <p class="font-mono text-sm text-cyan-200">03</p>
+              <h3 class="mt-6 text-xl font-semibold text-white">What followed historically</h3>
+              <p class="mt-3 leading-7 text-slate-300">
+                Pattern-match the setup against similar past events and outcomes.
+              </p>
+            </article>
+            <article class="panel rounded-[1.75rem] p-6">
+              <p class="font-mono text-sm text-cyan-200">04</p>
+              <h3 class="mt-6 text-xl font-semibold text-white">Whether we were right</h3>
+              <p class="mt-3 leading-7 text-slate-300">
+                Every alert rolls straight into the scorecard so you can audit the system.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-white/10">
+        <div class="mx-auto max-w-7xl px-6 py-16 sm:py-20 lg:py-24">
+          <div class="grid gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start">
+            <div class="lg:sticky lg:top-8">
+              <p class="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">Scorecard</p>
+              <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                We Show Our Receipts
+              </h2>
+              <p class="mt-5 max-w-xl text-lg leading-8 text-slate-300">
+                Trust comes from visible outcomes, not marketing copy. The scorecard tracks every alert across rolling windows so you can see where the system performs and where it misses.
+              </p>
+              <blockquote class="mt-8 border-l border-cyan-300/40 pl-5 text-lg leading-8 text-slate-200">
+                "Every alert gets tracked. No cherry-picking. No hiding misses."
+              </blockquote>
+            </div>
+
+            <div class="space-y-5">
+              <div class="panel overflow-hidden rounded-[2rem] shadow-panel">
+                <div class="border-b border-white/10 px-6 py-5">
+                  <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-500">
+                    90-Day Accuracy Table
+                  </p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full text-left text-sm text-slate-200">
+                    <thead class="font-mono text-xs uppercase tracking-[0.25em] text-slate-500">
+                      <tr>
+                        <th class="px-6 py-4 font-medium">Signal level</th>
+                        <th class="px-6 py-4 font-medium">Alerts</th>
+                        <th class="px-6 py-4 font-medium">Hit rate</th>
+                        <th class="px-6 py-4 font-medium">Avg T+20</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10">
+                      <tr>
+                        <td class="px-6 py-4 text-white">High-Quality Setup</td>
+                        <td class="px-6 py-4">23</td>
+                        <td class="px-6 py-4 text-emerald-300">78%</td>
+                        <td class="px-6 py-4 text-emerald-300">+11.2%</td>
+                      </tr>
+                      <tr>
+                        <td class="px-6 py-4 text-white">Monitor</td>
+                        <td class="px-6 py-4">67</td>
+                        <td class="px-6 py-4 text-amber-200">61%</td>
+                        <td class="px-6 py-4 text-emerald-300">+4.8%</td>
+                      </tr>
+                      <tr>
+                        <td class="px-6 py-4 text-white">Background</td>
+                        <td class="px-6 py-4">142</td>
+                        <td class="px-6 py-4 text-slate-300">52%</td>
+                        <td class="px-6 py-4 text-slate-300">+1.3%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="grid gap-5 md:grid-cols-2">
+                <div class="panel rounded-[1.75rem] p-6">
+                  <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-500">
+                    By Source
+                  </p>
+                  <div class="mt-6 space-y-4 text-sm text-slate-200">
+                    <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-3">
+                      <span>SEC EDGAR</span>
+                      <span class="font-mono text-emerald-300">34 alerts | 74%</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-3">
+                      <span>Federal Register</span>
+                      <span class="font-mono text-emerald-300">18 alerts | 67%</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 pb-1">
+                      <span>Breaking News</span>
+                      <span class="font-mono text-amber-200">89 alerts | 58%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel rounded-[1.75rem] p-6">
+                  <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-500">
+                    Why traders care
+                  </p>
+                  <ul class="mt-6 space-y-4 text-sm leading-7 text-slate-300">
+                    <li>See which signal tiers are earning attention right now.</li>
+                    <li>Know which sources deserve size and which belong on watch.</li>
+                    <li>Audit the product like you audit a setup: with actual results.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-white/10">
+        <div class="mx-auto max-w-7xl px-6 py-16 sm:py-20">
+          <div class="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-center">
+            <div>
+              <p class="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">Self-Host</p>
+              <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                Open source. Transparent. Run it yourself with your own API keys.
+              </h2>
+              <div class="panel mt-8 flex items-center justify-between gap-4 rounded-[1.75rem] px-5 py-4">
+                <code class="font-mono text-base text-cyan-100 sm:text-lg">docker compose up -d</code>
+                <span class="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 font-mono text-xs uppercase tracking-[0.25em] text-emerald-200">
+                  bootstrap
+                </span>
+              </div>
+              <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <a
+                  href="https://github.com/kaikezhang/event-radar"
+                  target="_blank"
+                  rel="noreferrer"
+                  class="inline-flex w-fit items-center rounded-full border border-white/10 px-5 py-3 text-sm font-medium text-white transition hover:border-cyan-300/40 hover:bg-white/5"
+                >
+                  View on GitHub
+                </a>
+                <a
+                  href="https://github.com/kaikezhang/event-radar"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="GitHub star badge for Event Radar"
+                  class="inline-flex w-fit"
+                >
+                  <img
+                    src="https://img.shields.io/github/stars/kaikezhang/event-radar?style=for-the-badge&label=GitHub%20Stars&labelColor=08101b&color=0f172a"
+                    alt="GitHub stars for Event Radar"
+                    class="h-8"
+                  />
+                </a>
+              </div>
+            </div>
+
+            <div class="panel rounded-[2rem] p-6 shadow-panel">
+              <p class="font-mono text-xs uppercase tracking-[0.35em] text-slate-500">Included</p>
+              <ul class="mt-6 space-y-4 text-sm leading-7 text-slate-300">
+                <li>30+ scanners across regulatory, macro, news, and social sources.</li>
+                <li>Historical outcome tracking with visible hit rates and average follow-through.</li>
+                <li>Dashboard, delivery routes, and config you can inspect end to end.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="mx-auto max-w-7xl px-6 py-16 sm:py-20 lg:py-24">
+          <div class="panel rounded-[2rem] p-6 shadow-panel sm:p-8 lg:p-10">
+            <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)] lg:items-end">
+              <div class="max-w-2xl">
+                <p class="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">Cloud Waitlist</p>
+                <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  Event Radar Cloud — limited beta spots
+                </h2>
+                <p class="mt-5 text-lg leading-8 text-slate-300">
+                  Join the waitlist for hosted access. We’ll reach out when a beta slot opens.
+                </p>
+              </div>
+
+              <form
+                id="waitlist-form"
+                class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <label class="sr-only" for="waitlist-email">Email address</label>
+                <input
+                  id="waitlist-email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="you@fund.com"
+                  class="h-14 rounded-full border border-white/10 bg-[#050b14] px-5 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60"
+                />
+                <button
+                  type="submit"
+                  class="h-14 rounded-full bg-cyan-300 px-6 text-base font-semibold text-slate-950 transition hover:bg-cyan-200"
+                >
+                  Join waitlist
+                </button>
+              </form>
+            </div>
+            <p
+              id="waitlist-note"
+              class="mt-4 text-sm text-slate-500"
+            >
+              Submitting opens your mail app with your address prefilled. No backend required for this MVP.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const waitlistForm = document.getElementById("waitlist-form");
+      const waitlistEmail = document.getElementById("waitlist-email");
+      const waitlistNote = document.getElementById("waitlist-note");
+
+      waitlistForm?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!(waitlistEmail instanceof HTMLInputElement) || !waitlistEmail.value) {
+          return;
+        }
+
+        const subject = encodeURIComponent("Event Radar Cloud Waitlist");
+        const body = encodeURIComponent(
+          "Please add me to the Event Radar Cloud waitlist:\n\n" + waitlistEmail.value.trim(),
+        );
+
+        window.location.href = `mailto:cloud@eventradar.dev?subject=${subject}&body=${body}`;
+        if (waitlistNote) {
+          waitlistNote.textContent = "Mail draft opened. If nothing happened, email cloud@eventradar.dev with your address.";
+        }
+      });
+    </script>
+  </body>
+</html>
