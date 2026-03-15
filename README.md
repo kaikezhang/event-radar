@@ -1,143 +1,190 @@
 # 🛰️ Event Radar
 
-**AI-powered market intelligence — right events, right time, right context.**
+**Not more alerts. Better setups.**
 
-Event Radar monitors real-time data sources across government filings, news, and social sentiment, then uses AI to filter noise, enrich context, and deliver only what matters — as clear, contextual intelligence on your phone.
+Event Radar detects market-moving events from 20+ sources, adds current market context and historical pattern data, then delivers only the setups that matter — with receipts.
 
-> SEC files an 8-K at 4:05 PM. CNBC covers it at 6 PM. You had it at 4:05 with AI analysis and historical context.
+> SEC files an 8-K at 4:05 PM. CNBC covers it at 6 PM.
+> You had it at 4:05 — with AI analysis, 14 historical analogs, and a 67% win rate.
 
 ---
 
-## How It Works
+## What Makes This Different
+
+Most alert services stop at "event happened." Event Radar answers the question that actually matters:
+
+**"Should I care about this, right now, given everything else?"**
+
+Every alert combines four dimensions:
+
+| Dimension | What It Tells You |
+|-----------|-------------------|
+| 📰 **Timely Event** | What happened, from the primary source |
+| 📉 **Current Context** | RSI, volume ratio, distance from 52w high/low, market regime |
+| 📊 **Historical Pattern** | How similar events played out — avg move, win rate, best/worst case |
+| 🧠 **AI Analysis** | Why this matters now, what to watch for, what would invalidate the setup |
+
+### Example Alert
 
 ```
-SEC filing → 30s → AI Analysis + Historical Pattern → Your Phone 📱
+🔴 MRNA — High-Quality Setup
+
+📉 Current: -28% over 3 weeks | RSI 22 (severely oversold) | Vol 2.3x avg
+
+📰 FDA granted accelerated approval for Moderna's RSV vaccine.
+   Expands TAM by ~$8B, addresses key bear thesis about pipeline depth.
+
+📊 Historical (n=14): Oversold biotech + FDA catalyst
+   → Avg move: +22.4% over 20 days
+   → Win rate: 79% (11/14)
+   → Best: VRTX +41% (2024) | Worst: BIIB -5% (2023)
+
+🧠 Severely oversold + major catalyst = historically highest-conviction
+   biotech setup. Key risk: broader market selloff overrides sector catalyst.
 ```
 
-Instead of raw data dumps, you get:
+---
 
-> 🔴 **NVDA — Restructuring Alert**
->
-> NVIDIA filed an 8-K announcing a $2.1B restructuring charge with 12% workforce reduction.
-> Historically, tech restructurings of this scale lead to +15-25% moves over 2-4 weeks.
->
-> 📊 12 similar events: +8.3% avg alpha T+20, 67% win rate
->
-> **Signal:** 🔴 High-Quality Setup — Similar events (META 2022, MSFT 2023) bottomed within 3 days.
+## We Show Our Receipts
+
+Event Radar tracks every alert's outcome. The built-in **Scorecard** shows rolling accuracy so you can see exactly where the system is right, where it's wrong, and which sources and event types you can trust.
+
+```
+📊 90-Day Scorecard
+
+Signal Level         | Alerts | Hit Rate | Avg T+20
+🔴 High-Quality Setup |    23  |   78%    |  +11.2%
+🟡 Monitor            |    67  |   61%    |   +4.8%
+🟢 Background         |   142  |   52%    |   +1.3%
+
+Source               | Alerts | Hit Rate
+SEC EDGAR            |    34  |   74%
+Federal Register     |    18  |   67%
+Breaking News        |    89  |   58%
+```
 
 ---
 
-## Features
+## Sources
 
-### 📱 Alert Feed
-Real-time event stream on mobile. Each alert shows severity, source, AI summary, and affected tickers. Tap for full analysis with historical pattern data.
+20+ scanners covering government, regulatory, news, and social sources:
 
-### 🧠 AI Enrichment
-GPT-4o-mini reads every event and produces:
-- **Summary** — what happened in plain language
-- **Impact** — why it matters for the market
-- **Signal** — 🔴 High-Quality Setup / 🟡 Monitor / 🟢 Background
-- **Tickers** — affected symbols + direction (bullish/bearish)
+| Category | Sources |
+|----------|---------|
+| **Government** | White House, Federal Register, Congress trades |
+| **Regulatory** | SEC EDGAR (8-K, Form 4), FDA, DOJ Antitrust |
+| **Market** | Trading halts, earnings, economic calendar, Fed watch |
+| **News** | PR Newswire, BusinessWire, GlobeNewswire, breaking news |
+| **Social** | Reddit (WSB, r/stocks), StockTwits, X, Truth Social |
+| **Quantitative** | Unusual options flow, short interest, IR monitors |
 
-### 📊 Historical Intelligence
-2,400+ past events with price outcomes. For every new alert:
-- How many similar events occurred before?
-- What was the average stock move?
-- Best and worst case scenarios
-- Win rate at T+5 and T+20
-
-### 🎯 Smart Filtering
-Three-layer filter ensures only genuine breaking events reach you:
-1. **Rule Engine** — 1,100+ rules classify severity, filter social noise
-2. **Pattern Filter** — catches clickbait, retrospective articles, stale news
-3. **LLM Gatekeeper** — GPT-4o-mini rejects generic commentary with 95% accuracy
-
-### 📋 Watchlist
-Set your tickers. Alerts matching your watchlist get priority and custom notification levels.
-
-### 🔔 Multi-Channel Delivery
-- **Push** — Bark (iOS) for instant mobile alerts
-- **Discord** — Rich embeds with full AI analysis
-- **Email** — Daily digest (coming soon)
+Each source has independent health monitoring, automatic backoff on failures, and configurable poll intervals.
 
 ---
 
-## Data Sources
+## Smart Filtering
 
-| Source | Coverage |
-|--------|----------|
-| White House | Executive orders, presidential actions |
-| Federal Register | DOJ, FDA, SEC, FTC, Fed, Treasury rules & notices |
-| SEC EDGAR | 8-K filings, insider trades (Form 4) |
-| Econ Calendar | CPI, jobs, GDP, 30+ macro releases |
-| Breaking News | Reuters, AP, CNBC, MarketWatch |
-| Reddit | r/wallstreetbets, r/stocks, r/options |
-| StockTwits | Trending symbols, volume spikes |
+Three layers ensure only genuine breaking events reach you:
 
-More sources available with API keys: Congress trades, unusual options flow, short interest, analyst ratings, earnings.
+1. **Rule Engine** — 1,100+ rules classify severity, filter social noise, enforce insider trade minimums ($1M+), catch stale/retrospective articles
+2. **Pattern Filter** — per-ticker cooldown (by event type), engagement thresholds for social sources, calendar-aware staleness
+3. **LLM Gatekeeper** — GPT-4o-mini rejects generic commentary with 5s timeout and fail-open design
+
+Result: ~95% noise reduction. When Event Radar pings you, you know it matters.
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────┐
-│            6+ Data Sources               │
-│  Gov · Regulatory · News · Social · Macro│
-└─────────────────┬────────────────────────┘
-                  │
-         ┌────────▼────────┐
-         │  Event Pipeline │
-         │  Classify       │ ← 1,100+ rules
-         │  Deduplicate    │ ← cross-source
-         │  Filter         │ ← 3-layer smart filter
-         │  LLM Enrich     │ ← GPT-4o-mini
-         │  Historical     │ ← 2,400+ past events
-         └────────┬────────┘
-                  │
-         ┌────────▼────────┐
-         │    Delivery     │
-         │  📱 Push (Bark) │
-         │  💬 Discord     │
-         │  📧 Email       │
-         │  🌐 Web App     │
-         └─────────────────┘
+┌─────────────────────────────────────────────────┐
+│              20+ Data Scanners                   │
+│  Gov · Regulatory · News · Social · Quantitative │
+└────────────────────┬────────────────────────────┘
+                     │
+          ┌──────────▼──────────┐
+          │   Event Pipeline    │
+          │                     │
+          │  Classify (rules)   │
+          │  Deduplicate        │
+          │  Filter (3-layer)   │
+          │  LLM Enrich         │  ← market context + pattern stats
+          │  Historical Match   │  ← T+5 / T+20 outcomes
+          │  Confidence Gate    │
+          └──────────┬──────────┘
+                     │
+          ┌──────────▼──────────┐
+          │     Delivery        │
+          │                     │
+          │  📱 Web Push (PWA)  │  ← confidence-gated
+          │  💬 Discord         │  ← rich embeds
+          │  📱 Bark (iOS)      │
+          │  ✈️ Telegram        │
+          │  🔗 Webhooks        │
+          └──────────┬──────────┘
+                     │
+          ┌──────────▼──────────┐
+          │    Web App (PWA)    │
+          │                     │
+          │  Feed · Watchlist   │
+          │  Event Detail       │
+          │  Scorecard          │
+          │  Ticker Profile     │
+          └─────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Backend | Node.js 22 + Fastify 5 + TypeScript (strict ESM) |
-| Database | PostgreSQL 17 + Drizzle ORM |
+| Layer | Technology |
+|-------|-----------|
+| Backend | Node.js 22 · Fastify 5 · TypeScript strict ESM |
+| Database | PostgreSQL 17 · Drizzle ORM · 21 tables |
 | AI | OpenAI GPT-4o-mini (classify + enrich + gatekeeper) |
-| Web App | React 19 + Vite + Tailwind (mobile-first PWA) |
-| Admin Dashboard | React 19 + Vite + Recharts |
-| Delivery | Discord webhooks, Bark push, Telegram, webhooks |
-| Metrics | Prometheus + prom-client |
-| Testing | Vitest (900+ tests) |
-| Monorepo | pnpm workspaces + Turborepo |
+| Market Data | Alpha Vantage (abstracted provider interface) |
+| Web App | React 19 · Vite · Tailwind · TanStack Query (mobile-first PWA) |
+| Dashboard | React 19 · Vite · Recharts (admin/observability) |
+| Delivery | Discord · Bark · Telegram · Web Push · Webhooks |
+| Metrics | Prometheus · prom-client |
+| Testing | Vitest · 155 test files · 1,300+ test cases |
+| Monorepo | pnpm workspaces · Turborepo |
 | CI/CD | GitHub Actions |
-| Deploy | Docker Compose |
 
 ---
 
-## Quick Start
+## Quick Start (Self-Hosted)
 
 ```bash
 git clone https://github.com/kaikezhang/event-radar.git
 cd event-radar
 pnpm install
 
+# Configure
 cp .env.example .env
-# Edit .env: database URL, Discord webhook, OpenAI key
+# Required: DATABASE_URL, OPENAI_API_KEY
+# Optional: DISCORD_WEBHOOK_URL, BARK_SERVER_URL, TELEGRAM_BOT_TOKEN
 
-docker compose up -d
-# Backend: http://localhost:3001
-# Dashboard: http://localhost:5173 (dev)
+# Start
+docker compose up -d postgres
+pnpm --filter @event-radar/backend dev
+
+# Web app (separate terminal)
+pnpm --filter @event-radar/web dev
+# → http://localhost:5173
 ```
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `OPENAI_API_KEY` | ✅ | For LLM classification + enrichment |
+| `ALPHA_VANTAGE_API_KEY` | Recommended | Per-ticker market context |
+| `DISCORD_WEBHOOK_URL` | Optional | Discord alert delivery |
+| `BARK_SERVER_URL` + `BARK_KEY` | Optional | iOS push via Bark |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Optional | Telegram delivery |
+| `API_KEY` | Auto-generated | API authentication key |
 
 ---
 
@@ -145,16 +192,56 @@ docker compose up -d
 
 ```
 packages/
-  backend/      Fastify API + scanners + event pipeline
-  delivery/     Discord, Bark, Telegram delivery
-  shared/       Types, schemas, base classes
-  dashboard/    Admin dashboard (React + Vite)
-  web/          User-facing app (React + Vite, mobile-first)
+  backend/      Fastify API · 20+ scanners · event pipeline · observability
+  delivery/     Discord · Bark · Telegram · Web Push · confidence-gated routing
+  shared/       Types · schemas · base classes · scanner utilities
+  web/          User-facing PWA (Feed · Watchlist · Scorecard · Event Detail)
+  dashboard/    Admin dashboard (pipeline audit · scanner health · AI observability)
+  e2e/          End-to-end tests
 docs/
-  USER-APP-SPEC.md    User app design spec
-  OBSERVABILITY.md    Metrics & monitoring
-  ARCHITECTURE.md     System architecture
-  ROADMAP.md          Feature roadmap
+  plans/        Product vision · implementation plans
+  reviews/      Architecture & plan reviews
+  ARCHITECTURE.md
+```
+
+---
+
+## Observability
+
+Built-in AI observability APIs for monitoring system health:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/ai/pulse` | Real-time system health score, anomalies, pipeline funnel |
+| `GET /api/v1/ai/daily-report` | Daily intelligence report with signal validation |
+| `GET /api/v1/ai/trace/:eventId` | Single event pipeline trace |
+| `GET /api/v1/ai/scanner/:name` | Scanner deep dive analytics |
+| `GET /api/v1/scorecards/summary` | Rolling accuracy scorecard |
+
+---
+
+## Roadmap
+
+- [x] **Phase 0–2**: Core pipeline, 20+ scanners, AI enrichment, historical patterns, outcome tracking
+- [x] **Phase 3 (in progress)**: Product language, scanner hardening, auth system, watchlist-first UX
+- [ ] **Phase 4**: External historical data import, story grouping, premium sources
+- [ ] **Phase 5**: Cloud hosted service, landing page, onboarding flow
+
+---
+
+## Contributing
+
+Event Radar is open source. PRs welcome.
+
+```bash
+# Run tests
+pnpm test
+
+# Lint
+pnpm lint
+
+# Build all packages
+pnpm build
 ```
 
 ---
