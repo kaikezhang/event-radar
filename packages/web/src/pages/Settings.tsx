@@ -1,63 +1,112 @@
 import { useEffect, useState } from 'react';
 import { useAlertSound } from '../hooks/useAlertSound.js';
 import {
+  getWebPushDeviceState,
+  getWebPushStatusDetails,
+  getWebPushSupport,
   sendPushSubscriptionToBackend,
   subscribeBrowserToPush,
   unsubscribeBrowserFromPush,
+  type WebPushDeviceState,
+  WebPushError,
 } from '../lib/web-push.js';
 
 export function Settings() {
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
-  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(
-    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
-  );
-  const [pushStatus, setPushStatus] = useState('Enable browser notifications for Event Radar alerts on this device.');
-  const [isPushBusy, setIsPushBusy] = useState(false);
-
-  const pushSupported =
-    typeof window !== 'undefined' &&
-    'Notification' in window &&
-    'PushManager' in window &&
-    'serviceWorker' in navigator &&
-    Boolean(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY);
+  const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
+    ...getWebPushSupport(),
+    subscribed: false,
+  }));
+  const [backendRegistrationFailed, setBackendRegistrationFailed] = useState(false);
+  const [isPushLoading, setIsPushLoading] = useState(() => getWebPushSupport().supported);
+  const [isPushActionPending, setIsPushActionPending] = useState(false);
 
   useEffect(() => {
-    if (typeof Notification !== 'undefined') {
-      setPushPermission(Notification.permission);
+    let cancelled = false;
+
+    async function refreshInitialPushState(): Promise<void> {
+      try {
+        const nextState = await getWebPushDeviceState();
+        if (!cancelled) {
+          setPushState(nextState);
+        }
+      } catch {
+        if (!cancelled) {
+          setPushState((current) => ({
+            ...current,
+            ...getWebPushSupport(),
+          }));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsPushLoading(false);
+        }
+      }
     }
+
+    if (!pushState.supported) {
+      setIsPushLoading(false);
+      return undefined;
+    }
+
+    void refreshInitialPushState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function enableWebPush(): Promise<void> {
     try {
-      setIsPushBusy(true);
+      setIsPushActionPending(true);
+      setBackendRegistrationFailed(false);
       const subscription = await subscribeBrowserToPush();
-      await sendPushSubscriptionToBackend(subscription);
-      setPushPermission(Notification.permission);
-      setPushStatus('Browser push is enabled for this device.');
+      if (subscription.status === 'created' || backendRegistrationFailed) {
+        await sendPushSubscriptionToBackend(subscription);
+      }
+
+      setPushState(await getWebPushDeviceState());
     } catch (error) {
-      setPushPermission(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
-      setPushStatus(error instanceof Error ? error.message : 'Failed to enable browser push.');
+      if (error instanceof WebPushError && error.code === 'backend-registration-failed') {
+        setBackendRegistrationFailed(true);
+      }
+
+      setPushState(await getWebPushDeviceState().catch(() => ({
+        ...getWebPushSupport(),
+        subscribed: false,
+      })));
     } finally {
-      setIsPushBusy(false);
+      setIsPushActionPending(false);
     }
   }
 
   async function disableWebPush(): Promise<void> {
     try {
-      setIsPushBusy(true);
-      const removed = await unsubscribeBrowserFromPush();
-      setPushStatus(
-        removed
-          ? 'Browser push has been disabled for this device.'
-          : 'No browser push subscription was active on this device.',
-      );
-    } catch (error) {
-      setPushStatus(error instanceof Error ? error.message : 'Failed to disable browser push.');
+      setIsPushActionPending(true);
+      setBackendRegistrationFailed(false);
+      await unsubscribeBrowserFromPush();
+      setPushState(await getWebPushDeviceState());
+    } catch {
+      setPushState(await getWebPushDeviceState().catch(() => ({
+        ...getWebPushSupport(),
+        subscribed: false,
+      })));
     } finally {
-      setPushPermission(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
-      setIsPushBusy(false);
+      setIsPushActionPending(false);
     }
   }
+
+  const pushDetails = getWebPushStatusDetails({
+    ...pushState,
+    isBusy: isPushLoading || isPushActionPending,
+    backendRegistrationFailed,
+  });
+  const pushToneClassName = {
+    neutral: 'border-white/10 bg-white/5 text-text-primary',
+    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100',
+    warning: 'border-amber-300/20 bg-amber-300/10 text-amber-100',
+    danger: 'border-rose-300/20 bg-rose-300/10 text-rose-100',
+  }[pushDetails.tone];
 
   return (
     <section className="space-y-4">
@@ -144,37 +193,45 @@ export function Settings() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <p className="text-sm font-medium text-text-primary">
-            Permission: {pushSupported ? pushPermission : 'unsupported'}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            {pushSupported
-              ? pushStatus
-              : 'Web push requires a production build with service workers and a configured VAPID public key.'}
+        <div className={`rounded-2xl border p-4 ${pushToneClassName}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                {pushDetails.title}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-current/80">
+                {pushDetails.description}
+              </p>
+            </div>
+            <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-current/80">
+              {pushDetails.state.replaceAll('-', ' ')}
+            </div>
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-[0.16em] text-current/70">
+            Permission: {pushState.permission}
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
             onClick={() => {
               void enableWebPush();
             }}
-            disabled={!pushSupported || isPushBusy}
+            disabled={!pushDetails.canEnable}
             className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPushBusy ? 'Working…' : 'Enable browser push'}
+            {pushDetails.enableLabel}
           </button>
           <button
             type="button"
             onClick={() => {
               void disableWebPush();
             }}
-            disabled={!pushSupported || isPushBusy}
+            disabled={!pushDetails.canDisable}
             className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Disable browser push
+            {pushDetails.disableLabel}
           </button>
         </div>
       </div>
