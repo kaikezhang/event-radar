@@ -28,6 +28,8 @@ export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM delivery_kill_switch`);
   await db.execute(sql`DELETE FROM pipeline_audit`);
   await db.execute(sql`DELETE FROM push_subscriptions`);
+  await db.execute(sql`DELETE FROM refresh_tokens`);
+  await db.execute(sql`DELETE FROM magic_link_tokens`);
   await db.execute(sql`DELETE FROM watchlist`);
   await db.execute(sql`DELETE FROM users`);
   await db.execute(sql`DELETE FROM severity_changes`);
@@ -57,6 +59,32 @@ export async function createTestDb(): Promise<{
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS users (
       id VARCHAR(100) PRIMARY KEY,
+      email VARCHAR(255) UNIQUE,
+      display_name VARCHAR(100),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS magic_link_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email VARCHAR(255) NOT NULL,
+      token_hash VARCHAR(64) NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash VARCHAR(64) NOT NULL UNIQUE,
+      family_id UUID NOT NULL,
+      replaced_by UUID,
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);

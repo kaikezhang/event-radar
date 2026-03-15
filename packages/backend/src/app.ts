@@ -65,6 +65,7 @@ import { registerAiObservabilityRoutes } from './routes/ai-observability.js';
 import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes, type PriceChartService } from './routes/price.js';
+import { registerAuthRoutes, validateJwtConfig } from './routes/auth.js';
 import { MarketRegimeService } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
 import { DeliveryKillSwitch, type IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
@@ -391,6 +392,9 @@ export function buildApp(options?: {
       );
     });
   }
+
+  // Validate JWT config — fail fast if AUTH_REQUIRED=true but no JWT_SECRET
+  validateJwtConfig();
 
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
@@ -1094,6 +1098,7 @@ export function buildApp(options?: {
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
     registerWatchlistRoutes(server, db, { apiKey });
     registerPushSubscriptionRoutes(server, db, { apiKey });
+    registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {
         apiKey,

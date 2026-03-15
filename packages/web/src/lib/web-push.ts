@@ -1,5 +1,3 @@
-import { API_KEY } from './api.js';
-
 export interface NotificationLike {
   permission: NotificationPermission;
   requestPermission(): Promise<NotificationPermission>;
@@ -179,9 +177,10 @@ export async function sendPushSubscriptionToBackend(
   const fetchImpl = options?.fetchImpl ?? globalThis.fetch;
   const response = await fetchImpl(options?.path ?? '/api/push-subscriptions', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'X-Api-Key': options?.apiKey ?? API_KEY,
+      ...(options?.apiKey ? { 'X-Api-Key': options.apiKey } : {}),
     },
     body: JSON.stringify(normalizePushSubscription(subscription)),
   });
@@ -214,9 +213,10 @@ export async function unsubscribeBrowserFromPush(options?: {
   const fetchImpl = options?.fetchImpl ?? globalThis.fetch;
   const response = await fetchImpl('/api/push-subscriptions', {
     method: 'DELETE',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'X-Api-Key': options?.apiKey ?? API_KEY,
+      ...(options?.apiKey ? { 'X-Api-Key': options.apiKey } : {}),
     },
     body: JSON.stringify({ endpoint: normalized.endpoint }),
   });

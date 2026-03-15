@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_KEY } from '../lib/api.js';
 
 export type WebSocketStatus = 'connected' | 'reconnecting' | 'disconnected';
 
@@ -10,13 +9,7 @@ interface UseWebSocketOptions<TEvent = unknown> {
 
 function buildWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = new URL(`${protocol}//${window.location.host}/ws/events`);
-  if (API_KEY) {
-    // Browser WebSocket upgrades cannot send custom auth headers, so the dev/internal
-    // API key has to ride in the query string for now.
-    url.searchParams.set('apiKey', API_KEY);
-  }
-  return url.toString();
+  return `${protocol}//${window.location.host}/ws/events`;
 }
 
 export function useWebSocket<TEvent = unknown>(
