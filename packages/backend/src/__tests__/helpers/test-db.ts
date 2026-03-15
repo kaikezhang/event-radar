@@ -113,7 +113,7 @@ export async function createTestDb(): Promise<{
 
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_events_ticker_type_time
-    ON events (ticker, event_type, created_at)
+    ON events (ticker, event_type, created_at DESC)
   `);
 
   await db.execute(sql`

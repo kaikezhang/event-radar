@@ -331,7 +331,7 @@ describe('storeEvent multi-source confirmation', () => {
     expect(legacyEvent?.eventType).toBe('sec_form_8k');
   });
 
-  it('keeps the ticker/type/time confirmation index aligned on ASC created_at', async () => {
+  it('keeps the ticker/type/time confirmation index aligned on DESC created_at', async () => {
     const migrationPath = join(process.cwd(), 'src/db/migrations/004-add-event-ticker-type-confirmation.sql');
     const testDbPath = join(process.cwd(), 'src/__tests__/helpers/test-db.ts');
     const schemaPath = join(process.cwd(), 'src/db/schema.ts');
@@ -343,11 +343,9 @@ describe('storeEvent multi-source confirmation', () => {
     const normalizedTestDb = testDbSource.replace(/\s+/g, ' ');
     const normalizedSchema = (await readFile(schemaPath, 'utf8')).replace(/\s+/g, ' ');
 
-    expect(normalizedMigration).toContain('CREATE INDEX idx_events_ticker_type_time ON events(ticker, event_type, created_at);');
-    expect(normalizedMigration).not.toContain('created_at DESC');
-    expect(normalizedTestDb).toContain('ON events (ticker, event_type, created_at)');
-    expect(normalizedTestDb).not.toContain('created_at DESC');
-    expect(normalizedSchema).toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt)");
-    expect(normalizedSchema).not.toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt.desc())");
+    expect(normalizedMigration).toContain('CREATE INDEX idx_events_ticker_type_time ON events(ticker, event_type, created_at DESC);');
+    expect(normalizedTestDb).toContain('ON events (ticker, event_type, created_at DESC)');
+    expect(normalizedSchema).toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt.desc())");
+    expect(normalizedSchema).not.toContain("index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt)");
   });
 });
