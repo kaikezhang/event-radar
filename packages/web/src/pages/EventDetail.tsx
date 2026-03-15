@@ -26,7 +26,32 @@ function formatTrustMove(value: number | null) {
   return value == null ? 'Pending' : formatPercent(value, 2);
 }
 
-function TrustField({ label, value }: { label: string; value: string }) {
+function formatSeverityLabel(value: string) {
+  return `${value.charAt(0)}${value.slice(1).toLowerCase()} severity`;
+}
+
+function buildWhyNow(data: NonNullable<ReturnType<typeof useEventDetail>['data']>) {
+  const thesis = data.scorecard?.originalAlert.thesis;
+
+  return thesis?.whyNow
+    ?? thesis?.impact
+    ?? data.aiAnalysis.impact
+    ?? `${data.source} pushed this alert ${formatRelativeTime(data.time)}, so the catalyst is still fresh for ${data.tickers.join(', ') || 'this name'}.`;
+}
+
+function buildTrustSummary(data: NonNullable<ReturnType<typeof useEventDetail>['data']>) {
+  if (data.scorecard?.notes.summary) {
+    return data.scorecard.notes.summary;
+  }
+
+  if (data.historicalPattern.matchCount > 0) {
+    return `${data.historicalPattern.matchCount} similar events were found with ${data.historicalPattern.confidence} pattern confidence.`;
+  }
+
+  return 'This alert is currently relying on live source context rather than a closed scorecard outcome.';
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
@@ -45,6 +70,25 @@ export function EventDetail() {
   const [showAllSimilar, setShowAllSimilar] = useState(false);
 
   const similarEvents = data?.historicalPattern?.similarEvents ?? [];
+  const whyNow = data ? buildWhyNow(data) : '';
+  const trustSummary = data ? buildTrustSummary(data) : '';
+  const notificationReasons = data ? [
+    { label: 'Severity', value: formatSeverityLabel(data.severity) },
+    { label: 'Source', value: data.source },
+    { label: 'Tickers', value: data.tickers.join(', ') || 'No ticker tagged' },
+    {
+      label: 'Alert label',
+      value: data.scorecard?.originalAlert.actionLabel ?? 'Initial action label not captured',
+    },
+    {
+      label: 'Confidence bucket',
+      value: formatTrustLabel(data.scorecard?.originalAlert.confidenceBucket, 'Not available yet'),
+    },
+    {
+      label: 'Arrival time',
+      value: `${formatRelativeTime(data.time)} from the latest update`,
+    },
+  ] : [];
   const visibleSimilarEvents = useMemo(() => {
     return showAllSimilar ? similarEvents : similarEvents.slice(0, 3);
   }, [similarEvents, showAllSimilar]);
@@ -122,73 +166,178 @@ export function EventDetail() {
         </div>
       </section>
 
-      {/* AI Summary */}
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-        <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">Summary</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Landing guide
+            </p>
+            <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
+              Read this in under 30 seconds
+            </h2>
+          </div>
+          <p className="max-w-sm text-sm leading-6 text-text-secondary">
+            Start with the catalyst, then the time-sensitive angle, then why the push fired, and finally the trust check.
+          </p>
+        </div>
+
+        <nav
+          aria-label="Event detail quick links"
+          className="mt-4 flex flex-wrap gap-2"
+        >
+          <a
+            href="#what-happened"
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            What happened
+          </a>
+          <a
+            href="#why-now"
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Why this matters now
+          </a>
+          <a
+            href="#why-notified"
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Why you were notified
+          </a>
+          <a
+            href="#trust-check"
+            className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-bg-elevated/60 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            Trust check
+          </a>
+        </nav>
+      </section>
+
+      <section id="what-happened" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+          Catalyst / event summary
+        </p>
+        <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">What happened</h2>
         <p className="mt-3 text-[15px] leading-7 text-text-secondary">{data.aiAnalysis.summary}</p>
       </section>
 
-      {data.scorecard && (
-        <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">
-                Trust and Verification
-              </h2>
-              <p className="mt-2 text-[15px] leading-6 text-text-secondary">
-                {data.scorecard.notes.summary}
-              </p>
-            </div>
-            {data.scorecard.notes.verdictWindow && (
-              <div className="inline-flex w-fit min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
-                {data.scorecard.notes.verdictWindow} window
-              </div>
-            )}
-          </div>
+      <section id="why-now" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+          Market timing
+        </p>
+        <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
+          Why this matters now
+        </h2>
+        <p className="mt-3 text-[15px] leading-7 text-text-secondary">{whyNow}</p>
+      </section>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TrustField
-              label="Original action label"
-              value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
-            />
-            <TrustField
-              label="Direction verdict"
-              value={formatTrustLabel(data.scorecard.outcome.directionVerdict)}
-            />
-            <TrustField
-              label="Setup verdict"
-              value={formatTrustLabel(data.scorecard.outcome.setupVerdict)}
-            />
-            <TrustField
-              label="Primary verdict window"
-              value={data.scorecard.notes.verdictWindow ?? 'Pending'}
-            />
-            <TrustField
-              label="T+5 move"
-              value={formatTrustMove(data.scorecard.outcome.tPlus5.movePercent)}
-            />
-            <TrustField
-              label="T+20 move"
-              value={formatTrustMove(data.scorecard.outcome.tPlus20.movePercent)}
-            />
+      <section id="why-notified" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Alert routing context
+            </p>
+            <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
+              Why you were notified
+            </h2>
           </div>
+          <p className="max-w-md text-sm leading-6 text-text-secondary">
+            This block explains the metadata behind the push so you can decide whether to keep reading or move immediately.
+          </p>
+        </div>
 
-          {data.scorecard.notes.items.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                Verification notes
-              </h3>
-              <div className="mt-3 space-y-2">
-                {data.scorecard.notes.items.map((item) => (
-                  <p key={item} className="text-sm leading-6 text-text-secondary">
-                    {item}
-                  </p>
-                ))}
-              </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {notificationReasons.map((item) => (
+            <InfoField key={item.label} label={item.label} value={item.value} />
+          ))}
+        </div>
+      </section>
+
+      <section id="trust-check" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Trust / scorecard context
+            </p>
+            <h2 className="text-[17px] font-semibold leading-[1.4] text-text-primary">
+              Trust and Verification
+            </h2>
+            <p className="mt-2 text-[15px] leading-6 text-text-secondary">
+              {trustSummary}
+            </p>
+          </div>
+          {data.scorecard?.notes.verdictWindow && (
+            <div className="inline-flex w-fit min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
+              {data.scorecard.notes.verdictWindow} window
             </div>
           )}
-        </section>
-      )}
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            How to read this scorecard
+          </h3>
+          <p className="mt-3 text-sm leading-6 text-text-secondary">
+            Direction verdict shows whether price followed the alert call. Setup verdict reflects whether the trade setup actually worked.
+          </p>
+        </div>
+
+        {data.scorecard ? (
+          <>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <InfoField
+                label="Original action label"
+                value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
+              />
+              <InfoField
+                label="Direction verdict"
+                value={formatTrustLabel(data.scorecard.outcome.directionVerdict)}
+              />
+              <InfoField
+                label="Setup verdict"
+                value={formatTrustLabel(data.scorecard.outcome.setupVerdict)}
+              />
+              <InfoField
+                label="Primary verdict window"
+                value={data.scorecard.notes.verdictWindow ?? 'Pending'}
+              />
+              <InfoField
+                label="T+5 move"
+                value={formatTrustMove(data.scorecard.outcome.tPlus5.movePercent)}
+              />
+              <InfoField
+                label="T+20 move"
+                value={formatTrustMove(data.scorecard.outcome.tPlus20.movePercent)}
+              />
+            </div>
+
+            {data.scorecard.notes.items.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                  Verification notes
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {data.scorecard.notes.items.map((item) => (
+                    <p key={item} className="text-sm leading-6 text-text-secondary">
+                      {item}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <InfoField
+              label="Historical matches"
+              value={String(data.historicalPattern.matchCount)}
+            />
+            <InfoField
+              label="Pattern confidence"
+              value={formatTrustLabel(data.historicalPattern.confidence)}
+            />
+          </div>
+        )}
+      </section>
 
       {/* Market Context */}
       {data.aiAnalysis.tickerDirections.length > 0 && (
