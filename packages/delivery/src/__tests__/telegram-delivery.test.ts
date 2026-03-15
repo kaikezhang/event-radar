@@ -222,6 +222,22 @@ describe('TelegramDelivery', () => {
     expect(payload.text).toContain('Technology earnings beat in correction');
   });
 
+  it('adds confirmed source names to the Telegram message when available', async () => {
+    const telegram = new TelegramDelivery(defaultConfig);
+
+    await telegram.send(
+      makeAlert({
+        confirmationCount: 2,
+        confirmedSources: ['sec-edgar', 'pr-newswire'],
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(options.body as string);
+
+    expect(payload.text).toContain('Confirmed by: sec\\-edgar, pr\\-newswire');
+  });
+
   it('should not send when disabled', async () => {
     const telegram = new TelegramDelivery({
       ...defaultConfig,

@@ -11,6 +11,8 @@ export interface AlertSummary {
   time: string;
   saved?: boolean;
   direction?: string;
+  confirmationCount?: number;
+  confirmedSources?: string[];
 }
 
 export interface TickerDirection {
@@ -34,6 +36,15 @@ export interface EventDetailData {
   tickers: string[];
   time: string;
   url: string | null;
+  confirmationCount: number;
+  confirmedSources: string[];
+  provenance: Array<{
+    id: string;
+    source: string;
+    title: string;
+    receivedAt: string;
+    url: string | null;
+  }>;
   aiAnalysis: {
     summary: string;
     impact: string | null;

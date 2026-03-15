@@ -164,6 +164,22 @@ describe('BarkPusher', () => {
     expect(body.body).toContain('68%');
   });
 
+  it('appends the confirmation count to the Bark title for multi-source events', async () => {
+    const pusher = new BarkPusher({ key: 'k' });
+
+    await pusher.send(
+      makeAlert({
+        confirmationCount: 2,
+        confirmedSources: ['sec-edgar', 'pr-newswire'],
+      }),
+    );
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+
+    expect(body.title).toContain('[2 sources]');
+  });
+
   it('should use enrichment action as title when LLM enrichment is present', async () => {
     const pusher = new BarkPusher({ key: 'k' });
 

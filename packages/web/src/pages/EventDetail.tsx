@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Share2, ThumbsDown, ThumbsUp, CircleCheckBig } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { SeverityBadge } from '../components/SeverityBadge.js';
@@ -28,6 +28,17 @@ function formatTrustMove(value: number | null) {
 
 function formatSeverityLabel(value: string) {
   return `${value.charAt(0)}${value.slice(1).toLowerCase()} severity`;
+}
+
+function formatProvenanceOffset(baseTime: string, sourceTime: string) {
+  const deltaMs = new Date(sourceTime).getTime() - new Date(baseTime).getTime();
+  const deltaMinutes = Math.round(deltaMs / 60_000);
+
+  if (deltaMinutes <= 0) {
+    return 'Initial report';
+  }
+
+  return `${deltaMinutes}m later`;
 }
 
 function buildWhyNow(data: NonNullable<ReturnType<typeof useEventDetail>['data']>) {
@@ -175,6 +186,12 @@ export function EventDetail() {
           ))}
           <span className="font-mono">{formatRelativeTime(data.time)}</span>
         </div>
+        {data.confirmationCount > 1 && (
+          <div className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-sm font-medium text-emerald-200">
+            <CircleCheckBig className="h-4 w-4" />
+            {`Confirmed by ${data.confirmationCount} sources`}
+          </div>
+        )}
       </section>
 
       <section className="rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
@@ -261,6 +278,70 @@ export function EventDetail() {
             <InfoField key={item.label} label={item.label} value={item.value} />
           ))}
         </div>
+      </section>
+
+      <section className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              Multi-source provenance
+            </p>
+            <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
+              Provenance
+            </h2>
+          </div>
+          <p className="max-w-md text-sm leading-6 text-text-secondary">
+            Follow who reported the event first and which sources echoed it after the initial alert.
+          </p>
+        </div>
+
+        {data.confirmationCount > 1 ? (
+          <>
+            <div className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-sm font-medium text-emerald-200">
+              <CircleCheckBig className="h-4 w-4" />
+              {`Confirmed by ${data.confirmationCount} sources`}
+            </div>
+            <div className="mt-4 space-y-3">
+              {data.provenance.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-white/6 bg-bg-elevated/60 p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-text-primary">{item.source}</span>
+                    <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-text-secondary">
+                      {formatProvenanceOffset(data.provenance[0]?.receivedAt ?? data.time, item.receivedAt)}
+                    </span>
+                    <span className="ml-auto text-xs font-mono text-text-secondary">
+                      {formatRelativeTime(item.receivedAt)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    {item.id === data.provenance[0]?.id
+                      ? `First report: ${item.source}`
+                      : `Also reported by: ${item.source} (${formatProvenanceOffset(data.provenance[0]?.receivedAt ?? data.time, item.receivedAt)})`}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-text-primary">{item.title}</p>
+                  {item.url && (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-accent-default transition hover:text-accent-strong"
+                    >
+                      View original source
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 text-sm leading-6 text-text-secondary">
+            No follow-on confirmation sources have been recorded for this alert yet.
+          </p>
+        )}
       </section>
 
       <section id="trust-check" className="scroll-mt-24 rounded-[28px] border border-border-default bg-bg-surface/95 p-5">

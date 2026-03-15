@@ -183,6 +183,29 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
+      confirmationCount:
+        typeof e.confirmationCount === 'number'
+          ? e.confirmationCount
+          : Array.isArray(e.provenance)
+            ? Math.max(1, e.provenance.length)
+            : 1,
+      confirmedSources: Array.isArray(e.confirmedSources)
+        ? (e.confirmedSources as string[])
+        : typeof source === 'string'
+          ? [mapSource(source)]
+          : [],
+      provenance: Array.isArray(e.provenance)
+        ? (e.provenance as Record<string, unknown>[]).map((item) => ({
+            id: (item.id as string) ?? '',
+            source: mapSource((item.source as string) ?? 'unknown'),
+            title: (item.title as string) ?? '',
+            receivedAt:
+              (item.receivedAt as string)
+              ?? (item.createdAt as string)
+              ?? new Date().toISOString(),
+            url: (item.url as string) ?? null,
+          }))
+        : [],
       aiAnalysis: {
         summary: (e.summary as string) ?? '',
         impact: (meta.impact as string) ?? null,
@@ -319,6 +342,17 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     time: (event.time as string) ?? (event.receivedAt as string) ?? (event.createdAt as string) ?? new Date().toISOString(),
     saved: false,
     direction: (metadata.direction as string | undefined) ?? undefined,
+    confirmationCount:
+      typeof event.confirmationCount === 'number'
+        ? event.confirmationCount
+        : typeof metadata.confirmationCount === 'number'
+          ? metadata.confirmationCount
+          : 1,
+    confirmedSources: Array.isArray(event.confirmedSources)
+      ? (event.confirmedSources as string[]).map(mapSource)
+      : Array.isArray(metadata.confirmedSources)
+        ? (metadata.confirmedSources as string[]).map(mapSource)
+        : undefined,
   };
 }
 
@@ -328,6 +362,11 @@ function mapSource(source: string): string {
     'whitehouse': 'White House',
     'federal-register': 'Federal Register',
     'breaking-news': 'Breaking News',
+    'newswire': 'Newswire',
+    'pr-newswire': 'PR Newswire',
+    'businesswire': 'BusinessWire',
+    'globenewswire': 'GlobeNewswire',
+    'reuters': 'Reuters',
     'reddit': 'Reddit',
     'stocktwits': 'StockTwits',
     'econ-calendar': 'Economic Calendar',

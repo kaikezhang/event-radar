@@ -1,4 +1,4 @@
-import { Plus, Check } from 'lucide-react';
+import { Plus, Check, CircleCheckBig } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AlertSummary } from '../types/index.js';
 import { formatRelativeTime } from '../lib/format.js';
@@ -69,6 +69,12 @@ export function AlertCard({
             )}
           >
             {trustCue.label}
+          </span>
+        )}
+        {(alert.confirmationCount ?? 1) > 1 && (
+          <span className="inline-flex min-h-8 items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
+            <CircleCheckBig className="h-3.5 w-3.5" />
+            {`Confirmed by ${alert.confirmationCount} sources`}
           </span>
         )}
         {showWatchlistButton && primaryTicker && onToggleWatchlist && (

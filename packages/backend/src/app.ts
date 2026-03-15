@@ -572,7 +572,31 @@ export function buildApp(options?: {
     let eventId: string | undefined;
 
     if (db) {
-      eventId = await storeEvent(db, { event, severity: result.severity });
+      const ticker =
+        event.metadata && typeof event.metadata['ticker'] === 'string'
+          ? event.metadata['ticker']
+          : undefined;
+      const classifiedEventType =
+        llmResult?.ok
+          ? llmResult.value.eventType
+          : event.metadata && typeof event.metadata['eventType'] === 'string'
+            ? event.metadata['eventType']
+            : undefined;
+
+      if (ticker || classifiedEventType) {
+        event.metadata = {
+          ...(event.metadata ?? {}),
+          ...(ticker ? { ticker } : {}),
+          ...(classifiedEventType ? { eventType: classifiedEventType } : {}),
+        };
+      }
+
+      eventId = await storeEvent(db, {
+        event,
+        severity: result.severity,
+        ticker: typeof ticker === 'string' ? ticker : undefined,
+        eventType: typeof classifiedEventType === 'string' ? classifiedEventType : undefined,
+      });
 
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
@@ -892,6 +916,13 @@ export function buildApp(options?: {
         event,
         severity: result.severity,
         ticker,
+        confirmationCount:
+          typeof event.metadata?.['confirmationCount'] === 'number'
+            ? event.metadata['confirmationCount'] as number
+            : undefined,
+        confirmedSources: Array.isArray(event.metadata?.['confirmedSources'])
+          ? (event.metadata['confirmedSources'] as string[])
+          : undefined,
         classificationConfidence: result.confidence,
         confidenceBucket: result.confidenceLevel,
         enrichment,

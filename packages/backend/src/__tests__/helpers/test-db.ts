@@ -94,6 +94,8 @@ export async function createTestDb(): Promise<{
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       source VARCHAR(100) NOT NULL,
       source_event_id VARCHAR(255),
+      ticker VARCHAR(10),
+      event_type VARCHAR(50),
       title TEXT NOT NULL,
       summary TEXT,
       raw_payload JSONB,
@@ -107,6 +109,11 @@ export async function createTestDb(): Promise<{
       confirmed_sources JSONB DEFAULT '[]',
       confirmation_count INTEGER DEFAULT 1
     )
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_events_ticker_type_time
+    ON events (ticker, event_type, created_at DESC)
   `);
 
   await db.execute(sql`

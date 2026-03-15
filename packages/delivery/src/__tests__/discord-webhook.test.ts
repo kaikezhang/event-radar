@@ -181,6 +181,27 @@ describe('DiscordWebhook', () => {
     expect(linkField.value).toContain('https://www.sec.gov/filing/123');
   });
 
+  it('renders a confirmation field when multiple sources confirm the event', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        confirmationCount: 3,
+        confirmedSources: ['sec-edgar', 'pr-newswire', 'reuters'],
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const confirmationField = embed.fields.find(
+      (field: { name: string }) => field.name.includes('Confirmed by'),
+    );
+
+    expect(confirmationField).toBeDefined();
+    expect(confirmationField.name).toContain('3 sources');
+    expect(confirmationField.value).toContain('sec-edgar');
+    expect(confirmationField.value).toContain('reuters');
+  });
+
   it('should truncate long descriptions to 2048 chars', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
     const longBody = 'x'.repeat(3000);

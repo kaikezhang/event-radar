@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count, gte, lte } from 'drizzle-orm';
+import { eq, sql, and, count, gte, lte, asc } from 'drizzle-orm';
 import { events, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
@@ -124,6 +124,12 @@ export interface EventParams {
   id: string;
 }
 
+const CONFIRMATION_WINDOW_MS = 30 * 60 * 1000;
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+}
+
 export function registerEventRoutes(
   server: FastifyInstance,
   db: Database,
@@ -147,12 +153,12 @@ export function registerEventRoutes(
 
     // Filter by ticker (search in metadata->>'ticker')
     if (query.ticker) {
-      conditions.push(eq(events.metadata, JSON.stringify({ ticker: query.ticker })) as ReturnType<typeof eq>);
+      conditions.push(eq(events.ticker, query.ticker));
     }
 
-    // Filter by type (stored in source field for 8-K, etc.)
+    // Filter by classified event type
     if (query.type) {
-      conditions.push(eq(events.sourceEventId, query.type));
+      conditions.push(eq(events.eventType, query.type));
     }
 
     // Filter by severity
@@ -192,7 +198,7 @@ export function registerEventRoutes(
       const tickers = watchlistTickers.map((w) => w.ticker);
       if (tickers.length > 0) {
         conditions.push(
-          sql`(${events.metadata}->>'ticker' IN (${sql.join(tickers.map(t => sql`${t}`), sql`, `)}) OR ${events.metadata}->'tickers' ?| array[${sql.join(tickers.map(t => sql`${t}`), sql`, `)}])`,
+          sql`(${events.ticker} IN (${sql.join(tickers.map(t => sql`${t}`), sql`, `)}) OR ${events.metadata}->'tickers' ?| array[${sql.join(tickers.map(t => sql`${t}`), sql`, `)}])`,
         );
       } else {
         // No watchlist tickers — return empty
@@ -246,7 +252,7 @@ export function registerEventRoutes(
         .select()
         .from(events)
         .where(
-          sql`(${events.metadata}->>'ticker' = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`,
+          sql`(${events.ticker} = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`,
         )
         .orderBy(sql`${events.receivedAt} DESC`)
         .limit(searchLimit);
@@ -263,6 +269,8 @@ export function registerEventRoutes(
         id: events.id,
         source: events.source,
         sourceEventId: events.sourceEventId,
+        ticker: events.ticker,
+        eventType: events.eventType,
         title: events.title,
         summary: events.summary,
         rawPayload: events.rawPayload,
@@ -320,10 +328,60 @@ export function registerEventRoutes(
       return reply.status(404).send({ error: 'Event not found' });
     }
 
+    const provenanceRows =
+      event.ticker && event.eventType
+        ? await db
+            .select({
+              id: events.id,
+              source: events.source,
+              title: events.title,
+              receivedAt: events.receivedAt,
+              createdAt: events.createdAt,
+              sourceUrls: events.sourceUrls,
+            })
+            .from(events)
+            .where(sql`
+              ${events.ticker} = ${event.ticker}
+              AND ${events.eventType} = ${event.eventType}
+              AND ${events.createdAt} >= ${new Date(event.createdAt.getTime() - CONFIRMATION_WINDOW_MS)}
+              AND ${events.createdAt} <= ${new Date(event.createdAt.getTime() + CONFIRMATION_WINDOW_MS)}
+            `)
+            .orderBy(asc(events.createdAt))
+        : [];
+
+    const confirmedSources = uniqueStrings([
+      event.source,
+      ...((event.confirmedSources as string[] | null) ?? []),
+      ...provenanceRows.map((row) => row.source),
+    ]);
+    const confirmationCount = Math.max(event.confirmationCount ?? 1, confirmedSources.length);
+
     return {
       ...event,
-      confirmationCount: event.confirmationCount ?? 1,
-      confirmedSources: (event.confirmedSources as string[] | null) ?? [event.source],
+      confirmationCount,
+      confirmedSources,
+      provenance: provenanceRows.map((row) => {
+        const urls = Array.isArray(row.sourceUrls)
+          ? row.sourceUrls
+          : typeof row.sourceUrls === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(row.sourceUrls) as unknown[];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
+        return {
+          id: row.id,
+          source: row.source,
+          title: row.title,
+          receivedAt: row.receivedAt,
+          createdAt: row.createdAt,
+          url: urls.find((value): value is string => typeof value === 'string') ?? null,
+        };
+      }),
     };
   });
 
