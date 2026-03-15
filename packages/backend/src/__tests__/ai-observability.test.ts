@@ -5,11 +5,40 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { ScannerHealth } from '@event-radar/shared';
 import { buildApp } from '../app.js';
 import { resetMetrics } from '../metrics.js';
-import { registerAiObservabilityRoutes, isWithinSchedule } from '../routes/ai-observability.js';
+import {
+  registerAiObservabilityRoutes,
+  isWithinSchedule,
+  SCANNER_SCHEDULE,
+} from '../routes/ai-observability.js';
 import { createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 
 const TEST_API_KEY = 'test-key-123';
+const EXPLICITLY_SCHEDULED_SCANNERS = [
+  'dummy',
+  'truth-social',
+  'x-elonmusk',
+  'reddit',
+  'stocktwits',
+  'econ-calendar',
+  'fedwatch',
+  'breaking-news',
+  'congress',
+  'unusual-options',
+  'short-interest',
+  'fda',
+  'whitehouse',
+  'doj-antitrust',
+  'analyst',
+  'earnings',
+  'federal-register',
+  'newswire',
+  'sec-edgar',
+  'ir-monitor',
+  'trading-halt',
+  'dilution-monitor',
+  'warn-act',
+] as const;
 
 describe('AI Observability — /api/v1/ai/pulse', () => {
   let server: FastifyInstance;
@@ -372,10 +401,25 @@ describe('isWithinSchedule', () => {
     expect(isWithinSchedule('sec-edgar', sundayMarketHours)).toBe(false);
   });
 
+  it('returns true for market-hours scanners starting at 4am ET pre-market', () => {
+    // Monday March 16 2026, 4am ET = 08:00 UTC (EDT)
+    expect(isWithinSchedule('trading-halt', new Date('2026-03-16T08:00:00Z'))).toBe(true);
+  });
+
+  it('returns true for market-hours scanners at 6am ET', () => {
+    // Monday March 16 2026, 6am ET = 10:00 UTC (EDT)
+    expect(isWithinSchedule('trading-halt', new Date('2026-03-16T10:00:00Z'))).toBe(true);
+  });
+
   it('returns false for market-hours scanners outside market hours on weekday', () => {
     // Monday March 16 2026, 11pm ET = 03:00 UTC March 17
     const mondayLateNight = new Date('2026-03-17T03:00:00Z');
     expect(isWithinSchedule('trading-halt', mondayLateNight)).toBe(false);
+  });
+
+  it('returns false for market-hours scanners on NYSE holidays', () => {
+    // Monday January 19 2026, 10am ET = 15:00 UTC (MLK Day holiday)
+    expect(isWithinSchedule('trading-halt', new Date('2026-01-19T15:00:00Z'))).toBe(false);
   });
 
   it('returns true for government scanners during weekday business hours', () => {
@@ -400,6 +444,16 @@ describe('isWithinSchedule', () => {
 
   it('returns true for unknown scanners (defaults to always)', () => {
     expect(isWithinSchedule('some-unknown-scanner', new Date('2026-03-15T07:00:00Z'))).toBe(true);
+  });
+});
+
+describe('SCANNER_SCHEDULE', () => {
+  it('includes explicit entries for every registered scanner name', () => {
+    const missing = EXPLICITLY_SCHEDULED_SCANNERS.filter(
+      scannerName => !(scannerName in SCANNER_SCHEDULE),
+    );
+
+    expect(missing).toEqual([]);
   });
 });
 
@@ -514,6 +568,48 @@ describe('Schedule-aware health scoring', () => {
         expect(alert.message).toContain('outside schedule');
       }
     }
+  });
+
+  it('does not penalize off-schedule scanner_silent info anomalies in health score', async () => {
+    vi.useFakeTimers();
+    // Sunday March 15 2026, 2pm ET = 18:00 UTC (EDT)
+    vi.setSystemTime(new Date('2026-03-15T18:00:00.000Z'));
+
+    await seedAuditRow('stocktwits', '2026-03-15T17:50:00.000Z');
+    await seedAuditRow('trading-halt', '2026-03-14T10:00:00.000Z');
+
+    const body = await requestPulse([
+      {
+        scanner: 'stocktwits',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T17:59:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+      {
+        scanner: 'trading-halt',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T17:58:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    const silentAnomaly = body.anomalies.find(
+      (a: { type: string; scanner?: string }) =>
+        a.type === 'scanner_silent' && a.scanner === 'trading-halt',
+    );
+
+    expect(silentAnomaly).toMatchObject({
+      severity: 'info',
+      scheduleStatus: 'outside',
+    });
+    expect(body.health.score).toBe(100);
+    expect(body.health.status).toBe('healthy');
   });
 
   it('weekday market-hours health score penalizes silent market scanners', async () => {

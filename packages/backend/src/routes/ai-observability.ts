@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import type { ScannerRegistry } from '@event-radar/shared';
 import { registry as metricsRegistry } from '../metrics.js';
+import { isNYSEHoliday } from '../pipeline/market-calendar.js';
 import { validateApiKeyValue } from './auth-middleware.js';
 import {
   getRuntimeScannerStatus,
@@ -60,6 +61,7 @@ interface AnomalyRecord {
   type: string;
   severity: 'info' | 'warning' | 'critical';
   scanner?: string;
+  scheduleStatus?: 'inside' | 'outside';
   detail: string;
   detectedAt: string;
 }
@@ -168,12 +170,17 @@ function computeTrend(current: number, previous: number | null): TrendData {
 
 // ---- Scanner Schedule ----
 
-const SCANNER_SCHEDULE: Record<string, ScheduleCategory> = {
+export const SCANNER_SCHEDULE: Record<string, ScheduleCategory> = {
   'trading-halt': 'market-hours',
   'sec-edgar': 'market-hours',
   'dilution-monitor': 'market-hours',
   'newswire': 'market-hours',
   'ir-monitor': 'market-hours',
+  'unusual-options': 'market-hours',
+  'earnings': 'market-hours',
+  'analyst': 'market-hours',
+  'fedwatch': 'market-hours',
+  'short-interest': 'market-hours',
   'federal-register': 'government',
   'fed': 'government',
   'fda': 'government',
@@ -181,9 +188,14 @@ const SCANNER_SCHEDULE: Record<string, ScheduleCategory> = {
   'ftc': 'government',
   'whitehouse': 'government',
   'econ-calendar': 'government',
+  'congress': 'government',
+  'doj-antitrust': 'government',
+  'warn-act': 'government',
   'stocktwits': 'always',
   'breaking-news': 'always',
   'reddit': 'always',
+  'truth-social': 'always',
+  'x-elonmusk': 'always',
   'manual': 'manual',
   'dummy': 'manual',
 };
@@ -224,8 +236,8 @@ export function isWithinSchedule(scannerName: string, now: Date): boolean {
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
   if (schedule === 'market-hours') {
-    // Mon-Fri 6am-8pm ET (pre-market through after-hours)
-    return isWeekday && hour >= 6 && hour < 20;
+    // Mon-Fri 4am-8pm ET (pre-market through after-hours), excluding NYSE holidays.
+    return isWeekday && !isNYSEHoliday(now) && hour >= 4 && hour < 20;
   }
   if (schedule === 'government') {
     // Mon-Fri 8am-6pm ET (business hours)
@@ -254,11 +266,12 @@ function computeHealthScore(
   // Grace period penalty
   if (gracePeriodActive) score -= 10;
 
-  // Anomaly penalty — info-level anomalies (e.g. expected off-schedule silence) don't penalize
+  // Anomaly penalty
   for (const a of anomalies) {
+    if (a.severity === 'info' && a.scheduleStatus === 'outside') continue;
     if (a.severity === 'critical') score -= 10;
     else if (a.severity === 'warning') score -= 5;
-    // info severity: no penalty (expected behavior like weekend silence)
+    else score -= 2;
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -661,6 +674,7 @@ export function registerAiObservabilityRoutes(
             type: 'scanner_silent',
             severity: 'info',
             scanner: s.name,
+            scheduleStatus: 'outside',
             detail: `Scanner ${s.name} silent for ${Math.round(silentHours)}h (expected — outside schedule)`,
             detectedAt: now.toISOString(),
           });
@@ -674,6 +688,7 @@ export function registerAiObservabilityRoutes(
           type: 'scanner_silent',
           severity: 'critical',
           scanner: s.name,
+          scheduleStatus: 'inside',
           detail: `Scanner ${s.name} silent for ${Math.round(silentHours)}h`,
           detectedAt: now.toISOString(),
         });
@@ -682,6 +697,7 @@ export function registerAiObservabilityRoutes(
           type: 'scanner_silent',
           severity: 'warning',
           scanner: s.name,
+          scheduleStatus: 'inside',
           detail: `Scanner ${s.name} silent for ${Math.round(silentHours * 10) / 10}h`,
           detectedAt: now.toISOString(),
         });
