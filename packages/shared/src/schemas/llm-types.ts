@@ -47,11 +47,27 @@ export type LLMClassification = z.infer<typeof LLMClassificationSchema>;
 export const LLMClassificationMethodSchema = z.enum(['rule', 'llm', 'hybrid']);
 export type LLMClassificationMethod = z.infer<typeof LLMClassificationMethodSchema>;
 
+/**
+ * Canonical signal labels (post-WP1 product language).
+ * Legacy labels (🔴 ACT NOW, 🟡 WATCH, 🟢 FYI) are normalized via
+ * {@link normalizeLegacyActionLabel} at parse time.
+ */
 export const LLMEnrichmentActionSchema = z.enum([
   '🔴 High-Quality Setup',
   '🟡 Monitor',
   '🟢 Background',
 ]);
+
+const LEGACY_ACTION_MAP: Record<string, z.infer<typeof LLMEnrichmentActionSchema>> = {
+  '🔴 ACT NOW': '🔴 High-Quality Setup',
+  '🟡 WATCH': '🟡 Monitor',
+  '🟢 FYI': '🟢 Background',
+};
+
+export function normalizeLegacyActionLabel(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return LEGACY_ACTION_MAP[value] ?? value;
+}
 export type LLMEnrichmentAction = z.infer<typeof LLMEnrichmentActionSchema>;
 
 export const LLMEnrichmentTickerSchema = z.object({
@@ -74,11 +90,12 @@ export const LLMEnrichmentSchema = z.object({
   historicalContext: OptionalEnrichmentFieldSchema,
   risks: OptionalEnrichmentFieldSchema,
   action: z.preprocess(
-    (value) => (
-      LLMEnrichmentActionSchema.safeParse(value).success
-        ? value
-        : DEFAULT_ENRICHMENT_ACTION
-    ),
+    (value) => {
+      const normalized = normalizeLegacyActionLabel(value);
+      return LLMEnrichmentActionSchema.safeParse(normalized).success
+        ? normalized
+        : DEFAULT_ENRICHMENT_ACTION;
+    },
     LLMEnrichmentActionSchema,
   ),
   tickers: z.preprocess(
