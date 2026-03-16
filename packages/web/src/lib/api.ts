@@ -417,7 +417,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       severity: (e.severity as string) ?? 'MEDIUM',
       source: mapSource(source),
       sourceKey: source,
-      title: (e.title as string) ?? '',
+      title: cleanHtml((e.title as string) ?? ''),
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
@@ -636,7 +636,7 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     ?? (metadata.tickers as string[] | undefined)
     ?? (metadata.ticker ? [metadata.ticker as string] : []);
 
-  const rawTitle = (event.title as string) ?? '';
+  const rawTitle = cleanHtml((event.title as string) ?? '');
   const rawSummary = cleanHtml((event.summary as string) ?? '');
   // Don't duplicate: if summary equals title, leave it empty
   const summary = rawSummary === rawTitle ? '' : rawSummary;

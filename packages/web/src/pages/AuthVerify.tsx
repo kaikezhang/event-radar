@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, XCircle } from 'lucide-react';
 import { verifyMagicLink, getWatchlist } from '../lib/api.js';
@@ -9,6 +9,7 @@ export function AuthVerify() {
   const navigate = useNavigate();
   const { setUser, setSuppressInitialCheck } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const calledRef = useRef(false);
 
   // Suppress AuthContext's initial session check so its 401 doesn't
   // flash "Verification failed" while we're still verifying the token.
@@ -18,18 +19,23 @@ export function AuthVerify() {
   }, [setSuppressInitialCheck]);
 
   useEffect(() => {
+    // Guard against React StrictMode double-mount: the first call consumes
+    // the magic-link token, so a second call would 401.
+    if (calledRef.current) return;
+    calledRef.current = true;
+
     const token = searchParams.get('token');
     if (!token) {
       setError('Missing token');
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
 
     async function verify() {
       try {
         const result = await verifyMagicLink(token!);
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setUser(result.user);
           // Redirect to onboarding if watchlist is empty
           let dest = '/';
@@ -42,14 +48,14 @@ export function AuthVerify() {
           navigate(dest, { replace: true });
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : 'Verification failed');
         }
       }
     }
 
     verify();
-    return () => { cancelled = true; };
+    return () => { controller.abort(); };
   }, [searchParams, navigate, setUser]);
 
   if (error) {

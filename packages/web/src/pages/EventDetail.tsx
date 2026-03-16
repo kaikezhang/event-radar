@@ -107,6 +107,7 @@ export function EventDetail() {
   const { data, isLoading } = useEventDetail(id);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
+  const [risksExpanded, setRisksExpanded] = useState(false);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const shouldFallbackToWatchlist = location.key === 'default';
 
@@ -242,11 +243,22 @@ export function EventDetail() {
         </section>
       )}
 
-      {/* Risks — from enrichment */}
+      {/* Risks — from enrichment, collapsible */}
       {enrichment?.risks && (
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <SectionHeading eyebrow="Risk factors" title="Risks" />
-          <p className="text-[15px] leading-7 text-text-secondary">{enrichment.risks}</p>
+          <p className={cn('text-[15px] leading-7 text-text-secondary', !risksExpanded && 'line-clamp-2')}>
+            {enrichment.risks}
+          </p>
+          {enrichment.risks.length > 120 && (
+            <button
+              type="button"
+              onClick={() => setRisksExpanded((c) => !c)}
+              className="mt-2 text-sm font-medium text-accent-default hover:underline focus:outline-none"
+            >
+              {risksExpanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
         </section>
       )}
 
@@ -418,120 +430,84 @@ export function EventDetail() {
         </section>
       )}
 
-      {/* Trust / Verification — always visible */}
-      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Trust / scorecard context
-            </p>
-            <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">Verification</h2>
-          </div>
-          {data.scorecard?.notes.verdictWindow && (
-            <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
-              {data.scorecard.notes.verdictWindow} window
+      {/* Trust / Verification — only shown when scorecard or historical pattern data exists */}
+      {(data.scorecard || hasHistoricalPattern) && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                Trust / scorecard context
+              </p>
+              <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">Verification</h2>
             </div>
-          )}
-        </div>
-
-        {data.scorecard ? (
-          <>
-            {data.scorecard.notes.summary && (
-              <p className="mb-4 text-sm leading-6 text-text-secondary">{data.scorecard.notes.summary}</p>
-            )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <InfoField
-                label="Original signal label"
-                value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
-              />
-              <InfoField
-                label="Direction verdict"
-                value={formatTrustLabel(data.scorecard.outcome.directionVerdict)}
-              />
-              <InfoField
-                label="Setup verdict"
-                value={formatTrustLabel(data.scorecard.outcome.setupVerdict)}
-              />
-              <InfoField
-                label="Primary verdict window"
-                value={data.scorecard.notes.verdictWindow ?? 'Pending'}
-              />
-              <InfoField
-                label="T+5 move"
-                value={formatTrustMove(data.scorecard.outcome.tPlus5.movePercent)}
-              />
-              <InfoField
-                label="T+20 move"
-                value={formatTrustMove(data.scorecard.outcome.tPlus20.movePercent)}
-              />
-            </div>
-
-            {data.scorecard.notes.items.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                  Verification notes
-                </h3>
-                <div className="mt-3 space-y-2">
-                  {data.scorecard.notes.items.map((item) => (
-                    <p key={item} className="text-sm leading-6 text-text-secondary">
-                      {item}
-                    </p>
-                  ))}
-                </div>
+            {data.scorecard?.notes.verdictWindow && (
+              <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
+                {data.scorecard.notes.verdictWindow} window
               </div>
             )}
-          </>
-        ) : hasHistoricalPattern ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoField
-              label="Historical matches"
-              value={String(data.historicalPattern.matchCount)}
-            />
-            <InfoField
-              label="Pattern confidence"
-              value={formatTrustLabel(data.historicalPattern.confidence)}
-            />
           </div>
-        ) : (
-          <p className="text-sm leading-6 text-text-secondary">
-            Similar events are available, but there is not enough historical data yet to show a reliable pattern.
-          </p>
-        )}
-      </section>
 
-      {/* Feedback — placed after main content, before metadata */}
-      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-        <h2 className="text-base font-semibold text-text-primary">Was this useful?</h2>
-        <p className="mt-1 text-sm leading-6 text-text-secondary">
-          Your feedback improves future alerts.
-        </p>
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            onClick={() => { setFeedback('up'); void submitFeedback(data.id, true); }}
-            className={cn(
-              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
-              feedback === 'up'
-                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
-                : 'border-white/10 text-text-primary hover:bg-white/6',
-            )}
-          >
-            <ThumbsUp className="h-4 w-4" /> Yes
-          </button>
-          <button
-            type="button"
-            onClick={() => { setFeedback('down'); void submitFeedback(data.id, false); }}
-            className={cn(
-              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
-              feedback === 'down'
-                ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical'
-                : 'border-white/10 text-text-primary hover:bg-white/6',
-            )}
-          >
-            <ThumbsDown className="h-4 w-4" /> No
-          </button>
-        </div>
-      </section>
+          {data.scorecard ? (
+            <>
+              {data.scorecard.notes.summary && (
+                <p className="mb-4 text-sm leading-6 text-text-secondary">{data.scorecard.notes.summary}</p>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <InfoField
+                  label="Original signal label"
+                  value={data.scorecard.originalAlert.actionLabel ?? 'Not captured'}
+                />
+                <InfoField
+                  label="Direction verdict"
+                  value={formatTrustLabel(data.scorecard.outcome.directionVerdict)}
+                />
+                <InfoField
+                  label="Setup verdict"
+                  value={formatTrustLabel(data.scorecard.outcome.setupVerdict)}
+                />
+                <InfoField
+                  label="Primary verdict window"
+                  value={data.scorecard.notes.verdictWindow ?? 'Pending'}
+                />
+                <InfoField
+                  label="T+5 move"
+                  value={formatTrustMove(data.scorecard.outcome.tPlus5.movePercent)}
+                />
+                <InfoField
+                  label="T+20 move"
+                  value={formatTrustMove(data.scorecard.outcome.tPlus20.movePercent)}
+                />
+              </div>
+
+              {data.scorecard.notes.items.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                    Verification notes
+                  </h3>
+                  <div className="mt-3 space-y-2">
+                    {data.scorecard.notes.items.map((item) => (
+                      <p key={item} className="text-sm leading-6 text-text-secondary">
+                        {item}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <InfoField
+                label="Historical matches"
+                value={String(data.historicalPattern.matchCount)}
+              />
+              <InfoField
+                label="Pattern confidence"
+                value={formatTrustLabel(data.historicalPattern.confidence)}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Source link */}
       {data.url && (
@@ -547,7 +523,8 @@ export function EventDetail() {
         </section>
       )}
 
-      {/* Provenance — collapsible metadata */}
+      {/* Provenance — collapsible metadata, hidden when no meaningful audit data */}
+      {(data.audit || data.provenance.length > 1 || data.confirmationCount > 1) && (
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-4">
         <button
           type="button"
@@ -674,6 +651,38 @@ export function EventDetail() {
           </div>
         )}
       </section>
+      )}
+
+      {/* Sticky feedback bar */}
+      <div className="sticky bottom-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-5 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.24)] backdrop-blur-md">
+        <span className="text-sm font-medium text-text-primary">Was this useful?</span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setFeedback('up'); void submitFeedback(data.id, true); }}
+            className={cn(
+              'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
+              feedback === 'up'
+                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+                : 'border-white/10 text-text-primary hover:bg-white/6',
+            )}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" /> Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => { setFeedback('down'); void submitFeedback(data.id, false); }}
+            className={cn(
+              'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
+              feedback === 'down'
+                ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical'
+                : 'border-white/10 text-text-primary hover:bg-white/6',
+            )}
+          >
+            <ThumbsDown className="h-3.5 w-3.5" /> No
+          </button>
+        </div>
+      </div>
 
       {/* Legal disclaimer — collapsed by default */}
       <Disclaimer />
