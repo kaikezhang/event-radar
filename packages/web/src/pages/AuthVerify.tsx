@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, XCircle } from 'lucide-react';
 import { verifyMagicLink, getWatchlist } from '../lib/api.js';
@@ -9,6 +9,7 @@ export function AuthVerify() {
   const navigate = useNavigate();
   const { setUser, setSuppressInitialCheck } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const calledRef = useRef(false);
 
   // Suppress AuthContext's initial session check so its 401 doesn't
   // flash "Verification failed" while we're still verifying the token.
@@ -18,38 +19,39 @@ export function AuthVerify() {
   }, [setSuppressInitialCheck]);
 
   useEffect(() => {
+    // Guard against React StrictMode double-mount: the first call consumes
+    // the magic-link token, so a second call would 401.
+    // We intentionally do NOT abort the request on cleanup — the token is
+    // single-use, so aborting would discard the result of an already-consumed
+    // token, leaving the user stuck.
+    if (calledRef.current) return;
+    calledRef.current = true;
+
     const token = searchParams.get('token');
     if (!token) {
       setError('Missing token');
       return;
     }
 
-    let cancelled = false;
-
     async function verify() {
       try {
         const result = await verifyMagicLink(token!);
-        if (!cancelled) {
-          setUser(result.user);
-          // Redirect to onboarding if watchlist is empty
-          let dest = '/';
-          try {
-            const wl = await getWatchlist();
-            if (wl.length === 0) dest = '/onboarding';
-          } catch {
-            // If watchlist fetch fails, default to home
-          }
-          navigate(dest, { replace: true });
+        setUser(result.user);
+        // Redirect to onboarding if watchlist is empty
+        let dest = '/';
+        try {
+          const wl = await getWatchlist();
+          if (wl.length === 0) dest = '/onboarding';
+        } catch {
+          // If watchlist fetch fails, default to home
         }
+        navigate(dest, { replace: true });
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Verification failed');
-        }
+        setError(err instanceof Error ? err.message : 'Verification failed');
       }
     }
 
     verify();
-    return () => { cancelled = true; };
   }, [searchParams, navigate, setUser]);
 
   if (error) {

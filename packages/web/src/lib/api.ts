@@ -258,7 +258,7 @@ function mapHistoricalContext(meta: Record<string, unknown>): HistoricalContext 
     ?? []
   ) as Array<Record<string, unknown>>;
   const similarEvents: SimilarEvent[] = rawSimilar.map((s) => ({
-    title: (s.title as string) ?? (s.headline as string) ?? (s.description as string) ?? '',
+    title: cleanHtml((s.title as string) ?? (s.headline as string) ?? (s.description as string) ?? ''),
     date: (s.date as string) ?? (s.eventDate as string) ?? (s.eventTime as string) ?? '',
     move: (s.move as string)
       ?? normalizeHistoricalMove(
@@ -327,7 +327,7 @@ function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDe
   if (!raw) return null;
 
   const similarEvents = ((raw.similarEvents ?? []) as Array<Record<string, unknown>>).map((item) => ({
-    title: (item.title as string) ?? '',
+    title: cleanHtml((item.title as string) ?? ''),
     date: (item.date as string) ?? '',
     move: (item.move as string) ?? '',
   }));
@@ -363,7 +363,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       const simData = await apiFetch(`/events/${id}/similar`);
       const simEvents = simData.data ?? simData.events ?? simData ?? [];
       apiSimilarEvents = simEvents.slice(0, 5).map((s: Record<string, unknown>) => ({
-        title: (s.title as string) ?? '',
+        title: cleanHtml((s.title as string) ?? ''),
         date: (s.receivedAt as string) ?? (s.createdAt as string) ?? '',
         move: '',
       }));
@@ -417,7 +417,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       severity: (e.severity as string) ?? 'MEDIUM',
       source: mapSource(source),
       sourceKey: source,
-      title: (e.title as string) ?? '',
+      title: cleanHtml((e.title as string) ?? ''),
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
@@ -436,7 +436,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
         ? (e.provenance as Record<string, unknown>[]).map((item) => ({
             id: (item.id as string) ?? '',
             source: mapSource((item.source as string) ?? 'unknown'),
-            title: (item.title as string) ?? '',
+            title: cleanHtml((item.title as string) ?? ''),
             receivedAt:
               (item.receivedAt as string)
               ?? (item.createdAt as string)
@@ -636,7 +636,7 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     ?? (metadata.tickers as string[] | undefined)
     ?? (metadata.ticker ? [metadata.ticker as string] : []);
 
-  const rawTitle = (event.title as string) ?? '';
+  const rawTitle = cleanHtml((event.title as string) ?? '');
   const rawSummary = cleanHtml((event.summary as string) ?? '');
   // Don't duplicate: if summary equals title, leave it empty
   const summary = rawSummary === rawTitle ? '' : rawSummary;
