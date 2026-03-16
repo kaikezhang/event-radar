@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, startTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -119,7 +119,15 @@ export function EventChart({ symbol, events }: EventChartProps) {
     staleTime: 300_000,
   });
 
-  const candles = data?.candles ?? [];
+  // Deduplicate candles by timestamp — lightweight-charts requires strictly ascending unique times
+  const candles = useMemo(() => {
+    const raw = data?.candles ?? [];
+    const seen = new Map<string, typeof raw[number]>();
+    for (const candle of raw) {
+      seen.set(candle.time, candle); // keep latest value per timestamp
+    }
+    return Array.from(seen.values()).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  }, [data?.candles]);
   const markers = buildEventMarkers(candles, events);
 
   useEffect(() => {

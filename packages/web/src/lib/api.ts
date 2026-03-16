@@ -178,25 +178,34 @@ export async function updateNotificationPreferences(
 }
 
 function mapLlmEnrichment(meta: Record<string, unknown>): LlmEnrichment | null {
-  const raw = meta.llm_enrichment as Record<string, unknown> | undefined;
-  if (!raw) return null;
+  // Try nested llm_enrichment first, fall back to top-level metadata fields
+  const raw = (meta.llm_enrichment as Record<string, unknown> | undefined) ?? meta;
+
+  // Check if there's actually any enrichment data present
+  const hasEnrichment = raw.summary || raw.impact || raw.whyNow || raw.why_now
+    || raw.risks || raw.action || raw.actionLabel || raw.action_label
+    || raw.tickers || raw.regimeContext || raw.regime_context
+    || raw.filingItems || raw.filing_items;
+  if (!hasEnrichment) return null;
 
   const rawTickers = (raw.tickers ?? []) as Array<string | Record<string, unknown>>;
-  const tickers: EnrichmentTicker[] = rawTickers.map((t) => {
-    if (typeof t === 'string') return { symbol: t, direction: 'neutral' };
-    return {
-      symbol: (t.symbol as string) ?? (t.ticker as string) ?? '',
-      direction: (t.direction as string) ?? 'neutral',
-      context: (t.context as string) ?? undefined,
-    };
-  });
+  const tickers: EnrichmentTicker[] = rawTickers
+    .filter((t) => typeof t === 'object' || typeof t === 'string')
+    .map((t) => {
+      if (typeof t === 'string') return { symbol: t, direction: 'neutral' };
+      return {
+        symbol: (t.symbol as string) ?? (t.ticker as string) ?? '',
+        direction: (t.direction as string) ?? 'neutral',
+        context: (t.context as string) ?? undefined,
+      };
+    });
 
   return {
     summary: (raw.summary as string | null) ?? null,
     impact: (raw.impact as string | null) ?? null,
     whyNow: (raw.whyNow as string | null) ?? (raw.why_now as string | null) ?? null,
     risks: (raw.risks as string | null) ?? null,
-    action: (raw.action as string | null) ?? (raw.actionLabel as string | null) ?? null,
+    action: (raw.action as string | null) ?? (raw.actionLabel as string | null) ?? (raw.action_label as string | null) ?? null,
     tickers,
     regimeContext: (raw.regimeContext as string | null) ?? (raw.regime_context as string | null) ?? null,
     filingItems: Array.isArray(raw.filingItems) ? raw.filingItems as string[]
@@ -419,7 +428,16 @@ export async function submitFeedback(_eventId: string, _helpful: boolean) {
 export async function searchEvents(q: string, limit = 20): Promise<AlertSummary[]> {
   const data = await apiFetch(`/events/search?q=${encodeURIComponent(q)}&limit=${limit}`);
   const events = data.data ?? [];
-  return events.map(mapAlertSummary);
+  const mapped = events.map(mapAlertSummary);
+
+  // Deduplicate by title+source to avoid floods of identical entries (e.g. StockTwits trending)
+  const seen = new Set<string>();
+  return mapped.filter((alert: AlertSummary) => {
+    const key = `${alert.title}::${alert.sourceKey ?? alert.source}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function getTickerPrice(symbol: string, range: ChartRange): Promise<PriceChartData> {
