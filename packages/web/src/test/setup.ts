@@ -63,6 +63,21 @@ const FEED_EVENT = {
   },
 };
 
+const LOW_SAMPLE_EVENT = {
+  ...FEED_EVENT,
+  id: 'evt-low-sample-pattern',
+  title: 'Semiconductor supplier update raises export questions',
+  summary: 'A chip supplier disclosed fresh export-related uncertainty.',
+  metadata: {
+    ...FEED_EVENT.metadata,
+    llm_enrichment: {
+      ...FEED_EVENT.metadata.llm_enrichment,
+      summary: 'A chip supplier disclosed fresh export-related uncertainty.',
+      impact: 'The filing adds context but does not yet establish a repeatable setup.',
+    },
+  },
+};
+
 const PRICE_CANDLES = [
   {
     time: '2026-03-10',
@@ -314,6 +329,24 @@ beforeEach(() => {
       });
     }
 
+    if (url.pathname === '/api/events/evt-low-sample-pattern') {
+      return jsonResponse({
+        data: {
+          ...LOW_SAMPLE_EVENT,
+          sourceUrls: ['https://example.com/sec/nvda-export-filing'],
+          provenance: [
+            {
+              id: 'evt-low-sample-pattern',
+              source: 'sec-edgar',
+              title: 'Semiconductor supplier update raises export questions',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              url: 'https://example.com/sec/nvda-export-filing',
+            },
+          ],
+        },
+      });
+    }
+
     if (url.pathname === '/api/events/evt-critical-nvda-1/similar') {
       return jsonResponse({
         data: [
@@ -329,46 +362,107 @@ beforeEach(() => {
       });
     }
 
-    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
-      return jsonResponse(SCORECARD);
-    }
-
-    if (url.pathname === '/api/events' && url.searchParams.get('ticker') === 'NVDA') {
+    if (url.pathname === '/api/events/evt-low-sample-pattern/similar') {
       return jsonResponse({
         data: [
-          FEED_EVENT,
           {
-            ...FEED_EVENT,
-            id: 'evt-medium-nvda-2',
-            severity: 'MEDIUM',
-            title: 'NVDA supplier update points to data-center demand',
-            source: 'breaking-news',
-            summary: 'Follow-on alert for Nvidia demand trends.',
-            receivedAt: '2026-03-11T18:00:00.000Z',
-            metadata: {
-              ...FEED_EVENT.metadata,
-              direction: 'bullish',
-            },
+            title: 'Prior supplier warning tied to export licensing delays',
+            receivedAt: '2026-02-02T14:30:00.000Z',
+          },
+          {
+            title: 'Chip vendor discloses shipment uncertainty after policy shift',
+            receivedAt: '2026-01-18T16:00:00.000Z',
           },
         ],
       });
     }
 
-    if (url.pathname === '/api/price/NVDA') {
-      return jsonResponse({
-        ticker: 'NVDA',
-        range: url.searchParams.get('range') ?? '1m',
-        candles: PRICE_CANDLES,
-      });
+    if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {
+      return jsonResponse(SCORECARD);
     }
 
-    // Search endpoint
-    if (url.pathname === '/api/events/search') {
-      const q = url.searchParams.get('q') ?? '';
-      if (q.toLowerCase().includes('nvda') || q === 'NVDA') {
+    if (url.pathname === '/api/events') {
+      const ticker = url.searchParams.get('ticker');
+      const q = url.searchParams.get('q');
+
+      if (ticker === 'NVDA') {
+        return jsonResponse({
+          data: [
+            FEED_EVENT,
+            {
+              ...FEED_EVENT,
+              id: 'evt-medium-nvda-2',
+              severity: 'MEDIUM',
+              title: 'NVDA supplier update points to data-center demand',
+              source: 'breaking-news',
+              summary: 'Follow-on alert for Nvidia demand trends.',
+              receivedAt: '2026-03-11T18:00:00.000Z',
+              metadata: {
+                ...FEED_EVENT.metadata,
+                direction: 'bullish',
+              },
+            },
+          ],
+        });
+      }
+
+      if (ticker === 'OIL') {
+        return jsonResponse({
+          data: [{
+            ...FEED_EVENT,
+            id: 'evt-oil-ticker-1',
+            title: 'OIL spikes on positioning',
+            source: 'stocktwits',
+            metadata: {
+              ...FEED_EVENT.metadata,
+              ticker: 'OIL',
+              tickers: ['OIL'],
+            },
+          }],
+          total: 1,
+        });
+      }
+
+      if (q?.toLowerCase().includes('nvda')) {
         return jsonResponse({ data: [FEED_EVENT], total: 1 });
       }
-      if (q.toLowerCase().includes('earnings')) {
+
+      if (q?.toLowerCase().includes('oil')) {
+        return jsonResponse({
+          data: [{
+            ...FEED_EVENT,
+            id: 'evt-oil-text-1',
+            title: 'Oil refiners jump after outage',
+            summary: 'Text search result for oil',
+            source: 'breaking-news',
+            metadata: {
+              ...FEED_EVENT.metadata,
+              ticker: 'XOM',
+              tickers: ['XOM'],
+            },
+          }],
+          total: 1,
+        });
+      }
+
+      if (q?.toLowerCase().includes('tesla')) {
+        return jsonResponse({
+          data: [{
+            ...FEED_EVENT,
+            id: 'evt-tsla-1',
+            title: 'Tesla battery supply update',
+            summary: 'Battery search match',
+            metadata: {
+              ...FEED_EVENT.metadata,
+              ticker: 'TSLA',
+              tickers: ['TSLA'],
+            },
+          }],
+          total: 1,
+        });
+      }
+
+      if (q?.toLowerCase().includes('earnings')) {
         return jsonResponse({
           data: [{
             ...FEED_EVENT,
@@ -379,7 +473,18 @@ beforeEach(() => {
           total: 1,
         });
       }
-      return jsonResponse({ data: [], total: 0 });
+
+      if (ticker || q) {
+        return jsonResponse({ data: [], total: 0 });
+      }
+    }
+
+    if (url.pathname === '/api/price/NVDA') {
+      return jsonResponse({
+        ticker: 'NVDA',
+        range: url.searchParams.get('range') ?? '1m',
+        candles: PRICE_CANDLES,
+      });
     }
 
     // Watchlist endpoints

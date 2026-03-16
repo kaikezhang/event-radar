@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, unlinkSync, mkdirSync } from 'fs';
+import { existsSync, unlinkSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { TrendingStateTracker } from '../scanners/trending-state.js';
 
@@ -131,7 +131,6 @@ describe('TrendingStateTracker', () => {
     });
 
     it('should handle corrupt persisted file gracefully', () => {
-      const { writeFileSync } = require('fs');
       writeFileSync(TEST_FILE, 'not json!!!');
 
       const tracker = createPersistedTracker();

@@ -218,28 +218,52 @@ function mapHistoricalContext(meta: Record<string, unknown>): HistoricalContext 
   const raw = (meta.historical_context ?? meta.historicalContext) as Record<string, unknown> | undefined;
   if (!raw) return null;
 
-  const rawSimilar = (raw.similarEvents ?? raw.similar_events ?? raw.mostSimilar ?? []) as Array<Record<string, unknown>>;
-  const similarEvents: SimilarEvent[] = rawSimilar.map((s) => ({
-    title: (s.title as string) ?? (s.description as string) ?? '',
-    date: (s.date as string) ?? (s.eventDate as string) ?? '',
-    move: (s.move as string) ?? (typeof s.movePercent === 'number' ? `${s.movePercent > 0 ? '+' : ''}${(s.movePercent as number).toFixed(1)}%` : ''),
-  }));
-
   const bestRaw = raw.bestCase as Record<string, unknown> | undefined;
   const worstRaw = raw.worstCase as Record<string, unknown> | undefined;
+  const hasDeliveryShape = typeof raw.patternSummary === 'string'
+    || Array.isArray(raw.topMatches)
+    || typeof bestRaw?.alphaT20 === 'number'
+    || typeof worstRaw?.alphaT20 === 'number';
+  const rawSimilar = (
+    raw.similarEvents
+    ?? raw.similar_events
+    ?? raw.mostSimilar
+    ?? raw.topMatches
+    ?? []
+  ) as Array<Record<string, unknown>>;
+  const similarEvents: SimilarEvent[] = rawSimilar.map((s) => ({
+    title: (s.title as string) ?? (s.headline as string) ?? (s.description as string) ?? '',
+    date: (s.date as string) ?? (s.eventDate as string) ?? (s.eventTime as string) ?? '',
+    move: (s.move as string)
+      ?? normalizeHistoricalMove(
+        (s.movePercent as number | undefined)
+        ?? (s.alphaT20 as number | undefined)
+        ?? (s.change1w as number | undefined)
+        ?? (s.change1d as number | undefined),
+        hasDeliveryShape,
+      ),
+  }));
 
   return {
-    patternLabel: (raw.patternLabel as string | null) ?? (raw.pattern_label as string | null) ?? (raw.label as string | null) ?? null,
+    patternLabel: (raw.patternLabel as string | null)
+      ?? (raw.pattern_label as string | null)
+      ?? (raw.patternSummary as string | null)
+      ?? (raw.label as string | null)
+      ?? null,
     confidence: (raw.confidence as string | null) ?? null,
     matchCount: typeof raw.matchCount === 'number' ? raw.matchCount
       : typeof raw.match_count === 'number' ? raw.match_count
       : typeof raw.caseCount === 'number' ? raw.caseCount
       : similarEvents.length,
-    avgAlphaT5: typeof raw.avgAlphaT5 === 'number' ? raw.avgAlphaT5
-      : typeof raw.avg_alpha_t5 === 'number' ? raw.avg_alpha_t5
+    avgAlphaT5: typeof raw.avgAlphaT5 === 'number'
+      ? normalizeHistoricalPercent(raw.avgAlphaT5, hasDeliveryShape)
+      : typeof raw.avg_alpha_t5 === 'number'
+        ? normalizeHistoricalPercent(raw.avg_alpha_t5, hasDeliveryShape)
       : null,
-    avgAlphaT20: typeof raw.avgAlphaT20 === 'number' ? raw.avgAlphaT20
-      : typeof raw.avg_alpha_t20 === 'number' ? raw.avg_alpha_t20
+    avgAlphaT20: typeof raw.avgAlphaT20 === 'number'
+      ? normalizeHistoricalPercent(raw.avgAlphaT20, hasDeliveryShape)
+      : typeof raw.avg_alpha_t20 === 'number'
+        ? normalizeHistoricalPercent(raw.avg_alpha_t20, hasDeliveryShape)
       : null,
     winRateT20: typeof raw.winRateT20 === 'number' ? raw.winRateT20
       : typeof raw.win_rate_t20 === 'number' ? raw.win_rate_t20
@@ -247,12 +271,47 @@ function mapHistoricalContext(meta: Record<string, unknown>): HistoricalContext 
       : null,
     bestCase: bestRaw ? {
       ticker: (bestRaw.ticker as string) ?? '',
-      move: typeof bestRaw.move === 'number' ? bestRaw.move : 0,
+      move: normalizeHistoricalPercent(
+        (bestRaw.move as number | undefined) ?? (bestRaw.alphaT20 as number | undefined) ?? 0,
+        hasDeliveryShape && typeof bestRaw.alphaT20 === 'number',
+      ),
     } : null,
     worstCase: worstRaw ? {
       ticker: (worstRaw.ticker as string) ?? '',
-      move: typeof worstRaw.move === 'number' ? worstRaw.move : 0,
+      move: normalizeHistoricalPercent(
+        (worstRaw.move as number | undefined) ?? (worstRaw.alphaT20 as number | undefined) ?? 0,
+        hasDeliveryShape && typeof worstRaw.alphaT20 === 'number',
+      ),
     } : null,
+    similarEvents,
+  };
+}
+
+function normalizeHistoricalPercent(value: number, treatAsFraction: boolean): number {
+  return treatAsFraction ? Number((value * 100).toFixed(1)) : value;
+}
+
+function normalizeHistoricalMove(value: number | undefined, treatAsFraction: boolean): string {
+  if (typeof value !== 'number') return '';
+  const normalized = normalizeHistoricalPercent(value, treatAsFraction);
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)}%`;
+}
+
+function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDetailData['historicalPattern'] | null {
+  if (!raw) return null;
+
+  const similarEvents = ((raw.similarEvents ?? []) as Array<Record<string, unknown>>).map((item) => ({
+    title: (item.title as string) ?? '',
+    date: (item.date as string) ?? '',
+    move: (item.move as string) ?? '',
+  }));
+
+  return {
+    matchCount: typeof raw.matchCount === 'number' ? raw.matchCount : 0,
+    confidence: (raw.confidence as string | null) ?? 'low',
+    avgMoveT5: typeof raw.avgMoveT5 === 'number' ? raw.avgMoveT5 : null,
+    avgMoveT20: typeof raw.avgMoveT20 === 'number' ? raw.avgMoveT20 : null,
+    winRate: typeof raw.winRate === 'number' ? raw.winRate : null,
     similarEvents,
   };
 }
@@ -270,6 +329,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
     // Extract enrichment data from metadata
     const enrichment = mapLlmEnrichment(meta);
     const historical = mapHistoricalContext(meta);
+    const responseHistoricalPattern = mapHistoricalPattern(e.historicalPattern as Record<string, unknown> | undefined);
 
     // Try to get similar events from API as fallback
     let apiSimilarEvents: SimilarEvent[] = [];
@@ -288,7 +348,9 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
     // Merge similar events: prefer historical context, fall back to API
     const similarEvents = historical?.similarEvents.length
       ? historical.similarEvents
-      : apiSimilarEvents;
+      : responseHistoricalPattern?.similarEvents.length
+        ? responseHistoricalPattern.similarEvents
+        : apiSimilarEvents;
 
     // Map audit trail data if present
     const rawAudit = e.audit as Record<string, unknown> | null | undefined;
@@ -318,8 +380,11 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
           context: '',
         }));
 
-    // Use enrichment or historical for pattern data
-    const matchCount = historical?.matchCount ?? similarEvents.length;
+    // Similar events can exist without enough evidence for a real historical pattern.
+    const matchCount = historical?.matchCount ?? responseHistoricalPattern?.matchCount ?? 0;
+    const historicalConfidence = historical?.confidence
+      ?? responseHistoricalPattern?.confidence
+      ?? 'insufficient';
 
     return {
       id: e.id as string,
@@ -362,11 +427,10 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       historical,
       historicalPattern: {
         matchCount,
-        confidence: historical?.confidence
-          ?? (matchCount > 3 ? 'high' : matchCount > 0 ? 'medium' : 'low'),
-        avgMoveT5: historical?.avgAlphaT5 ?? null,
-        avgMoveT20: historical?.avgAlphaT20 ?? null,
-        winRate: historical?.winRateT20 ?? null,
+        confidence: historicalConfidence,
+        avgMoveT5: historical?.avgAlphaT5 ?? responseHistoricalPattern?.avgMoveT5 ?? null,
+        avgMoveT20: historical?.avgAlphaT20 ?? responseHistoricalPattern?.avgMoveT20 ?? null,
+        winRate: historical?.winRateT20 ?? responseHistoricalPattern?.winRate ?? null,
         similarEvents,
       },
       audit,
@@ -425,9 +489,25 @@ export async function submitFeedback(_eventId: string, _helpful: boolean) {
   return { ok: true };
 }
 
-export async function searchEvents(q: string, limit = 20): Promise<AlertSummary[]> {
-  const data = await apiFetch(`/events/search?q=${encodeURIComponent(q)}&limit=${limit}`);
-  const events = data.data ?? [];
+export async function searchEvents(q: string, limit = 50): Promise<AlertSummary[]> {
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+
+  const searchLimit = Math.min(limit, 50);
+  const isTickerLike = /^[A-Z]{1,5}$/.test(trimmed);
+  const requests: Array<Promise<Record<string, unknown>[]>> = [];
+
+  if (isTickerLike) {
+    requests.push(
+      apiFetch(`/events?ticker=${encodeURIComponent(trimmed)}&limit=${searchLimit}`).then((data) => data.data ?? []),
+    );
+  }
+
+  requests.push(
+    apiFetch(`/events?q=${encodeURIComponent(trimmed)}&limit=${searchLimit}`).then((data) => data.data ?? []),
+  );
+
+  const events = (await Promise.all(requests)).flat();
   const mapped = events.map(mapAlertSummary);
 
   // Deduplicate by title+source to avoid floods of identical entries (e.g. StockTwits trending)

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "lint": "eslint src/",
     "golden-check": "tsx src/scripts/golden-drift-check.ts",
+    "generate:vapid": "bash scripts/generate-vapid-keys.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
