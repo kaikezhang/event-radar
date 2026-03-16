@@ -61,6 +61,8 @@ Rules:
 - Never state what a trader should do. State what the data shows and what historically followed.
 - Frame as intelligence, not recommendations.
 - If market setup or historical analog data is unavailable, omit that field or return an empty string.
+- For tickers: identify directly impacted US-listed tickers when they are explicit or strongly implied in the event. Do NOT guess proxies, ETFs, or loosely related names. Return tickers: [] if no clear directly impacted ticker exists.
+- For direction: prefer bullish or bearish. Use neutral only when the impact is genuinely ambiguous (this should be rare — most events lean one way).
 
 Classify signal quality:
 - 🔴 High-Quality Setup: Strong catalyst + favorable current context + historical support
