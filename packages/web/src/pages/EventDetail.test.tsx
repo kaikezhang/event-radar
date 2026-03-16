@@ -77,6 +77,14 @@ describe('EventDetail page', () => {
     expect(screen.getAllByText(/nvda is losing momentum into resistance/i).length).toBeGreaterThan(0);
   });
 
+  it('keeps AI signal context in the header badge without rendering a duplicate section', async () => {
+    renderDetail();
+
+    expect((await screen.findAllByText(/⚡ developing/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: /signal context/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/nvda is losing momentum into resistance/i)).toHaveLength(1);
+  });
+
   it('shows regime context instead of an unclear direction label for neutral signals', async () => {
     renderDetail('evt-neutral-regime-1');
 

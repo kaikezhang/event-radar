@@ -42,9 +42,7 @@ function formatProvenanceOffset(baseTime: string, sourceTime: string) {
 }
 
 function formatSignedPercent(value: number | null): string {
-  if (value == null) return 'N/A';
-  const prefix = value > 0 ? '+' : '';
-  return `${prefix}${value.toFixed(1)}%`;
+  return value == null ? 'N/A' : formatPercent(value, 1);
 }
 
 function formatSignalLabel(value: string | null | undefined): string | null {
@@ -244,6 +242,7 @@ export function EventDetail() {
           {signalLabel && (
             <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-text-primary">
               <p className="font-medium">{signalLabel}</p>
+              <p className="mt-1 max-w-xl text-[11px] leading-5 text-text-secondary">{directionSummary}</p>
               {signalReason && (
                 <p className="mt-1 max-w-xl text-[11px] leading-5 text-text-secondary">{signalReason}</p>
               )}
@@ -281,21 +280,6 @@ export function EventDetail() {
           </div>
         )}
       </section>
-
-      {(signalLabel || signalReason) && (
-        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-          <SectionHeading eyebrow="AI signal" title="Signal Context" />
-          <div className="space-y-2">
-            {signalLabel && (
-              <p className="text-[15px] font-semibold leading-6 text-text-primary">{signalLabel}</p>
-            )}
-            <p className="text-[15px] leading-7 text-text-secondary">{directionSummary}</p>
-            {signalReason && (
-              <p className="text-[15px] leading-7 text-text-secondary">{signalReason}</p>
-            )}
-          </div>
-        </section>
-      )}
 
       {/* AI Summary — always visible, use enrichment first */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
