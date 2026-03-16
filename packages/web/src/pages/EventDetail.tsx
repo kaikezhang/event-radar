@@ -654,7 +654,7 @@ export function EventDetail() {
       )}
 
       {/* Sticky feedback bar */}
-      <div className="sticky bottom-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-5 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.24)] backdrop-blur-md">
+      <div className="sticky bottom-20 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-5 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.24)] backdrop-blur-md">
         <span className="text-sm font-medium text-text-primary">Was this useful?</span>
         <div className="flex gap-2">
           <button

@@ -21,6 +21,9 @@ export function AuthVerify() {
   useEffect(() => {
     // Guard against React StrictMode double-mount: the first call consumes
     // the magic-link token, so a second call would 401.
+    // We intentionally do NOT abort the request on cleanup — the token is
+    // single-use, so aborting would discard the result of an already-consumed
+    // token, leaving the user stuck.
     if (calledRef.current) return;
     calledRef.current = true;
 
@@ -30,32 +33,25 @@ export function AuthVerify() {
       return;
     }
 
-    const controller = new AbortController();
-
     async function verify() {
       try {
         const result = await verifyMagicLink(token!);
-        if (!controller.signal.aborted) {
-          setUser(result.user);
-          // Redirect to onboarding if watchlist is empty
-          let dest = '/';
-          try {
-            const wl = await getWatchlist();
-            if (wl.length === 0) dest = '/onboarding';
-          } catch {
-            // If watchlist fetch fails, default to home
-          }
-          navigate(dest, { replace: true });
+        setUser(result.user);
+        // Redirect to onboarding if watchlist is empty
+        let dest = '/';
+        try {
+          const wl = await getWatchlist();
+          if (wl.length === 0) dest = '/onboarding';
+        } catch {
+          // If watchlist fetch fails, default to home
         }
+        navigate(dest, { replace: true });
       } catch (err) {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Verification failed');
-        }
+        setError(err instanceof Error ? err.message : 'Verification failed');
       }
     }
 
     verify();
-    return () => { controller.abort(); };
   }, [searchParams, navigate, setUser]);
 
   if (error) {
