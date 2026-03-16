@@ -38,8 +38,10 @@ const FEED_EVENT = {
       summary: 'NVIDIA Corporation flagged heightened export exposure tied to China demand.',
       impact: 'Export controls may pressure near-term demand expectations.',
       whyNow: 'New export restrictions coincide with Q1 guidance period, amplifying uncertainty.',
+      currentSetup: 'NVDA is losing momentum into resistance while RSI remains near the middle of its range.',
+      historicalContext: 'Comparable export headlines produced negative T+20 follow-through in slightly less than half of matches.',
       risks: 'Regulatory escalation could further restrict chip sales to Chinese data centers.',
-      action: 'Fade the headline',
+      action: '🟡 Monitor',
       tickers: [
         { symbol: 'NVDA', direction: 'bearish', context: 'Direct exposure to China export risk' },
       ],
@@ -75,7 +77,64 @@ const LOW_SAMPLE_EVENT = {
       ...FEED_EVENT.metadata.llm_enrichment,
       summary: 'A chip supplier disclosed fresh export-related uncertainty.',
       impact: 'The filing adds context but does not yet establish a repeatable setup.',
+      currentSetup: 'Price is chopping sideways and traders are still digesting the disclosure.',
+      action: '🟡 Monitor',
     },
+  },
+};
+
+const NEUTRAL_SIGNAL_EVENT = {
+  ...FEED_EVENT,
+  id: 'evt-neutral-regime-1',
+  title: 'Fed speaker keeps macro catalysts in balance',
+  summary: 'The market is waiting to see whether rates volatility spills into equities.',
+  source: 'fed',
+  metadata: {
+    ...FEED_EVENT.metadata,
+    ticker: 'SPY',
+    tickers: ['SPY'],
+    direction: 'neutral',
+    llm_enrichment: {
+      summary: 'The market is waiting to see whether rates volatility spills into equities.',
+      impact: 'The catalyst matters because index breadth is already fragile.',
+      whyNow: 'Positioning is light ahead of the next CPI print.',
+      currentSetup: 'Index positioning remains defensive and traders are reacting to rates first.',
+      historicalContext: 'Past macro repricings saw follow-through depend on the next inflation print.',
+      risks: 'A fast rates reversal could erase the move.',
+      action: '🟡 Monitor',
+      tickers: [
+        { symbol: 'SPY', direction: 'neutral', context: 'The tape is waiting for confirmation from rates.' },
+      ],
+      regimeContext: 'Risk-off tape is amplifying macro headlines more than single-stock catalysts.',
+    },
+    historical_context: undefined,
+  },
+};
+
+const AWAITING_REACTION_EVENT = {
+  ...FEED_EVENT,
+  id: 'evt-awaiting-reaction-1',
+  title: 'Company update lands before the open with no clear tape response',
+  summary: 'Traders have not picked a direction yet.',
+  metadata: {
+    ...FEED_EVENT.metadata,
+    ticker: 'MSFT',
+    tickers: ['MSFT'],
+    direction: 'mixed',
+    llm_enrichment: {
+      summary: 'Traders have not picked a direction yet.',
+      impact: 'The headline is notable but confirmation is still missing.',
+      whyNow: 'Liquidity is thin ahead of the opening auction.',
+      currentSetup: '',
+      historicalContext: '',
+      risks: 'A delayed conference call could change the read.',
+      action: '🟡 Monitor',
+      tickers: [
+        { symbol: 'MSFT', direction: 'mixed', context: '' },
+      ],
+      regimeContext: '',
+    },
+    historical_context: undefined,
   },
 };
 
@@ -292,6 +351,13 @@ beforeEach(() => {
       return jsonResponse({
         data: {
           ...FEED_EVENT,
+          marketData: {
+            price: 178.42,
+            change1d: 2.3,
+            change5d: 6.1,
+            rsi14: 54,
+            volumeRatio: 1.8,
+          },
           sourceUrls: ['https://example.com/sec/nvda-export-filing'],
           audit: {
             outcome: 'delivered',
@@ -348,6 +414,42 @@ beforeEach(() => {
       });
     }
 
+    if (url.pathname === '/api/events/evt-neutral-regime-1') {
+      return jsonResponse({
+        data: {
+          ...NEUTRAL_SIGNAL_EVENT,
+          sourceUrls: ['https://example.com/fed/neutral-regime'],
+          provenance: [
+            {
+              id: 'evt-neutral-regime-1',
+              source: 'fed',
+              title: 'Fed speaker keeps macro catalysts in balance',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              url: 'https://example.com/fed/neutral-regime',
+            },
+          ],
+        },
+      });
+    }
+
+    if (url.pathname === '/api/events/evt-awaiting-reaction-1') {
+      return jsonResponse({
+        data: {
+          ...AWAITING_REACTION_EVENT,
+          sourceUrls: ['https://example.com/company/awaiting-reaction'],
+          provenance: [
+            {
+              id: 'evt-awaiting-reaction-1',
+              source: 'sec-edgar',
+              title: 'Company update lands before the open with no clear tape response',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              url: 'https://example.com/company/awaiting-reaction',
+            },
+          ],
+        },
+      });
+    }
+
     if (url.pathname === '/api/events/evt-critical-nvda-1/similar') {
       return jsonResponse({
         data: [
@@ -376,6 +478,14 @@ beforeEach(() => {
           },
         ],
       });
+    }
+
+    if (url.pathname === '/api/events/evt-neutral-regime-1/similar') {
+      return jsonResponse({ data: [] });
+    }
+
+    if (url.pathname === '/api/events/evt-awaiting-reaction-1/similar') {
+      return jsonResponse({ data: [] });
     }
 
     if (url.pathname === '/api/v1/scorecards/evt-critical-nvda-1') {

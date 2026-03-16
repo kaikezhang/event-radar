@@ -4,6 +4,7 @@ import { events, pipelineAudit, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
 import { resolveRequestUserId } from './user-context.js';
+import type { MarketQuote } from '../services/market-data-provider.js';
 
 // Query params schema for GET /api/events
 const ListEventsQuerySchema = {
@@ -143,6 +144,11 @@ function escapeLikePattern(value: string): string {
 export function registerEventRoutes(
   server: FastifyInstance,
   db: Database,
+  options?: {
+    marketDataCache?: {
+      getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
+    };
+  },
 ): void {
   /**
    * GET /api/events
@@ -386,6 +392,10 @@ export function registerEventRoutes(
       return reply.status(404).send({ error: 'Event not found' });
     }
 
+    const metadata = event.metadata as Record<string, unknown> | null;
+    const eventTicker = event.ticker
+      ?? (typeof metadata?.['ticker'] === 'string' ? metadata.ticker : null);
+
     const provenanceRows =
       event.ticker && event.eventType
         ? await db
@@ -428,6 +438,14 @@ export function registerEventRoutes(
       : [];
 
     const auditRecord = auditRows[0] ?? null;
+    let quote: MarketQuote | undefined;
+    if (eventTicker) {
+      try {
+        quote = await options?.marketDataCache?.getOrFetch(eventTicker);
+      } catch {
+        quote = undefined;
+      }
+    }
 
     const confirmedSources = uniqueStrings([
       event.source,
@@ -450,6 +468,15 @@ export function registerEventRoutes(
             historicalConfidence: auditRecord.historicalConfidence,
             deliveryChannels: auditRecord.deliveryChannels,
             enrichedAt: auditRecord.createdAt?.toISOString() ?? null,
+          }
+        : null,
+      marketData: quote
+        ? {
+            price: quote.price,
+            change1d: quote.change1d,
+            change5d: quote.change5d,
+            rsi14: quote.rsi14,
+            volumeRatio: quote.volumeRatio,
           }
         : null,
       provenance: provenanceRows.map((row) => {

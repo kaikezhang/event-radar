@@ -6,7 +6,7 @@ import { SkeletonCard } from '../components/SkeletonCard.js';
 import { StatCard } from '../components/StatCard.js';
 import { TickerChip } from '../components/TickerChip.js';
 import { EmptyState } from '../components/EmptyState.js';
-import { formatPercent, formatRelativeTime } from '../lib/format.js';
+import { formatPercent, formatPrice, formatRelativeTime } from '../lib/format.js';
 import { submitFeedback } from '../lib/api.js';
 import { useEventDetail } from '../hooks/useEventDetail.js';
 import { cn } from '../lib/utils.js';
@@ -45,6 +45,49 @@ function formatSignedPercent(value: number | null): string {
   if (value == null) return 'N/A';
   const prefix = value > 0 ? '+' : '';
   return `${prefix}${value.toFixed(1)}%`;
+}
+
+function formatSignalLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value === '🟡 Monitor' ? '⚡ Developing' : value;
+}
+
+function formatDirectionSummary(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string {
+  const primaryDirection = data.enrichment?.tickers[0]?.direction
+    ?? data.aiAnalysis.tickerDirections[0]?.direction
+    ?? null;
+  const normalizedDirection = typeof primaryDirection === 'string'
+    ? primaryDirection.trim().toLowerCase()
+    : null;
+  const regimeContext = data.enrichment?.regimeContext?.trim();
+  const tickerContext = data.aiAnalysis.tickerDirections[0]?.context?.trim();
+
+  if (normalizedDirection === 'bullish') {
+    return 'Direction: Bullish';
+  }
+
+  if (normalizedDirection === 'bearish') {
+    return 'Direction: Bearish';
+  }
+
+  if ((normalizedDirection === 'neutral' || normalizedDirection === 'mixed') && regimeContext) {
+    return `Direction: ${regimeContext}`;
+  }
+
+  if ((normalizedDirection === 'neutral' || normalizedDirection === 'mixed') && tickerContext) {
+    return `Direction: ${tickerContext}`;
+  }
+
+  return 'Direction: Awaiting market reaction';
+}
+
+function getSignalReason(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string | null {
+  return data.enrichment?.currentSetup
+    ?? data.enrichment?.whyNow
+    ?? data.enrichment?.historicalContext
+    ?? data.enrichment?.regimeContext
+    ?? data.enrichment?.impact
+    ?? null;
 }
 
 function buildFilterPath(data: NonNullable<ReturnType<typeof useEventDetail>['data']>): string {
@@ -158,7 +201,10 @@ export function EventDetail() {
   const enrichment = data.enrichment;
   const historical = data.historical;
   const hasHistoricalPattern = historical != null || data.historicalPattern.matchCount > 0;
-  const hasSimilarEventsOnly = !hasHistoricalPattern && similarEvents.length > 0;
+  const signalLabel = formatSignalLabel(enrichment?.action);
+  const signalReason = getSignalReason(data);
+  const directionSummary = formatDirectionSummary(data);
+  const priceBarTicker = data.tickers[0];
 
   return (
     <div className="space-y-4">
@@ -190,15 +236,18 @@ export function EventDetail() {
 
       {/* Header: severity + title + meta */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <SeverityBadge
             severity={data.severity}
             className="min-h-7 px-2.5 py-1 text-[10px] tracking-[0.14em]"
           />
-          {enrichment?.action && (
-            <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium text-text-primary">
-              {enrichment.action}
-            </span>
+          {signalLabel && (
+            <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-text-primary">
+              <p className="font-medium">{signalLabel}</p>
+              {signalReason && (
+                <p className="mt-1 max-w-xl text-[11px] leading-5 text-text-secondary">{signalReason}</p>
+              )}
+            </div>
           )}
         </div>
         <h1 className="mt-4 text-[20px] font-semibold leading-7 text-text-primary">{data.title}</h1>
@@ -216,7 +265,37 @@ export function EventDetail() {
             {`Confirmed by ${data.confirmationCount} sources`}
           </div>
         )}
+        {data.marketData && priceBarTicker && (
+          <div
+            className={cn(
+              'mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border px-4 py-3 text-sm',
+              data.marketData.change1d >= 0
+                ? 'border-emerald-400/20 bg-emerald-400/8 text-emerald-200'
+                : 'border-red-400/20 bg-red-400/8 text-red-200',
+            )}
+          >
+            <span className="font-mono font-semibold">${priceBarTicker}</span>
+            <span className="text-base font-semibold">{formatPrice(data.marketData.price)}</span>
+            <span>{formatPercent(data.marketData.change1d, 1)} today</span>
+            <span>RSI {Math.round(data.marketData.rsi14)}</span>
+          </div>
+        )}
       </section>
+
+      {(signalLabel || signalReason) && (
+        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="AI signal" title="Signal Context" />
+          <div className="space-y-2">
+            {signalLabel && (
+              <p className="text-[15px] font-semibold leading-6 text-text-primary">{signalLabel}</p>
+            )}
+            <p className="text-[15px] leading-7 text-text-secondary">{directionSummary}</p>
+            {signalReason && (
+              <p className="text-[15px] leading-7 text-text-secondary">{signalReason}</p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* AI Summary — always visible, use enrichment first */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -268,7 +347,7 @@ export function EventDetail() {
             />
           )}
           {enrichment?.action && (
-            <InfoField label="Signal" value={enrichment.action} />
+            <InfoField label="Signal" value={formatSignalLabel(enrichment.action) ?? enrichment.action} />
           )}
         </div>
       </section>
@@ -342,6 +421,10 @@ export function EventDetail() {
             )}
           </div>
 
+          <p className="text-sm leading-6 text-text-secondary">
+            {`📊 ${data.historicalPattern.matchCount} similar events | Avg move T+20: ${formatSignedPercent(data.historicalPattern.avgMoveT20)} | Win rate: ${data.historicalPattern.winRate ?? 'N/A'}%`}
+          </p>
+
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-3">
             {data.historicalPattern.avgMoveT5 != null && (
@@ -355,6 +438,36 @@ export function EventDetail() {
             )}
             <StatCard value={String(data.historicalPattern.matchCount)} label="Similar events" />
           </div>
+
+          {similarEvents.length > 0 && (
+            <div className="mt-4">
+              <SectionHeading eyebrow="Historical precedents" title="Similar Playbook" />
+              <div className="space-y-3">
+                {visibleSimilarEvents.map((event, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">{event.title}</p>
+                      <p className="mt-1 font-mono text-xs text-text-secondary">
+                        {event.date ? formatRelativeTime(event.date) : ''}
+                      </p>
+                    </div>
+                    {event.move && (
+                      <p className="text-sm font-semibold text-text-primary">{event.move}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {similarEvents.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSimilar((c) => !c)}
+                  className="mt-4 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+                >
+                  {showAllSimilar ? 'Show fewer' : `Show all ${similarEvents.length} →`}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Best / Worst cases */}
           {(historical?.bestCase || historical?.worstCase) && (
@@ -380,40 +493,6 @@ export function EventDetail() {
                 </div>
               )}
             </div>
-          )}
-        </section>
-      )}
-
-      {/* Similar Events */}
-      {similarEvents.length > 0 && (
-        <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-          <SectionHeading eyebrow="Historical precedents" title="Most Similar" />
-          {hasSimilarEventsOnly && (
-            <p className="mb-4 text-sm leading-6 text-text-secondary">
-              Not enough historical matches to show a reliable pattern yet.
-            </p>
-          )}
-          <div className="space-y-3">
-            {visibleSimilarEvents.map((event, i) => (
-              <div key={i} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">{event.title}</p>
-                  <p className="mt-1 font-mono text-xs text-text-secondary">
-                    {event.date ? formatRelativeTime(event.date) : ''}
-                    {event.move ? ` · ${event.move}` : ''}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {similarEvents.length > 3 && (
-            <button
-              type="button"
-              onClick={() => setShowAllSimilar((c) => !c)}
-              className="mt-4 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              {showAllSimilar ? 'Show fewer' : `Show all ${similarEvents.length} →`}
-            </button>
           )}
         </section>
       )}
@@ -494,7 +573,7 @@ export function EventDetail() {
           </div>
         ) : (
           <p className="text-sm leading-6 text-text-secondary">
-            Similar events are available, but there is not enough historical data yet to show a reliable pattern.
+            Verification data is not available yet.
           </p>
         )}
       </section>

@@ -27,10 +27,20 @@ export interface SimilarEvent {
   move: string;
 }
 
+export interface EventMarketData {
+  price: number;
+  change1d: number;
+  change5d: number;
+  rsi14: number;
+  volumeRatio: number;
+}
+
 export interface LlmEnrichment {
   summary: string | null;
   impact: string | null;
   whyNow: string | null;
+  currentSetup: string | null;
+  historicalContext: string | null;
   risks: string | null;
   action: string | null;
   tickers: EnrichmentTicker[];
@@ -79,6 +89,7 @@ export interface EventDetailData {
     impact: string | null;
     tickerDirections: TickerDirection[];
   };
+  marketData: EventMarketData | null;
   enrichment: LlmEnrichment | null;
   historical: HistoricalContext | null;
   historicalPattern: {
