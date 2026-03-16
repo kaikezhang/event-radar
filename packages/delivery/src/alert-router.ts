@@ -61,9 +61,35 @@ export class AlertRouter {
     alert: AlertEvent,
   ): Promise<AlertRouteResult> {
     const decision = decideAlertRouting(alert);
-    const targets = decision.shouldPush
-      ? [...ROUTING_TABLE[alert.severity], 'webPush']
-      : ROUTING_TABLE[alert.severity];
+
+    // When the delivery gate assigns a tier, use tier-based routing
+    // instead of severity-based routing.
+    let targets: ChannelName[];
+    if (alert.deliveryTier) {
+      switch (alert.deliveryTier) {
+        case 'critical':
+          // Full push: Bark + Discord + Telegram + Webhook + optionally WebPush
+          targets = ['bark', 'discord', 'telegram', 'webhook'];
+          if (decision.shouldPush) targets.push('webPush');
+          break;
+        case 'high':
+          // Feed channels only — no Bark/Telegram push
+          targets = ['discord', 'webhook'];
+          break;
+        case 'feed':
+          // Feed channels only
+          targets = ['discord', 'webhook'];
+          break;
+        default:
+          targets = ROUTING_TABLE[alert.severity];
+      }
+    } else {
+      // Legacy path: severity-based routing
+      targets = decision.shouldPush
+        ? [...ROUTING_TABLE[alert.severity], 'webPush']
+        : ROUTING_TABLE[alert.severity];
+    }
+
     const results: ChannelDeliveryResult[] = [];
 
     const promises = targets.map(async (channelName) => {
