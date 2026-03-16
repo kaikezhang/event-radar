@@ -311,6 +311,22 @@ export function buildApp(options?: {
   priceChartService?: PriceChartService;
   marketRegimeService?: IMarketRegimeService;
   killSwitch?: IDeliveryKillSwitch;
+  marketDataCache?: {
+    getOrFetch(symbol: string): Promise<{
+      symbol: string;
+      price: number;
+      change1d: number;
+      change5d: number;
+      change20d: number;
+      volumeRatio: number;
+      rsi14: number;
+      high52w: number;
+      low52w: number;
+      support: number;
+      resistance: number;
+    } | undefined>;
+    start?(): void;
+  };
 }): AppContext {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
@@ -356,12 +372,13 @@ export function buildApp(options?: {
   const marketCache = db
     ? new MarketContextCache({ refreshIntervalMs: 300_000 })
     : undefined;
-  const tickerMarketDataCache = tickerMarketDataProvider
-    ? new MarketDataCache({
-      provider: tickerMarketDataProvider,
-      refreshIntervalMs: 300_000,
-    })
-    : undefined;
+  const tickerMarketDataCache = options?.marketDataCache
+    ?? (tickerMarketDataProvider
+      ? new MarketDataCache({
+        provider: tickerMarketDataProvider,
+        refreshIntervalMs: 300_000,
+      })
+      : undefined);
   const patternMatcher = db ? new PatternMatcher(db) : undefined;
   const llmEnricher = new LLMEnricher(options?.llmEnricherConfig, {
     regimeService: marketRegimeService,
@@ -394,7 +411,7 @@ export function buildApp(options?: {
 
   if (shouldWarmHistoricalResources) {
     marketCache.start();
-    tickerMarketDataCache?.start();
+    tickerMarketDataCache?.start?.();
     void prewarmSectorCache(db).catch((error) => {
       console.error(
         '[event-type-mapper] Failed to prewarm sector cache:',
@@ -1126,7 +1143,9 @@ export function buildApp(options?: {
 
   // Register event query routes if db is available
   if (db) {
-    registerEventRoutes(server, db);
+    registerEventRoutes(server, db, {
+      marketDataCache: tickerMarketDataCache,
+    });
     registerEventsHistoryRoutes(server, db, { apiKey });
     registerEventImpactRoutes(server, db, { apiKey });
     registerHistoricalRoutes(server, db, { apiKey });

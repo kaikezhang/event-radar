@@ -57,9 +57,45 @@ describe('EventDetail page', () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getAllByText(/fade the headline/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/developing/i).length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText(/nvda/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders the compact price context bar above the AI summary', async () => {
+    renderDetail();
+
+    expect(await screen.findByText(/\$178\.42/)).toBeInTheDocument();
+    expect(screen.getByText(/\+2\.3% today/i)).toBeInTheDocument();
+    expect(screen.getByText(/rsi 54/i)).toBeInTheDocument();
+  });
+
+  it('makes the signal badge more informative with a reason snippet', async () => {
+    renderDetail();
+
+    expect((await screen.findAllByText(/⚡ developing/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/nvda is losing momentum into resistance/i).length).toBeGreaterThan(0);
+  });
+
+  it('keeps AI signal context in the header badge without rendering a duplicate section', async () => {
+    renderDetail();
+
+    expect((await screen.findAllByText(/⚡ developing/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: /signal context/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/nvda is losing momentum into resistance/i)).toHaveLength(1);
+  });
+
+  it('shows regime context instead of an unclear direction label for neutral signals', async () => {
+    renderDetail('evt-neutral-regime-1');
+
+    expect(await screen.findByText(/direction: risk-off tape is amplifying macro headlines/i)).toBeInTheDocument();
+    expect(screen.queryByText(/unclear/i)).not.toBeInTheDocument();
+  });
+
+  it('falls back to awaiting market reaction when direction cannot be determined', async () => {
+    renderDetail('evt-awaiting-reaction-1');
+
+    expect(await screen.findByText(/direction: awaiting market reaction/i)).toBeInTheDocument();
   });
 
   it('displays filing items for SEC events', async () => {
@@ -88,8 +124,8 @@ describe('EventDetail page', () => {
     });
     expect(screen.getByText('251')).toBeInTheDocument();
     expect(screen.getByText(/-0\.6%/)).toBeInTheDocument();
-    expect(screen.getByText(/-0\.4%/)).toBeInTheDocument();
-    expect(screen.getByText(/46%/)).toBeInTheDocument();
+    expect(screen.getAllByText(/-0\.4%/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/46%/).length).toBeGreaterThan(0);
   });
 
   it('renders best and worst cases from historical context', async () => {
@@ -106,18 +142,25 @@ describe('EventDetail page', () => {
   it('renders similar events', async () => {
     renderDetail();
 
-    expect(await screen.findByText(/most similar/i)).toBeInTheDocument();
+    expect(await screen.findByText(/similar playbook/i)).toBeInTheDocument();
     expect(screen.getByText(/prior nvda export disclosure/i)).toBeInTheDocument();
     expect(screen.getByText(/semiconductor filing highlights china demand risk/i)).toBeInTheDocument();
   });
 
-  it('keeps similar events visible without inventing a historical pattern card', async () => {
+  it('shows the historical pattern summary line with T\\+20 and win-rate stats', async () => {
+    renderDetail();
+
+    expect(await screen.findByText(/251 similar events/i)).toBeInTheDocument();
+    expect(screen.getByText(/avg move t\+20: -0\.4%/i)).toBeInTheDocument();
+    expect(screen.getByText(/win rate: 46%/i)).toBeInTheDocument();
+  });
+
+  it('hides historical pattern and similar-event fallback blocks when no historical context exists', async () => {
     renderDetail('evt-low-sample-pattern');
 
-    expect(await screen.findByText(/most similar/i)).toBeInTheDocument();
-    expect(screen.getByText(/prior supplier warning tied to export licensing delays/i)).toBeInTheDocument();
-    expect(screen.getByText(/not enough historical matches to show a reliable pattern yet/i)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /historical pattern/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /similar playbook/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/not enough historical matches to show a reliable pattern yet/i)).not.toBeInTheDocument();
   });
 
   it('renders the trust block when scorecard data is available', async () => {

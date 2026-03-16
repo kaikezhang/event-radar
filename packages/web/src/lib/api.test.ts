@@ -320,4 +320,99 @@ describe('getEventDetail historical pattern mapping', () => {
       ],
     });
   });
+
+  it('maps marketData from the event detail response', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events/evt-market-data-1') {
+        return jsonResponse({
+          data: {
+            id: 'evt-market-data-1',
+            severity: 'HIGH',
+            source: 'sec-edgar',
+            title: 'Price context event',
+            summary: 'Market data should be mapped.',
+            metadata: {
+              ticker: 'GOOG',
+              tickers: ['GOOG'],
+            },
+            marketData: {
+              price: 178.42,
+              change1d: 2.3,
+              change5d: 6.1,
+              rsi14: 54,
+              volumeRatio: 1.8,
+            },
+          },
+        });
+      }
+
+      if (url.pathname === '/api/events/evt-market-data-1/similar') {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unexpected URL: ${url.pathname}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detail = await getEventDetail('evt-market-data-1');
+
+    expect(detail?.marketData).toEqual({
+      price: 178.42,
+      change1d: 2.3,
+      change5d: 6.1,
+      rsi14: 54,
+      volumeRatio: 1.8,
+    });
+  });
+
+  it('maps currentSetup and historicalContext into enrichment fields', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events/evt-enrichment-1') {
+        return jsonResponse({
+          data: {
+            id: 'evt-enrichment-1',
+            severity: 'MEDIUM',
+            source: 'reuters',
+            title: 'Signal context event',
+            summary: 'Signal context should be preserved.',
+            metadata: {
+              ticker: 'SPY',
+              tickers: ['SPY'],
+              llm_enrichment: {
+                summary: 'Summary',
+                impact: 'Impact',
+                action: '🟡 Monitor',
+                currentSetup: 'Breadth is deteriorating while headline sensitivity is rising.',
+                historicalContext: 'Prior policy shocks saw weaker follow-through after day one.',
+                regimeContext: 'Risk-off tape is amplifying macro surprises.',
+                tickers: [{ symbol: 'SPY', direction: 'neutral' }],
+              },
+            },
+          },
+        });
+      }
+
+      if (url.pathname === '/api/events/evt-enrichment-1/similar') {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unexpected URL: ${url.pathname}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detail = await getEventDetail('evt-enrichment-1');
+
+    expect(detail?.enrichment?.currentSetup).toBe(
+      'Breadth is deteriorating while headline sensitivity is rising.',
+    );
+    expect(detail?.enrichment?.historicalContext).toBe(
+      'Prior policy shocks saw weaker follow-through after day one.',
+    );
+  });
 });

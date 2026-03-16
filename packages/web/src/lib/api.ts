@@ -2,6 +2,7 @@ import type {
   AlertSummary,
   ChartRange,
   EnrichmentTicker,
+  EventMarketData,
   EventScorecard,
   EventDetailData,
   HistoricalContext,
@@ -230,6 +231,11 @@ function mapLlmEnrichment(meta: Record<string, unknown>): LlmEnrichment | null {
     summary: (raw.summary as string | null) ?? null,
     impact: (raw.impact as string | null) ?? null,
     whyNow: (raw.whyNow as string | null) ?? (raw.why_now as string | null) ?? null,
+    currentSetup: (raw.currentSetup as string | null) ?? (raw.current_setup as string | null) ?? null,
+    historicalContext:
+      (raw.historicalContext as string | null)
+      ?? (raw.historical_context as string | null)
+      ?? null,
     risks: (raw.risks as string | null) ?? null,
     action: (raw.action as string | null) ?? (raw.actionLabel as string | null) ?? (raw.action_label as string | null) ?? null,
     tickers,
@@ -342,6 +348,28 @@ function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDe
   };
 }
 
+function mapMarketData(raw: Record<string, unknown> | undefined): EventMarketData | null {
+  if (!raw) return null;
+
+  const price = Number(raw.price);
+  const change1d = Number(raw.change1d);
+  const change5d = Number(raw.change5d);
+  const rsi14 = Number(raw.rsi14);
+  const volumeRatio = Number(raw.volumeRatio);
+
+  if ([price, change1d, change5d, rsi14, volumeRatio].some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  return {
+    price,
+    change1d,
+    change5d,
+    rsi14,
+    volumeRatio,
+  };
+}
+
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
   try {
     const data = await apiFetch(`/events/${id}`);
@@ -356,6 +384,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
     const enrichment = mapLlmEnrichment(meta);
     const historical = mapHistoricalContext(meta);
     const responseHistoricalPattern = mapHistoricalPattern(e.historicalPattern as Record<string, unknown> | undefined);
+    const marketData = mapMarketData(e.marketData as Record<string, unknown> | undefined);
 
     // Try to get similar events from API as fallback
     let apiSimilarEvents: SimilarEvent[] = [];
@@ -449,6 +478,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
         impact: enrichment?.impact ?? (meta.impact as string) ?? null,
         tickerDirections,
       },
+      marketData,
       enrichment,
       historical,
       historicalPattern: {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
@@ -279,6 +279,83 @@ describe('GET /api/events/:id', () => {
     expect(body.id).toBe(storedEventId);
     expect(body.title).toBe('Detail Test Event');
     expect(body.severity).toBe('HIGH');
+  });
+
+  it('should include market data when a ticker quote is available', async () => {
+    const marketDataCache = {
+      getOrFetch: vi.fn(async () => ({
+        symbol: 'AAPL',
+        price: 178.42,
+        change1d: 2.3,
+        change5d: 5.6,
+        change20d: 8.9,
+        volumeRatio: 1.7,
+        rsi14: 54,
+        high52w: 201,
+        low52w: 132,
+        support: 170,
+        resistance: 182,
+      })),
+    };
+
+    const ctxWithMarketData = buildApp({
+      logger: false,
+      db: sharedDb,
+      apiKey: TEST_API_KEY,
+      marketDataCache,
+    } as Parameters<typeof buildApp>[0]);
+    await ctxWithMarketData.server.ready();
+
+    const response = await ctxWithMarketData.server.inject({
+      method: 'GET',
+      url: `/api/events/${storedEventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      marketData: {
+        price: 178.42,
+        change1d: 2.3,
+        change5d: 5.6,
+        rsi14: 54,
+        volumeRatio: 1.7,
+      },
+    });
+    expect(marketDataCache.getOrFetch).toHaveBeenCalledWith('AAPL');
+
+    await safeCloseServer(ctxWithMarketData.server);
+  });
+
+  it('should return null marketData when quote lookup misses', async () => {
+    const marketDataCache = {
+      getOrFetch: vi.fn(async () => undefined),
+    };
+
+    const ctxWithMarketData = buildApp({
+      logger: false,
+      db: sharedDb,
+      apiKey: TEST_API_KEY,
+      marketDataCache,
+    } as Parameters<typeof buildApp>[0]);
+    await ctxWithMarketData.server.ready();
+
+    const response = await ctxWithMarketData.server.inject({
+      method: 'GET',
+      url: `/api/events/${storedEventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      marketData: null,
+    });
+
+    await safeCloseServer(ctxWithMarketData.server);
   });
 
   it('should return audit trail when pipeline_audit has a matching record', async () => {
