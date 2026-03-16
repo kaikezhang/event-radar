@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "preview": "vite preview",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -35,6 +36,7 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.46.3",
     "vite": "^7.1.7",
+    "@playwright/test": "^1.58.0",
     "vitest": "^3.2.4"
   }
 }

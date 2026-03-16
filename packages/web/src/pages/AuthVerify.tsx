@@ -7,8 +7,15 @@ import { useAuth } from '../contexts/AuthContext.js';
 export function AuthVerify() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, setSuppressInitialCheck } = useAuth();
   const [error, setError] = useState<string | null>(null);
+
+  // Suppress AuthContext's initial session check so its 401 doesn't
+  // flash "Verification failed" while we're still verifying the token.
+  useEffect(() => {
+    setSuppressInitialCheck(true);
+    return () => { setSuppressInitialCheck(false); };
+  }, [setSuppressInitialCheck]);
 
   useEffect(() => {
     const token = searchParams.get('token');

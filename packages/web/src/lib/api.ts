@@ -15,6 +15,32 @@ import type {
 
 const API_BASE = '/api';
 
+// ── HTML sanitization helpers ────────────────────────────────────────────────
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&apos;': "'",
+  '&nbsp;': ' ',
+};
+
+function decodeHtmlEntities(text: string): string {
+  // Named + numeric entities
+  return text
+    .replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/gi, (m) => HTML_ENTITY_MAP[m.toLowerCase()] ?? m)
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+/** Strip HTML tags and decode entities — returns plain text. */
+function cleanHtml(raw: string): string {
+  // Remove all HTML tags, then decode entities, then collapse whitespace
+  return decodeHtmlEntities(raw.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
 function getCsrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)er_csrf=([^;]*)/);
   return match ? match[1]! : null;
@@ -354,7 +380,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
           }))
         : [],
       aiAnalysis: {
-        summary: enrichment?.summary ?? (e.summary as string) ?? '',
+        summary: cleanHtml(enrichment?.summary ?? (e.summary as string) ?? ''),
         impact: enrichment?.impact ?? (meta.impact as string) ?? null,
         tickerDirections,
       },
@@ -530,14 +556,19 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     ?? (metadata.tickers as string[] | undefined)
     ?? (metadata.ticker ? [metadata.ticker as string] : []);
 
+  const rawTitle = (event.title as string) ?? '';
+  const rawSummary = cleanHtml((event.summary as string) ?? '');
+  // Don't duplicate: if summary equals title, leave it empty
+  const summary = rawSummary === rawTitle ? '' : rawSummary;
+
   return {
     id: event.id as string,
     severity: (event.severity as string) ?? 'MEDIUM',
     source: mapSource(source),
     sourceKey: source,
-    title: (event.title as string) ?? '',
+    title: rawTitle,
     tickers,
-    summary: (event.summary as string) ?? '',
+    summary,
     time: (event.time as string) ?? (event.receivedAt as string) ?? (event.createdAt as string) ?? new Date().toISOString(),
     saved: false,
     direction: (metadata.direction as string | undefined) ?? undefined,
