@@ -70,6 +70,7 @@ const LOW_SAMPLE_EVENT = {
   summary: 'A chip supplier disclosed fresh export-related uncertainty.',
   metadata: {
     ...FEED_EVENT.metadata,
+    historical_context: undefined,
     llm_enrichment: {
       ...FEED_EVENT.metadata.llm_enrichment,
       summary: 'A chip supplier disclosed fresh export-related uncertainty.',
