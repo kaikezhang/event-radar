@@ -49,10 +49,10 @@ describe('Rich Delivery Format', () => {
     vi.stubGlobal('fetch', fetchSpy);
   });
 
-  // ---- Discord Tests ----
+  // ---- Discord Tests (compact card format) ----
 
-  describe('Discord — AI Analysis field', () => {
-    it('should include AI Analysis field when enrichment is present', async () => {
+  describe('Discord — compact card: enrichment in description', () => {
+    it('should include "Why it matters" in description instead of AI Analysis field', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -69,20 +69,21 @@ describe('Rich Delivery Format', () => {
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
-      const aiField = embed.fields.find(
+
+      // No AI Analysis field in compact card
+      const aiField = embed.fields?.find(
         (f: { name: string }) => f.name === '🤖 AI Analysis',
       );
+      expect(aiField).toBeUndefined();
 
-      expect(aiField).toBeDefined();
-      expect(aiField.value).toContain('Apple CEO departure triggers uncertainty');
-      expect(aiField.value).toContain('Leadership vacuum');
-      expect(aiField.value).not.toContain('neutral market');
-      expect(aiField.inline).toBe(false);
+      // Impact is in description as "Why it matters"
+      expect(embed.description).toContain('**Why it matters:**');
+      expect(embed.description).toContain('Leadership vacuum');
     });
   });
 
-  describe('Discord — Market Regime field', () => {
-    it('should include Market Regime field when regimeSnapshot is present', async () => {
+  describe('Discord — compact card: no Market Regime field', () => {
+    it('should NOT include Market Regime field (removed in compact card)', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -104,22 +105,16 @@ describe('Rich Delivery Format', () => {
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
-      const regimeField = embed.fields.find(
+      const regimeField = embed.fields?.find(
         (f: { name: string }) => f.name === '📈 Market Regime',
       );
 
-      expect(regimeField).toBeDefined();
-      expect(regimeField.value).toContain('Overbought');
-      expect(regimeField.value).toContain('Score: 65');
-      expect(regimeField.value).toContain('VIX: 14.2');
-      expect(regimeField.value).toContain('SPY RSI: 72.5');
-      expect(regimeField.value).toContain('INVERTED');
-      expect(regimeField.value).toContain('Bearish amp: 1.5x');
+      expect(regimeField).toBeUndefined();
     });
   });
 
-  describe('Discord — Disclaimer field', () => {
-    it('should include disclaimer when enrichment is present', async () => {
+  describe('Discord — compact card: no Disclaimer field', () => {
+    it('should NOT include disclaimer in compact card', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -135,12 +130,11 @@ describe('Rich Delivery Format', () => {
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
-      const disclaimer = embed.fields.find(
+      const disclaimer = embed.fields?.find(
         (f: { name: string }) => f.name === '⚖️ Disclaimer',
       );
 
-      expect(disclaimer).toBeDefined();
-      expect(disclaimer.value).toContain('Not financial advice');
+      expect(disclaimer).toBeUndefined();
     });
 
     it('should NOT include disclaimer when no enrichment/regime/history', async () => {
@@ -150,7 +144,7 @@ describe('Rich Delivery Format', () => {
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
-      const disclaimer = embed.fields.find(
+      const disclaimer = embed.fields?.find(
         (f: { name: string }) => f.name === '⚖️ Disclaimer',
       );
 
@@ -158,8 +152,8 @@ describe('Rich Delivery Format', () => {
     });
   });
 
-  describe('Discord — title format with enrichment', () => {
-    it('should format title with severity emoji and event title', async () => {
+  describe('Discord — compact title with enrichment', () => {
+    it('should format title with direction emoji + ticker + action label', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -177,8 +171,9 @@ describe('Rich Delivery Format', () => {
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
 
-      expect(embed.title).toBe('🟠 8-K: Apple Inc. (AAPL)');
-      expect(embed.description).toContain('Item 5.02 Departure of CEO');
+      expect(embed.title).toBe('📉 NVDA — Bearish Setup');
+      // Description contains the event title as headline
+      expect(embed.description).toContain('8-K: Apple Inc. (AAPL)');
     });
   });
 
