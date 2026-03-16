@@ -100,12 +100,15 @@ import {
   llmEnrichmentDurationSeconds,
   pushQuietSuppressedTotal,
   pushCapSuppressedTotal,
+  deliveryGateTotal,
+  deliveryGateShadowTotal,
 } from './metrics.js';
 import { EventDeduplicator } from './pipeline/deduplicator.js';
 import { AlertFilter, type AlertFilterConfig } from './pipeline/alert-filter.js';
 import { LLMEnricher, type LLMEnricherConfig } from './pipeline/llm-enricher.js';
 import { HistoricalEnricher } from './pipeline/historical-enricher.js';
 import { AuditLog } from './pipeline/audit-log.js';
+import { DeliveryGate } from './pipeline/delivery-gate.js';
 import { LLMGatekeeper } from './pipeline/llm-gatekeeper.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { PipelineLimiter } from './pipeline/pipeline-limiter.js';
@@ -345,6 +348,7 @@ export function buildApp(options?: {
   const deduplicator = new EventDeduplicator({ db });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const auditLog = new AuditLog(db);
+  const deliveryGate = new DeliveryGate();
   const gatekeeperApiKey = process.env.LLM_GATEKEEPER_API_KEY;
   const gatekeeperModel = process.env.LLM_GATEKEEPER_MODEL ?? 'gpt-4o-mini';
   const llmGatekeeper = new LLMGatekeeper({
@@ -866,6 +870,65 @@ export function buildApp(options?: {
         }
       }
 
+      // Delivery Gate — evaluate tier before historical enrichment
+      const classifierDir = llmResult?.ok ? llmResult.value.direction : undefined;
+      const gateClassifierDirection: import('@event-radar/shared').LLMDirection =
+        classifierDir === 'BULLISH' ? 'bullish'
+          : classifierDir === 'BEARISH' ? 'bearish'
+            : 'neutral';
+      const gateResult = deliveryGate.evaluate({
+        event,
+        enrichment: enrichment ?? null,
+        classificationConfidence: result.confidence,
+        confidenceBucket: result.confidenceLevel ?? 'unconfirmed',
+        classifierDirection: gateClassifierDirection,
+        classifierSeverity: result.severity,
+      });
+
+      const gateMode = process.env.DELIVERY_GATE_MODE ?? 'shadow';
+
+      deliveryGateTotal.inc({
+        result: gateResult.pass ? 'pass' : 'block',
+        tier: gateResult.tier,
+        reason: gateResult.reason,
+      });
+
+      if (gateMode === 'enforce' && !gateResult.pass) {
+        pipelineFunnelTotal.inc({ stage: 'delivery_gate_blocked' });
+        auditLog.record({
+          eventId: event.id, source: event.source, title: event.title,
+          severity: result.severity, ticker,
+          outcome: 'filtered', stoppedAt: 'delivery_gate',
+          reason: gateResult.reason, reasonCategory: 'delivery_gate',
+        });
+        server.log.info({
+          pipeline: true, stage: 'delivery_gate', source: event.source,
+          title: logTitle(event.title), pass: false,
+          tier: gateResult.tier, reason: gateResult.reason,
+          details: gateResult.gateDetails,
+        });
+        return;
+      }
+
+      if (gateMode === 'shadow') {
+        deliveryGateShadowTotal.inc({
+          result: gateResult.pass ? 'would_pass' : 'would_block',
+          tier: gateResult.tier,
+        });
+      }
+
+      server.log.info({
+        pipeline: true, stage: 'delivery_gate', source: event.source,
+        title: logTitle(event.title), pass: gateResult.pass,
+        tier: gateResult.tier, reason: gateResult.reason, mode: gateMode,
+      });
+
+      event.metadata = { ...(event.metadata ?? {}), delivery_gate: {
+        tier: gateResult.tier, reason: gateResult.reason, pass: gateResult.pass,
+        details: gateResult.gateDetails,
+      }};
+      await persistEventMetadata();
+
       // Historical enrichment (only after filter passes, before delivery)
       let historicalContext: import('@event-radar/delivery').HistoricalContext | undefined;
       if (historicalEnricher) {
@@ -956,6 +1019,7 @@ export function buildApp(options?: {
         enrichment,
         historicalContext,
         regimeSnapshot,
+        deliveryTier: gateMode === 'enforce' && gateResult.pass ? gateResult.tier as 'critical' | 'high' | 'feed' : undefined,
       });
       const deliveryMs = Date.now() - deliveryStart;
       const results = routeResult.deliveries;

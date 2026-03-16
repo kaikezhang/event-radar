@@ -67,6 +67,10 @@ export interface AlertEvent {
   readonly historicalContext?: HistoricalContext;
   /** Current market regime snapshot. */
   readonly regimeSnapshot?: RegimeSnapshot;
+  /** Delivery tier assigned by the delivery gate. */
+  readonly deliveryTier?: 'critical' | 'high' | 'feed';
+  /** Proxy tickers for macro events without direct ticker associations. */
+  readonly macroProxies?: string[];
 }
 
 /** Common interface for all delivery channels. */
