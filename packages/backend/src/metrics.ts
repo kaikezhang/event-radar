@@ -196,6 +196,22 @@ export const pushCapSuppressedTotal = new Counter({
   registers: [registry],
 });
 
+/** Counter: delivery gate decisions */
+export const deliveryGateTotal = new Counter({
+  name: 'delivery_gate_total',
+  help: 'Delivery gate decisions',
+  labelNames: ['result', 'tier', 'reason'] as const,
+  registers: [registry],
+});
+
+/** Counter: delivery gate shadow mode decisions */
+export const deliveryGateShadowTotal = new Counter({
+  name: 'delivery_gate_shadow_total',
+  help: 'Delivery gate shadow mode decisions',
+  labelNames: ['result', 'tier'] as const,
+  registers: [registry],
+});
+
 /** Reset all custom metrics (useful for tests) */
 export function resetMetrics(): void {
   eventsProcessedTotal.reset();
@@ -220,4 +236,6 @@ export function resetMetrics(): void {
   pipelineQueueDroppedTotal.reset();
   pushQuietSuppressedTotal.reset();
   pushCapSuppressedTotal.reset();
+  deliveryGateTotal.reset();
+  deliveryGateShadowTotal.reset();
 }
