@@ -223,6 +223,7 @@ function buildCompactDescription(alert: AlertEvent, tier: DeliveryTier): string 
   if (
     tier !== 'feed'
     && alert.historicalContext
+    && alert.historicalContext.confidence !== 'insufficient'
     && hasRealHistoricalData(alert.historicalContext)
   ) {
     const ctx = alert.historicalContext;
