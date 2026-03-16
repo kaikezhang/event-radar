@@ -8,7 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
-import { SeenIdBuffer } from './scraping/scrape-utils.js';
+import { TrendingStateTracker } from './trending-state.js';
 
 const POLL_INTERVAL_MS = 60_000;
 const VOLUME_SPIKE_MULTIPLIER = 2;
@@ -92,9 +92,10 @@ export function analyzeSentiment(messages: StockTwitsMessage[]): {
 }
 
 export class StockTwitsScanner extends BaseScanner {
-  private readonly seenTrending = new SeenIdBuffer(200, 'stocktwits-trending');
-  private readonly seenMessages = new SeenIdBuffer(500, 'stocktwits-messages');
-  private previousTrending: Set<string> = new Set();
+  private readonly trendingTracker = new TrendingStateTracker({
+    name: 'stocktwits-trending',
+    cooldownMs: 24 * 60 * 60 * 1000, // 24h
+  });
   private previousVolumes: Map<string, number> = new Map();
   private previousSentiments: Map<string, number> = new Map();
   /** Symbols to track stream for (populated from trending) */
@@ -151,11 +152,14 @@ export class StockTwitsScanner extends BaseScanner {
     const json = (await response.json()) as StockTwitsTrendingResponse;
     const symbols = parseTrendingResponse(json);
     console.log(`[stocktwits] Fetched ${symbols.length} trending symbols`);
-    const currentTrending = new Set(symbols.map((s) => s.symbol));
 
-    // Detect new trending symbols
+    const currentTickers = symbols.map((s) => s.symbol);
+    const newEntries = this.trendingTracker.update(currentTickers);
+    const newSet = new Set(newEntries);
+
+    // Only emit events for genuinely new entries
     for (const sym of symbols) {
-      if (!this.previousTrending.has(sym.symbol)) {
+      if (newSet.has(sym.symbol)) {
         events.push({
           id: randomUUID(),
           source: 'stocktwits',
@@ -175,7 +179,6 @@ export class StockTwitsScanner extends BaseScanner {
 
     // Update tracked symbols from trending
     this.trackedSymbols = symbols.map((s) => s.symbol);
-    this.previousTrending = currentTrending;
 
     return events;
   }
