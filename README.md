@@ -172,6 +172,9 @@ pnpm --filter @event-radar/backend dev
 # Web app (separate terminal)
 pnpm --filter @event-radar/web dev
 # → http://localhost:5173
+
+# Optional: generate VAPID keys for browser push
+pnpm generate:vapid
 ```
 
 ### Environment Variables
@@ -184,6 +187,8 @@ pnpm --filter @event-radar/web dev
 | `DISCORD_WEBHOOK_URL` | Optional | Discord alert delivery |
 | `BARK_SERVER_URL` + `BARK_KEY` | Optional | iOS push via Bark |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Optional | Telegram delivery |
+| `WEB_PUSH_VAPID_SUBJECT` + `WEB_PUSH_VAPID_PUBLIC_KEY` + `WEB_PUSH_VAPID_PRIVATE_KEY` | Optional | Browser push delivery |
+| `VITE_WEB_PUSH_PUBLIC_KEY` | Optional | Public browser push key for the web app |
 | `API_KEY` | Auto-generated | API authentication key |
 
 ---

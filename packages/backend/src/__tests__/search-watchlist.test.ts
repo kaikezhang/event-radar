@@ -76,6 +76,32 @@ describe('GET /api/events/search', () => {
       severity: 'HIGH',
     });
 
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Export filing flags China exposure risk',
+        body: 'GPU export restrictions may pressure near-term demand expectations',
+        metadata: {
+          ticker: 'NVDA',
+          tickers: ['NVDA'],
+          companyName: 'NVIDIA Corporation',
+        },
+      }),
+      severity: 'HIGH',
+    });
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Late-stage trial readout hits primary endpoint',
+        body: 'Lead therapy showed a statistically significant benefit in the pivotal study',
+        metadata: {
+          ticker: 'ABIO',
+          tickers: ['ABIO'],
+          companyName: 'Acme Biologics Holdings',
+        },
+      }),
+      severity: 'MEDIUM',
+    });
+
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();
   });
@@ -108,6 +134,32 @@ describe('GET /api/events/search', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should match mixed ticker-plus-text queries using ticker metadata', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=NVDA+export',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const titles = body.data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('Export filing flags China exposure risk');
+  });
+
+  it('should match company names stored only in metadata', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=Biologics',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const titles = body.data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('Late-stage trial readout hits primary endpoint');
   });
 
   it('should handle ticker prefix search (uppercase 1-5 chars)', async () => {
@@ -144,6 +196,97 @@ describe('GET /api/events/search', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('GET /api/events?q=', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    await cleanTestDb(sharedDb);
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Tesla',
+        body: 'Single-word exact title match for relevance sorting',
+        metadata: { ticker: 'TSLA', tickers: ['TSLA'] },
+      }),
+      severity: 'HIGH',
+    });
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Tesla supplier wins battery contract',
+        body: 'Battery supplier update with partial Tesla title match',
+        metadata: { ticker: 'QS', tickers: ['QS'] },
+      }),
+      severity: 'MEDIUM',
+    });
+
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Refiner guidance raised after outage',
+        body: 'Oil traders reacted to the refinery outage and demand shock.',
+        metadata: { ticker: 'XOM', tickers: ['XOM'] },
+      }),
+      severity: 'LOW',
+    });
+
+    for (let index = 0; index < 55; index += 1) {
+      await storeEvent(sharedDb, {
+        event: makeEvent({
+          title: `Oil setup ${index + 1}`,
+          body: `Oil follow-through case ${index + 1}`,
+          metadata: { ticker: 'CVX', tickers: ['CVX'] },
+        }),
+        severity: 'LOW',
+      });
+    }
+
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('should search summary text with q', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=refinery',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const titles = body.data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('Refiner guidance raised after outage');
+  });
+
+  it('should rank exact case-insensitive matches before partial matches', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=tesla',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data[0].title).toBe('Tesla');
+    expect(body.data[1].title).toContain('Tesla supplier');
+  });
+
+  it('should cap q search results at 50 even when a larger limit is requested', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=oil&limit=200',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(50);
   });
 });
 

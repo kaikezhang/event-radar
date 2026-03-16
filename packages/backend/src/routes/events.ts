@@ -9,6 +9,11 @@ import { resolveRequestUserId } from './user-context.js';
 const ListEventsQuerySchema = {
   type: 'object',
   properties: {
+    q: {
+      type: 'string',
+      minLength: 1,
+      description: 'Case-insensitive text search across event title and summary',
+    },
     ticker: {
       type: 'string',
       pattern: '^[A-Z]{1,5}$',
@@ -108,6 +113,7 @@ const SimilarEventsQuerySchema = {
 } as const;
 
 export interface ListEventsQuery {
+  q?: string;
   ticker?: string;
   type?: string;
   severity?: string;
@@ -130,6 +136,10 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+}
+
 export function registerEventRoutes(
   server: FastifyInstance,
   db: Database,
@@ -145,8 +155,12 @@ export function registerEventRoutes(
     },
   }, async (request) => {
     const query = request.query as ListEventsQuery;
+    const trimmedQ = query.q?.trim();
+    const q = trimmedQ && trimmedQ.length > 0 ? trimmedQ : undefined;
 
-    const pageLimit = Math.min(query.limit || 50, 200);
+    const pageLimit = q
+      ? Math.min(query.limit || 50, 50)
+      : Math.min(query.limit || 50, 200);
     const pageOffset = query.offset || 0;
 
     const conditions = [];
@@ -206,14 +220,38 @@ export function registerEventRoutes(
       }
     }
 
+    if (q) {
+      const escapedQ = escapeLikePattern(q);
+      const containsPattern = `%${escapedQ}%`;
+
+      conditions.push(sql`(
+        ${events.title} ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.summary}, '') ILIKE ${containsPattern} ESCAPE '\\'
+      )`);
+    }
+
     const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const escapedQ = q ? escapeLikePattern(q) : null;
+    const prefixPattern = escapedQ ? `${escapedQ}%` : null;
+    const ordering = q
+      ? [
+          sql`CASE
+            WHEN lower(${events.title}) = lower(${q}) THEN 0
+            WHEN lower(coalesce(${events.summary}, '')) = lower(${q}) THEN 1
+            WHEN ${events.title} ILIKE ${prefixPattern!} ESCAPE '\\' THEN 2
+            WHEN coalesce(${events.summary}, '') ILIKE ${prefixPattern!} ESCAPE '\\' THEN 3
+            ELSE 4
+          END`,
+          sql`${events.receivedAt} desc`,
+        ]
+      : [sql`${events.receivedAt} desc`];
 
     const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(events)
         .where(where)
-        .orderBy(sql`${events.receivedAt} desc`)
+        .orderBy(...ordering)
         .limit(pageLimit)
         .offset(pageOffset),
       db.select({ total: count() }).from(events).where(where),
@@ -245,8 +283,27 @@ export function registerEventRoutes(
     const trimmed = q.trim().toUpperCase();
     const isTickerQuery = /^[A-Z]{1,5}$/.test(trimmed);
 
+    const metadataTickersText = sql`
+      coalesce(
+        (
+          select string_agg(value, ' ')
+          from jsonb_array_elements_text(coalesce(${events.metadata}->'tickers', '[]'::jsonb)) as value
+        ),
+        ''
+      )
+    `;
+    const searchDocument = sql`
+      coalesce(${events.title}, '')
+      || ' ' || coalesce(${events.summary}, '')
+      || ' ' || coalesce(${events.ticker}, '')
+      || ' ' || coalesce(${events.metadata}->>'ticker', '')
+      || ' ' || coalesce(${events.metadata}->>'companyName', '')
+      || ' ' || coalesce(${events.metadata}->>'company_name', '')
+      || ' ' || coalesce(${events.metadata}->>'issuer_name', '')
+      || ' ' || ${metadataTickersText}
+    `;
     // Full-text search using to_tsvector / plainto_tsquery
-    const searchVector = sql`to_tsvector('english', coalesce(${events.title}, '') || ' ' || coalesce(${events.summary}, ''))`;
+    const searchVector = sql`to_tsvector('english', ${searchDocument})`;
     const tsQuery = sql`plainto_tsquery('english', ${q})`;
 
     if (isTickerQuery) {

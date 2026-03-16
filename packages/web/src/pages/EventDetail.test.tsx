@@ -4,10 +4,10 @@ import { EventDetail } from './EventDetail.js';
 import { renderWithRouter } from '../test/render.js';
 
 describe('EventDetail page', () => {
-  function renderDetail() {
+  function renderDetail(id = 'evt-critical-nvda-1') {
     return renderWithRouter(
       [{ path: '/event/:id', element: <EventDetail /> }],
-      ['/event/evt-critical-nvda-1'],
+      [`/event/${id}`],
     );
   }
 
@@ -109,6 +109,15 @@ describe('EventDetail page', () => {
     expect(await screen.findByText(/most similar/i)).toBeInTheDocument();
     expect(screen.getByText(/prior nvda export disclosure/i)).toBeInTheDocument();
     expect(screen.getByText(/semiconductor filing highlights china demand risk/i)).toBeInTheDocument();
+  });
+
+  it('keeps similar events visible without inventing a historical pattern card', async () => {
+    renderDetail('evt-low-sample-pattern');
+
+    expect(await screen.findByText(/most similar/i)).toBeInTheDocument();
+    expect(screen.getByText(/prior supplier warning tied to export licensing delays/i)).toBeInTheDocument();
+    expect(screen.getByText(/not enough historical matches to show a reliable pattern yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /historical pattern/i })).not.toBeInTheDocument();
   });
 
   it('renders the trust block when scorecard data is available', async () => {

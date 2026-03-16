@@ -157,6 +157,8 @@ export function EventDetail() {
 
   const enrichment = data.enrichment;
   const historical = data.historical;
+  const hasHistoricalPattern = historical != null || data.historicalPattern.matchCount > 0;
+  const hasSimilarEventsOnly = !hasHistoricalPattern && similarEvents.length > 0;
 
   return (
     <div className="space-y-4">
@@ -319,7 +321,7 @@ export function EventDetail() {
       )}
 
       {/* Historical Pattern — full data from metadata.historical_context */}
-      {(historical || data.historicalPattern.matchCount > 0) && (
+      {hasHistoricalPattern && (
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -386,6 +388,11 @@ export function EventDetail() {
       {similarEvents.length > 0 && (
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <SectionHeading eyebrow="Historical precedents" title="Most Similar" />
+          {hasSimilarEventsOnly && (
+            <p className="mb-4 text-sm leading-6 text-text-secondary">
+              Not enough historical matches to show a reliable pattern yet.
+            </p>
+          )}
           <div className="space-y-3">
             {visibleSimilarEvents.map((event, i) => (
               <div key={i} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
@@ -474,7 +481,7 @@ export function EventDetail() {
               </div>
             )}
           </>
-        ) : (
+        ) : hasHistoricalPattern ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <InfoField
               label="Historical matches"
@@ -485,6 +492,10 @@ export function EventDetail() {
               value={formatTrustLabel(data.historicalPattern.confidence)}
             />
           </div>
+        ) : (
+          <p className="text-sm leading-6 text-text-secondary">
+            Similar events are available, but there is not enough historical data yet to show a reliable pattern.
+          </p>
         )}
       </section>
 
