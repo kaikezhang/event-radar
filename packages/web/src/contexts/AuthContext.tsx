@@ -13,6 +13,9 @@ interface AuthContextValue {
   isLoading: boolean;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => void;
+  /** When true, AuthProvider skips its initial session check (used during verify flow) */
+  suppressInitialCheck: boolean;
+  setSuppressInitialCheck: (v: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -20,8 +23,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [suppressInitialCheck, setSuppressInitialCheck] = useState(false);
 
   useEffect(() => {
+    // When the verify page is active it handles auth itself — skip the
+    // automatic session check so a 401 from authMe() doesn't flash an error.
+    if (suppressInitialCheck) {
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function checkSession() {
@@ -50,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkSession();
     return () => { cancelled = true; };
-  }, []);
+  }, [suppressInitialCheck]);
 
   const logout = useCallback(async () => {
     await authLogout();
@@ -64,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       logout,
       setUser,
+      suppressInitialCheck,
+      setSuppressInitialCheck,
     }}>
       {children}
     </AuthContext>

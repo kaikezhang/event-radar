@@ -18,11 +18,12 @@ function AppHeader() {
   const { user } = useAuth();
   const connectionStatus = useConnectionStatus();
 
-  const statusConfig = {
-    connected: { label: 'Live', dotClass: 'bg-success animate-pulse' },
-    reconnecting: { label: 'Reconnecting', dotClass: 'bg-warning animate-pulse' },
-    disconnected: { label: 'Offline', dotClass: 'bg-severity-critical' },
-  }[connectionStatus];
+  // Connected = green dot (no label), reconnecting = amber dot, disconnected = hidden
+  const statusIndicator = connectionStatus === 'connected'
+    ? <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" title="Live" />
+    : connectionStatus === 'reconnecting'
+      ? <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" title="Reconnecting" />
+      : null;
 
   return (
     <header className="flex h-12 items-center justify-between">
@@ -34,10 +35,7 @@ function AppHeader() {
       </Link>
 
       <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5 text-[10px] font-medium text-text-tertiary">
-          <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
-          {statusConfig.label}
-        </span>
+        {statusIndicator}
 
         {user ? (
           <Link
