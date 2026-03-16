@@ -245,24 +245,25 @@ export function registerEventRoutes(
     const trimmed = q.trim().toUpperCase();
     const isTickerQuery = /^[A-Z]{1,5}$/.test(trimmed);
 
+    // Full-text search using to_tsvector / plainto_tsquery
+    const searchVector = sql`to_tsvector('english', coalesce(${events.title}, '') || ' ' || coalesce(${events.summary}, ''))`;
+    const tsQuery = sql`plainto_tsquery('english', ${q})`;
+
     if (isTickerQuery) {
-      // Ticker search: match metadata->>'ticker' or metadata->'tickers'
+      // Ticker-like query: do both ticker match AND full-text search, union results
       const ticker = trimmed;
+      const tickerCondition = sql`(${events.ticker} = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`;
+      const textCondition = sql`${searchVector} @@ ${tsQuery}`;
+
       const data = await db
         .select()
         .from(events)
-        .where(
-          sql`(${events.ticker} = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`,
-        )
+        .where(sql`(${tickerCondition} OR ${textCondition})`)
         .orderBy(sql`${events.receivedAt} DESC`)
         .limit(searchLimit);
 
       return { data, total: data.length };
     }
-
-    // Full-text search using to_tsvector / plainto_tsquery
-    const searchVector = sql`to_tsvector('english', coalesce(${events.title}, '') || ' ' || coalesce(${events.summary}, ''))`;
-    const tsQuery = sql`plainto_tsquery('english', ${q})`;
 
     const data = await db
       .select({
