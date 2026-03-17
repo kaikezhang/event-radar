@@ -25,6 +25,8 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     mutationFn: (ticker: string) => removeFromWatchlist(ticker),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
 
   const updateItemMutation = useMutation({
     mutationFn: ({ ticker, data }: { ticker: string; data: { notes?: string; sectionId?: string | null } }) =>
@@ -39,8 +41,6 @@ export function useWatchlist(options?: { enabled?: boolean }) {
       bulkAddWatchlist(tickers),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-    },
-  });
     },
   });
 

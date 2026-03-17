@@ -131,22 +131,6 @@ function SwipeableRow({ children, onMoveAction, onRemoveAction }: { children: Re
         <button type="button" onClick={() => { resetSwipe(); onRemoveAction(); }} className="flex w-20 items-center justify-center bg-red-500/80 text-white text-xs font-medium"><Trash2 className="mr-1 h-3.5 w-3.5" />Remove</button>
       </div>
       <div style={{ transform: `translateX(${translateX}px)`, transition: swiping ? 'none' : 'transform 0.25s ease-out' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>{children}</div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -165,22 +149,6 @@ function MoveSectionModal({ sections, onSelect, onClose }: { sections: Watchlist
         </div>
         <button type="button" onClick={onClose} className="mt-3 w-full rounded-xl bg-white/5 px-3 py-2 text-sm text-text-secondary hover:bg-white/10">Cancel</button>
       </div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -199,22 +167,6 @@ function ConfirmRemoveDialog({ count, onConfirm, onCancel }: { count: number; on
           <button type="button" onClick={onCancel} className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-text-secondary hover:bg-white/10">Cancel</button>
         </div>
       </div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -356,22 +308,6 @@ function DragOverlayRow({ item, tickerSummary }: { item: WatchlistItem; tickerSu
           <span className="text-lg">{tickerSummary.highestSignal}</span>
         )}
       </div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -586,22 +522,6 @@ function SectionHeader({
           </div>
         )}
       </div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -688,22 +608,6 @@ function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string)
           Cancel
         </button>
       </div>
-
-      {editMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-            <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
-            <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" onClick={() => setShowMoveModal(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/25 disabled:opacity-40"><MoveRight className="h-3.5 w-3.5" />Move to...</button>
-              <button type="button" onClick={() => setShowConfirmRemove(true)} disabled={selected.size === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Remove</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMoveModal && <MoveSectionModal sections={sections} onSelect={handleBulkMove} onClose={() => { setShowMoveModal(false); setSingleMoveTicker(null); }} />}
-      {showConfirmRemove && <ConfirmRemoveDialog count={selected.size} onConfirm={handleBulkRemove} onCancel={() => setShowConfirmRemove(false)} />}
     </div>
   );
 }
@@ -1060,6 +964,12 @@ export function Watchlist() {
                         item={item}
                         tickerSummary={summaryMap.get(item.ticker)}
                         onRemove={remove}
+                        editMode={editMode}
+                        isSelected={selected.has(item.ticker)}
+                        onToggleSelect={toggleSelect}
+                        onSaveNote={handleSaveNote}
+                        onMoveAction={handleMoveAction}
+                        onLongPress={handleLongPress}
                       />
                     ))}
                   </div>
