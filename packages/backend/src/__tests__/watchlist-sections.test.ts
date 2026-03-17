@@ -454,6 +454,99 @@ describe('watchlist section routes', () => {
     });
   });
 
+  // ── Ownership validation on reorder ─────────────────────────────
+
+  describe('reorder sectionId ownership validation', () => {
+    it('rejects sectionId belonging to another user', async () => {
+      const secRes = await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist/sections',
+        headers: { ...AUTH_HEADERS, 'x-user-id': 'user-a' },
+        payload: { name: 'User A Section' },
+      });
+      const userASectionId = secRes.json().id;
+
+      await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist',
+        headers: { ...AUTH_HEADERS, 'x-user-id': 'user-b' },
+        payload: { ticker: 'AAPL' },
+      });
+
+      const res = await ctx.server.inject({
+        method: 'PATCH',
+        url: '/api/watchlist/reorder',
+        headers: { ...AUTH_HEADERS, 'x-user-id': 'user-b' },
+        payload: {
+          items: [{ ticker: 'AAPL', sortOrder: 0, sectionId: userASectionId }],
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('not owned');
+    });
+  });
+
+  // ── Blank name rejection ──────────────────────────────────────────
+
+  describe('blank section name rejection', () => {
+    it('rejects whitespace-only name on create', async () => {
+      const res = await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist/sections',
+        headers: AUTH_HEADERS,
+        payload: { name: '   ' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('empty');
+    });
+
+    it('rejects whitespace-only name on update', async () => {
+      const createRes = await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist/sections',
+        headers: AUTH_HEADERS,
+        payload: { name: 'Valid Name' },
+      });
+      const sectionId = createRes.json().id;
+
+      const res = await ctx.server.inject({
+        method: 'PATCH',
+        url: `/api/watchlist/sections/${sectionId}`,
+        headers: AUTH_HEADERS,
+        payload: { name: '   ' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('empty');
+    });
+  });
+
+  // ── Concurrent create race condition ──────────────────────────────
+
+  describe('concurrent create race condition', () => {
+    it('does not produce 500 on concurrent duplicate name', async () => {
+      const [res1, res2] = await Promise.all([
+        ctx.server.inject({
+          method: 'POST',
+          url: '/api/watchlist/sections',
+          headers: AUTH_HEADERS,
+          payload: { name: 'RaceName' },
+        }),
+        ctx.server.inject({
+          method: 'POST',
+          url: '/api/watchlist/sections',
+          headers: AUTH_HEADERS,
+          payload: { name: 'RaceName' },
+        }),
+      ]);
+
+      const codes = [res1.statusCode, res2.statusCode].sort();
+      expect(codes).toEqual([201, 409]);
+    });
+  });
+
   // ── GET /api/watchlist returns new fields ─────────────────────────
 
   describe('GET /api/watchlist includes sectionId and sortOrder', () => {

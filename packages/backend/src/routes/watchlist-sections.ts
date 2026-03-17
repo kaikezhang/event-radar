@@ -70,46 +70,54 @@ export function registerWatchlistSectionRoutes(
       return reply.status(400).send({ error: `Invalid color. Must be one of: ${VALID_COLORS.join(', ')}` });
     }
 
-    // Check max sections
-    const [{ value: sectionCount }] = await db
-      .select({ value: count() })
-      .from(watchlistSections)
-      .where(eq(watchlistSections.userId, userId));
-
-    if (sectionCount >= MAX_SECTIONS) {
-      return reply.status(400).send({ error: `Maximum ${MAX_SECTIONS} sections allowed` });
-    }
-
-    // Check unique name
-    const [existing] = await db
-      .select()
-      .from(watchlistSections)
-      .where(and(eq(watchlistSections.userId, userId), eq(watchlistSections.name, name.trim())))
-      .limit(1);
-
-    if (existing) {
-      return reply.status(409).send({ error: 'A section with this name already exists' });
-    }
-
-    // Determine next sortOrder
-    const [maxOrder] = await db
-      .select({ maxSort: sql<number>`COALESCE(MAX(${watchlistSections.sortOrder}), -1)` })
-      .from(watchlistSections)
-      .where(eq(watchlistSections.userId, userId));
-
     try {
-      const [inserted] = await db
-        .insert(watchlistSections)
-        .values({
-          userId,
-          name,
-          color: resolvedColor,
-          sortOrder: (maxOrder?.maxSort ?? -1) + 1,
-        })
-        .returning();
+      const inserted = await db.transaction(async (tx) => {
+        // Check max sections
+        const [{ value: sectionCount }] = await tx
+          .select({ value: count() })
+          .from(watchlistSections)
+          .where(eq(watchlistSections.userId, userId));
+
+        if (sectionCount >= MAX_SECTIONS) {
+          throw Object.assign(new Error(`Maximum ${MAX_SECTIONS} sections allowed`), { statusCode: 400 });
+        }
+
+        // Check unique name
+        const [existing] = await tx
+          .select()
+          .from(watchlistSections)
+          .where(and(eq(watchlistSections.userId, userId), eq(watchlistSections.name, name)))
+          .limit(1);
+
+        if (existing) {
+          throw Object.assign(new Error('A section with this name already exists'), { statusCode: 409 });
+        }
+
+        // Determine next sortOrder
+        const [maxOrder] = await tx
+          .select({ maxSort: sql<number>`COALESCE(MAX(${watchlistSections.sortOrder}), -1)` })
+          .from(watchlistSections)
+          .where(eq(watchlistSections.userId, userId));
+
+        const [row] = await tx
+          .insert(watchlistSections)
+          .values({
+            userId,
+            name,
+            color: resolvedColor,
+            sortOrder: (maxOrder?.maxSort ?? -1) + 1,
+          })
+          .returning();
+
+        return row;
+      });
 
       return reply.status(201).send(inserted);
     } catch (err: unknown) {
+      if (err instanceof Error && 'statusCode' in err) {
+        const code = (err as Error & { statusCode: number }).statusCode;
+        return reply.status(code).send({ error: err.message });
+      }
       if (err instanceof Error && err.message.includes('idx_ws_user_name')) {
         return reply.status(409).send({ error: 'A section with this name already exists' });
       }
@@ -161,19 +169,6 @@ export function registerWatchlistSectionRoutes(
       if (!trimmedName) {
         return reply.status(400).send({ error: 'Section name cannot be empty' });
       }
-      // Check unique name (excluding current section)
-      const [existing] = await db
-        .select()
-        .from(watchlistSections)
-        .where(and(
-          eq(watchlistSections.userId, userId),
-          eq(watchlistSections.name, trimmedName),
-        ))
-        .limit(1);
-
-      if (existing && existing.id !== id) {
-        return reply.status(409).send({ error: 'A section with this name already exists' });
-      }
       updates.name = trimmedName;
     }
 
@@ -192,13 +187,43 @@ export function registerWatchlistSectionRoutes(
       return section;
     }
 
-    const [updated] = await db
-      .update(watchlistSections)
-      .set(updates)
-      .where(and(eq(watchlistSections.id, id), eq(watchlistSections.userId, userId)))
-      .returning();
+    try {
+      const updated = await db.transaction(async (tx) => {
+        if (updates.name) {
+          const [existing] = await tx
+            .select()
+            .from(watchlistSections)
+            .where(and(
+              eq(watchlistSections.userId, userId),
+              eq(watchlistSections.name, updates.name as string),
+            ))
+            .limit(1);
 
-    return updated;
+          if (existing && existing.id !== id) {
+            throw Object.assign(new Error('A section with this name already exists'), { statusCode: 409 });
+          }
+        }
+
+        const [row] = await tx
+          .update(watchlistSections)
+          .set(updates)
+          .where(and(eq(watchlistSections.id, id), eq(watchlistSections.userId, userId)))
+          .returning();
+
+        return row;
+      });
+
+      return updated;
+    } catch (err: unknown) {
+      if (err instanceof Error && 'statusCode' in err) {
+        const code = (err as Error & { statusCode: number }).statusCode;
+        return reply.status(code).send({ error: err.message });
+      }
+      if (err instanceof Error && err.message.includes('idx_ws_user_name')) {
+        return reply.status(409).send({ error: 'A section with this name already exists' });
+      }
+      throw err;
+    }
   });
 
   /**

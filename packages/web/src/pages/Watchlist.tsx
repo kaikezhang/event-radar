@@ -26,6 +26,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   DragOverlay,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -420,6 +421,25 @@ function SectionHeader({
   );
 }
 
+// ── Empty Section Drop Zone ─────────────────────────────────────────
+
+function EmptySectionDropZone({ sectionId }: { sectionId: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `section-drop:${sectionId}` });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-lg border border-dashed px-4 py-3 text-center text-sm transition ${
+        isOver
+          ? 'border-accent-default/60 bg-accent-default/10 text-accent-default'
+          : 'border-white/10 text-text-secondary/50'
+      }`}
+    >
+      {isOver ? 'Drop here' : 'No tickers in this section'}
+    </div>
+  );
+}
+
 // ── New Section Form ────────────────────────────────────────────────
 
 function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string) => void }) {
@@ -521,6 +541,7 @@ export function Watchlist() {
     reorder,
   } = useWatchlistSections();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchSectionId, setSearchSectionId] = useState<string | null>(null);
   const [firstTickerAdded, setFirstTickerAdded] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(getCollapsedState);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -569,6 +590,10 @@ export function Watchlist() {
     if (items.length === 0) {
       setFirstTickerAdded(ticker);
     }
+    if (searchSectionId) {
+      // Assign the newly added ticker to the section via reorder
+      reorder([{ ticker, sortOrder: 0, sectionId: searchSectionId }]);
+    }
   };
 
   // Build a flat ordered list of all tickers for dnd-kit
@@ -596,15 +621,30 @@ export function Watchlist() {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
+    const overId = over.id as string;
+
+    // Handle drop on empty section placeholder
+    if (overId.startsWith('section-drop:')) {
+      const targetSectionId = overId.replace('section-drop:', '');
+      const activeTicker = active.id as string;
+      const reorderItems = orderedTickers.map((ticker, idx) => ({
+        ticker,
+        sortOrder: idx,
+        sectionId: ticker === activeTicker ? targetSectionId : tickerToSection.get(ticker) ?? null,
+      }));
+      reorder(reorderItems);
+      return;
+    }
+
     const oldIndex = orderedTickers.indexOf(active.id as string);
-    const newIndex = orderedTickers.indexOf(over.id as string);
+    const newIndex = orderedTickers.indexOf(overId);
     if (oldIndex === -1 || newIndex === -1) return;
 
     const newOrder = arrayMove(orderedTickers, oldIndex, newIndex);
 
     // Determine which section each ticker now belongs to based on position
     // For cross-section moves, the dragged item takes the section of its new neighbor
-    const overSectionId = tickerToSection.get(over.id as string) ?? null;
+    const overSectionId = tickerToSection.get(overId) ?? null;
     const reorderItems = newOrder.map((ticker, idx) => ({
       ticker,
       sortOrder: idx,
@@ -692,7 +732,7 @@ export function Watchlist() {
 
         <button
           type="button"
-          onClick={() => setSearchOpen(true)}
+          onClick={() => { setSearchSectionId(null); setSearchOpen(true); }}
           className="flex min-h-11 w-full items-center gap-3 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-[15px] text-text-secondary/60 transition hover:bg-white/8 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
         >
           <Search className="h-4 w-4" />
@@ -705,7 +745,7 @@ export function Watchlist() {
 
       <TickerSearch
         open={searchOpen}
-        onClose={() => setSearchOpen(false)}
+        onClose={() => { setSearchOpen(false); setSearchSectionId(null); }}
         onTickerAdded={handleTickerAdded}
       />
 
@@ -816,7 +856,7 @@ export function Watchlist() {
                       onRename={(name) => updateSection({ id: section.id, data: { name } })}
                       onChangeColor={(color) => updateSection({ id: section.id, data: { color } })}
                       onDelete={() => removeSection(section.id)}
-                      onAddTicker={() => setSearchOpen(true)}
+                      onAddTicker={() => { setSearchSectionId(section.id); setSearchOpen(true); }}
                     />
                     {!isCollapsedSection && (
                       <div className="space-y-2 pl-2">
@@ -829,9 +869,7 @@ export function Watchlist() {
                           />
                         ))}
                         {sectionItems.length === 0 && (
-                          <p className="py-3 text-center text-sm text-text-secondary/50">
-                            No tickers in this section
-                          </p>
+                          <EmptySectionDropZone sectionId={section.id} />
                         )}
                       </div>
                     )}
