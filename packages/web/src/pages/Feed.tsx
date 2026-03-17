@@ -296,6 +296,7 @@ export function Feed() {
     }
     if (newIds.size > 0 && prevAlertIdsRef.current.size > 0) {
       setNewAlertIds(newIds);
+      prevAlertIdsRef.current = currentIds;
       const timer = setTimeout(() => setNewAlertIds(new Set()), 1600);
       return () => clearTimeout(timer);
     }
@@ -320,6 +321,13 @@ export function Feed() {
     }
     return result;
   }, [alerts, activeSeverities, activeSources, sortMode]);
+
+  // Clear stale selection when the selected event is no longer visible
+  useEffect(() => {
+    if (selectedEventId && filteredAlerts.length > 0 && !filteredAlerts.some((a) => a.id === selectedEventId)) {
+      setSelectedEventId(null);
+    }
+  }, [filteredAlerts, selectedEventId]);
 
   // Group alerts by date
   const dateGroups = useMemo(() => groupAlertsByDate(filteredAlerts), [filteredAlerts]);
@@ -379,6 +387,9 @@ export function Feed() {
   // Card click handler — desktop opens split panel, mobile navigates
   const handleCardClick = useCallback((e: React.MouseEvent, alertId: string) => {
     if (isDesktop) {
+      // Let nested interactive elements (buttons, links, role="button") handle their own clicks
+      const target = e.target as HTMLElement;
+      if (target.closest('a, button, [role="button"]')) return;
       e.preventDefault();
       setSelectedEventId(alertId);
     }
