@@ -631,6 +631,19 @@ export async function removeFromWatchlist(ticker: string): Promise<void> {
   await apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'DELETE' });
 }
 
+export async function updateWatchlistItem(
+  ticker: string,
+  data: { notes?: string; sectionId?: string | null },
+): Promise<WatchlistItem> {
+  return apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'PATCH', body: data });
+}
+
+export async function bulkAddWatchlist(
+  tickers: Array<{ ticker: string; sectionId?: string; notes?: string }>,
+): Promise<{ added: number; skipped: number }> {
+  return apiFetch('/watchlist/bulk', { method: 'POST', body: { tickers } });
+}
+
 // ── Watchlist Sections API ───────────────────────────────────────────────────
 
 export async function getWatchlistSections(): Promise<WatchlistSection[]> {

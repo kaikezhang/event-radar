@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWatchlist, addToWatchlist, removeFromWatchlist, getWatchlistSummary } from '../lib/api.js';
+import { getWatchlist, addToWatchlist, removeFromWatchlist, getWatchlistSummary, updateWatchlistItem, bulkAddWatchlist } from '../lib/api.js';
 import type { WatchlistItem } from '../types/index.js';
 import type { WatchlistTickerSummary } from '../lib/api.js';
 
@@ -25,6 +25,22 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     mutationFn: (ticker: string) => removeFromWatchlist(ticker),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+
+  const updateItemMutation = useMutation({
+    mutationFn: ({ ticker, data }: { ticker: string; data: { notes?: string; sectionId?: string | null } }) =>
+      updateWatchlistItem(ticker, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+
+  const bulkAddMutation = useMutation({
+    mutationFn: (tickers: Array<{ ticker: string; sectionId?: string; notes?: string }>) =>
+      bulkAddWatchlist(tickers),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
     },
   });
 
@@ -37,6 +53,8 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     add: addMutation.mutate,
     addAsync: addMutation.mutateAsync,
     remove: removeMutation.mutate,
+    updateItem: updateItemMutation.mutate,
+    bulkAdd: bulkAddMutation.mutate,
     isAdding: addMutation.isPending,
     isRemoving: removeMutation.isPending,
     isOnWatchlist,
