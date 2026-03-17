@@ -362,12 +362,17 @@ function mapMarketData(raw: Record<string, unknown> | undefined): EventMarketDat
     return null;
   }
 
+  const high52w = raw.high52w != null ? Number(raw.high52w) : undefined;
+  const low52w = raw.low52w != null ? Number(raw.low52w) : undefined;
+
   return {
     price,
     change1d,
     change5d,
     rsi14,
     volumeRatio,
+    ...(high52w != null && !Number.isNaN(high52w) ? { high52w } : {}),
+    ...(low52w != null && !Number.isNaN(low52w) ? { low52w } : {}),
   };
 }
 

@@ -10,6 +10,9 @@ import { formatPercent, formatRelativeTime } from '../lib/format.js';
 import { mapSource, submitFeedback } from '../lib/api.js';
 import { useEventDetail } from '../hooks/useEventDetail.js';
 import { cn } from '../lib/utils.js';
+import { EventChart } from '../components/EventChart.js';
+import { RangeBar } from '../components/RangeBar.js';
+import { StatMini } from '../components/StatMini.js';
 import type { LlmEnrichment } from '../types/index.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -303,39 +306,57 @@ function StockContextPanel({ data }: { data: NonNullable<ReturnType<typeof useEv
   const md = data.marketData;
   if (!md) return null;
 
+  const primaryTicker = data.tickers[0];
+
   return (
     <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-      <SectionHeading eyebrow="Stock context" title={data.tickers[0] ?? 'Market Data'} />
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-white/6 bg-bg-elevated/70 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Price</p>
-          <p className="mt-1 font-mono text-lg font-semibold text-text-primary">
-            ${md.price.toFixed(2)}
-          </p>
+      <SectionHeading eyebrow="Stock context" title={primaryTicker ?? 'Market Data'} />
+
+      {/* Candlestick chart with event marker */}
+      {primaryTicker && (
+        <div className="mb-4 -mx-1">
+          <EventChart
+            symbol={primaryTicker}
+            defaultRange="3m"
+            height={200}
+            events={[{
+              id: data.id,
+              severity: data.severity,
+              title: data.title,
+              time: data.time,
+              tickers: data.tickers,
+              source: data.source,
+              summary: '',
+            }]}
+            compact
+          />
         </div>
-        <div className="rounded-xl border border-white/6 bg-bg-elevated/70 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Today</p>
-          <p className={cn(
-            'mt-1 font-mono text-lg font-semibold',
-            md.change1d >= 0 ? 'text-emerald-400' : 'text-red-400',
-          )}>
-            {md.change1d > 0 ? '+' : ''}{md.change1d.toFixed(1)}% today
-          </p>
-        </div>
-        <div className="rounded-xl border border-white/6 bg-bg-elevated/70 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">5-Day</p>
-          <p className={cn(
-            'mt-1 font-mono text-sm font-medium',
-            md.change5d >= 0 ? 'text-emerald-400' : 'text-red-400',
-          )}>
-            {md.change5d > 0 ? '+' : ''}{md.change5d.toFixed(1)}%
-          </p>
-        </div>
-        <div className="rounded-xl border border-white/6 bg-bg-elevated/70 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">RSI</p>
-          <p className="mt-1 font-mono text-sm font-medium text-text-primary">RSI {md.rsi14}</p>
-        </div>
+      )}
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatMini label="Price" value={`$${md.price.toFixed(2)}`} />
+        <StatMini
+          label="Today"
+          value={`${md.change1d > 0 ? '+' : ''}${md.change1d.toFixed(1)}%`}
+          tone={md.change1d >= 0 ? 'positive' : 'negative'}
+        />
+        <StatMini
+          label="5-Day"
+          value={`${md.change5d > 0 ? '+' : ''}${md.change5d.toFixed(1)}%`}
+          tone={md.change5d >= 0 ? 'positive' : 'negative'}
+        />
+        <StatMini label="RSI" value={`RSI ${md.rsi14}`} />
+        <StatMini label="Volume" value={md.volumeRatio ? `${md.volumeRatio.toFixed(1)}x avg` : 'N/A'} />
+        <StatMini label="52W Range" value={md.high52w && md.low52w
+          ? `$${md.low52w.toFixed(0)} - $${md.high52w.toFixed(0)}`
+          : 'N/A'} />
       </div>
+
+      {/* 52-Week Range Bar */}
+      {md.high52w && md.low52w && md.price && (
+        <RangeBar low={md.low52w} high={md.high52w} current={md.price} />
+      )}
     </div>
   );
 }

@@ -477,6 +477,8 @@ export function registerEventRoutes(
             change5d: quote.change5d,
             rsi14: quote.rsi14,
             volumeRatio: quote.volumeRatio,
+            high52w: quote.high52w,
+            low52w: quote.low52w,
           }
         : null,
       provenance: provenanceRows.map((row) => {
