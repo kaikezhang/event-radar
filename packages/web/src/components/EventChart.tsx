@@ -102,11 +102,15 @@ export function buildEventMarkers(
 interface EventChartProps {
   symbol: string;
   events: AlertSummary[];
+  compact?: boolean;
+  height?: number;
+  defaultRange?: ChartRange;
 }
 
-export function EventChart({ symbol, events }: EventChartProps) {
+export function EventChart({ symbol, events, compact, height: heightProp, defaultRange }: EventChartProps) {
   const navigate = useNavigate();
-  const [range, setRange] = useState<ChartRange>('1m');
+  const chartHeight = heightProp ?? 300;
+  const [range, setRange] = useState<ChartRange>(defaultRange ?? '1m');
   const [selectedEvent, setSelectedEvent] = useState<AlertSummary | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -138,7 +142,7 @@ export function EventChart({ symbol, events }: EventChartProps) {
 
     const chart = createChart(container, {
       width: container.clientWidth || 640,
-      height: 300,
+      height: chartHeight,
       layout: {
         background: { color: '#111111' },
         textColor: '#cbd5e1',
@@ -173,7 +177,7 @@ export function EventChart({ symbol, events }: EventChartProps) {
     seriesRef.current = series;
 
     const resizeChart = () => {
-      chart.resize(container.clientWidth || 640, 300);
+      chart.resize(container.clientWidth || 640, chartHeight);
     };
 
     let observer: ResizeObserver | undefined;
@@ -193,7 +197,7 @@ export function EventChart({ symbol, events }: EventChartProps) {
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, []);
+  }, [chartHeight]);
 
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current || candles.length === 0) {
@@ -235,41 +239,43 @@ export function EventChart({ symbol, events }: EventChartProps) {
   }, [range]);
 
   return (
-    <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(9,9,11,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent-default">
-            Market Reaction
-          </p>
-          <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
-            {symbol} price action
-          </h2>
-        </div>
+    <section className={compact ? '' : 'rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(9,9,11,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]'}>
+      {!compact && (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent-default">
+              Market Reaction
+            </p>
+            <h2 className="mt-2 text-[17px] font-semibold leading-[1.4] text-text-primary">
+              {symbol} price action
+            </h2>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          {RANGE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                startTransition(() => {
-                  setRange(option.value);
-                });
-              }}
-              aria-pressed={range === option.value}
-              className={`min-h-10 rounded-full px-3 text-xs font-semibold tracking-[0.18em] transition ${
-                range === option.value
-                  ? 'bg-accent-default text-white'
-                  : 'bg-white/6 text-text-secondary hover:bg-white/10 hover:text-text-primary'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+          <div className="flex flex-wrap gap-2">
+            {RANGE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  startTransition(() => {
+                    setRange(option.value);
+                  });
+                }}
+                aria-pressed={range === option.value}
+                className={`min-h-10 rounded-full px-3 text-xs font-semibold tracking-[0.18em] transition ${
+                  range === option.value
+                    ? 'bg-accent-default text-white'
+                    : 'bg-white/6 text-text-secondary hover:bg-white/10 hover:text-text-primary'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="relative h-[300px] overflow-hidden rounded-[24px] border border-white/6 bg-[#111111]">
+      <div className={`relative overflow-hidden rounded-[24px] border border-white/6 bg-[#111111]`} style={{ height: `${chartHeight}px` }}>
         <div ref={containerRef} className="h-full w-full" aria-label={`${symbol} candlestick chart`} />
 
         {isLoading ? (

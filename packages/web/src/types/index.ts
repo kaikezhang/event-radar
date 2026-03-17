@@ -35,6 +35,8 @@ export interface EventMarketData {
   change5d: number;
   rsi14: number;
   volumeRatio: number;
+  high52w?: number;
+  low52w?: number;
 }
 
 export interface LlmEnrichment {
