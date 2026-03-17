@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav.js';
+import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
 import { TickerSearch } from './components/TickerSearch.js';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { AuthVerify } from './pages/AuthVerify.js';
@@ -87,6 +89,17 @@ function GlobalTickerSearch() {
   return <TickerSearch open={open} onClose={handleClose} />;
 }
 
+function GlobalKeyboardShortcuts() {
+  const [showHelp, setShowHelp] = useState(false);
+
+  const handleShowHelp = useCallback(() => setShowHelp(true), []);
+  const handleCloseHelp = useCallback(() => setShowHelp(false), []);
+
+  useKeyboardShortcuts({ onShowHelp: handleShowHelp });
+
+  return <KeyboardShortcutsHelp open={showHelp} onClose={handleCloseHelp} />;
+}
+
 function AppShell() {
   return (
     <AuthProvider>
@@ -102,6 +115,7 @@ function AppShell() {
           <BottomNav />
           <ScrollRestoration />
           <GlobalTickerSearch />
+          <GlobalKeyboardShortcuts />
         </div>
       </ConnectionProvider>
     </AuthProvider>

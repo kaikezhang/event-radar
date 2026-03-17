@@ -126,7 +126,7 @@ export function Feed() {
   });
 
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const { items: watchlistItems, isLoading: isWatchlistLoading } = useWatchlist();
+  const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add } = useWatchlist();
   const hasWatchlist = watchlistItems.length > 0;
 
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
@@ -668,6 +668,9 @@ export function Feed() {
                         key={alert.id}
                         alert={alert}
                         trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
+                        showWatchlistButton
+                        isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
+                        onToggleWatchlist={(ticker) => add(ticker)}
                       />
                     ))}
                   </div>
