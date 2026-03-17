@@ -54,8 +54,13 @@ export function registerWatchlistSectionRoutes(
       },
     },
   }, async (request, reply) => {
-    const { name, color } = request.body as { name: string; color?: string };
+    const { name: rawName, color } = request.body as { name: string; color?: string };
+    const name = rawName.trim();
     const userId = resolveRequestUserId(request);
+
+    if (!name) {
+      return reply.status(400).send({ error: 'Section name cannot be empty' });
+    }
 
     await ensureUserExists(db, userId);
 
@@ -92,17 +97,24 @@ export function registerWatchlistSectionRoutes(
       .from(watchlistSections)
       .where(eq(watchlistSections.userId, userId));
 
-    const [inserted] = await db
-      .insert(watchlistSections)
-      .values({
-        userId,
-        name: name.trim(),
-        color: resolvedColor,
-        sortOrder: (maxOrder?.maxSort ?? -1) + 1,
-      })
-      .returning();
+    try {
+      const [inserted] = await db
+        .insert(watchlistSections)
+        .values({
+          userId,
+          name,
+          color: resolvedColor,
+          sortOrder: (maxOrder?.maxSort ?? -1) + 1,
+        })
+        .returning();
 
-    return reply.status(201).send(inserted);
+      return reply.status(201).send(inserted);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('idx_ws_user_name')) {
+        return reply.status(409).send({ error: 'A section with this name already exists' });
+      }
+      throw err;
+    }
   });
 
   /**
@@ -146,6 +158,9 @@ export function registerWatchlistSectionRoutes(
 
     if (body.name !== undefined) {
       const trimmedName = body.name.trim();
+      if (!trimmedName) {
+        return reply.status(400).send({ error: 'Section name cannot be empty' });
+      }
       // Check unique name (excluding current section)
       const [existing] = await db
         .select()
@@ -249,6 +264,20 @@ export function registerWatchlistSectionRoutes(
 
     if (items.length === 0) {
       return { ok: true };
+    }
+
+    // Validate all sectionIds belong to current user
+    const sectionIds = [...new Set(items.filter(i => i.sectionId).map(i => i.sectionId as string))];
+    if (sectionIds.length > 0) {
+      const ownedSections = await db
+        .select({ id: watchlistSections.id })
+        .from(watchlistSections)
+        .where(and(eq(watchlistSections.userId, userId)));
+      const ownedIds = new Set(ownedSections.map(s => s.id));
+      const invalid = sectionIds.filter(id => !ownedIds.has(id));
+      if (invalid.length > 0) {
+        return reply.status(400).send({ error: 'Invalid section ID(s) — not owned by current user' });
+      }
     }
 
     // Update all items in a single transaction
