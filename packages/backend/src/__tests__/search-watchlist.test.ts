@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
 import { createTestDb, safeClose, safeCloseServer, cleanTestDb } from './helpers/test-db.js';
@@ -355,6 +356,33 @@ describe('Watchlist CRUD', () => {
     expect(tickers).toContain('AAPL');
     expect(tickers).toContain('NVDA');
     expect(tickers).not.toContain('TSLA');
+  });
+
+  it('should include company name from ticker_reference in watchlist response', async () => {
+    // Seed ticker_reference
+    await sharedDb.execute(sql`
+      INSERT INTO ticker_reference (ticker, name, sector, exchange) VALUES
+        ('GOOG', 'Alphabet Inc', 'Technology', 'NASDAQ')
+    `);
+
+    await ctx.server.inject({
+      method: 'POST',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY },
+      payload: { ticker: 'GOOG' },
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/watchlist',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const googItem = body.data.find((w: { ticker: string }) => w.ticker === 'GOOG');
+    expect(googItem).toBeDefined();
+    expect(googItem.name).toBe('Alphabet Inc');
   });
 
   it('should reject duplicate ticker', async () => {
