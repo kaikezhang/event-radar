@@ -152,6 +152,32 @@ describe('ticker routes', () => {
       const tickers = res.json().data.map((d: { ticker: string }) => d.ticker);
       expect(tickers).toContain('BRK.B');
     });
+
+    it('escapes LIKE wildcards in search query', async () => {
+      // Searching for "%" or "_" should not match everything
+      const resPercent = await ctx.server.inject({
+        method: 'GET',
+        url: '/api/tickers/search?q=%25', // URL-encoded %
+      });
+      expect(resPercent.statusCode).toBe(200);
+      expect(resPercent.json().data).toEqual([]);
+
+      const resUnderscore = await ctx.server.inject({
+        method: 'GET',
+        url: '/api/tickers/search?q=_',
+      });
+      expect(resUnderscore.statusCode).toBe(200);
+      expect(resUnderscore.json().data).toEqual([]);
+    });
+
+    it('rejects q parameter longer than 50 characters', async () => {
+      const longQuery = 'A'.repeat(51);
+      const res = await ctx.server.inject({
+        method: 'GET',
+        url: `/api/tickers/search?q=${longQuery}`,
+      });
+      expect(res.statusCode).toBe(400);
+    });
   });
 
   describe('GET /api/tickers/trending', () => {
