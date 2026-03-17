@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface ToastProps {
   message: string;
@@ -8,11 +8,14 @@ interface ToastProps {
 }
 
 export function Toast({ message, visible, onDismiss, duration = 2000 }: ToastProps) {
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
   useEffect(() => {
     if (!visible) return;
-    const timer = setTimeout(onDismiss, duration);
+    const timer = setTimeout(() => onDismissRef.current(), duration);
     return () => clearTimeout(timer);
-  }, [visible, duration, onDismiss]);
+  }, [visible, duration]);
 
   return (
     <div

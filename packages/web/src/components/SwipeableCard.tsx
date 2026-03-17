@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, type ReactNode } from 'react';
+import { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { X, Star } from 'lucide-react';
 
 interface SwipeableCardProps {
@@ -27,9 +27,36 @@ export function SwipeableCard({
   const currentX = useRef(0);
   const swiping = useRef(false);
   const locked = useRef(false);
+  const timeoutIds = useRef<number[]>([]);
   const [offset, setOffset] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+
+  // Cleanup all pending timeouts on unmount
+  useEffect(() => {
+    return () => {
+      for (const id of timeoutIds.current) {
+        clearTimeout(id);
+      }
+    };
+  }, []);
+
+  const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timeoutIds.current = timeoutIds.current.filter((t) => t !== id);
+      fn();
+    }, ms);
+    timeoutIds.current.push(id);
+    return id;
+  }, []);
+
+  const resetSwipeState = useCallback(() => {
+    swiping.current = false;
+    locked.current = false;
+    currentX.current = 0;
+    setOffset(0);
+    setTransitioning(false);
+  }, []);
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -63,6 +90,8 @@ export function SwipeableCard({
       }
 
       if (swiping.current) {
+        // Prevent pull-to-refresh from activating during horizontal swipe
+        e.stopPropagation();
         currentX.current = dx;
         setOffset(dx);
       }
@@ -70,49 +99,58 @@ export function SwipeableCard({
     [disabled],
   );
 
-  const handleTouchEnd = useCallback(() => {
-    if (disabled || !swiping.current) {
-      setOffset(0);
-      return;
-    }
-
-    const el = containerRef.current;
-    if (!el) {
-      setOffset(0);
-      return;
-    }
-
-    const width = el.offsetWidth;
-    const threshold = width * THRESHOLD_RATIO;
-    const dx = currentX.current;
-
-    if (dx < -threshold && onSwipeLeft) {
-      // Haptic feedback
-      if ('vibrate' in navigator) {
-        navigator.vibrate(10);
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (disabled || !swiping.current) {
+        setOffset(0);
+        return;
       }
-      setTransitioning(true);
-      setOffset(-width);
-      setTimeout(() => {
-        setDismissed(true);
-        onSwipeLeft();
-      }, 250);
-    } else if (dx > threshold && onSwipeRight) {
-      if ('vibrate' in navigator) {
-        navigator.vibrate(10);
-      }
-      setTransitioning(true);
-      setOffset(0);
-      onSwipeRight();
-    } else {
-      // Spring back
-      setTransitioning(true);
-      setOffset(0);
-      setTimeout(() => setTransitioning(false), 250);
-    }
 
-    swiping.current = false;
-  }, [disabled, onSwipeLeft, onSwipeRight]);
+      // Stop event from reaching pull-to-refresh handler
+      e.stopPropagation();
+
+      const el = containerRef.current;
+      if (!el) {
+        setOffset(0);
+        return;
+      }
+
+      const width = el.offsetWidth;
+      const threshold = width * THRESHOLD_RATIO;
+      const dx = currentX.current;
+
+      if (dx < -threshold && onSwipeLeft) {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(10);
+        }
+        setTransitioning(true);
+        setOffset(-width);
+        scheduleTimeout(() => {
+          setDismissed(true);
+          onSwipeLeft();
+        }, 250);
+      } else if (dx > threshold && onSwipeRight) {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(10);
+        }
+        setTransitioning(true);
+        setOffset(0);
+        onSwipeRight();
+      } else {
+        // Spring back
+        setTransitioning(true);
+        setOffset(0);
+        scheduleTimeout(() => setTransitioning(false), 250);
+      }
+
+      swiping.current = false;
+    },
+    [disabled, onSwipeLeft, onSwipeRight, scheduleTimeout],
+  );
+
+  const handleTouchCancel = useCallback(() => {
+    resetSwipeState();
+  }, [resetSwipeState]);
 
   if (dismissed) return null;
 
@@ -154,6 +192,7 @@ export function SwipeableCard({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
         style={{
           transform: `translateX(${offset}px)`,
           transition: transitioning ? 'transform 250ms ease-out' : 'none',

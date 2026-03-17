@@ -134,7 +134,7 @@ export function Feed() {
   });
 
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add } = useWatchlist();
+  const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add, addAsync } = useWatchlist();
   const hasWatchlist = watchlistItems.length > 0;
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -161,7 +161,7 @@ export function Feed() {
   }, []);
 
   const handleQuickWatchlist = useCallback(
-    (alert: AlertSummary) => {
+    async (alert: AlertSummary) => {
       const ticker = alert.tickers[0];
       if (!ticker) return;
       if (isOnWatchlist(ticker)) {
@@ -169,11 +169,16 @@ export function Feed() {
         setToastVisible(true);
         return;
       }
-      add(ticker);
-      setToastMessage(`Added ${ticker} to watchlist \u2713`);
-      setToastVisible(true);
+      try {
+        await addAsync(ticker);
+        setToastMessage(`Added ${ticker} to watchlist \u2713`);
+        setToastVisible(true);
+      } catch {
+        setToastMessage(`Failed to add ${ticker}`);
+        setToastVisible(true);
+      }
     },
-    [add, isOnWatchlist],
+    [addAsync, isOnWatchlist],
   );
 
   // Resolve default tab after auth + watchlist queries settle
