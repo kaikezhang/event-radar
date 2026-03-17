@@ -11,6 +11,8 @@ export interface AlertSummary {
   time: string;
   saved?: boolean;
   direction?: string;
+  confidence?: number | null;
+  confidenceBucket?: string | null;
   confirmationCount?: number;
   confirmedSources?: string[];
 }
