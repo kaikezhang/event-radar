@@ -221,7 +221,7 @@ export function registerWatchlistRoutes(
               type: 'object',
               required: ['ticker'],
               properties: {
-                ticker: { type: 'string', pattern: '^[A-Z.]{1,10}$' },
+                ticker: { type: 'string', pattern: '^[A-Za-z.]{1,10}$' },
                 sectionId: { type: 'string' },
                 notes: { type: 'string' },
               },
@@ -259,10 +259,11 @@ export function registerWatchlistRoutes(
     let skipped = 0;
 
     for (const item of tickers) {
+      const upperTicker = item.ticker.toUpperCase();
       const [existing] = await db
         .select({ id: watchlist.id })
         .from(watchlist)
-        .where(and(eq(watchlist.userId, userId), eq(watchlist.ticker, item.ticker)))
+        .where(and(eq(watchlist.userId, userId), eq(watchlist.ticker, upperTicker)))
         .limit(1);
 
       if (existing) {
@@ -272,7 +273,7 @@ export function registerWatchlistRoutes(
 
       await db.insert(watchlist).values({
         userId,
-        ticker: item.ticker,
+        ticker: upperTicker,
         notes: item.notes ?? null,
         sectionId: item.sectionId ?? null,
       });
