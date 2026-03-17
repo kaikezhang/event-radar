@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ArrowUpRight, Bell, CheckCircle2, LogIn, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CheckCircle2, LogIn, Plus, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SkeletonCard } from '../components/SkeletonCard.js';
+import { TickerSearch } from '../components/TickerSearch.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist, useWatchlistSummary } from '../hooks/useWatchlist.js';
 
-const SUGGESTED_TICKERS = ['AAPL', 'NVDA', 'TSLA'] as const;
 const PUSH_SETTINGS_PATH = '/settings?from=watchlist#push-alerts';
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -25,9 +25,9 @@ function timeAgo(isoString: string): string {
 
 export function Watchlist() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { items, isLoading, addAsync, remove, isAdding } = useWatchlist();
+  const { items, isLoading, remove } = useWatchlist();
   const { summary } = useWatchlistSummary();
-  const [tickerInput, setTickerInput] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [firstTickerAdded, setFirstTickerAdded] = useState<string | null>(null);
 
   const isEmpty = items.length === 0;
@@ -36,18 +36,9 @@ export function Watchlist() {
 
   const summaryMap = new Map(summary.map((s) => [s.ticker, s]));
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const ticker = tickerInput.trim().toUpperCase();
-
-    if (ticker && /^[A-Z]{1,5}$/.test(ticker)) {
-      const addingFirstTicker = items.length === 0;
-      await addAsync(ticker);
-      setTickerInput('');
-
-      if (addingFirstTicker) {
-        setFirstTickerAdded(ticker);
-      }
+  const handleTickerAdded = (ticker: string) => {
+    if (items.length === 0) {
+      setFirstTickerAdded(ticker);
     }
   };
 
@@ -124,48 +115,24 @@ export function Watchlist() {
           </span>
         </div>
 
-        <form onSubmit={(event) => void handleAdd(event)} className="flex gap-2">
-          <input
-            type="text"
-            value={tickerInput}
-            onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
-            placeholder={isEmpty ? 'Type your first ticker (e.g. AAPL)' : 'Add ticker (e.g. AAPL)'}
-            maxLength={5}
-            className="min-h-11 flex-1 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
-            aria-label="Add ticker to watchlist"
-          />
-          <button
-            type="submit"
-            disabled={isAdding || !tickerInput.trim()}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent-default px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            {isEmpty ? 'Add first ticker' : 'Add'}
-          </button>
-        </form>
-
-        {isEmpty ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Quick add
-            </p>
-            <div className="flex flex-wrap gap-2">
-            {SUGGESTED_TICKERS.map((ticker) => (
-              <button
-                key={ticker}
-                type="button"
-                onClick={() => setTickerInput(ticker)}
-                aria-label={`Quick add ${ticker}`}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-bg-elevated/72 px-3.5 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
-              >
-                <Plus className="h-3.5 w-3.5 text-accent-default" />
-                {ticker}
-              </button>
-            ))}
-            </div>
-          </div>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="flex min-h-11 w-full items-center gap-3 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-[15px] text-text-secondary/60 transition hover:bg-white/8 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
+        >
+          <Search className="h-4 w-4" />
+          <span>{isEmpty ? 'Search tickers to add (e.g. AAPL)' : 'Search tickers...'}</span>
+          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+            /
+          </kbd>
+        </button>
       </section>
+
+      <TickerSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onTickerAdded={handleTickerAdded}
+      />
 
       {isEmpty ? (
         <section className="rounded-2xl border border-border-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
