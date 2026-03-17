@@ -776,7 +776,7 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
   };
 }
 
-function mapSource(source: string): string {
+export function mapSource(source: string): string {
   const MAP: Record<string, string> = {
     'sec-edgar': 'SEC Filing',
     'whitehouse': 'White House',
