@@ -118,6 +118,7 @@ interface FeedRow {
   received_at: string | Date;
   created_at: string | Date;
   audit_ticker: string | null;
+  audit_confidence: string | number | null;
 }
 
 const FEED_CATEGORIES = new Set<FeedCategory>([
@@ -232,7 +233,43 @@ function getFeedTickers(metadata: Record<string, unknown>, fallbackTicker: strin
     return [singleTicker];
   }
 
+  // Fallback: extract tickers from LLM enrichment
+  const enrichment = metadata['llm_enrichment'];
+  if (enrichment && typeof enrichment === 'object' && !Array.isArray(enrichment)) {
+    const enrTickers = (enrichment as Record<string, unknown>)['tickers'];
+    if (Array.isArray(enrTickers)) {
+      const symbols = enrTickers
+        .map((t) => typeof t === 'object' && t !== null ? (t as Record<string, unknown>)['symbol'] : null)
+        .filter((s): s is string => typeof s === 'string' && s.length > 0);
+      if (symbols.length > 0) return symbols;
+    }
+  }
+
   return fallbackTicker ? [fallbackTicker] : [];
+}
+
+function getFeedDirection(metadata: Record<string, unknown>): string | null {
+  // From enrichment tickers direction
+  const enrichment = metadata['llm_enrichment'];
+  if (enrichment && typeof enrichment === 'object' && !Array.isArray(enrichment)) {
+    const enrTickers = (enrichment as Record<string, unknown>)['tickers'];
+    if (Array.isArray(enrTickers) && enrTickers.length > 0) {
+      const first = enrTickers[0] as Record<string, unknown> | undefined;
+      if (first && typeof first['direction'] === 'string') return first['direction'];
+    }
+  }
+  return null;
+}
+
+function getFeedConfidence(metadata: Record<string, unknown>, auditConfidence: unknown): { confidence: number | null; confidenceBucket: string | null } {
+  const conf = typeof auditConfidence === 'number' ? auditConfidence
+    : typeof auditConfidence === 'string' ? parseFloat(auditConfidence)
+    : null;
+
+  if (conf == null || isNaN(conf)) return { confidence: null, confidenceBucket: null };
+
+  const bucket = conf >= 0.7 ? 'high' : conf >= 0.5 ? 'medium' : conf >= 0.3 ? 'low' : 'unconfirmed';
+  return { confidence: conf, confidenceBucket: bucket };
 }
 
 function getFeedUrl(metadata: Record<string, unknown>, sourceUrls: unknown): string | null {
@@ -592,6 +629,7 @@ export function registerDashboardRoutes(
           pa.created_at AS audit_created_at,
           pa.reason AS llm_reason,
           pa.ticker AS audit_ticker,
+          pa.confidence AS audit_confidence,
           e.id,
           e.title,
           e.source,
@@ -645,6 +683,8 @@ export function registerDashboardRoutes(
             confirmedSources: asStringArray(row.confirmed_sources).length > 0
               ? asStringArray(row.confirmed_sources)
               : asStringArray(metadata['confirmedSources']),
+            direction: getFeedDirection(metadata),
+            ...getFeedConfidence(metadata, row.audit_confidence),
           };
         }),
         cursor: hasMore && lastRow

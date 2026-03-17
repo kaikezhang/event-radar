@@ -770,7 +770,9 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     summary,
     time: (event.time as string) ?? (event.receivedAt as string) ?? (event.createdAt as string) ?? new Date().toISOString(),
     saved: false,
-    direction: (metadata.direction as string | undefined) ?? undefined,
+    direction: (event.direction as string | undefined) ?? (metadata.direction as string | undefined) ?? undefined,
+    confidence: typeof event.confidence === 'number' ? event.confidence : null,
+    confidenceBucket: (event.confidenceBucket as string | undefined) ?? null,
     confirmationCount:
       typeof event.confirmationCount === 'number'
         ? event.confirmationCount
