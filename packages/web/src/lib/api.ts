@@ -99,8 +99,12 @@ async function apiFetch(path: string, options?: { public?: boolean; method?: str
       return retryRes.json();
     }
 
-    // Refresh failed → redirect to login
-    window.location.href = '/login';
+    // Refresh failed → clear stale cookies silently, don't redirect
+    // The user can continue browsing as unauthenticated
+    document.cookie.split(';').forEach((c) => {
+      const name = c.split('=')[0]?.trim();
+      if (name) document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    });
     throw new Error('Session expired');
   }
 
