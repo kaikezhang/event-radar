@@ -7,7 +7,7 @@ import { SkeletonCard } from '../components/SkeletonCard.js';
 import { TickerChip } from '../components/TickerChip.js';
 import { EmptyState } from '../components/EmptyState.js';
 import { formatPercent, formatRelativeTime } from '../lib/format.js';
-import { submitFeedback } from '../lib/api.js';
+import { mapSource, submitFeedback } from '../lib/api.js';
 import { useEventDetail } from '../hooks/useEventDetail.js';
 import { cn } from '../lib/utils.js';
 import type { LlmEnrichment } from '../types/index.js';
@@ -26,9 +26,6 @@ function formatTrustMove(value: number | null) {
   return value == null ? 'Pending' : formatPercent(value, 2);
 }
 
-function formatSeverityLabel(value: string) {
-  return `${value.charAt(0)}${value.slice(1).toLowerCase()} severity`;
-}
 
 function formatSignedPercent(value: number | null): string {
   if (value == null) return 'N/A';
@@ -492,7 +489,7 @@ export function EventDetail() {
         <div className="min-w-0 space-y-4 lg:flex-[2]">
 
           {/* ═══════════════════ ZONE 1: THE VERDICT ═══════════════════ */}
-          <div id="zone-verdict" ref={verdictRef}>
+          <div id="zone-verdict" ref={verdictRef} className="scroll-mt-28">
             {/* 1. Header: severity + source + time */}
             <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
               <div className="flex items-center gap-3">
@@ -593,7 +590,7 @@ export function EventDetail() {
           <div className="border-t-2 border-white/10" />
 
           {/* ═══════════════════ ZONE 2: THE EVIDENCE ═══════════════════ */}
-          <div id="zone-evidence" ref={evidenceRef}>
+          <div id="zone-evidence" ref={evidenceRef} className="scroll-mt-28">
             {/* 8. Stock Context — inline on mobile (sidebar has it on desktop) */}
             <div className="lg:hidden">
               <StockContextPanel data={data} />
@@ -716,7 +713,7 @@ export function EventDetail() {
           <div className="border-t-2 border-white/10" />
 
           {/* ═══════════════════ ZONE 3: THE TRUST ═══════════════════ */}
-          <div id="zone-trust" ref={trustRef}>
+          <div id="zone-trust" ref={trustRef} className="scroll-mt-28">
             {/* 11. Source Journey Timeline */}
             {(data.audit || data.provenance.length > 0) && (
               <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -815,7 +812,7 @@ export function EventDetail() {
                       className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-sm font-medium text-emerald-200"
                     >
                       <CircleCheckBig className="h-3.5 w-3.5" />
-                      {source}
+                      {mapSource(source)}
                     </span>
                   ))}
                 </div>
