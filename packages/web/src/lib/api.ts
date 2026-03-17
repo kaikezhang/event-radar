@@ -12,6 +12,7 @@ import type {
   SimilarEvent,
   TickerProfileData,
   WatchlistItem,
+  WatchlistSection,
 } from '../types/index.js';
 
 const API_BASE = '/api';
@@ -600,6 +601,8 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
     addedAt: (w.addedAt as string) ?? (w.added_at as string) ?? new Date().toISOString(),
     notes: (w.notes as string | null) ?? null,
     name: (w.name as string | null) ?? null,
+    sectionId: (w.sectionId as string | null) ?? (w.section_id as string | null) ?? null,
+    sortOrder: typeof w.sortOrder === 'number' ? w.sortOrder : (typeof w.sort_order === 'number' ? w.sort_order : 0),
   }));
 }
 
@@ -626,6 +629,41 @@ export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
 
 export async function removeFromWatchlist(ticker: string): Promise<void> {
   await apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'DELETE' });
+}
+
+// ── Watchlist Sections API ───────────────────────────────────────────────────
+
+export async function getWatchlistSections(): Promise<WatchlistSection[]> {
+  const data = await apiFetch('/watchlist/sections');
+  return (data.data ?? []).map((s: Record<string, unknown>) => ({
+    id: s.id as string,
+    name: s.name as string,
+    color: (s.color as string) ?? 'gray',
+    sortOrder: typeof s.sortOrder === 'number' ? s.sortOrder : (typeof s.sort_order === 'number' ? s.sort_order : 0),
+  }));
+}
+
+export async function createWatchlistSection(name: string, color?: string): Promise<WatchlistSection> {
+  const body: Record<string, string> = { name };
+  if (color) body.color = color;
+  return apiFetch('/watchlist/sections', { method: 'POST', body });
+}
+
+export async function updateWatchlistSection(
+  id: string,
+  data: Partial<{ name: string; color: string; sortOrder: number }>,
+): Promise<WatchlistSection> {
+  return apiFetch(`/watchlist/sections/${id}`, { method: 'PATCH', body: data });
+}
+
+export async function deleteWatchlistSection(id: string): Promise<void> {
+  await apiFetch(`/watchlist/sections/${id}`, { method: 'DELETE' });
+}
+
+export async function reorderWatchlist(
+  items: Array<{ ticker: string; sortOrder: number; sectionId?: string | null }>,
+): Promise<void> {
+  await apiFetch('/watchlist/reorder', { method: 'PATCH', body: { items } });
 }
 
 // ── Ticker Search API ────────────────────────────────────────────────────────

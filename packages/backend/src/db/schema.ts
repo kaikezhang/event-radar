@@ -456,6 +456,19 @@ export const tickerReference = pgTable('ticker_reference', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
+export const watchlistSections = pgTable('watchlist_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id', { length: 100 })
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  color: varchar('color', { length: 20 }).default('gray'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('idx_ws_user_name').on(table.userId, table.name),
+]);
+
 export const watchlist = pgTable(
   'watchlist',
   {
@@ -468,6 +481,8 @@ export const watchlist = pgTable(
       .notNull()
       .defaultNow(),
     notes: text('notes'),
+    sectionId: uuid('section_id').references(() => watchlistSections.id, { onDelete: 'set null' }),
+    sortOrder: integer('sort_order').notNull().default(0),
   },
   (table) => [
     index('idx_watchlist_ticker').on(table.ticker),
