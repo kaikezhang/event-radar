@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Check, Loader2, Plus, Search, X, TrendingUp, Clock } from 'lucide-react';
 import { useTickerSearch } from '../hooks/useTickerSearch.js';
 import { useWatchlist } from '../hooks/useWatchlist.js';
+import { useAuth } from '../contexts/AuthContext.js';
 
 interface TickerSearchProps {
   /** Whether the overlay is open */
@@ -13,9 +14,10 @@ interface TickerSearchProps {
 }
 
 export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps) {
+  const { isAuthenticated } = useAuth();
   const { query, setQuery, results, isSearching, recentSearches, trending, addToRecent, clearRecent } =
     useTickerSearch({ enabled: open });
-  const { add, isOnWatchlist } = useWatchlist({ enabled: open });
+  const { add, isOnWatchlist } = useWatchlist({ enabled: open && isAuthenticated });
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
