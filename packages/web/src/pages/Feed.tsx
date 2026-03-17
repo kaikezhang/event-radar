@@ -134,7 +134,7 @@ export function Feed() {
   });
 
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add, addAsync } = useWatchlist();
+  const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add, addAsync } = useWatchlist({ enabled: isAuthenticated });
   const hasWatchlist = watchlistItems.length > 0;
   const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
