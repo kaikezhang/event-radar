@@ -6,6 +6,8 @@ import { EmptyState } from '../components/EmptyState.js';
 import { AlertCard } from '../components/AlertCard.js';
 import { PillBanner } from '../components/PillBanner.js';
 import { SkeletonCard } from '../components/SkeletonCard.js';
+import { SwipeableCard } from '../components/SwipeableCard.js';
+import { Toast } from '../components/Toast.js';
 import { useAlerts } from '../hooks/useAlerts.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist } from '../hooks/useWatchlist.js';
@@ -148,6 +150,31 @@ export function Feed() {
   const [bannerDismissed, setBannerDismissed] = useState(() => {
     try { return localStorage.getItem(UNAUTH_BANNER_KEY) === '1'; } catch { return false; }
   });
+
+  // D8: Swipe dismiss & toast state
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+
+  const handleDismiss = useCallback((alertId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(alertId));
+  }, []);
+
+  const handleQuickWatchlist = useCallback(
+    (alert: AlertSummary) => {
+      const ticker = alert.tickers[0];
+      if (!ticker) return;
+      if (isOnWatchlist(ticker)) {
+        setToastMessage(`${ticker} already on watchlist`);
+        setToastVisible(true);
+        return;
+      }
+      add(ticker);
+      setToastMessage(`Added ${ticker} to watchlist \u2713`);
+      setToastVisible(true);
+    },
+    [add, isOnWatchlist],
+  );
 
   // Resolve default tab after auth + watchlist queries settle
   useEffect(() => {
@@ -303,9 +330,12 @@ export function Feed() {
     prevAlertIdsRef.current = currentIds;
   }, [alerts]);
 
-  // Apply client-side filters + sort
+  // Apply client-side filters + sort + dismissed
   const filteredAlerts = useMemo(() => {
     let result = alerts;
+    if (dismissedIds.size > 0) {
+      result = result.filter((a) => !dismissedIds.has(a.id));
+    }
     if (activeSeverities.length > 0) {
       result = result.filter((a) => activeSeverities.includes(a.severity));
     }
@@ -320,7 +350,7 @@ export function Feed() {
       });
     }
     return result;
-  }, [alerts, activeSeverities, activeSources, sortMode]);
+  }, [alerts, activeSeverities, activeSources, sortMode, dismissedIds]);
 
   // Clear stale selection when the selected event is no longer visible
   useEffect(() => {
@@ -447,7 +477,7 @@ export function Feed() {
           <button
             type="button"
             onClick={() => setShowModeDropdown(!showModeDropdown)}
-            className="flex items-center gap-1.5 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary"
+            className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm font-medium text-text-primary"
           >
             {isWatchlistMode ? 'My Watchlist' : 'All Events'}
             <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />
@@ -490,7 +520,7 @@ export function Feed() {
         <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as SortMode)}
-          className="rounded-xl border border-border-default bg-bg-surface px-2.5 py-2 text-xs font-medium text-text-secondary outline-none focus:border-accent-default"
+          className="min-h-[44px] rounded-xl border border-border-default bg-bg-surface px-2.5 py-2 text-xs font-medium text-text-secondary outline-none focus:border-accent-default"
         >
           <option value="latest">Latest first</option>
           <option value="severity">Highest severity</option>
@@ -501,7 +531,7 @@ export function Feed() {
           type="button"
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
-            'flex items-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-medium transition',
+            'flex min-h-[44px] items-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-medium transition',
             hasActiveFilters
               ? 'border-accent-default/30 bg-accent-default/10 text-accent-default'
               : 'border-border-default bg-bg-surface text-text-secondary',
@@ -525,7 +555,7 @@ export function Feed() {
             key={`sev-${s}`}
             type="button"
             onClick={() => toggleSeverity(s)}
-            className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
             role="listitem"
           >
             {s}
@@ -537,7 +567,7 @@ export function Feed() {
             key={`src-${s}`}
             type="button"
             onClick={() => toggleSource(s)}
-            className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
             role="listitem"
           >
             {s}
@@ -850,28 +880,41 @@ export function Feed() {
                     </div>
                   </div>
                   <div className="space-y-3">
-                    {group.alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className={cn(
-                          'rounded-2xl transition-all',
-                          newAlertIds.has(alert.id) && 'animate-highlight',
-                          isDesktop && selectedEventId === alert.id && 'ring-2 ring-accent-default/50 bg-bg-elevated/50',
-                        )}
-                        onClick={(e) => handleCardClick(e, alert.id)}
-                        role={isDesktop ? 'button' : undefined}
-                        tabIndex={isDesktop ? 0 : undefined}
-                        onKeyDown={isDesktop ? (e) => { if (e.key === 'Enter') handleCardClick(e as unknown as React.MouseEvent, alert.id); } : undefined}
-                      >
-                        <AlertCard
-                          alert={alert}
-                          trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
-                          showWatchlistButton
-                          isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
-                          onToggleWatchlist={(ticker) => add(ticker)}
-                        />
-                      </div>
-                    ))}
+                    {group.alerts.map((alert) => {
+                      const card = (
+                        <div
+                          key={alert.id}
+                          className={cn(
+                            'rounded-2xl transition-all',
+                            newAlertIds.has(alert.id) && 'animate-highlight',
+                            isDesktop && selectedEventId === alert.id && 'ring-2 ring-accent-default/50 bg-bg-elevated/50',
+                            !isDesktop && 'active:scale-[0.98]',
+                          )}
+                          onClick={(e) => handleCardClick(e, alert.id)}
+                          role={isDesktop ? 'button' : undefined}
+                          tabIndex={isDesktop ? 0 : undefined}
+                          onKeyDown={isDesktop ? (e) => { if (e.key === 'Enter') handleCardClick(e as unknown as React.MouseEvent, alert.id); } : undefined}
+                        >
+                          <AlertCard
+                            alert={alert}
+                            trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
+                            showWatchlistButton
+                            isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
+                            onToggleWatchlist={(ticker) => add(ticker)}
+                          />
+                        </div>
+                      );
+
+                      return isDesktop ? card : (
+                        <SwipeableCard
+                          key={alert.id}
+                          onSwipeLeft={() => handleDismiss(alert.id)}
+                          onSwipeRight={() => handleQuickWatchlist(alert)}
+                        >
+                          {card}
+                        </SwipeableCard>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -929,5 +972,14 @@ export function Feed() {
   }
 
   // ── Mobile layout (existing single-column) ─────────────────────────────
-  return feedListContent;
+  return (
+    <>
+      {feedListContent}
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onDismiss={() => setToastVisible(false)}
+      />
+    </>
+  );
 }
