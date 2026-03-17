@@ -33,11 +33,13 @@ export function registerWatchlistRoutes(
         notes: watchlist.notes,
         addedAt: watchlist.addedAt,
         name: tickerReference.name,
+        sectionId: watchlist.sectionId,
+        sortOrder: watchlist.sortOrder,
       })
       .from(watchlist)
       .leftJoin(tickerReference, eq(watchlist.ticker, tickerReference.ticker))
       .where(eq(watchlist.userId, userId))
-      .orderBy(watchlist.addedAt);
+      .orderBy(watchlist.sortOrder, watchlist.addedAt);
 
     return { data };
   });

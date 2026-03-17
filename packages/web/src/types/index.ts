@@ -186,6 +186,15 @@ export interface WatchlistItem {
   addedAt: string;
   notes?: string | null;
   name?: string | null;
+  sectionId?: string | null;
+  sortOrder?: number;
+}
+
+export interface WatchlistSection {
+  id: string;
+  name: string;
+  color: string;
+  sortOrder: number;
 }
 
 export interface FilterPreset {

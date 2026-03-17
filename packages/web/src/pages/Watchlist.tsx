@@ -1,10 +1,47 @@
-import { useState } from 'react';
-import { ArrowUpRight, Bell, CheckCircle2, LogIn, Plus, Search, X } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  ArrowUpRight,
+  Bell,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+  LogIn,
+  MoreHorizontal,
+  Palette,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { SkeletonCard } from '../components/SkeletonCard.js';
 import { TickerSearch } from '../components/TickerSearch.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist, useWatchlistSummary } from '../hooks/useWatchlist.js';
+import { useWatchlistSections } from '../hooks/useWatchlistSections.js';
+import type { WatchlistItem, WatchlistSection } from '../types/index.js';
+import type { WatchlistTickerSummary } from '../lib/api.js';
 
 const PUSH_SETTINGS_PATH = '/settings?from=watchlist#push-alerts';
 
@@ -15,6 +52,33 @@ const SEVERITY_COLORS: Record<string, string> = {
   LOW: 'bg-green-500/20 text-green-400 border-green-500/30',
 };
 
+const SECTION_COLORS: Record<string, string> = {
+  red: 'bg-red-500',
+  orange: 'bg-orange-500',
+  yellow: 'bg-yellow-500',
+  green: 'bg-emerald-500',
+  blue: 'bg-blue-500',
+  purple: 'bg-purple-500',
+  gray: 'bg-zinc-400',
+};
+
+const VALID_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'] as const;
+
+const COLLAPSED_KEY = 'er-watchlist-collapsed';
+
+function getCollapsedState(): Set<string> {
+  try {
+    const stored = localStorage.getItem(COLLAPSED_KEY);
+    return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function setCollapsedState(ids: Set<string>) {
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...ids]));
+}
+
 function timeAgo(isoString: string): string {
   const ms = Date.now() - new Date(isoString).getTime();
   if (ms < 60_000) return 'just now';
@@ -23,12 +87,448 @@ function timeAgo(isoString: string): string {
   return `${Math.round(ms / 86_400_000)}d ago`;
 }
 
+// ── Sortable Ticker Row ─────────────────────────────────────────────
+
+interface TickerRowProps {
+  item: WatchlistItem;
+  tickerSummary?: WatchlistTickerSummary;
+  onRemove: (ticker: string) => void;
+}
+
+function SortableTickerRow({ item, tickerSummary, onRemove }: TickerRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.ticker });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="touch-none cursor-grab text-text-secondary/40 hover:text-text-secondary"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <Link
+          to={`/ticker/${item.ticker}`}
+          className="flex flex-1 items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-default"
+        >
+          <span className="text-[17px] font-semibold text-text-primary">
+            ${item.ticker}
+          </span>
+          {item.name && (
+            <span className="truncate text-sm text-text-secondary">
+              {item.name}
+            </span>
+          )}
+          {tickerSummary && tickerSummary.eventCount24h > 0 && (
+            <span className="text-lg" aria-label={`Signal: ${tickerSummary.highestSignal}`}>
+              {tickerSummary.highestSignal}
+            </span>
+          )}
+        </Link>
+        <button
+          type="button"
+          onClick={() => onRemove(item.ticker)}
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-white/6 p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
+          aria-label={`Remove ${item.ticker} from watchlist`}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {tickerSummary && tickerSummary.eventCount24h > 0 && (
+        <div className="mt-3 ml-6 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-text-secondary">
+              {tickerSummary.eventCount24h} event{tickerSummary.eventCount24h !== 1 ? 's' : ''} (24h)
+            </span>
+            {tickerSummary.latestEvent && (
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                  SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
+                }`}
+              >
+                {tickerSummary.latestEvent.severity}
+              </span>
+            )}
+          </div>
+          {tickerSummary.latestEvent && (
+            <p className="mt-1.5 text-sm leading-5 text-text-primary line-clamp-2">
+              {tickerSummary.latestEvent.title}
+            </p>
+          )}
+          {tickerSummary.latestEvent && (
+            <p className="mt-1 text-xs text-text-secondary">
+              {timeAgo(tickerSummary.latestEvent.timestamp)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DragOverlayRow({ item, tickerSummary }: { item: WatchlistItem; tickerSummary?: WatchlistTickerSummary }) {
+  return (
+    <div className="rounded-2xl border border-accent-default/40 bg-bg-surface p-4 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+      <div className="flex items-center gap-2">
+        <GripVertical className="h-4 w-4 text-text-secondary/40" />
+        <span className="text-[17px] font-semibold text-text-primary">
+          ${item.ticker}
+        </span>
+        {item.name && (
+          <span className="truncate text-sm text-text-secondary">{item.name}</span>
+        )}
+        {tickerSummary && tickerSummary.eventCount24h > 0 && (
+          <span className="text-lg">{tickerSummary.highestSignal}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Section Header ──────────────────────────────────────────────────
+
+interface SectionHeaderProps {
+  section: WatchlistSection;
+  itemCount: number;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  onRename: (name: string) => void;
+  onChangeColor: (color: string) => void;
+  onDelete: () => void;
+  onAddTicker: () => void;
+}
+
+function SectionHeader({
+  section,
+  itemCount,
+  isCollapsed,
+  onToggleCollapse,
+  onRename,
+  onChangeColor,
+  onDelete,
+  onAddTicker,
+}: SectionHeaderProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(section.name);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setColorPickerOpen(false);
+        setConfirmDelete(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [menuOpen]);
+
+  const handleRename = () => {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== section.name) {
+      onRename(trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2">
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        className="text-text-secondary hover:text-text-primary"
+        aria-label={isCollapsed ? 'Expand section' : 'Collapse section'}
+      >
+        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+
+      <span className={`h-2.5 w-2.5 rounded-full ${SECTION_COLORS[section.color] ?? SECTION_COLORS.gray}`} />
+
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleRename();
+            if (e.key === 'Escape') {
+              setEditName(section.name);
+              setIsEditing(false);
+            }
+          }}
+          className="flex-1 rounded border border-accent-default/40 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-text-primary outline-none"
+          maxLength={100}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setEditName(section.name);
+            setIsEditing(true);
+          }}
+          className="flex-1 text-left text-sm font-semibold text-text-primary hover:text-accent-default"
+        >
+          {section.name}
+        </button>
+      )}
+
+      <span className="text-xs text-text-secondary">{itemCount}</span>
+
+      <button
+        type="button"
+        onClick={onAddTicker}
+        className="rounded-full p-1 text-text-secondary/60 hover:bg-white/8 hover:text-text-primary"
+        aria-label="Add ticker to section"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => {
+            setMenuOpen(!menuOpen);
+            setColorPickerOpen(false);
+            setConfirmDelete(false);
+          }}
+          className="rounded-full p-1 text-text-secondary/60 hover:bg-white/8 hover:text-text-primary"
+          aria-label="Section menu"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-border-default bg-bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.3)]">
+            {colorPickerOpen ? (
+              <div className="p-2">
+                <p className="mb-2 text-xs font-medium text-text-secondary">Pick a color</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {VALID_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        onChangeColor(c);
+                        setColorPickerOpen(false);
+                        setMenuOpen(false);
+                      }}
+                      className={`h-6 w-6 rounded-full ${SECTION_COLORS[c]} ${section.color === c ? 'ring-2 ring-white ring-offset-1 ring-offset-bg-surface' : ''} hover:scale-110 transition`}
+                      aria-label={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : confirmDelete ? (
+              <div className="p-2">
+                <p className="mb-2 text-xs text-text-secondary">
+                  Delete "{section.name}"? Tickers will move to Unsorted.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete();
+                      setMenuOpen(false);
+                      setConfirmDelete(false);
+                    }}
+                    className="flex-1 rounded-lg bg-red-500/20 px-2 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/30"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 rounded-lg bg-white/5 px-2 py-1.5 text-xs font-medium text-text-secondary hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setEditName(section.name);
+                    setIsEditing(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-white/5"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setColorPickerOpen(true)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-white/5"
+                >
+                  <Palette className="h-3.5 w-3.5" />
+                  Change Color
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── New Section Form ────────────────────────────────────────────────
+
+function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState<string>('gray');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  const handleSubmit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onCreate(trimmed, color);
+    setName('');
+    setColor('gray');
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-sm text-text-secondary/60 transition hover:border-white/20 hover:text-text-secondary"
+      >
+        <Plus className="h-4 w-4" />
+        New Section
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border-default bg-white/[0.04] p-3 space-y-3">
+      <input
+        ref={inputRef}
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSubmit();
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        placeholder="Section name"
+        className="w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm text-text-primary placeholder-text-secondary/40 outline-none focus:border-accent-default"
+        maxLength={100}
+      />
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-text-secondary">Color:</span>
+        <div className="flex gap-1.5">
+          {VALID_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              className={`h-5 w-5 rounded-full ${SECTION_COLORS[c]} ${color === c ? 'ring-2 ring-white ring-offset-1 ring-offset-bg-surface' : ''} hover:scale-110 transition`}
+              aria-label={c}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!name.trim()}
+          className="rounded-lg bg-accent-default px-3 py-1.5 text-xs font-medium text-white hover:brightness-110 disabled:opacity-40"
+        >
+          Create
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-white/10"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────────────
+
 export function Watchlist() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { items, isLoading, remove } = useWatchlist();
   const { summary } = useWatchlistSummary();
+  const {
+    sections,
+    isLoading: sectionsLoading,
+    create: createSection,
+    update: updateSection,
+    remove: removeSection,
+    reorder,
+  } = useWatchlistSections();
   const [searchOpen, setSearchOpen] = useState(false);
   const [firstTickerAdded, setFirstTickerAdded] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(getCollapsedState);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const isEmpty = items.length === 0;
   const hasFirstTickerSuccess =
@@ -36,11 +536,85 @@ export function Watchlist() {
 
   const summaryMap = new Map(summary.map((s) => [s.ticker, s]));
 
+  // Group items by section
+  const itemsBySection = new Map<string | null, WatchlistItem[]>();
+  for (const item of items) {
+    const key = item.sectionId ?? null;
+    const list = itemsBySection.get(key) ?? [];
+    list.push(item);
+    itemsBySection.set(key, list);
+  }
+
+  // Sort items within each group by sortOrder
+  for (const [, groupItems] of itemsBySection) {
+    groupItems.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  }
+
+  const unsortedItems = itemsBySection.get(null) ?? [];
+
+  const toggleCollapse = useCallback((sectionId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      setCollapsedState(next);
+      return next;
+    });
+  }, []);
+
   const handleTickerAdded = (ticker: string) => {
     if (items.length === 0) {
       setFirstTickerAdded(ticker);
     }
   };
+
+  // Build a flat ordered list of all tickers for dnd-kit
+  const orderedTickers: string[] = [];
+  const tickerToSection = new Map<string, string | null>();
+
+  for (const section of sections) {
+    const sectionItems = itemsBySection.get(section.id) ?? [];
+    for (const item of sectionItems) {
+      orderedTickers.push(item.ticker);
+      tickerToSection.set(item.ticker, section.id);
+    }
+  }
+  for (const item of unsortedItems) {
+    orderedTickers.push(item.ticker);
+    tickerToSection.set(item.ticker, null);
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedTickers.indexOf(active.id as string);
+    const newIndex = orderedTickers.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(orderedTickers, oldIndex, newIndex);
+
+    // Determine which section each ticker now belongs to based on position
+    // For cross-section moves, the dragged item takes the section of its new neighbor
+    const overSectionId = tickerToSection.get(over.id as string) ?? null;
+    const reorderItems = newOrder.map((ticker, idx) => ({
+      ticker,
+      sortOrder: idx,
+      sectionId: ticker === (active.id as string) ? overSectionId : tickerToSection.get(ticker) ?? null,
+    }));
+
+    reorder(reorderItems);
+  };
+
+  const activeItem = activeId ? items.find((i) => i.ticker === activeId) : null;
 
   if (!authLoading && !isAuthenticated) {
     return (
@@ -68,7 +642,7 @@ export function Watchlist() {
     );
   }
 
-  if (isLoading || authLoading) {
+  if (isLoading || authLoading || sectionsLoading) {
     return (
       <div className="space-y-4">
         <SkeletonCard />
@@ -94,6 +668,7 @@ export function Watchlist() {
         ) : (
           <p className="text-sm text-text-secondary">
             {items.length} ticker{items.length !== 1 ? 's' : ''} tracked
+            {sections.length > 0 && ` across ${sections.length} section${sections.length !== 1 ? 's' : ''}`}
           </p>
         )}
       </section>
@@ -220,78 +795,88 @@ export function Watchlist() {
             </div>
           ) : null}
 
-          {items.map((item) => {
-            const tickerSummary = summaryMap.get(item.ticker);
-            return (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)]"
-              >
-                <div className="flex items-center justify-between">
-                  <Link
-                    to={`/ticker/${item.ticker}`}
-                    className="flex-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-default"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-[17px] font-semibold text-text-primary">
-                        ${item.ticker}
-                      </span>
-                      {item.name && (
-                        <span className="truncate text-sm text-text-secondary">
-                          {item.name}
-                        </span>
-                      )}
-                      {tickerSummary && tickerSummary.eventCount24h > 0 && (
-                        <span className="text-lg" aria-label={`Signal: ${tickerSummary.highestSignal}`}>
-                          {tickerSummary.highestSignal}
-                        </span>
-                      )}
-                    </div>
-                    {item.notes && (
-                      <span className="text-sm text-text-secondary">{item.notes}</span>
-                    )}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => remove(item.ticker)}
-                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-white/6 p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
-                    aria-label={`Remove ${item.ticker} from watchlist`}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={orderedTickers} strategy={verticalListSortingStrategy}>
+              {sections.map((section) => {
+                const sectionItems = itemsBySection.get(section.id) ?? [];
+                const isCollapsedSection = collapsed.has(section.id);
 
-                {tickerSummary && tickerSummary.eventCount24h > 0 && (
-                  <div className="mt-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-text-secondary">
-                        {tickerSummary.eventCount24h} event{tickerSummary.eventCount24h !== 1 ? 's' : ''} (24h)
-                      </span>
-                      {tickerSummary.latestEvent && (
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                            SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
-                          }`}
-                        >
-                          {tickerSummary.latestEvent.severity}
-                        </span>
-                      )}
-                    </div>
-                    {tickerSummary.latestEvent && (
-                      <p className="mt-1.5 text-sm leading-5 text-text-primary line-clamp-2">
-                        {tickerSummary.latestEvent.title}
-                      </p>
-                    )}
-                    {tickerSummary.latestEvent && (
-                      <p className="mt-1 text-xs text-text-secondary">
-                        {timeAgo(tickerSummary.latestEvent.timestamp)}
-                      </p>
+                return (
+                  <div key={section.id} className="space-y-2">
+                    <SectionHeader
+                      section={section}
+                      itemCount={sectionItems.length}
+                      isCollapsed={isCollapsedSection}
+                      onToggleCollapse={() => toggleCollapse(section.id)}
+                      onRename={(name) => updateSection({ id: section.id, data: { name } })}
+                      onChangeColor={(color) => updateSection({ id: section.id, data: { color } })}
+                      onDelete={() => removeSection(section.id)}
+                      onAddTicker={() => setSearchOpen(true)}
+                    />
+                    {!isCollapsedSection && (
+                      <div className="space-y-2 pl-2">
+                        {sectionItems.map((item) => (
+                          <SortableTickerRow
+                            key={item.ticker}
+                            item={item}
+                            tickerSummary={summaryMap.get(item.ticker)}
+                            onRemove={remove}
+                          />
+                        ))}
+                        {sectionItems.length === 0 && (
+                          <p className="py-3 text-center text-sm text-text-secondary/50">
+                            No tickers in this section
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+
+              {unsortedItems.length > 0 && (
+                <div className="space-y-2">
+                  {sections.length > 0 && (
+                    <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />
+                      <span className="flex-1 text-sm font-semibold text-text-secondary">
+                        Unsorted
+                      </span>
+                      <span className="text-xs text-text-secondary">{unsortedItems.length}</span>
+                    </div>
+                  )}
+                  <div className={sections.length > 0 ? 'space-y-2 pl-2' : 'space-y-2'}>
+                    {unsortedItems.map((item) => (
+                      <SortableTickerRow
+                        key={item.ticker}
+                        item={item}
+                        tickerSummary={summaryMap.get(item.ticker)}
+                        onRemove={remove}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </SortableContext>
+
+            <DragOverlay>
+              {activeItem ? (
+                <DragOverlayRow
+                  item={activeItem}
+                  tickerSummary={summaryMap.get(activeItem.ticker)}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+
+          <NewSectionForm
+            onCreate={(name, color) => createSection({ name, color })}
+          />
         </section>
       )}
     </div>
