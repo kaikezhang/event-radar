@@ -599,6 +599,7 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
     ticker: w.ticker as string,
     addedAt: (w.addedAt as string) ?? (w.added_at as string) ?? new Date().toISOString(),
     notes: (w.notes as string | null) ?? null,
+    name: (w.name as string | null) ?? null,
   }));
 }
 
@@ -625,6 +626,34 @@ export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
 
 export async function removeFromWatchlist(ticker: string): Promise<void> {
   await apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'DELETE' });
+}
+
+// ── Ticker Search API ────────────────────────────────────────────────────────
+
+export interface TickerSearchResult {
+  ticker: string;
+  name: string;
+  sector: string | null;
+  exchange: string | null;
+}
+
+export interface TrendingTicker {
+  ticker: string;
+  eventCount: number;
+  name: string | null;
+  sector: string | null;
+}
+
+export async function searchTickers(query: string, limit = 8): Promise<TickerSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const data = await apiFetch(`/tickers/search?q=${encodeURIComponent(trimmed)}&limit=${limit}`, { public: true });
+  return data.data ?? [];
+}
+
+export async function getTrendingTickers(limit = 8): Promise<TrendingTicker[]> {
+  const data = await apiFetch(`/tickers/trending?limit=${limit}`, { public: true });
+  return data.data ?? [];
 }
 
 // ── Onboarding API ──────────────────────────────────────────────────────────

@@ -36,6 +36,13 @@
       "when": 1773586800000,
       "tag": "0004_dapper_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773712706780,
+      "tag": "0005_cool_warlock",
+      "breakpoints": true
     }
   ]
 }

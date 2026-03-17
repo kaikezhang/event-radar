@@ -447,6 +447,15 @@ export const severityOverrides = pgTable(
   ],
 );
 
+export const tickerReference = pgTable('ticker_reference', {
+  ticker: varchar('ticker', { length: 10 }).primaryKey(),
+  name: varchar('name', { length: 200 }).notNull(),
+  sector: varchar('sector', { length: 100 }),
+  industry: varchar('industry', { length: 100 }),
+  exchange: varchar('exchange', { length: 20 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 export const watchlist = pgTable(
   'watchlist',
   {

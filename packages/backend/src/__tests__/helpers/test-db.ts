@@ -32,6 +32,7 @@ export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM refresh_tokens`);
   await db.execute(sql`DELETE FROM magic_link_tokens`);
   await db.execute(sql`DELETE FROM watchlist`);
+  await db.execute(sql`DELETE FROM ticker_reference`);
   await db.execute(sql`DELETE FROM users`);
   await db.execute(sql`DELETE FROM severity_changes`);
   await db.execute(sql`DELETE FROM severity_overrides`);
@@ -289,6 +290,17 @@ export async function createTestDb(): Promise<{
       reason TEXT NOT NULL,
       changed_by VARCHAR(20) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ticker_reference (
+      ticker VARCHAR(10) PRIMARY KEY NOT NULL,
+      name VARCHAR(200) NOT NULL,
+      sector VARCHAR(100),
+      industry VARCHAR(100),
+      exchange VARCHAR(20),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 

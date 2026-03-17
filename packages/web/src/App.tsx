@@ -1,6 +1,8 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav.js';
+import { TickerSearch } from './components/TickerSearch.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { AuthVerify } from './pages/AuthVerify.js';
@@ -54,6 +56,37 @@ function AppHeader() {
   );
 }
 
+function GlobalTickerSearch() {
+  const [open, setOpen] = useState(false);
+
+  const handleClose = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs/textareas
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setOpen(true);
+      }
+
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  return <TickerSearch open={open} onClose={handleClose} />;
+}
+
 function AppShell() {
   return (
     <AuthProvider>
@@ -68,6 +101,7 @@ function AppShell() {
           </div>
           <BottomNav />
           <ScrollRestoration />
+          <GlobalTickerSearch />
         </div>
       </ConnectionProvider>
     </AuthProvider>

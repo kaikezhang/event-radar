@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq } from 'drizzle-orm';
-import { watchlist } from '../db/schema.js';
+import { and, eq, sql } from 'drizzle-orm';
+import { watchlist, tickerReference } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
 import { ensureUserExists, resolveRequestUserId } from './user-context.js';
@@ -26,8 +26,16 @@ export function registerWatchlistRoutes(
   server.get('/api/watchlist', { preHandler: withAuth }, async (request) => {
     const userId = resolveRequestUserId(request);
     const data = await db
-      .select()
+      .select({
+        id: watchlist.id,
+        userId: watchlist.userId,
+        ticker: watchlist.ticker,
+        notes: watchlist.notes,
+        addedAt: watchlist.addedAt,
+        name: tickerReference.name,
+      })
       .from(watchlist)
+      .leftJoin(tickerReference, eq(watchlist.ticker, tickerReference.ticker))
       .where(eq(watchlist.userId, userId))
       .orderBy(watchlist.addedAt);
 
@@ -47,8 +55,8 @@ export function registerWatchlistRoutes(
         properties: {
           ticker: {
             type: 'string',
-            pattern: '^[A-Z]{1,5}$',
-            description: 'Ticker symbol (1-5 uppercase letters)',
+            pattern: '^[A-Z.]{1,10}$',
+            description: 'Ticker symbol (1-10 uppercase letters/dots, e.g. BRK.B)',
           },
           notes: {
             type: 'string',
@@ -74,12 +82,24 @@ export function registerWatchlistRoutes(
       return reply.status(409).send({ error: 'Ticker already in watchlist' });
     }
 
+    // Check if ticker exists in reference table
+    const [knownTicker] = await db
+      .select()
+      .from(tickerReference)
+      .where(eq(tickerReference.ticker, ticker))
+      .limit(1);
+
     const [inserted] = await db
       .insert(watchlist)
       .values({ userId, ticker, notes: notes ?? null })
       .returning();
 
-    return reply.status(201).send(inserted);
+    const response: Record<string, unknown> = { ...inserted };
+    if (!knownTicker) {
+      response.warning = `Ticker "${ticker}" not found in our reference database. It may still be valid.`;
+    }
+
+    return reply.status(201).send(response);
   });
 
   /**

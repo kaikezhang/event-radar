@@ -3,13 +3,15 @@ import { getWatchlist, addToWatchlist, removeFromWatchlist, getWatchlistSummary 
 import type { WatchlistItem } from '../types/index.js';
 import type { WatchlistTickerSummary } from '../lib/api.js';
 
-export function useWatchlist() {
+export function useWatchlist(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const queryClient = useQueryClient();
 
   const { data: items = [], isLoading } = useQuery<WatchlistItem[]>({
     queryKey: ['watchlist'],
     queryFn: getWatchlist,
     staleTime: 30_000,
+    enabled,
   });
 
   const addMutation = useMutation({
