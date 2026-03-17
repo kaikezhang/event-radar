@@ -46,7 +46,7 @@ function AppHeader() {
             to="/settings"
             className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-elevated text-xs font-semibold text-text-secondary"
           >
-            {user.displayName?.[0]?.toUpperCase() ?? user.email[0]?.toUpperCase() ?? '?'}
+            {user.displayName?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?'}
           </Link>
         ) : (
           <Link to="/login" className="text-xs font-medium text-accent-default">
