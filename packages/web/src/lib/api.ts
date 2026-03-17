@@ -599,6 +599,7 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
     ticker: w.ticker as string,
     addedAt: (w.addedAt as string) ?? (w.added_at as string) ?? new Date().toISOString(),
     notes: (w.notes as string | null) ?? null,
+    name: (w.name as string | null) ?? null,
   }));
 }
 

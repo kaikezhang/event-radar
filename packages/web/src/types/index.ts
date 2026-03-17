@@ -185,6 +185,7 @@ export interface WatchlistItem {
   ticker: string;
   addedAt: string;
   notes?: string | null;
+  name?: string | null;
 }
 
 export interface FilterPreset {

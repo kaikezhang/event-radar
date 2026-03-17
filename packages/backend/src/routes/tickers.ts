@@ -3,6 +3,11 @@ import { sql } from 'drizzle-orm';
 import { tickerReference, events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 
+/** Escape SQL LIKE special characters so they are matched literally. */
+function escapeLike(input: string): string {
+  return input.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
 export function registerTickerRoutes(
   server: FastifyInstance,
   db: Database,
@@ -17,7 +22,7 @@ export function registerTickerRoutes(
       querystring: {
         type: 'object',
         properties: {
-          q: { type: 'string' },
+          q: { type: 'string', maxLength: 50 },
           limit: { type: 'integer', minimum: 1, maximum: 20, default: 8 },
         },
         required: ['q'],
@@ -32,8 +37,8 @@ export function registerTickerRoutes(
     }
 
     const safeLimit = Math.min(Math.max(limit, 1), 20);
-    const upperQuery = query.toUpperCase();
-    const lowerQuery = query.toLowerCase();
+    const upperQuery = escapeLike(query.toUpperCase());
+    const lowerQuery = escapeLike(query.toLowerCase());
 
     // Search by ticker prefix (case-insensitive) and name contains (case-insensitive)
     // Rank: exact ticker match first, then ticker prefix, then name contains
@@ -44,13 +49,13 @@ export function registerTickerRoutes(
         sector,
         exchange,
         CASE
-          WHEN UPPER(ticker) = ${upperQuery} THEN 0
-          WHEN UPPER(ticker) LIKE ${upperQuery + '%'} THEN 1
+          WHEN UPPER(ticker) = ${query.toUpperCase()} THEN 0
+          WHEN UPPER(ticker) LIKE ${upperQuery + '%'} ESCAPE '\\' THEN 1
           ELSE 2
         END AS rank
       FROM ticker_reference
-      WHERE UPPER(ticker) LIKE ${upperQuery + '%'}
-         OR LOWER(name) LIKE ${'%' + lowerQuery + '%'}
+      WHERE UPPER(ticker) LIKE ${upperQuery + '%'} ESCAPE '\\'
+         OR LOWER(name) LIKE ${'%' + lowerQuery + '%'} ESCAPE '\\'
       ORDER BY rank, LENGTH(ticker), ticker
       LIMIT ${safeLimit}
     `);

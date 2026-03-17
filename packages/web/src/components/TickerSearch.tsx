@@ -14,8 +14,8 @@ interface TickerSearchProps {
 
 export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps) {
   const { query, setQuery, results, isSearching, recentSearches, trending, addToRecent, clearRecent } =
-    useTickerSearch();
-  const { add, isOnWatchlist } = useWatchlist();
+    useTickerSearch({ enabled: open });
+  const { add, isOnWatchlist } = useWatchlist({ enabled: open });
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -69,9 +69,10 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIndex((prev) => Math.max(prev - 1, -1));
-    } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < results.length) {
+    } else if (e.key === 'Enter' && results.length > 0) {
       e.preventDefault();
-      const result = results[activeIndex]!;
+      const index = activeIndex >= 0 ? activeIndex : 0;
+      const result = results[index]!;
       handleAddTicker(result.ticker);
     }
   };
@@ -87,7 +88,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center" role="dialog" aria-modal="true" aria-label="Ticker search">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -102,6 +103,10 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-expanded={hasQuery && results.length > 0}
+            aria-controls="ticker-search-listbox"
+            aria-activedescendant={activeIndex >= 0 ? `ticker-option-${activeIndex}` : undefined}
             value={query}
             onChange={(e) => setQuery(e.target.value.toUpperCase())}
             onKeyDown={handleKeyDown}
@@ -121,7 +126,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
           {hasQuery ? (
             /* Search results */
             results.length > 0 ? (
-              <div className="py-2">
+              <div className="py-2" role="listbox" id="ticker-search-listbox" aria-label="Search results">
                 {results.map((result, index) => {
                   const onWatchlist = isOnWatchlist(result.ticker);
                   const isActive = index === activeIndex;
@@ -129,6 +134,9 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                   return (
                     <div
                       key={result.ticker}
+                      id={`ticker-option-${index}`}
+                      role="option"
+                      aria-selected={isActive}
                       data-ticker-result
                       className={`flex items-center justify-between gap-3 px-4 py-2.5 transition-colors ${
                         isActive ? 'bg-white/8' : 'hover:bg-white/5'

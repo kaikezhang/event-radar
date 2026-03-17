@@ -19,7 +19,8 @@ function saveRecentSearches(searches: string[]) {
   localStorage.setItem(RECENT_TICKER_SEARCHES_KEY, JSON.stringify(searches.slice(0, MAX_RECENT)));
 }
 
-export function useTickerSearch() {
+export function useTickerSearch(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>(loadRecentSearches);
@@ -35,7 +36,7 @@ export function useTickerSearch() {
   const { data: results = [], isLoading: isSearching } = useQuery<TickerSearchResult[]>({
     queryKey: ['ticker-search', debouncedQuery],
     queryFn: () => searchTickers(debouncedQuery),
-    enabled: debouncedQuery.trim().length > 0,
+    enabled: enabled && debouncedQuery.trim().length > 0,
     staleTime: 30_000,
   });
 
@@ -43,6 +44,7 @@ export function useTickerSearch() {
     queryKey: ['trending-tickers'],
     queryFn: () => getTrendingTickers(),
     staleTime: 60_000,
+    enabled,
   });
 
   const addToRecent = useCallback((ticker: string) => {

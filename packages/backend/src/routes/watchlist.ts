@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { watchlist, tickerReference } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
@@ -26,8 +26,16 @@ export function registerWatchlistRoutes(
   server.get('/api/watchlist', { preHandler: withAuth }, async (request) => {
     const userId = resolveRequestUserId(request);
     const data = await db
-      .select()
+      .select({
+        id: watchlist.id,
+        userId: watchlist.userId,
+        ticker: watchlist.ticker,
+        notes: watchlist.notes,
+        addedAt: watchlist.addedAt,
+        name: tickerReference.name,
+      })
       .from(watchlist)
+      .leftJoin(tickerReference, eq(watchlist.ticker, tickerReference.ticker))
       .where(eq(watchlist.userId, userId))
       .orderBy(watchlist.addedAt);
 

@@ -236,6 +236,11 @@ export function Watchlist() {
                       <span className="text-[17px] font-semibold text-text-primary">
                         ${item.ticker}
                       </span>
+                      {item.name && (
+                        <span className="truncate text-sm text-text-secondary">
+                          {item.name}
+                        </span>
+                      )}
                       {tickerSummary && tickerSummary.eventCount24h > 0 && (
                         <span className="text-lg" aria-label={`Signal: ${tickerSummary.highestSignal}`}>
                           {tickerSummary.highestSignal}
