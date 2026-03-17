@@ -80,6 +80,21 @@ input {
   background: rgba(249, 115, 22, 0.3);
 }
 
+@keyframes highlight-entrance {
+  0% {
+    background-color: rgba(249, 115, 22, 0.12);
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.animate-highlight {
+  animation: highlight-entrance 1.5s ease-in-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 export function EmptyState({
@@ -6,12 +7,16 @@ export function EmptyState({
   description,
   ctaLabel,
   ctaHref = '/',
+  onCtaClick,
+  children,
 }: {
   icon: string;
   title: string;
   description: string;
-  ctaLabel: string;
+  ctaLabel?: string;
   ctaHref?: string;
+  onCtaClick?: () => void;
+  children?: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-6 text-center shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
@@ -22,12 +27,25 @@ export function EmptyState({
       <p className="mx-auto mb-5 max-w-sm text-[15px] leading-6 text-text-secondary">
         {description}
       </p>
-      <Link
-        to={ctaHref}
-        className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-4 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default focus:ring-offset-2 focus:ring-offset-bg-primary"
-      >
-        {ctaLabel}
-      </Link>
+      {children}
+      {ctaLabel && (
+        onCtaClick ? (
+          <button
+            type="button"
+            onClick={onCtaClick}
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-4 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default focus:ring-offset-2 focus:ring-offset-bg-primary"
+          >
+            {ctaLabel}
+          </button>
+        ) : (
+          <Link
+            to={ctaHref}
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent-default px-4 py-2 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default focus:ring-offset-2 focus:ring-offset-bg-primary"
+          >
+            {ctaLabel}
+          </Link>
+        )
+      )}
     </div>
   );
 }

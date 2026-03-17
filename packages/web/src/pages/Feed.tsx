@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ChevronDown, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { ChevronDown, RefreshCw, SlidersHorizontal, X, Plus } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../components/EmptyState.js';
 import { AlertCard } from '../components/AlertCard.js';
@@ -9,22 +9,28 @@ import { SkeletonCard } from '../components/SkeletonCard.js';
 import { useAlerts } from '../hooks/useAlerts.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist } from '../hooks/useWatchlist.js';
+import { useMediaQuery } from '../hooks/useMediaQuery.js';
 import { getEventSources, getScorecardSummary } from '../lib/api.js';
 import { cn } from '../lib/utils.js';
+import { EventDetail } from './EventDetail.js';
 import type { AlertSummary, FilterPreset, ScorecardSummary } from '../types/index.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
+const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 const PRESETS_KEY = 'event-radar-filter-presets';
 const FEED_TAB_KEY = 'event-radar-feed-tab';
 const UNAUTH_BANNER_KEY = 'event-radar-unauth-banner-dismissed';
 
 type FeedTab = 'watchlist' | 'all';
+type SortMode = 'latest' | 'severity';
 
 const BUILT_IN_PRESETS: FilterPreset[] = [
   { name: 'Full Firehose', severities: [], sources: [] },
   { name: 'High Conviction', severities: ['HIGH', 'CRITICAL'], sources: [] },
 ];
+
+const POPULAR_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN'];
 
 function loadCustomPresets(): FilterPreset[] {
   try {
@@ -128,11 +134,17 @@ export function Feed() {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add } = useWatchlist();
   const hasWatchlist = watchlistItems.length > 0;
+  const navigate = useNavigate();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
   const tabInitializedRef = useRef(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [showAddFilterDropdown, setShowAddFilterDropdown] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('latest');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [newAlertIds, setNewAlertIds] = useState<Set<string>>(new Set());
   const [bannerDismissed, setBannerDismissed] = useState(() => {
     try { return localStorage.getItem(UNAUTH_BANNER_KEY) === '1'; } catch { return false; }
   });
@@ -271,7 +283,27 @@ export function Feed() {
     watchlistTickers: isWatchlistMode ? watchlistItems.map((w) => w.ticker) : undefined,
   });
 
-  // Apply client-side filters
+  // Track newly arrived alerts for entrance animation
+  const prevAlertIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (alerts.length === 0) return;
+    const currentIds = new Set(alerts.map((a) => a.id));
+    const newIds = new Set<string>();
+    for (const id of currentIds) {
+      if (!prevAlertIdsRef.current.has(id)) {
+        newIds.add(id);
+      }
+    }
+    if (newIds.size > 0 && prevAlertIdsRef.current.size > 0) {
+      setNewAlertIds(newIds);
+      prevAlertIdsRef.current = currentIds;
+      const timer = setTimeout(() => setNewAlertIds(new Set()), 1600);
+      return () => clearTimeout(timer);
+    }
+    prevAlertIdsRef.current = currentIds;
+  }, [alerts]);
+
+  // Apply client-side filters + sort
   const filteredAlerts = useMemo(() => {
     let result = alerts;
     if (activeSeverities.length > 0) {
@@ -280,8 +312,22 @@ export function Feed() {
     if (activeSources.length > 0) {
       result = result.filter((a) => activeSources.includes(a.source));
     }
+    if (sortMode === 'severity') {
+      result = [...result].sort((a, b) => {
+        const sevDiff = (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4);
+        if (sevDiff !== 0) return sevDiff;
+        return new Date(b.time).getTime() - new Date(a.time).getTime();
+      });
+    }
     return result;
-  }, [alerts, activeSeverities, activeSources]);
+  }, [alerts, activeSeverities, activeSources, sortMode]);
+
+  // Clear stale selection when the selected event is no longer visible
+  useEffect(() => {
+    if (selectedEventId && filteredAlerts.length > 0 && !filteredAlerts.some((a) => a.id === selectedEventId)) {
+      setSelectedEventId(null);
+    }
+  }, [filteredAlerts, selectedEventId]);
 
   // Group alerts by date
   const dateGroups = useMemo(() => groupAlertsByDate(filteredAlerts), [filteredAlerts]);
@@ -338,7 +384,33 @@ export function Feed() {
     try { localStorage.setItem(UNAUTH_BANNER_KEY, '1'); } catch { /* ignore */ }
   };
 
-  return (
+  // Card click handler — desktop opens split panel, mobile navigates
+  const handleCardClick = useCallback((e: React.MouseEvent, alertId: string) => {
+    if (isDesktop) {
+      // Let nested interactive elements (buttons, links, role="button") handle their own clicks
+      const target = e.target as HTMLElement;
+      if (target.closest('a, button, [role="button"]')) return;
+      e.preventDefault();
+      setSelectedEventId(alertId);
+    }
+    // On mobile, the Link navigates naturally
+  }, [isDesktop]);
+
+  // Close the add-filter dropdown when clicking outside
+  const addFilterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showAddFilterDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (addFilterRef.current && !addFilterRef.current.contains(e.target as Node)) {
+        setShowAddFilterDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAddFilterDropdown]);
+
+  // ── Feed list content ─────────────────────────────────────────────────────
+  const feedListContent = (
     <div
       ref={feedRef}
       className="space-y-3"
@@ -368,7 +440,7 @@ export function Feed() {
         </div>
       )}
 
-      {/* Filter bar */}
+      {/* ── Header bar: mode toggle + live indicator + sort + filter ── */}
       <div className="flex items-center gap-2 py-1">
         {/* Feed mode toggle */}
         <div className="relative">
@@ -408,6 +480,22 @@ export function Feed() {
 
         <div className="flex-1" />
 
+        {/* Live indicator */}
+        <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+          Live
+        </span>
+
+        {/* Sort dropdown */}
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          className="rounded-xl border border-border-default bg-bg-surface px-2.5 py-2 text-xs font-medium text-text-secondary outline-none focus:border-accent-default"
+        >
+          <option value="latest">Latest first</option>
+          <option value="severity">Highest severity</option>
+        </select>
+
         {/* Filter button */}
         <button
           type="button"
@@ -430,33 +518,112 @@ export function Feed() {
         </button>
       </div>
 
-      {/* Active filter chips */}
-      {hasActiveFilters && (
-        <div className="flex flex-wrap gap-1.5" role="list" aria-label="Active filters">
-          {activeSeverities.map((s) => (
-            <button
-              key={`sev-${s}`}
-              type="button"
-              onClick={() => toggleSeverity(s)}
-              className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
-              role="listitem"
-            >
-              {s}
-              <X className="h-3 w-3" />
-            </button>
-          ))}
-          {activeSources.map((s) => (
-            <button
-              key={`src-${s}`}
-              type="button"
-              onClick={() => toggleSource(s)}
-              className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
-              role="listitem"
-            >
-              {s}
-              <X className="h-3 w-3" />
-            </button>
-          ))}
+      {/* ── Inline filter chips ── */}
+      <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Active filters">
+        {activeSeverities.map((s) => (
+          <button
+            key={`sev-${s}`}
+            type="button"
+            onClick={() => toggleSeverity(s)}
+            className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            role="listitem"
+          >
+            {s}
+            <X className="h-3 w-3" />
+          </button>
+        ))}
+        {activeSources.map((s) => (
+          <button
+            key={`src-${s}`}
+            type="button"
+            onClick={() => toggleSource(s)}
+            className="inline-flex items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            role="listitem"
+          >
+            {s}
+            <X className="h-3 w-3" />
+          </button>
+        ))}
+
+        {/* + Add filter button */}
+        <div className="relative" ref={addFilterRef}>
+          <button
+            type="button"
+            onClick={() => setShowAddFilterDropdown(!showAddFilterDropdown)}
+            className="inline-flex items-center gap-1 rounded-lg border border-border-default px-2 py-1 text-[11px] font-medium text-text-tertiary transition hover:border-border-default hover:text-text-secondary"
+          >
+            <Plus className="h-3 w-3" />
+            Add filter
+          </button>
+          {showAddFilterDropdown && (
+            <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-xl border border-border-default bg-bg-surface p-3 shadow-lg space-y-3">
+              {/* Severity toggles */}
+              <div>
+                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Severity</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {SEVERITIES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => toggleSeverity(s)}
+                      className={cn(
+                        'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                        activeSeverities.includes(s)
+                          ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                          : 'border-border-default text-text-secondary hover:text-text-primary',
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Source checkboxes */}
+              {sources.length > 0 && (
+                <div>
+                  <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Source</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sources.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleSource(s)}
+                        className={cn(
+                          'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                          activeSources.includes(s)
+                            ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                            : 'border-border-default text-text-secondary hover:text-text-primary',
+                        )}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Presets quick-select */}
+              <div>
+                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Presets</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {allPresets.map((preset) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => { applyPreset(preset); setShowAddFilterDropdown(false); }}
+                      className="rounded-lg border border-border-default px-2 py-1 text-[11px] font-medium text-text-secondary transition hover:text-text-primary"
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {hasActiveFilters && (
           <button
             type="button"
             onClick={clearFilters}
@@ -464,10 +631,10 @@ export function Feed() {
           >
             Clear all
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Filter panel */}
+      {/* Filter panel (expanded view) */}
       {showFilters && (
         <section className="rounded-2xl border border-border-default bg-bg-surface p-4 space-y-4">
           {/* Presets */}
@@ -586,26 +753,40 @@ export function Feed() {
       {/* New alerts pill */}
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
 
-      {/* Watchlist onboarding CTA */}
+      {/* ── Watchlist onboarding CTA (enhanced empty state) ── */}
       {showWatchlistOnboarding ? (
-        <section className="rounded-2xl border border-border-default bg-bg-surface p-6 text-center">
-          <p className="text-3xl" aria-hidden="true">👀</p>
-          <h2 className="mt-3 text-[15px] font-semibold text-text-primary">
-            Your watchlist is empty
-          </h2>
-          <p className="mt-2 text-sm leading-5 text-text-secondary">
-            Add tickers to your watchlist to see personalized alerts here.
-          </p>
+        <EmptyState
+          icon="📋"
+          title="Your watchlist is empty"
+          description="Add tickers to see relevant alerts."
+        >
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium text-text-tertiary">Popular right now:</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {POPULAR_TICKERS.map((ticker) => (
+                <button
+                  key={ticker}
+                  type="button"
+                  onClick={() => add(ticker)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border-default bg-bg-elevated px-2.5 py-1.5 text-sm font-semibold text-text-primary transition hover:border-accent-default/30"
+                >
+                  {ticker}
+                  <Plus className="h-3 w-3 text-text-tertiary" />
+                </button>
+              ))}
+            </div>
+          </div>
           <Link
-            to="/onboarding"
-            className="mt-4 inline-flex items-center justify-center rounded-xl bg-accent-default px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-default"
+            to="/"
+            onClick={(e) => { e.preventDefault(); handleTabChange('all'); }}
+            className="text-sm font-medium text-accent-default"
           >
-            Set up your watchlist
+            Browse all events →
           </Link>
-        </section>
+        </EmptyState>
       ) : null}
 
-      {/* Alert list with date sections */}
+      {/* ── Alert list with date sections ── */}
       {!showWatchlistOnboarding && (
         <section aria-live="polite">
           {isInitialLoading ? (
@@ -623,27 +804,33 @@ export function Feed() {
             />
           ) : null}
 
+          {/* No results — filters too restrictive */}
           {!isInitialLoading && !error && filteredAlerts.length === 0 && !isEmpty ? (
             <EmptyState
               icon="🔍"
-              title="No events match your filters"
-              description="Try adjusting your filter criteria."
+              title="No alerts match your filters"
+              description="Your filters are hiding all alerts."
               ctaLabel="Clear filters"
-              ctaHref="/"
+              onCtaClick={clearFilters}
             />
           ) : null}
 
+          {/* System quiet — no events recently */}
           {!isInitialLoading && isEmpty ? (
             <EmptyState
               icon="📡"
-              title={isWatchlistMode ? 'No watchlist events yet' : 'No market-moving events right now'}
+              title={isWatchlistMode ? 'No watchlist events yet' : 'Markets are quiet'}
               description={
                 isWatchlistMode
                   ? 'No events detected for your watchlist tickers recently. They will appear here when something happens.'
-                  : 'Event Radar monitors SEC filings, executive orders, breaking news, and more. High-impact events will appear here in real-time.'
+                  : 'No new events match your criteria. Event Radar is scanning SEC filings, executive orders, breaking news, and more.'
               }
-              ctaLabel="Refresh"
-            />
+            >
+              <p className="mb-4 inline-flex items-center gap-1.5 text-xs text-text-secondary">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                Live · Scanning
+              </p>
+            </EmptyState>
           ) : null}
 
           {!isInitialLoading && !error && dateGroups.length > 0 && (
@@ -664,14 +851,26 @@ export function Feed() {
                   </div>
                   <div className="space-y-3">
                     {group.alerts.map((alert) => (
-                      <AlertCard
+                      <div
                         key={alert.id}
-                        alert={alert}
-                        trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
-                        showWatchlistButton
-                        isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
-                        onToggleWatchlist={(ticker) => add(ticker)}
-                      />
+                        className={cn(
+                          'rounded-2xl transition-all',
+                          newAlertIds.has(alert.id) && 'animate-highlight',
+                          isDesktop && selectedEventId === alert.id && 'ring-2 ring-accent-default/50 bg-bg-elevated/50',
+                        )}
+                        onClick={(e) => handleCardClick(e, alert.id)}
+                        role={isDesktop ? 'button' : undefined}
+                        tabIndex={isDesktop ? 0 : undefined}
+                        onKeyDown={isDesktop ? (e) => { if (e.key === 'Enter') handleCardClick(e as unknown as React.MouseEvent, alert.id); } : undefined}
+                      >
+                        <AlertCard
+                          alert={alert}
+                          trustCue={getTrustCue(alert.sourceKey, scorecardSummary)}
+                          showWatchlistButton
+                          isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
+                          onToggleWatchlist={(ticker) => add(ticker)}
+                        />
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -691,4 +890,44 @@ export function Feed() {
       )}
     </div>
   );
+
+  // ── Desktop split-panel layout ──────────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 80px)' }}>
+        {/* Left panel: feed list (40%) */}
+        <div className="w-[40%] shrink-0 overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+          {feedListContent}
+        </div>
+
+        {/* Right panel: event detail (60%) */}
+        <div
+          className="flex-1 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/50 p-4"
+          style={{ maxHeight: 'calc(100vh - 80px)' }}
+        >
+          {selectedEventId ? (
+            <EventDetail
+              eventId={selectedEventId}
+              onBack={() => setSelectedEventId(null)}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <p className="text-3xl" aria-hidden="true">📰</p>
+                <p className="mt-3 text-[15px] font-medium text-text-secondary">
+                  Select an event to view details
+                </p>
+                <p className="mt-1 text-xs text-text-tertiary">
+                  Click any alert card on the left
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Mobile layout (existing single-column) ─────────────────────────────
+  return feedListContent;
 }

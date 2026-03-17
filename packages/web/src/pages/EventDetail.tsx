@@ -363,10 +363,12 @@ function StockContextPanel({ data }: { data: NonNullable<ReturnType<typeof useEv
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function EventDetail() {
+export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: () => void } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id: paramId } = useParams();
+  const id = eventId ?? paramId;
+  const isInline = Boolean(eventId);
   const { data, isLoading } = useEventDetail(id);
   const [feedback, setFeedback] = useState<'up' | 'down' | 'bad' | null>(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
@@ -410,12 +412,16 @@ export function EventDetail() {
   }, [similarEvents, showAllSimilar]);
 
   const handleBack = useCallback(() => {
+    if (onBack) {
+      onBack();
+      return;
+    }
     if (shouldFallbackToWatchlist) {
       navigate('/watchlist');
       return;
     }
     navigate(-1);
-  }, [shouldFallbackToWatchlist, navigate]);
+  }, [onBack, shouldFallbackToWatchlist, navigate]);
 
   if (isLoading) {
     return (
@@ -427,7 +433,7 @@ export function EventDetail() {
             className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm text-text-primary"
           >
             <ArrowLeft className="h-4 w-4" />
-            {shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
+            {isInline ? '← Back to list' : shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
           </button>
           <Share2 className="h-5 w-5 text-text-secondary" />
         </div>
@@ -483,7 +489,7 @@ export function EventDetail() {
           className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
         >
           <ArrowLeft className="h-4 w-4" />
-          {shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
+          {isInline ? '← Back to list' : shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back'}
         </button>
         <button
           type="button"
