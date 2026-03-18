@@ -113,6 +113,15 @@ export class DeliveryGate {
           isMacro: false, enrichmentAvailable: true, action, confidenceBucket,
         });
       }
+      // SEC Form 4 (insider trades): only deliver if 🔴 High-Quality Setup
+      // Routine insider disclosures are low-value noise for swing traders
+      const isForm4 = event.title?.includes('Form 4') || event.type?.includes('sec_form_4');
+      if (isForm4 && action !== '🔴 High-Quality Setup') {
+        return this.result(false, 'archive', 'sec_form4_routine', {
+          hasTicker: secTickers.length > 0, hasDirection: false, isNotable: hasNotableSec,
+          isMacro: false, enrichmentAvailable: true, action, confidenceBucket,
+        });
+      }
     }
 
     // ── 3. Ticker resolution ───────────────────────────────────────
