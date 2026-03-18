@@ -1,143 +1,95 @@
-# TASK.md — D8: Mobile Swipe Gestures & Polish
+# TASK: Source-Specific Web App Cards
 
-> Reference: `docs/plans/2026-03-17-alert-feed-redesign.md` (Section A — Interaction Design + D8)
+## Role
+You are implementing source-specific card rendering in the web app Feed and EventDetail pages. This mirrors what we just did for Discord webhook templates (PR #151).
 
 ## Goal
-Add touch swipe gestures to feed cards on mobile for quick actions (dismiss / watchlist), and polish mobile-specific UI details.
+Make Feed AlertCards and EventDetail pages render **source-specific information** based on the event source. Each source type should show relevant metadata in a visually distinct way.
 
-## What to Build
+## Architecture
 
-### 1. Swipeable Alert Card Wrapper
+### Backend Changes (minimal)
 
-**File:** `packages/web/src/components/SwipeableCard.tsx` (new)
+The feed API (`GET /api/v1/feed`) currently does NOT return `metadata` or `sourceKey` to the frontend. We need to add a lightweight `sourceMetadata` field to the feed response that extracts source-specific fields.
 
-A wrapper component that adds horizontal swipe gestures to AlertCard on touch devices:
+In `packages/backend/src/routes/dashboard.ts`, in the feed endpoint's `.map()`, add:
 
-**Swipe Left → Dismiss (mark as read):**
-- Reveals a red/orange background with "Dismiss" text + icon
-- On release past threshold (40% of card width): dismiss the card with slide-out animation
-- Under threshold: spring back
-- Dismissed cards get a muted/faded style or are removed from the list
-
-**Swipe Right → Add to Watchlist:**
-- Reveals a green background with "★ Watchlist" text + icon
-- On release past threshold: add primary ticker to watchlist, show brief success toast
-- If already on watchlist: show "Already saved" and spring back
-- Under threshold: spring back
-
-**Implementation approach:**
-- Use touch event handlers (`onTouchStart`, `onTouchMove`, `onTouchEnd`)
-- Track horizontal delta, apply `transform: translateX()` during swipe
-- Use `transition` for spring-back animation
-- Threshold: 40% of card width for action trigger
-- Only enable on touch devices (check `'ontouchstart' in window` or use pointer events)
-- Do NOT use a heavy library — keep it lightweight with native touch events
-
-```tsx
-interface SwipeableCardProps {
-  children: React.ReactNode;
-  onSwipeLeft?: () => void;    // dismiss
-  onSwipeRight?: () => void;   // watchlist
-  leftLabel?: string;          // "Dismiss"
-  rightLabel?: string;         // "★ Watchlist"
-  disabled?: boolean;          // disable on desktop
-}
+```typescript
+sourceMetadata: extractSourceMetadata(row.source, metadata),
 ```
 
-### 2. Integrate into Feed
+Create a helper `extractSourceMetadata(source: string, metadata: Record<string, unknown>)` that returns a small subset of relevant metadata per source:
 
-**File:** `packages/web/src/pages/Feed.tsx`
+- **breaking-news**: `{ url, headline, sourceFeed }`
+- **sec-edgar**: `{ formType, companyName, filingLink, itemDescriptions }`
+- **trading-halt**: `{ haltReasonCode, haltReasonDescription, haltTime, resumeTime, market, isResume }` (isResume = event type is 'resume')
+- **econ-calendar**: `{ indicatorName, scheduledTime, frequency, tags }`
+- **stocktwits**: `{ currentVolume, previousVolume, ratio }`
+- **reddit**: `{ upvotes, comments, highEngagement }`
 
-Wrap each `<AlertCard>` with `<SwipeableCard>` on mobile:
+Use the REAL scanner metadata keys (we verified these in PR #151).
 
-```tsx
-const isMobile = !isDesktop;  // from useMediaQuery
+### Frontend Changes
 
-{alerts.map(alert => (
-  isMobile ? (
-    <SwipeableCard
-      key={alert.id}
-      onSwipeLeft={() => handleDismiss(alert.id)}
-      onSwipeRight={() => handleQuickWatchlist(alert)}
-    >
-      <AlertCard alert={alert} ... />
-    </SwipeableCard>
-  ) : (
-    <AlertCard key={alert.id} alert={alert} ... />
-  )
-))}
-```
+#### 1. Update Types (`packages/web/src/types/index.ts`)
 
-**Dismiss handler:** For now, just hide the card from the current view (filter it from the displayed list via local state). No backend endpoint needed yet.
+Add `sourceMetadata?: Record<string, unknown>` to `AlertSummary`.
 
-**Watchlist handler:** Call `add(primaryTicker)` from useWatchlist hook. Show a brief inline notification "Added NVDA to watchlist ✓" that auto-dismisses after 2 seconds.
+#### 2. Update AlertCard (`packages/web/src/components/AlertCard.tsx`)
 
-### 3. Toast Notification Component
+Below the summary line (Row 3), add a **source-specific detail strip** that shows 1-2 lines of key metadata. Keep it compact — this is a card, not a detail page.
 
-**File:** `packages/web/src/components/Toast.tsx` (new)
+**Breaking News:**
+- Show source feed name if available (e.g., "via CNBC")
+- Nothing else — the summary + direction are enough
 
-A simple auto-dismissing notification:
+**SEC Filing:**
+- Show form type badge (e.g., "8-K" / "13F" / "Form 4") as a small pill
+- Show item descriptions if 8-K (e.g., "Item 5.02 — Departure of Directors")
+- Link to filing if available
 
-```tsx
-interface ToastProps {
-  message: string;
-  visible: boolean;
-  onDismiss: () => void;
-  duration?: number;  // default 2000ms
-}
-```
+**Trading Halt:**
+- Show halt reason + code (e.g., "T1 — News Pending")
+- Show halt/resume time
+- If resume event, show "✅ RESUMED at 11:15 AM ET" instead of halt styling
 
-- Fixed at bottom center of screen, above the bottom nav
-- Slides up on appear, slides down on dismiss
-- Dark background with white text
-- Auto-dismisses after `duration` ms
+**Econ Calendar:**
+- Show indicator name
+- Show frequency tag (e.g., "Monthly")
 
-### 4. Mobile Polish
+**Social (StockTwits/Reddit):**
+- StockTwits: Show volume ratio (e.g., "3.2x normal volume")
+- Reddit: Show engagement stats (e.g., "↑ 1.2k · 💬 340")
 
-#### Bottom safe area
-- Ensure feed cards and bottom nav respect `safe-area-inset-bottom` on notched phones
-- Add `pb-safe` or `pb-[env(safe-area-inset-bottom)]` where needed
+#### 3. Update EventDetail (`packages/web/src/pages/EventDetail.tsx`)
 
-#### Touch targets
-- All interactive elements must be at least 44px touch target
-- Check: filter chips, sort dropdown, tab buttons, watchlist stars
+The EventDetail page already receives full `metadata` from the backend. Add a **Source Details** section between the AI Analysis and Historical sections that shows source-specific structured data.
 
-#### Card press feedback
-- Add `active:scale-[0.98]` to AlertCard for subtle press feedback on mobile
-- Already has `active:bg-bg-elevated` — keep that too
+Use the same source routing logic but with more detail than the card view.
 
-#### Scroll performance
-- Add `will-change: transform` to swipeable cards during active swipe
-- Remove it after swipe ends (avoid permanent GPU layer)
+For EventDetail, read metadata directly from `event.metadata` (it's already returned by `GET /api/events/:id`).
 
-### 5. Haptic Feedback (optional, best-effort)
+### Design Guidelines
 
-If the browser supports it, trigger a subtle vibration on swipe action:
-```tsx
-if ('vibrate' in navigator) {
-  navigator.vibrate(10);  // 10ms micro-vibration
-}
-```
+- Use the existing design system colors and spacing
+- Source-specific strips should be subtle — use `text-text-secondary` and `text-[12px]` for metadata
+- Add small source-type icons or emoji if it helps readability
+- Halt cards should visually distinguish halt vs resume (red accent for halt, green for resume)
+- Filing links should be clickable `<a>` tags opening in new tab
+- Keep mobile-friendly — everything should work on narrow screens
 
-Only on successful swipe action (past threshold), not during drag.
+### Tests
 
-### Testing
-- Build: `pnpm --filter @event-radar/web build` must pass
-- Visual: swipe left reveals dismiss action on mobile
-- Visual: swipe right reveals watchlist action on mobile
-- Visual: toast notification appears and auto-dismisses
-- Functional: dismiss removes card from view
-- Functional: watchlist add works via swipe
-- Functional: desktop cards are NOT swipeable (no wrapper)
-- Visual: active press scale effect on mobile cards
+- Add tests for `extractSourceMetadata` helper
+- Update existing AlertCard tests if any
+- No need for E2E tests — this is a rendering change
 
-## Do NOT Change
-- Do NOT modify AlertCard internal layout (done in D1+D2)
-- Do NOT modify EventDetail (done in D3+D4)
-- Do NOT modify desktop split-panel behavior (done in D7)
-- Do NOT add backend endpoints for dismiss (local state only for now)
+## DO NOT
+- Do NOT change the Discord webhook code (that's already done in PR #151)
+- Do NOT modify the delivery pipeline
+- Do NOT restructure existing components — just add source-specific sections
 
-## PR
-- Branch: `feat/d8-mobile-swipe-polish`
-- Title: "feat: mobile swipe gestures & polish (D8)"
-- CREATE PR AND STOP. DO NOT MERGE.
+## Output
+- Create a PR with title: `feat: source-specific web app cards`
+- Branch: `feat/source-specific-web-cards`
+- Push and create PR. **DO NOT MERGE.**

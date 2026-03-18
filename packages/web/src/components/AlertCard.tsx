@@ -234,6 +234,9 @@ export function AlertCard({
         </Link>
       </div>
 
+      {/* Row 3.5: Source-specific detail strip */}
+      <SourceDetailStrip source={alert.source} sourceKey={alert.sourceKey} metadata={alert.sourceMetadata} />
+
       {/* Critical tier: historical preview */}
       {isCritical && alert.summary && (
         <HistoricalPreview summary={alert.summary} />
@@ -283,6 +286,138 @@ export function AlertCard({
       </div>
     </article>
   );
+}
+
+/** Source-specific detail strip below the summary */
+function SourceDetailStrip({
+  source,
+  sourceKey,
+  metadata,
+}: {
+  source: string;
+  sourceKey?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (!metadata || Object.keys(metadata).length === 0) return null;
+
+  const src = sourceKey ?? source;
+
+  switch (src) {
+    case 'breaking-news': {
+      const feed = metadata.sourceFeed as string | undefined;
+      if (!feed) return null;
+      return (
+        <div className="mt-2 text-[12px] text-text-tertiary">
+          via {feed}
+        </div>
+      );
+    }
+
+    case 'sec-edgar': {
+      const formType = metadata.formType as string | undefined;
+      const items = metadata.itemDescriptions as string[] | undefined;
+      const link = metadata.filingLink as string | undefined;
+      if (!formType && !items?.length) return null;
+      return (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
+          {formType && (
+            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-text-primary">
+              {formType}
+            </span>
+          )}
+          {items?.map((item, i) => (
+            <span key={i} className="text-text-tertiary">{item}</span>
+          ))}
+          {link && (
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent-default hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View filing →
+            </a>
+          )}
+        </div>
+      );
+    }
+
+    case 'trading-halt': {
+      const isResume = metadata.isResume as boolean | undefined;
+      const code = metadata.haltReasonCode as string | undefined;
+      const desc = metadata.haltReasonDescription as string | undefined;
+      const haltTime = metadata.haltTime as string | undefined;
+      const resumeTime = metadata.resumeTime as string | undefined;
+
+      if (isResume) {
+        return (
+          <div className="mt-2 text-[12px] text-emerald-400">
+            ✅ RESUMED{resumeTime ? ` at ${resumeTime}` : ''}
+            {code && desc ? ` · ${code} — ${desc}` : ''}
+          </div>
+        );
+      }
+
+      return (
+        <div className="mt-2 text-[12px] text-text-secondary">
+          {code && desc ? `${code} — ${desc}` : code ?? desc ?? ''}
+          {haltTime ? ` · Halted ${haltTime}` : ''}
+          {resumeTime ? ` · Resume ${resumeTime}` : ''}
+        </div>
+      );
+    }
+
+    case 'econ-calendar': {
+      const name = metadata.indicatorName as string | undefined;
+      const freq = metadata.frequency as string | undefined;
+      if (!name && !freq) return null;
+      return (
+        <div className="mt-2 flex items-center gap-2 text-[12px] text-text-secondary">
+          {name && <span>{name}</span>}
+          {freq && (
+            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[11px] text-text-tertiary capitalize">
+              {freq}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    case 'stocktwits': {
+      const current = metadata.currentVolume as number | undefined;
+      const previous = metadata.previousVolume as number | undefined;
+      const ratio = metadata.ratio as number | undefined;
+      if (current == null && ratio == null) return null;
+      const ratioLabel = current != null && previous != null && previous > 0
+        ? `${(current / previous).toFixed(1)}x`
+        : ratio != null
+          ? `${ratio.toFixed(1)}x`
+          : null;
+      return (
+        <div className="mt-2 text-[12px] text-text-secondary">
+          {ratioLabel && <span>🔥 {ratioLabel} normal volume</span>}
+        </div>
+      );
+    }
+
+    case 'reddit': {
+      const upvotes = metadata.upvotes as number | undefined;
+      const comments = metadata.comments as number | undefined;
+      if (upvotes == null && comments == null) return null;
+      const fmtNum = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+      return (
+        <div className="mt-2 text-[12px] text-text-secondary">
+          {upvotes != null && <span>↑ {fmtNum(upvotes)}</span>}
+          {upvotes != null && comments != null && <span> · </span>}
+          {comments != null && <span>💬 {fmtNum(comments)}</span>}
+        </div>
+      );
+    }
+
+    default:
+      return null;
+  }
 }
 
 /** Extract a historical pattern preview from the summary text for CRITICAL cards */
