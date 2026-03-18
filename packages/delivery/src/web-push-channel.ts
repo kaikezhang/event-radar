@@ -3,7 +3,7 @@ import type { Severity } from '@event-radar/shared';
 import type { AlertEvent, DeliveryService } from './types.js';
 
 const INVALID_SUBSCRIPTION_STATUS_CODES = new Set([404, 410]);
-const DEFAULT_TTL_SECONDS = 60;
+const DEFAULT_TTL_SECONDS = 3600;
 const MAX_BODY_LENGTH = 240;
 const DEFAULT_TIMEZONE = 'America/New_York';
 const DEFAULT_DAILY_PUSH_CAP = 20;

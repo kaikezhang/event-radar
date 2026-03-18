@@ -203,17 +203,56 @@ describe('BarkPusher', () => {
     expect(body.body).toBe('Apple CEO departure triggers uncertainty');
   });
 
-  it('should throw on non-ok response', async () => {
+  it('should throw on non-ok response after exhausting retries', async () => {
     fetchSpy.mockResolvedValue({
       ok: false,
       status: 500,
       text: async () => 'internal error',
     });
-    const pusher = new BarkPusher({ key: 'k' });
+    const pusher = new BarkPusher({ key: 'k', retryDelays: [0, 0] });
 
     await expect(pusher.send(makeAlert())).rejects.toThrow(
       'Bark push failed (500): internal error',
     );
+    // 1 initial + 2 retries = 3 attempts
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('should retry on network error and succeed', async () => {
+    fetchSpy
+      .mockRejectedValueOnce(new Error('network failure'))
+      .mockResolvedValueOnce({ ok: true, text: async () => '' });
+
+    const pusher = new BarkPusher({ key: 'k', retryDelays: [0] });
+
+    await pusher.send(makeAlert());
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('should retry on non-ok response and succeed on second attempt', async () => {
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => 'service unavailable',
+      })
+      .mockResolvedValueOnce({ ok: true, text: async () => '' });
+
+    const pusher = new BarkPusher({ key: 'k', retryDelays: [0] });
+
+    await pusher.send(makeAlert());
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('should throw after all retries exhausted on network error', async () => {
+    fetchSpy.mockRejectedValue(new Error('persistent network failure'));
+
+    const pusher = new BarkPusher({ key: 'k', retryDelays: [0, 0, 0] });
+
+    await expect(pusher.send(makeAlert())).rejects.toThrow('persistent network failure');
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
   it('should strip trailing slash from server URL', async () => {

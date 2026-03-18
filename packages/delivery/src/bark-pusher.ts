@@ -6,6 +6,8 @@ export interface BarkConfig {
   key: string;
   /** Bark server base URL. Defaults to https://api.day.app */
   serverUrl?: string;
+  /** Retry delays in ms. Defaults to [1000, 5000, 30000]. */
+  retryDelays?: number[];
 }
 
 const SEVERITY_TO_BARK_LEVEL: Record<Severity, string> = {
@@ -45,10 +47,13 @@ const REGIME_SHORT: Record<string, string> = {
   extreme_oversold: '🟢OS+',
 };
 
+const DEFAULT_RETRY_DELAYS = [1_000, 5_000, 30_000];
+
 export class BarkPusher implements DeliveryService {
   readonly name = 'bark';
   private readonly key: string;
   private readonly serverUrl: string;
+  private readonly retryDelays: number[];
 
   constructor(config: BarkConfig) {
     this.key = config.key;
@@ -56,6 +61,7 @@ export class BarkPusher implements DeliveryService {
       /\/$/,
       '',
     );
+    this.retryDelays = config.retryDelays ?? DEFAULT_RETRY_DELAYS;
   }
 
   async send(alert: AlertEvent): Promise<void> {
@@ -112,15 +118,38 @@ export class BarkPusher implements DeliveryService {
       body.url = alert.event.url;
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Bark push failed (${response.status}): ${text}`);
-    }
+    await this.sendWithRetry(url, JSON.stringify(body));
   }
+
+  private async sendWithRetry(url: string, payload: string): Promise<void> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= this.retryDelays.length; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: payload,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Bark push failed (${response.status}): ${text}`);
+        }
+
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < this.retryDelays.length) {
+          await sleep(this.retryDelays[attempt]);
+        }
+      }
+    }
+
+    throw lastError!;
+  }
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

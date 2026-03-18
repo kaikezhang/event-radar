@@ -1,6 +1,6 @@
 import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { getMarketSession, getNextSessionOpenMs } from './llm-gatekeeper.js';
 
 const require = createRequire(import.meta.url);
@@ -248,7 +248,9 @@ export class AlertFilter {
           this.pruneExpired();
           const obj: Record<string, number> = {};
           for (const [k, v] of this.cooldownMap) obj[k] = v;
-          writeFileSync(AlertFilter.COOLDOWN_PATH, JSON.stringify(obj));
+          const tmpPath = AlertFilter.COOLDOWN_PATH + '.tmp';
+          writeFileSync(tmpPath, JSON.stringify(obj));
+          renameSync(tmpPath, AlertFilter.COOLDOWN_PATH);
         } catch { /* ignore write errors */ }
       }
     }, 2000);

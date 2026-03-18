@@ -73,6 +73,7 @@ import { registerAuthRoutes, validateJwtConfig } from './routes/auth.js';
 import { MarketRegimeService } from './services/market-regime.js';
 import { registerRegimeRoutes } from './routes/regime.js';
 import { DeliveryKillSwitch, type IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
+import { startAuditCleanupLoop, type AuditCleanupHandle } from './services/audit-cleanup.js';
 import { HealthMonitorService } from './services/health-monitor.js';
 import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { createLLMProvider, OpenAIProvider } from './services/llm-provider.js';
@@ -1315,6 +1316,12 @@ export function buildApp(options?: {
     });
   }
 
+  // Start daily audit cleanup (delete old pipeline_audit, alert_log, etc.)
+  let auditCleanupLoop: AuditCleanupHandle | undefined;
+  if (db && process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+    auditCleanupLoop = startAuditCleanupLoop(db);
+  }
+
   // Cleanup on shutdown
   server.addHook('onClose', async () => {
     const drained = await pipelineLimiter.drain(30_000);
@@ -1329,6 +1336,7 @@ export function buildApp(options?: {
     marketCache?.stop();
     healthMonitor?.stop();
     outcomeProcessingLoop?.stop();
+    auditCleanupLoop?.stop();
   });
 
   return {

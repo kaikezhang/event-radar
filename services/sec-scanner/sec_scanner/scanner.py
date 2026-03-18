@@ -1,9 +1,11 @@
 """SEC scanner that polls EDGAR for 8-K and Form 4 filings and posts RawEvents to the backend."""
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -12,6 +14,9 @@ from sec_scanner.edgar_client import EdgarClient, Filing8K
 from sec_scanner.form4_client import FilingForm4, Form4Client, TRANSACTION_CODES
 
 logger = logging.getLogger(__name__)
+
+SEEN_IDS_PATH = Path("/tmp/event-radar-seen/sec-seen-ids.json")
+MAX_SEEN_IDS = 5000
 
 
 def filing_to_raw_event(filing: Filing8K) -> dict:
@@ -130,7 +135,7 @@ class SecScanner:
         self._edgar = EdgarClient()
         self._form4 = Form4Client()
         self._backend_client = httpx.AsyncClient(timeout=10.0)
-        self._seen_ids: set[str] = set()
+        self._seen_ids: set[str] = self._load_seen_ids()
         self._running = False
         self._task: asyncio.Task | None = None  # type: ignore[type-arg]
         self._poll_count = 0
@@ -200,6 +205,31 @@ class SecScanner:
         await self._poll_8k()
         await self._poll_form4()
 
+    def _load_seen_ids(self) -> set[str]:
+        """Load seen IDs from persistent file."""
+        try:
+            if SEEN_IDS_PATH.exists():
+                data = json.loads(SEEN_IDS_PATH.read_text())
+                # data is {"ids": [...], "saved_at": "ISO timestamp"}
+                return set(data.get("ids", []))
+        except Exception:
+            logger.warning("Failed to load seen IDs, starting fresh")
+        return set()
+
+    def _save_seen_ids(self) -> None:
+        """Persist seen IDs to file atomically."""
+        try:
+            SEEN_IDS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            # Cap to prevent unbounded growth
+            if len(self._seen_ids) > MAX_SEEN_IDS:
+                self._seen_ids = set(list(self._seen_ids)[-MAX_SEEN_IDS:])
+            tmp = SEEN_IDS_PATH.with_suffix(".tmp")
+            data = {"ids": list(self._seen_ids), "saved_at": datetime.now(timezone.utc).isoformat()}
+            tmp.write_text(json.dumps(data))
+            tmp.rename(SEEN_IDS_PATH)  # atomic on same filesystem
+        except Exception:
+            logger.warning("Failed to save seen IDs")
+
     async def _poll_8k(self) -> None:
         """Poll for new 8-K filings."""
         filings = await self._edgar.fetch_latest_8k()
@@ -218,6 +248,8 @@ class SecScanner:
             event = filing_to_raw_event(filing)
             await self._post_event(event)
             self._seen_ids.add(filing.accession_number)
+
+        self._save_seen_ids()
 
     async def _poll_form4(self) -> None:
         """Poll for new Form 4 filings."""
@@ -241,6 +273,8 @@ class SecScanner:
             event = form4_to_raw_event(filing)
             await self._post_event(event)
             self._seen_ids.add(filing.accession_number)
+
+        self._save_seen_ids()
 
     async def _post_event(self, event: dict) -> None:
         """Post a RawEvent to the backend ingest endpoint."""
