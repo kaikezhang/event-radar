@@ -460,6 +460,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
+      sourceMetadata: extractSourceMetadataClient(source, meta, (e.eventType as string) ?? null),
       confirmationCount:
         typeof e.confirmationCount === 'number'
           ? e.confirmationCount
@@ -784,7 +785,68 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
       : Array.isArray(metadata.confirmedSources)
         ? (metadata.confirmedSources as string[]).map(mapSource)
         : undefined,
+    sourceMetadata: (event.sourceMetadata as Record<string, unknown>) ?? undefined,
   };
+}
+
+function extractSourceMetadataClient(
+  source: string,
+  meta: Record<string, unknown>,
+  eventType: string | null,
+): Record<string, unknown> | undefined {
+  switch (source) {
+    case 'breaking-news': {
+      const r: Record<string, unknown> = {};
+      if (meta.url != null) r.url = meta.url;
+      if (meta.headline != null) r.headline = meta.headline;
+      if (meta.source_feed != null) r.sourceFeed = meta.source_feed;
+      return Object.keys(r).length ? r : undefined;
+    }
+    case 'sec-edgar': {
+      const r: Record<string, unknown> = {};
+      if (meta.form_type != null) r.formType = meta.form_type;
+      const companyName = meta.company_name ?? meta.issuer_name;
+      if (companyName != null) r.companyName = companyName;
+      if (meta.filing_link != null) r.filingLink = meta.filing_link;
+      if (meta.item_descriptions != null) r.itemDescriptions = meta.item_descriptions;
+      return Object.keys(r).length ? r : undefined;
+    }
+    case 'trading-halt': {
+      const r: Record<string, unknown> = {};
+      if (meta.haltReasonCode != null) r.haltReasonCode = meta.haltReasonCode;
+      if (meta.haltReasonDescription != null) r.haltReasonDescription = meta.haltReasonDescription;
+      if (meta.haltTime != null) r.haltTime = meta.haltTime;
+      if (meta.resumeTime != null) r.resumeTime = meta.resumeTime;
+      if (meta.market != null) r.market = meta.market;
+      if (Object.keys(r).length === 0) return undefined;
+      r.isResume = eventType === 'resume';
+      return r;
+    }
+    case 'econ-calendar': {
+      const r: Record<string, unknown> = {};
+      if (meta.indicator_name != null) r.indicatorName = meta.indicator_name;
+      if (meta.scheduled_time != null) r.scheduledTime = meta.scheduled_time;
+      if (meta.frequency != null) r.frequency = meta.frequency;
+      if (meta.tags != null) r.tags = meta.tags;
+      return Object.keys(r).length ? r : undefined;
+    }
+    case 'stocktwits': {
+      const r: Record<string, unknown> = {};
+      if (meta.current_volume != null) r.currentVolume = meta.current_volume;
+      if (meta.previous_volume != null) r.previousVolume = meta.previous_volume;
+      if (meta.ratio != null) r.ratio = meta.ratio;
+      return Object.keys(r).length ? r : undefined;
+    }
+    case 'reddit': {
+      const r: Record<string, unknown> = {};
+      if (meta.upvotes != null) r.upvotes = meta.upvotes;
+      if (meta.comments != null) r.comments = meta.comments;
+      if (meta.high_engagement != null) r.highEngagement = meta.high_engagement;
+      return Object.keys(r).length ? r : undefined;
+    }
+    default:
+      return undefined;
+  }
 }
 
 export function mapSource(source: string): string {

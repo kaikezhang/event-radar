@@ -15,6 +15,7 @@ export interface AlertSummary {
   confidenceBucket?: string | null;
   confirmationCount?: number;
   confirmedSources?: string[];
+  sourceMetadata?: Record<string, unknown>;
 }
 
 export interface TickerDirection {
@@ -79,6 +80,7 @@ export interface EventDetailData {
   tickers: string[];
   time: string;
   url: string | null;
+  sourceMetadata?: Record<string, unknown>;
   confirmationCount: number;
   confirmedSources: string[];
   provenance: Array<{

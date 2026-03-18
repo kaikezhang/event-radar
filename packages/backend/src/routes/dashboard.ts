@@ -119,6 +119,7 @@ interface FeedRow {
   created_at: string | Date;
   audit_ticker: string | null;
   audit_confidence: string | number | null;
+  event_type: string | null;
 }
 
 const FEED_CATEGORIES = new Set<FeedCategory>([
@@ -317,6 +318,77 @@ function inferFeedCategory(source: string, metadata: Record<string, unknown>): F
   }
 
   return 'other';
+}
+
+export function extractSourceMetadata(
+  source: string,
+  metadata: Record<string, unknown>,
+  eventType?: string | null,
+): Record<string, unknown> | undefined {
+  switch (source) {
+    case 'breaking-news':
+      return pick(metadata, {
+        url: 'url',
+        headline: 'headline',
+        sourceFeed: 'source_feed',
+      });
+    case 'sec-edgar': {
+      const secResult = pick(metadata, {
+        formType: 'form_type',
+        filingLink: 'filing_link',
+        itemDescriptions: 'item_descriptions',
+      });
+      const companyName = metadata.company_name ?? metadata.issuer_name;
+      if (companyName != null) secResult.companyName = companyName;
+      return secResult;
+    }
+    case 'trading-halt': {
+      const haltResult = pick(metadata, {
+        haltReasonCode: 'haltReasonCode',
+        haltReasonDescription: 'haltReasonDescription',
+        haltTime: 'haltTime',
+        resumeTime: 'resumeTime',
+        market: 'market',
+      });
+      if (Object.keys(haltResult).length === 0) return undefined;
+      haltResult.isResume = eventType === 'resume';
+      return haltResult;
+    }
+    case 'econ-calendar':
+      return pick(metadata, {
+        indicatorName: 'indicator_name',
+        scheduledTime: 'scheduled_time',
+        frequency: 'frequency',
+        tags: 'tags',
+      });
+    case 'stocktwits':
+      return pick(metadata, {
+        currentVolume: 'current_volume',
+        previousVolume: 'previous_volume',
+        ratio: 'ratio',
+      });
+    case 'reddit':
+      return pick(metadata, {
+        upvotes: 'upvotes',
+        comments: 'comments',
+        highEngagement: 'high_engagement',
+      });
+    default:
+      return undefined;
+  }
+}
+
+function pick(
+  metadata: Record<string, unknown>,
+  mapping: Record<string, string>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [outKey, metaKey] of Object.entries(mapping)) {
+    if (metadata[metaKey] != null) {
+      result[outKey] = metadata[metaKey];
+    }
+  }
+  return Object.keys(result).length > 0 ? result : {};
 }
 
 export function registerDashboardRoutes(
@@ -640,7 +712,8 @@ export function registerDashboardRoutes(
           e.confirmation_count,
           e.confirmed_sources,
           e.received_at,
-          e.created_at
+          e.created_at,
+          e.event_type
         FROM pipeline_audit pa
         INNER JOIN events e ON e.source_event_id = pa.event_id
         WHERE ${whereClause}
@@ -685,6 +758,7 @@ export function registerDashboardRoutes(
               : asStringArray(metadata['confirmedSources']),
             direction: getFeedDirection(metadata),
             ...getFeedConfidence(metadata, row.audit_confidence),
+            sourceMetadata: extractSourceMetadata(row.source, metadata, row.event_type),
           };
         }),
         cursor: hasMore && lastRow
