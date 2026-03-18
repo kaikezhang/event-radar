@@ -114,6 +114,7 @@ import { DeliveryGate } from './pipeline/delivery-gate.js';
 import { LLMGatekeeper } from './pipeline/llm-gatekeeper.js';
 import { prewarmSectorCache } from './pipeline/event-type-mapper.js';
 import { PipelineLimiter } from './pipeline/pipeline-limiter.js';
+import rateLimit from '@fastify/rate-limit';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebsocketPlugin, toLiveFeedEvent } from './plugins/websocket.js';
 import { OutcomeTracker } from './services/outcome-tracker.js';
@@ -429,6 +430,9 @@ export function buildApp(options?: {
   // Validate JWT config — fail fast if AUTH_REQUIRED=true but no JWT_SECRET
   validateJwtConfig();
 
+  // Register global rate limiter (before routes)
+  server.register(rateLimit, { max: 200, timeWindow: '1 minute' });
+
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
   server.decorate('websocketClientCount', () => websocketClientState.count);
@@ -436,23 +440,36 @@ export function buildApp(options?: {
     await registerAuthPlugin(server, {
       apiKey,
       publicRoutes: [
-        '/health',
-        '/ws/events',
-        '/api/health/ping',
-        '/metrics',
-        '/api/events/ingest',
+        '/api/auth/magic-link',
+        '/api/auth/verify',
+        '/api/auth/refresh',
+        '/api/auth/logout',
+        '/api/auth/me',
         '/api/v1/feed',
         '/api/v1/feed/watchlist-summary',
         '/api/v1/scorecards/summary',
+        '/api/events',
+        '/api/events/:id',
+        '/api/events/:id/similar',
+        '/api/tickers/search',
+        '/api/tickers/trending',
+        '/api/v1/scorecard/summary',
+        '/api/v1/story-groups',
+        '/api/v1/story-groups/:id',
+        '/api/v1/sources',
+        '/api/health/ping',
         '/api/health/delivery-stats',
-        '/api/auth/magic-link',
-        '/api/auth/verify',
-        '/api/auth/me',
-        '/api/auth/refresh',
-        '/api/auth/logout',
+        '/ws/events',
       ],
     });
   });
+
+  if (process.env.AUTH_REQUIRED !== 'true') {
+    server.log.warn('⚠️  AUTH_REQUIRED is not set to true. All routes are accessible without authentication.');
+  }
+  if (apiKey === 'er-dev-2026') {
+    server.log.warn('⚠️  Using default dev API key. Set API_KEY in production.');
+  }
 
   server.register(registerWebsocketPlugin, {
     apiKey,
@@ -1192,7 +1209,7 @@ export function buildApp(options?: {
     marketRegimeService,
   });
 
-  server.post('/api/events/ingest', async (request, reply) => {
+  server.post('/api/events/ingest', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const parsed = RawEventSchema.safeParse(request.body);
 
     if (!parsed.success) {

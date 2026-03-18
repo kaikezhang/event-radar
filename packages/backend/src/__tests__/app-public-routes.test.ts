@@ -7,7 +7,7 @@ describe('buildApp public route registration', () => {
     vi.restoreAllMocks();
   });
 
-  it('includes scanner events in the auth public routes list', async () => {
+  it('includes feed endpoint in the auth public routes list', async () => {
     const registerAuthPlugin = vi.fn(async () => {});
 
     vi.doMock('../plugins/auth.js', async () => {
@@ -28,7 +28,7 @@ describe('buildApp public route registration', () => {
     expect(registerAuthPlugin).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        publicRoutes: expect.arrayContaining(['/api/v1/scanners/:name/events']),
+        publicRoutes: expect.arrayContaining(['/api/v1/feed']),
       }),
     );
 

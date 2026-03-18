@@ -22,6 +22,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@event-radar/delivery": "workspace:*",
     "@event-radar/shared": "workspace:*",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.2.0",
     "cheerio": "1.0.0-rc.12",
     "crawlee": "^3.16.0",

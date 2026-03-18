@@ -336,12 +336,6 @@ describe('Watchlist CRUD', () => {
       headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'NVDA' },
     });
-    await ctx.server.inject({
-      method: 'POST',
-      url: '/api/watchlist',
-      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
-      payload: { ticker: 'TSLA' },
-    });
 
     const response = await ctx.server.inject({
       method: 'GET',
@@ -355,7 +349,6 @@ describe('Watchlist CRUD', () => {
     const tickers = body.data.map((w: { ticker: string }) => w.ticker);
     expect(tickers).toContain('AAPL');
     expect(tickers).toContain('NVDA');
-    expect(tickers).not.toContain('TSLA');
   });
 
   it('should include company name from ticker_reference in watchlist response', async () => {
@@ -403,14 +396,15 @@ describe('Watchlist CRUD', () => {
     expect(response.statusCode).toBe(409);
   });
 
-  it('should allow the same ticker for a different user', async () => {
-    const firstResponse = await ctx.server.inject({
+  it('should ignore x-user-id header (impersonation removed)', async () => {
+    await ctx.server.inject({
       method: 'POST',
       url: '/api/watchlist',
       headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'AAPL' },
     });
 
+    // x-user-id is now ignored, so this should conflict with the same default user
     const secondResponse = await ctx.server.inject({
       method: 'POST',
       url: '/api/watchlist',
@@ -418,8 +412,7 @@ describe('Watchlist CRUD', () => {
       payload: { ticker: 'AAPL' },
     });
 
-    expect(firstResponse.statusCode).toBe(201);
-    expect(secondResponse.statusCode).toBe(201);
+    expect(secondResponse.statusCode).toBe(409);
   });
 
   it('should delete a ticker from the watchlist', async () => {
@@ -447,30 +440,32 @@ describe('Watchlist CRUD', () => {
     expect(listResponse.json().data).toHaveLength(0);
   });
 
-  it('should not delete another user watchlist ticker', async () => {
+  it('should not delete a non-existent ticker (x-user-id ignored)', async () => {
+    // x-user-id is ignored, so both requests go to 'default' user
     await ctx.server.inject({
       method: 'POST',
       url: '/api/watchlist',
-      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'AAPL' },
     });
 
+    // This deletes from 'default' user (x-user-id header is ignored)
     const deleteResponse = await ctx.server.inject({
       method: 'DELETE',
       url: '/api/watchlist/AAPL',
       headers: { 'x-api-key': TEST_API_KEY },
     });
 
-    expect(deleteResponse.statusCode).toBe(404);
+    expect(deleteResponse.statusCode).toBe(200);
 
     const listResponse = await ctx.server.inject({
       method: 'GET',
       url: '/api/watchlist',
-      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
+      headers: { 'x-api-key': TEST_API_KEY },
     });
 
     expect(listResponse.statusCode).toBe(200);
-    expect(listResponse.json().data).toHaveLength(1);
+    expect(listResponse.json().data).toHaveLength(0);
   });
 
   it('should return 404 when deleting non-existent ticker', async () => {
@@ -529,12 +524,6 @@ describe('GET /api/events?watchlist=true', () => {
       headers: { 'x-api-key': TEST_API_KEY },
       payload: { ticker: 'NVDA' },
     });
-    await ctx.server.inject({
-      method: 'POST',
-      url: '/api/watchlist',
-      headers: { 'x-api-key': TEST_API_KEY, 'x-user-id': 'user-2' },
-      payload: { ticker: 'TSLA' },
-    });
   });
 
   afterAll(async () => {
@@ -558,7 +547,8 @@ describe('GET /api/events?watchlist=true', () => {
     expect(tickers).not.toContain('TSLA');
   });
 
-  it('should filter events using the explicit user watchlist', async () => {
+  it('should ignore x-user-id header when filtering by watchlist', async () => {
+    // x-user-id is ignored, so this returns the default user's watchlist (AAPL, NVDA)
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?watchlist=true',
@@ -567,8 +557,8 @@ describe('GET /api/events?watchlist=true', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0].metadata.ticker).toBe('TSLA');
+    // Returns default user's watchlist tickers (AAPL, NVDA), not user-2's
+    expect(body.data).toHaveLength(2);
   });
 
   it('should return empty when watchlist is empty', async () => {
@@ -597,7 +587,8 @@ describe('GET /api/events?watchlist=true', () => {
     await safeClose(emptyClient);
   });
 
-  it('should return empty for a user with no watchlist entries', async () => {
+  it('should ignore x-user-id and return default user watchlist events', async () => {
+    // x-user-id is ignored, so 'empty-user' resolves to 'default' which has watchlist entries
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events?watchlist=true',
@@ -605,7 +596,8 @@ describe('GET /api/events?watchlist=true', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toHaveLength(0);
+    // Returns default user's watchlist (AAPL, NVDA), not empty
+    expect(response.json().data).toHaveLength(2);
   });
 });
 

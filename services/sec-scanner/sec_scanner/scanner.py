@@ -246,7 +246,8 @@ class SecScanner:
         """Post a RawEvent to the backend ingest endpoint."""
         url = f"{settings.backend_url}/api/events/ingest"
         try:
-            response = await self._backend_client.post(url, json=event)
+            headers = {"x-api-key": settings.api_key}
+            response = await self._backend_client.post(url, json=event, headers=headers)
             response.raise_for_status()
             logger.info("Posted event: %s", event["title"][:80])
         except Exception:

@@ -162,7 +162,7 @@ export function registerAuthRoutes(
   db: Database,
 ): void {
   // POST /api/auth/magic-link
-  server.post('/api/auth/magic-link', async (request: FastifyRequest, reply: FastifyReply) => {
+  server.post('/api/auth/magic-link', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as { email?: string } | null;
     const email = body?.email?.trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
