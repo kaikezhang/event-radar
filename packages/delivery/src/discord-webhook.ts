@@ -88,9 +88,21 @@ export class DiscordWebhook implements DeliveryService {
     // --- Footer: source badge ---
     const sourceBadge = SOURCE_BADGE[alert.event.source] ?? `📡 ${alert.event.source}`;
 
+    const truncatedTitle = truncate(title, 256);
+    let truncatedDesc = description;
+
+    // Aggregate embed size check — Discord limit is 6000, we target 5500 for safety
+    const fieldsSize = fields.reduce((sum, f) => sum + f.name.length + f.value.length, 0);
+    const footerSize = sourceBadge.length;
+    const overhead = truncatedTitle.length + fieldsSize + footerSize;
+    const maxDesc = Math.min(2048, 5500 - overhead);
+    if (truncatedDesc.length > maxDesc) {
+      truncatedDesc = truncate(truncatedDesc, Math.max(200, maxDesc));
+    }
+
     const embed = {
-      title: truncate(title, 256),
-      description,
+      title: truncatedTitle,
+      description: truncatedDesc,
       color,
       fields: fields.length > 0 ? fields : undefined,
       timestamp: alert.event.timestamp.toISOString(),
@@ -324,15 +336,21 @@ function buildTradingHaltDescription(alert: AlertEvent, tier: DeliveryTier): str
   const enrichment = alert.enrichment;
   const halt = extractHaltMetadata(alert.event);
 
-  // Header: 🔒 Trading Halt · NYSE · NOW
+  // Header varies for halt vs resume events
+  const isResume = alert.event.type === 'resume';
   const marketLabel = halt.market ? ` · ${halt.market}` : '';
-  parts.push(`🔒 Trading Halt${marketLabel} · NOW`);
+  if (isResume) {
+    const resumeLabel = halt.resumeTime ? ` · ${halt.resumeTime}` : '';
+    parts.push(`🔓 Trading Resumed${marketLabel}${resumeLabel}`);
+  } else {
+    parts.push(`🔒 Trading Halt${marketLabel} · NOW`);
+  }
   parts.push('');
 
   // Headline
   parts.push(alert.event.title);
 
-  // Halt details
+  // Halt/resume details
   parts.push('');
   if (halt.haltReasonDescription || halt.haltReasonCode) {
     const reason = halt.haltReasonDescription ?? halt.haltReasonCode!;
@@ -342,7 +360,9 @@ function buildTradingHaltDescription(alert: AlertEvent, tier: DeliveryTier): str
   if (halt.haltTime) {
     parts.push(`⏱ Halted at: ${halt.haltTime}`);
   }
-  if (halt.resumeTime) {
+  if (isResume && halt.resumeTime) {
+    parts.push(`▶️ Resumed at: ${halt.resumeTime}`);
+  } else if (!isResume && halt.resumeTime) {
     parts.push(`▶️ Resume: ${halt.resumeTime}`);
   }
   if (halt.isLULD) {
@@ -384,28 +404,22 @@ function buildEconDataDescription(alert: AlertEvent, tier: DeliveryTier): string
   // Headline
   parts.push(alert.event.title);
 
-  // Actual vs Expected vs Previous from metadata
+  // Indicator details from real scanner metadata
   const m = alert.event.metadata ?? {};
-  const actual = m.actual as string | number | undefined;
-  const expected = m.expected as string | number | undefined;
-  const previous = m.previous as string | number | undefined;
+  const indicatorName = m.indicator_name as string | undefined;
+  const scheduledTime = m.scheduled_time as string | undefined;
+  const frequency = m.frequency as string | undefined;
+  const tags = m.tags as string[] | undefined;
 
-  if (actual != null || expected != null || previous != null) {
+  if (indicatorName || scheduledTime || frequency) {
     parts.push('');
-    if (actual != null) parts.push(`📈 Actual: ${actual}`);
-    if (expected != null) parts.push(`📋 Expected: ${expected}`);
-    if (previous != null) parts.push(`📊 Previous: ${previous}`);
-
-    // Beat/miss indicator
-    if (typeof actual === 'number' && typeof expected === 'number' && expected !== 0) {
-      const diff = actual - expected;
-      const pctDiff = ((diff / Math.abs(expected)) * 100).toFixed(0);
-      if (diff > 0) {
-        parts.push(`💥 Beat by: +${pctDiff}% (${diff > 0 ? '+' : ''}${diff} above consensus)`);
-      } else if (diff < 0) {
-        parts.push(`📉 Missed by: ${pctDiff}% (${diff} below consensus)`);
-      }
+    if (indicatorName) parts.push(`📋 Indicator: ${indicatorName}`);
+    if (scheduledTime) {
+      const formatted = formatScheduledTime(scheduledTime);
+      parts.push(`⏱ Scheduled: ${formatted}`);
     }
+    if (frequency) parts.push(`🔄 Frequency: ${frequency}`);
+    if (tags?.length) parts.push(`🏷️ Tags: ${tags.join(', ')}`);
   }
 
   // Direction badge
@@ -439,22 +453,38 @@ function buildSocialDescription(alert: AlertEvent, tier: DeliveryTier): string {
   // Headline
   parts.push(alert.event.title);
 
-  // Volume/mention stats from metadata
+  // Platform-specific stats from real scanner metadata
   const m = alert.event.metadata ?? {};
-  const mentionCount = m.mention_count as number | undefined;
-  const sentimentPct = m.sentiment_pct as number | undefined;
-  const volumeMultiple = m.volume_multiple as number | undefined;
+  const source = alert.event.source;
 
-  if (mentionCount != null || sentimentPct != null || volumeMultiple != null) {
-    parts.push('');
-    if (volumeMultiple != null) {
-      parts.push(`🔥 Volume: ${volumeMultiple.toFixed(1)}x average`);
+  if (source === 'stocktwits') {
+    // StockTwits scanner emits: current_volume, previous_volume, ratio
+    const currentVol = m.current_volume as number | undefined;
+    const previousVol = m.previous_volume as number | undefined;
+    const ratio = m.ratio as number | undefined;
+
+    if (currentVol != null || ratio != null) {
+      parts.push('');
+      if (currentVol != null && previousVol != null) {
+        parts.push(`🔥 Volume: ${currentVol} messages (prev: ${previousVol})`);
+      } else if (currentVol != null) {
+        parts.push(`🔥 Volume: ${currentVol} messages`);
+      }
+      if (ratio != null) {
+        parts.push(`📈 Sentiment ratio: ${ratio.toFixed(2)}`);
+      }
     }
-    if (mentionCount != null) {
-      parts.push(`🔥 Trending mentions: ${mentionCount} in last hour`);
-    }
-    if (sentimentPct != null) {
-      parts.push(`📈 Sentiment: ${sentimentPct}% bullish`);
+  } else {
+    // Reddit scanner emits: upvotes, comments, high_engagement
+    const upvotes = m.upvotes as number | undefined;
+    const comments = m.comments as number | undefined;
+    const highEngagement = m.high_engagement as boolean | undefined;
+
+    if (upvotes != null || comments != null) {
+      parts.push('');
+      if (upvotes != null) parts.push(`⬆️ Upvotes: ${upvotes}`);
+      if (comments != null) parts.push(`💬 Comments: ${comments}`);
+      if (highEngagement) parts.push(`🔥 High engagement`);
     }
   }
 
@@ -555,6 +585,15 @@ function appendHistoricalStats(parts: string[], alert: AlertEvent, tier: Deliver
     const sign5 = ctx.avgAlphaT5 >= 0 ? '+' : '';
     parts.push('');
     parts.push(`📊 Similar events: ${ctx.matchCount} cases | ${sign5}${(ctx.avgAlphaT5 * 100).toFixed(1)}% avg 5d | ${ctx.winRateT20.toFixed(0)}% win rate`);
+  }
+}
+
+function formatScheduledTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  } catch {
+    return isoString;
   }
 }
 

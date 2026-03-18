@@ -1068,6 +1068,35 @@ describe('DiscordWebhook', () => {
       expect(embed.description).toContain('**What typically happens:**');
       expect(embed.description).toContain('average -8% on resume');
     });
+
+    it('renders resume events with RESUMED header and resume time', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(
+        makeHaltAlert({
+          event: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            source: 'trading-halt',
+            type: 'resume',
+            title: 'MRLN trading RESUMED',
+            body: 'MRLN on NYSE resumed trading at 11:15 AM ET.',
+            timestamp: new Date('2024-01-15T11:15:00Z'),
+            metadata: {
+              ticker: 'MRLN',
+              haltReasonCode: 'T1',
+              haltReasonDescription: 'News Pending',
+              haltTime: '10:32 AM ET',
+              resumeTime: '11:15 AM ET',
+              market: 'NYSE',
+            },
+          },
+        }),
+      );
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('🔓 Trading Resumed · NYSE · 11:15 AM ET');
+      expect(embed.description).not.toContain('🔒 Trading Halt');
+      expect(embed.description).toContain('▶️ Resumed at: 11:15 AM ET');
+    });
   });
 
   // ── Economic Data template tests ──────────────────────────────
@@ -1078,14 +1107,16 @@ describe('DiscordWebhook', () => {
         event: {
           id: '550e8400-e29b-41d4-a716-446655440000',
           source: 'econ-calendar',
-          type: 'economic_data',
-          title: 'Non-Farm Payrolls — March 2026',
-          body: 'NFP came in at 275K vs 250K expected',
+          type: 'economic-release',
+          title: 'Non-Farm Payrolls — Data Released',
+          body: 'Non-Farm Payrolls data has been released. Check official source for actual values.',
           timestamp: new Date('2024-01-15T13:30:00Z'),
           metadata: {
-            actual: 275,
-            expected: 250,
-            previous: 230,
+            indicator: 'nfp',
+            indicator_name: 'Non-Farm Payrolls',
+            scheduled_time: '2024-01-15T13:30:00.000Z',
+            frequency: 'monthly',
+            tags: ['employment', 'fed-watch'],
           },
         },
         enrichment: {
@@ -1107,47 +1138,36 @@ describe('DiscordWebhook', () => {
       expect(embed.description).toContain('📊 Economic Data');
     });
 
-    it('shows actual vs expected vs previous', async () => {
+    it('shows indicator name', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
       await webhook.send(makeEconAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('📈 Actual: 275');
-      expect(embed.description).toContain('📋 Expected: 250');
-      expect(embed.description).toContain('📊 Previous: 230');
+      expect(embed.description).toContain('📋 Indicator: Non-Farm Payrolls');
     });
 
-    it('shows beat indicator with magnitude', async () => {
+    it('shows scheduled time', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
       await webhook.send(makeEconAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('💥 Beat by: +10%');
-      expect(embed.description).toContain('25 above consensus');
+      expect(embed.description).toContain('⏱ Scheduled:');
     });
 
-    it('shows miss indicator for below-consensus data', async () => {
+    it('shows frequency', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(
-        makeEconAlert({
-          event: {
-            id: '550e8400-e29b-41d4-a716-446655440000',
-            source: 'econ-calendar',
-            type: 'economic_data',
-            title: 'CPI — February 2026',
-            body: 'CPI missed',
-            timestamp: new Date('2024-01-15T13:30:00Z'),
-            metadata: {
-              actual: 220,
-              expected: 250,
-              previous: 240,
-            },
-          },
-        }),
-      );
+      await webhook.send(makeEconAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('📉 Missed by: -12%');
+      expect(embed.description).toContain('🔄 Frequency: monthly');
+    });
+
+    it('shows tags', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(makeEconAlert());
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('🏷️ Tags: employment, fed-watch');
     });
 
     it('uses "Market impact" instead of "Why it matters"', async () => {
@@ -1168,52 +1188,52 @@ describe('DiscordWebhook', () => {
       expect(embed.description).toContain('▲ BULLISH');
     });
 
-    it('handles string values for actual/expected/previous', async () => {
+    it('handles missing optional metadata gracefully', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
       await webhook.send(
         makeEconAlert({
           event: {
             id: '550e8400-e29b-41d4-a716-446655440000',
             source: 'econ-calendar',
-            type: 'economic_data',
-            title: 'FOMC Rate Decision',
-            body: 'Rate held steady',
+            type: 'economic-release-upcoming',
+            title: 'FOMC Rate Decision — releasing in 15 min',
+            body: 'FOMC Rate Decision is scheduled for release.',
             timestamp: new Date('2024-01-15T14:00:00Z'),
             metadata: {
-              actual: '5.25%-5.50%',
-              expected: '5.25%-5.50%',
-              previous: '5.00%-5.25%',
+              indicator: 'fomc',
+              indicator_name: 'FOMC Rate Decision',
             },
           },
         }),
       );
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('📈 Actual: 5.25%-5.50%');
-      expect(embed.description).toContain('📋 Expected: 5.25%-5.50%');
-      // No beat/miss for string values
-      expect(embed.description).not.toContain('💥 Beat');
-      expect(embed.description).not.toContain('📉 Missed');
+      expect(embed.description).toContain('📋 Indicator: FOMC Rate Decision');
+      // No frequency or tags when not provided
+      expect(embed.description).not.toContain('🔄 Frequency');
+      expect(embed.description).not.toContain('🏷️ Tags');
     });
   });
 
   // ── Social template tests ─────────────────────────────────────
 
   describe('social template (reddit/stocktwits)', () => {
-    function makeSocialAlert(source: 'reddit' | 'stocktwits', overrides?: Partial<AlertEvent>): AlertEvent {
+    function makeStocktwitsAlert(overrides?: Partial<AlertEvent>): AlertEvent {
       return makeAlert({
         event: {
           id: '550e8400-e29b-41d4-a716-446655440000',
-          source,
-          type: 'social_volume_spike',
-          title: 'PLTR — Unusual Volume Spike (4.2x average)',
-          body: 'Significant increase in social mentions',
+          source: 'stocktwits',
+          type: 'social-volume',
+          title: 'PLTR StockTwits volume spike (847 vs 200)',
+          body: 'StockTwits message volume for PLTR spiked to 847 (previous: 200). Sentiment ratio: 1.35.',
           timestamp: new Date('2024-01-15T10:00:00Z'),
           metadata: {
             ticker: 'PLTR',
-            mention_count: 847,
-            sentiment_pct: 78,
-            volume_multiple: 4.2,
+            tickers: ['PLTR'],
+            current_volume: 847,
+            previous_volume: 200,
+            ratio: 1.35,
+            event_subtype: 'volume-spike',
           },
         },
         ticker: 'PLTR',
@@ -1227,9 +1247,39 @@ describe('DiscordWebhook', () => {
       });
     }
 
+    function makeRedditAlert(overrides?: Partial<AlertEvent>): AlertEvent {
+      return makeAlert({
+        event: {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          source: 'reddit',
+          type: 'reddit_trending',
+          title: 'PLTR trending on r/wallstreetbets',
+          body: 'PLTR is seeing unusual engagement on Reddit',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          metadata: {
+            subreddit: 'wallstreetbets',
+            upvotes: 1523,
+            comments: 342,
+            high_engagement: true,
+            ticker: 'PLTR',
+            tickers: ['PLTR'],
+            author: 'test_user',
+          },
+        },
+        ticker: 'PLTR',
+        enrichment: {
+          summary: 'Reddit trending post',
+          impact: 'Social volume spike often precedes short-term momentum. Historical accuracy: 48%.',
+          action: '🟡 Monitor',
+          tickers: [{ symbol: 'PLTR', direction: 'bullish' }],
+        },
+        ...overrides,
+      });
+    }
+
     it('includes Social Buzz header with StockTwits platform', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('stocktwits'));
+      await webhook.send(makeStocktwitsAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('💬 Social Buzz · StockTwits');
@@ -1237,39 +1287,48 @@ describe('DiscordWebhook', () => {
 
     it('includes Social Buzz header with Reddit platform', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('reddit'));
+      await webhook.send(makeRedditAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('💬 Social Buzz · Reddit');
     });
 
-    it('shows volume multiple', async () => {
+    it('shows StockTwits volume with current and previous', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('stocktwits'));
+      await webhook.send(makeStocktwitsAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('🔥 Volume: 4.2x average');
+      expect(embed.description).toContain('🔥 Volume: 847 messages (prev: 200)');
     });
 
-    it('shows mention count', async () => {
+    it('shows StockTwits sentiment ratio', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('stocktwits'));
+      await webhook.send(makeStocktwitsAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('🔥 Trending mentions: 847 in last hour');
+      expect(embed.description).toContain('📈 Sentiment ratio: 1.35');
     });
 
-    it('shows sentiment percentage', async () => {
+    it('shows Reddit upvotes and comments', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('stocktwits'));
+      await webhook.send(makeRedditAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('📈 Sentiment: 78% bullish');
+      expect(embed.description).toContain('⬆️ Upvotes: 1523');
+      expect(embed.description).toContain('💬 Comments: 342');
+    });
+
+    it('shows Reddit high engagement indicator', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(makeRedditAlert());
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('🔥 High engagement');
     });
 
     it('uses "Speculative" confidence label', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('reddit'));
+      await webhook.send(makeRedditAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('▲ BULLISH · Speculative');
@@ -1277,7 +1336,7 @@ describe('DiscordWebhook', () => {
 
     it('uses "Context" instead of "Why it matters"', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
-      await webhook.send(makeSocialAlert('stocktwits'));
+      await webhook.send(makeStocktwitsAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('**Context:**');
@@ -1375,7 +1434,54 @@ describe('DiscordWebhook', () => {
         ) +
         (embed.footer?.text?.length ?? 0);
 
-      expect(totalSize).toBeLessThan(6000);
+      expect(totalSize).toBeLessThanOrEqual(5500);
+    });
+
+    it('truncates description when fields push total over 5500', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+      await webhook.send(
+        makeAlert({
+          event: {
+            id: '550e8400-e29b-41d4-a716-446655440000',
+            source: 'breaking-news',
+            type: 'news',
+            title: 'T'.repeat(256),
+            body: 'B'.repeat(2000),
+            url: 'https://example.com/very-long-article',
+            timestamp: new Date('2024-01-15T10:00:00Z'),
+            metadata: { source_feed: 'CNBC' },
+          },
+          enrichment: {
+            summary: 'S'.repeat(300),
+            impact: 'I'.repeat(2000),
+            risks: 'R'.repeat(500),
+            action: '🔴 High-Quality Setup',
+            tickers: [
+              { symbol: 'AAPL', direction: 'bearish' },
+              { symbol: 'MSFT', direction: 'bearish' },
+            ],
+          },
+          deliveryTier: 'critical',
+          confirmationCount: 3,
+          confirmedSources: ['breaking-news', 'analyst', 'sec-edgar'],
+        }),
+      );
+
+      const [, options] = fetchSpy.mock.calls.at(-1) as [string, RequestInit];
+      const payload = JSON.parse(options.body as string);
+      const embed = payload.embeds[0];
+
+      const totalSize =
+        (embed.title?.length ?? 0) +
+        (embed.description?.length ?? 0) +
+        (embed.fields ?? []).reduce(
+          (sum: number, f: { name: string; value: string }) => sum + f.name.length + f.value.length,
+          0,
+        ) +
+        (embed.footer?.text?.length ?? 0);
+
+      expect(totalSize).toBeLessThanOrEqual(5500);
     });
   });
 });
