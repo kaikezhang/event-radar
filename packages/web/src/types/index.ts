@@ -97,7 +97,6 @@ export interface EventDetailData {
   };
   marketData: EventMarketData | null;
   enrichment: LlmEnrichment | null;
-  historical: HistoricalContext | null;
   historicalPattern: {
     matchCount: number;
     confidence: string;
@@ -105,6 +104,9 @@ export interface EventDetailData {
     avgMoveT20: number | null;
     winRate: number | null;
     similarEvents: SimilarEvent[];
+    patternSummary?: string;
+    bestCase: { ticker: string; move: number } | null;
+    worstCase: { ticker: string; move: number } | null;
   };
   audit?: {
     outcome: string;

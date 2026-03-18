@@ -455,8 +455,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   }
 
   const enrichment = data.enrichment;
-  const historical = data.historical;
-  const hasHistoricalPattern = historical != null || data.historicalPattern.matchCount > 0;
+  const hasHistoricalPattern = data.historicalPattern.matchCount > 0;
   const direction = getPrimaryDirection(data);
   const confidence = getPrimaryConfidence(data);
   const { bullPoints, bearPoints } = deriveBullBear(enrichment, direction);
@@ -646,8 +645,8 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                   <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
                     Historical Similar Events
                   </h2>
-                  {historical?.patternLabel && (
-                    <p className="mt-1 text-sm leading-6 text-text-secondary">{historical.patternLabel}</p>
+                  {data.historicalPattern.patternSummary && (
+                    <p className="mt-1 text-sm leading-6 text-text-secondary">{data.historicalPattern.patternSummary}</p>
                   )}
                 </div>
 
@@ -691,21 +690,21 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 <ConfidenceBar matchCount={data.historicalPattern.matchCount} />
 
                 {/* Best / Worst cases */}
-                {(historical?.bestCase || historical?.worstCase) && (
+                {(data.historicalPattern.bestCase || data.historicalPattern.worstCase) && (
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    {historical.bestCase && (
+                    {data.historicalPattern.bestCase && (
                       <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Best</p>
                         <p className="mt-2 text-sm font-semibold text-emerald-300">
-                          {historical.bestCase.ticker} {formatSignedPercent(historical.bestCase.move)}
+                          {data.historicalPattern.bestCase.ticker} {formatSignedPercent(data.historicalPattern.bestCase.move)}
                         </p>
                       </div>
                     )}
-                    {historical.worstCase && (
+                    {data.historicalPattern.worstCase && (
                       <div className="rounded-2xl border border-red-400/15 bg-red-400/5 p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Worst</p>
                         <p className="mt-2 text-sm font-semibold text-severity-critical">
-                          {historical.worstCase.ticker} {formatSignedPercent(historical.worstCase.move)}
+                          {data.historicalPattern.worstCase.ticker} {formatSignedPercent(data.historicalPattern.worstCase.move)}
                         </p>
                       </div>
                     )}

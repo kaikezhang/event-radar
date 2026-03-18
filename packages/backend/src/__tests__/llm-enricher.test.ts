@@ -478,4 +478,93 @@ describe('LLMEnricher.enrich', () => {
 
     await expect(enricher.enrich(makeEvent())).resolves.toBeNull();
   });
+
+  it('opens the circuit breaker after 5 consecutive failures', async () => {
+    const create = vi.fn().mockRejectedValue(new Error('LLM unavailable'));
+    const enricher = new LLMEnricher(
+      { enabled: true, apiKey: 'test-key', timeoutMs: 50 },
+      makeDependencies() as never,
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setClient(enricher, create);
+
+    // 5 consecutive failures should open the circuit
+    for (let i = 0; i < 5; i++) {
+      await enricher.enrich(makeEvent());
+    }
+
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Circuit breaker OPEN'),
+    );
+
+    // 6th call should be skipped (circuit open), not hitting the LLM
+    create.mockClear();
+    await enricher.enrich(makeEvent());
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('resets the circuit breaker after a successful call', async () => {
+    const create = vi.fn().mockRejectedValue(new Error('LLM unavailable'));
+    const enricher = new LLMEnricher(
+      { enabled: true, apiKey: 'test-key', timeoutMs: 50 },
+      makeDependencies() as never,
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    setClient(enricher, create);
+
+    // 4 failures (below threshold)
+    for (let i = 0; i < 4; i++) {
+      await enricher.enrich(makeEvent());
+    }
+
+    // Success resets the counter
+    create.mockResolvedValueOnce(makeChatCompletion(makeLlmPayload()));
+    const result = await enricher.enrich(makeEvent());
+    expect(result).not.toBeNull();
+
+    // 4 more failures should NOT open the circuit (counter was reset)
+    create.mockRejectedValue(new Error('LLM unavailable'));
+    for (let i = 0; i < 4; i++) {
+      await enricher.enrich(makeEvent());
+    }
+
+    // Should still call the LLM (circuit not open)
+    create.mockClear();
+    create.mockRejectedValue(new Error('LLM unavailable'));
+    await enricher.enrich(makeEvent());
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('allows a half-open request after cooldown expires', async () => {
+    const create = vi.fn().mockRejectedValue(new Error('LLM unavailable'));
+    const enricher = new LLMEnricher(
+      { enabled: true, apiKey: 'test-key', timeoutMs: 50 },
+      makeDependencies() as never,
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    setClient(enricher, create);
+
+    // Open the circuit
+    for (let i = 0; i < 5; i++) {
+      await enricher.enrich(makeEvent());
+    }
+
+    // Fast-forward past cooldown
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(120_001);
+
+    // Half-open: should allow one request through
+    create.mockClear();
+    create.mockResolvedValueOnce(makeChatCompletion(makeLlmPayload()));
+    const result = await enricher.enrich(makeEvent());
+    expect(create).toHaveBeenCalled();
+    expect(result).not.toBeNull();
+
+    vi.useRealTimers();
+  });
 });

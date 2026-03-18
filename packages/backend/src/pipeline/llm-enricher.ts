@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { Gauge } from 'prom-client';
 import {
   LLMEnrichmentSchema,
   type LlmClassificationResult,
@@ -7,12 +8,19 @@ import {
   type LLMEnrichment,
   type RegimeSnapshot,
 } from '@event-radar/shared';
+import { registry } from '../metrics.js';
 import type { MarketSnapshot } from '../services/market-context-cache.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
 import {
   extractPrimaryTicker,
   type PatternMatchResult,
 } from '../services/pattern-matcher.js';
+
+const enricherCircuitState = new Gauge({
+  name: 'llm_enricher_circuit_state',
+  help: 'LLM enricher circuit breaker state (0=closed, 1=open)',
+  registers: [registry],
+});
 
 export interface LLMEnricherConfig {
   apiKey?: string;
@@ -100,6 +108,35 @@ export class LLMEnricher {
   private readonly patternMatcher?: PatternStatsSource;
   private readonly marketSnapshotProvider?: MarketSnapshotProvider;
 
+  // Circuit breaker state
+  private consecutiveFailures = 0;
+  private circuitOpenUntil = 0;
+  private static readonly FAILURE_THRESHOLD = 5;
+  private static readonly COOLDOWN_MS = 120_000; // 2 minutes
+
+  private isCircuitOpen(): boolean {
+    if (this.consecutiveFailures < LLMEnricher.FAILURE_THRESHOLD) return false;
+    if (Date.now() > this.circuitOpenUntil) {
+      // Half-open: allow one request through
+      return false;
+    }
+    return true;
+  }
+
+  private recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    enricherCircuitState.set(0);
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= LLMEnricher.FAILURE_THRESHOLD) {
+      this.circuitOpenUntil = Date.now() + LLMEnricher.COOLDOWN_MS;
+      enricherCircuitState.set(1);
+      console.warn(`[llm-enricher] Circuit breaker OPEN — skipping enrichment for ${LLMEnricher.COOLDOWN_MS / 1000}s after ${this.consecutiveFailures} consecutive failures`);
+    }
+  }
+
   constructor(
     config?: LLMEnricherConfig,
     dependencies?: IMarketRegimeService | LLMEnricherDependencies,
@@ -121,6 +158,11 @@ export class LLMEnricher {
     llmResult?: LlmClassificationResult,
   ): Promise<LLMEnrichment | null> {
     if (!this.client) return null;
+
+    if (this.isCircuitOpen()) {
+      console.warn(`[llm-enricher] Circuit breaker open — skipping enrichment for event ${event.id}`);
+      return null;
+    }
 
     const [regimeSnapshot, marketContext, patternMatch] = await Promise.all([
       this.loadRegimeSnapshot(),
@@ -147,10 +189,16 @@ export class LLMEnricher {
         timeout(this.timeoutMs),
       ]);
 
-      if (!response) return null;
+      if (!response) {
+        this.recordFailure();
+        return null;
+      }
 
       const text = response.choices[0]?.message?.content ?? '';
-      if (!text) return null;
+      if (!text) {
+        this.recordFailure();
+        return null;
+      }
 
       const parsed = JSON.parse(text) as unknown;
       const validation = LLMEnrichmentSchema.safeParse(parsed);
@@ -159,14 +207,17 @@ export class LLMEnricher {
           `[llm-enricher] Invalid enrichment payload for event ${event.id}:`,
           validation.error.flatten(),
         );
+        this.recordFailure();
         return null;
       }
 
       const usage = response.usage;
       console.log(`[llm-enricher] Enriched event ${event.id}: action=${validation.data.action}, tokens=${usage?.prompt_tokens ?? '?'}+${usage?.completion_tokens ?? '?'}`);
+      this.recordSuccess();
       return validation.data;
     } catch (err) {
       console.error(`[llm-enricher] Failed to enrich event ${event.id}:`, err instanceof Error ? err.message : err);
+      this.recordFailure();
       return null;
     }
   }

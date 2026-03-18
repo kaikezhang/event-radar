@@ -491,7 +491,6 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       },
       marketData,
       enrichment,
-      historical,
       historicalPattern: {
         matchCount,
         confidence: historicalConfidence,
@@ -499,6 +498,9 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
         avgMoveT20: historical?.avgAlphaT20 ?? responseHistoricalPattern?.avgMoveT20 ?? null,
         winRate: historical?.winRateT20 ?? responseHistoricalPattern?.winRate ?? null,
         similarEvents,
+        patternSummary: historical?.patternLabel ?? undefined,
+        bestCase: historical?.bestCase ?? null,
+        worstCase: historical?.worstCase ?? null,
       },
       audit,
     };
