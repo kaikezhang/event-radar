@@ -373,7 +373,7 @@ function SourceDetailStrip({
       const freq = metadata.frequency as string | undefined;
       if (!name && !freq) return null;
       return (
-        <div className="mt-2 flex items-center gap-2 text-[12px] text-text-secondary">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
           {name && <span>{name}</span>}
           {freq && (
             <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[11px] text-text-tertiary capitalize">

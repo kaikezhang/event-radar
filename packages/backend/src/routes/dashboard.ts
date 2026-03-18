@@ -332,24 +332,28 @@ export function extractSourceMetadata(
         headline: 'headline',
         sourceFeed: 'source_feed',
       });
-    case 'sec-edgar':
-      return pick(metadata, {
+    case 'sec-edgar': {
+      const secResult = pick(metadata, {
         formType: 'form_type',
-        companyName: 'company_name',
         filingLink: 'filing_link',
         itemDescriptions: 'item_descriptions',
       });
-    case 'trading-halt':
-      return {
-        ...pick(metadata, {
-          haltReasonCode: 'haltReasonCode',
-          haltReasonDescription: 'haltReasonDescription',
-          haltTime: 'haltTime',
-          resumeTime: 'resumeTime',
-          market: 'market',
-        }),
-        isResume: eventType === 'resume',
-      };
+      const companyName = metadata.company_name ?? metadata.issuer_name;
+      if (companyName != null) secResult.companyName = companyName;
+      return secResult;
+    }
+    case 'trading-halt': {
+      const haltResult = pick(metadata, {
+        haltReasonCode: 'haltReasonCode',
+        haltReasonDescription: 'haltReasonDescription',
+        haltTime: 'haltTime',
+        resumeTime: 'resumeTime',
+        market: 'market',
+      });
+      if (Object.keys(haltResult).length === 0) return undefined;
+      haltResult.isResume = eventType === 'resume';
+      return haltResult;
+    }
     case 'econ-calendar':
       return pick(metadata, {
         indicatorName: 'indicator_name',

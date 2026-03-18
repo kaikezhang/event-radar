@@ -32,6 +32,28 @@ describe('extractSourceMetadata', () => {
     });
   });
 
+  it('extracts sec-edgar metadata using issuer_name fallback for Form 4', () => {
+    const result = extractSourceMetadata('sec-edgar', {
+      form_type: 'Form 4',
+      issuer_name: 'Apple Inc',
+      filing_link: 'https://sec.gov/filing/form4/789',
+    });
+    expect(result).toEqual({
+      formType: 'Form 4',
+      companyName: 'Apple Inc',
+      filingLink: 'https://sec.gov/filing/form4/789',
+    });
+  });
+
+  it('prefers company_name over issuer_name for sec-edgar', () => {
+    const result = extractSourceMetadata('sec-edgar', {
+      form_type: '8-K',
+      company_name: 'Apple Inc (Primary)',
+      issuer_name: 'Apple Inc (Issuer)',
+    });
+    expect(result?.companyName).toBe('Apple Inc (Primary)');
+  });
+
   it('extracts trading-halt metadata and sets isResume from eventType', () => {
     const haltResult = extractSourceMetadata('trading-halt', {
       haltReasonCode: 'T1',
@@ -106,6 +128,13 @@ describe('extractSourceMetadata', () => {
       comments: 342,
       highEngagement: true,
     });
+  });
+
+  it('returns undefined for trading-halt when no halt metadata keys present', () => {
+    const result = extractSourceMetadata('trading-halt', {
+      unrelated: 'value',
+    }, 'halt');
+    expect(result).toBeUndefined();
   });
 
   it('returns undefined for unknown sources', () => {

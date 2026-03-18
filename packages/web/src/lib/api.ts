@@ -785,6 +785,7 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
       : Array.isArray(metadata.confirmedSources)
         ? (metadata.confirmedSources as string[]).map(mapSource)
         : undefined,
+    sourceMetadata: (event.sourceMetadata as Record<string, unknown>) ?? undefined,
   };
 }
 
@@ -804,7 +805,8 @@ function extractSourceMetadataClient(
     case 'sec-edgar': {
       const r: Record<string, unknown> = {};
       if (meta.form_type != null) r.formType = meta.form_type;
-      if (meta.company_name != null) r.companyName = meta.company_name;
+      const companyName = meta.company_name ?? meta.issuer_name;
+      if (companyName != null) r.companyName = companyName;
       if (meta.filing_link != null) r.filingLink = meta.filing_link;
       if (meta.item_descriptions != null) r.itemDescriptions = meta.item_descriptions;
       return Object.keys(r).length ? r : undefined;
@@ -816,6 +818,7 @@ function extractSourceMetadataClient(
       if (meta.haltTime != null) r.haltTime = meta.haltTime;
       if (meta.resumeTime != null) r.resumeTime = meta.resumeTime;
       if (meta.market != null) r.market = meta.market;
+      if (Object.keys(r).length === 0) return undefined;
       r.isResume = eventType === 'resume';
       return r;
     }
