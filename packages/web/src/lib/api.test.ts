@@ -194,12 +194,12 @@ describe('getEventDetail historical pattern mapping', () => {
 
     const detail = await getEventDetail('evt-historical-1');
 
-    expect(detail?.historical?.patternLabel).toBe('Technology earnings beat in correction market');
+    expect(detail?.historicalPattern.patternSummary).toBe('Technology earnings beat in correction market');
     expect(detail?.historicalPattern.avgMoveT5).toBe(3.4);
     expect(detail?.historicalPattern.avgMoveT20).toBe(12);
     expect(detail?.historicalPattern.winRate).toBe(68);
-    expect(detail?.historical?.bestCase).toEqual({ ticker: 'SMCI', move: 41 });
-    expect(detail?.historical?.worstCase).toEqual({ ticker: 'AMD', move: -18 });
+    expect(detail?.historicalPattern.bestCase).toEqual({ ticker: 'SMCI', move: 41 });
+    expect(detail?.historicalPattern.worstCase).toEqual({ ticker: 'AMD', move: -18 });
   });
 
   it('builds similar events from topMatches when the metadata has no preformatted similarEvents array', async () => {
@@ -304,7 +304,6 @@ describe('getEventDetail historical pattern mapping', () => {
 
     const detail = await getEventDetail('evt-historical-3');
 
-    expect(detail?.historical).toBeNull();
     expect(detail?.historicalPattern).toEqual({
       matchCount: 7,
       confidence: 'high',
@@ -318,6 +317,9 @@ describe('getEventDetail historical pattern mapping', () => {
           move: '+5.1%',
         },
       ],
+      patternSummary: undefined,
+      bestCase: null,
+      worstCase: null,
     });
   });
 
