@@ -1,5 +1,6 @@
 import type { Severity } from '@event-radar/shared';
 import type { AlertEvent, DeliveryService, HistoricalContext } from './types.js';
+import { extractHaltMetadata, extractNewsMetadata, extractSecMetadata } from './source-metadata.js';
 
 export interface DiscordConfig {
   /** Discord webhook URL. */
@@ -69,13 +70,12 @@ export class DiscordWebhook implements DeliveryService {
 
   async send(alert: AlertEvent): Promise<void> {
     const tier: DeliveryTier = alert.deliveryTier ?? 'high';
-    const enrichment = alert.enrichment;
 
     // --- Compact title ---
     const title = buildCompactTitle(alert);
 
-    // --- Description: headline + structured body ---
-    const description = buildCompactDescription(alert, tier);
+    // --- Description: source-specific template ---
+    const description = buildDescription(alert, tier);
 
     // --- Color based on tier (or severity fallback) ---
     const color = alert.deliveryTier
@@ -83,35 +83,7 @@ export class DiscordWebhook implements DeliveryService {
       : SEVERITY_COLOR[alert.severity];
 
     // --- Optional fields (minimal) ---
-    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
-
-    // Multiple tickers (when more than one)
-    if (enrichment?.tickers && enrichment.tickers.length > 1) {
-      const eventPrice = alert.event.metadata?.['event_price'];
-      const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
-      const tickerDisplay = enrichment.tickers
-        .map((t) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
-        .join('  ');
-      fields.push({ name: 'Tickers', value: `${tickerDisplay}${priceStr}`, inline: false });
-    }
-
-    // Confirmation (multi-source)
-    if ((alert.confirmationCount ?? 1) > 1) {
-      fields.push({
-        name: `✓ Confirmed by ${alert.confirmationCount} sources`,
-        value: (alert.confirmedSources ?? []).join(', '),
-        inline: false,
-      });
-    }
-
-    // Source link
-    if (alert.event.url) {
-      fields.push({
-        name: '🔗 Source',
-        value: `[View Original](${alert.event.url})`,
-        inline: false,
-      });
-    }
+    const fields = buildFields(alert);
 
     // --- Footer: source badge ---
     const sourceBadge = SOURCE_BADGE[alert.event.source] ?? `📡 ${alert.event.source}`;
@@ -162,7 +134,44 @@ export class DiscordWebhook implements DeliveryService {
   }
 }
 
-// ── Compact card helpers ──────────────────────────────────────
+// ── Fields (shared across all templates) ──────────────────────
+
+function buildFields(alert: AlertEvent): Array<{ name: string; value: string; inline: boolean }> {
+  const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+  const enrichment = alert.enrichment;
+
+  // Multiple tickers (when more than one)
+  if (enrichment?.tickers && enrichment.tickers.length > 1) {
+    const eventPrice = alert.event.metadata?.['event_price'];
+    const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
+    const tickerDisplay = enrichment.tickers
+      .map((t) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
+      .join('  ');
+    fields.push({ name: 'Tickers', value: `${tickerDisplay}${priceStr}`, inline: false });
+  }
+
+  // Confirmation (multi-source)
+  if ((alert.confirmationCount ?? 1) > 1) {
+    fields.push({
+      name: `✓ Confirmed by ${alert.confirmationCount} sources`,
+      value: (alert.confirmedSources ?? []).join(', '),
+      inline: false,
+    });
+  }
+
+  // Source link
+  if (alert.event.url) {
+    fields.push({
+      name: '🔗 Source',
+      value: `[View Original](${alert.event.url})`,
+      inline: false,
+    });
+  }
+
+  return fields;
+}
+
+// ── Title ─────────────────────────────────────────────────────
 
 function buildCompactTitle(alert: AlertEvent): string {
   const enrichment = alert.enrichment;
@@ -196,7 +205,278 @@ function compactActionLabel(action: string | undefined, direction?: string): str
   return action;
 }
 
-function buildCompactDescription(alert: AlertEvent, tier: DeliveryTier): string {
+// ── Template router ───────────────────────────────────────────
+
+function buildDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  switch (alert.event.source) {
+    case 'breaking-news': return buildBreakingNewsDescription(alert, tier);
+    case 'sec-edgar': return buildSecFilingDescription(alert, tier);
+    case 'trading-halt': return buildTradingHaltDescription(alert, tier);
+    case 'econ-calendar': return buildEconDataDescription(alert, tier);
+    case 'reddit':
+    case 'stocktwits': return buildSocialDescription(alert, tier);
+    default: return buildDefaultDescription(alert, tier);
+  }
+}
+
+// ── Breaking News ─────────────────────────────────────────────
+
+function buildBreakingNewsDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  const parts: string[] = [];
+  const enrichment = alert.enrichment;
+  const news = extractNewsMetadata(alert.event);
+
+  // Source header: 📰 Breaking News · CNBC · 2m ago
+  const sourceLabel = news.sourceFeed ? ` · ${news.sourceFeed}` : '';
+  const timeAgo = relativeTime(alert.event.timestamp);
+  parts.push(`📰 Breaking News${sourceLabel} · ${timeAgo}`);
+  parts.push('');
+
+  // Headline
+  parts.push(alert.event.title);
+
+  // Quoted original text from summary or body
+  const quoteText = alert.event.body || enrichment?.summary;
+  if (quoteText) {
+    parts.push('');
+    const trimmed = quoteText.length > 300 ? quoteText.slice(0, 297) + '...' : quoteText;
+    parts.push(`> ${trimmed.replace(/\n/g, '\n> ')}`);
+  }
+
+  // Direction badge
+  parts.push('');
+  parts.push(directionBadge(alert));
+
+  // "Why it matters" from enrichment.impact
+  if (enrichment?.impact) {
+    parts.push('');
+    parts.push(`**Why it matters:** ${enrichment.impact}`);
+  }
+
+  // Risk — critical/high tier
+  if ((tier === 'critical' || tier === 'high') && enrichment?.risks) {
+    parts.push('');
+    parts.push(`**Risk:** ${enrichment.risks}`);
+  }
+
+  // Historical stats — critical/high tier
+  appendHistoricalStats(parts, alert, tier);
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── SEC Filing ────────────────────────────────────────────────
+
+function buildSecFilingDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  const parts: string[] = [];
+  const enrichment = alert.enrichment;
+  const sec = extractSecMetadata(alert.event);
+
+  // Header: 📋 SEC Filing · 8-K · 5m ago
+  const formLabel = sec.formType ? ` · ${sec.formType}` : '';
+  const timeAgo = relativeTime(alert.event.timestamp);
+  parts.push(`📋 SEC Filing${formLabel} · ${timeAgo}`);
+  parts.push('');
+
+  // Headline
+  parts.push(alert.event.title);
+
+  // Item types
+  if (sec.itemDescriptions?.length) {
+    parts.push('');
+    for (const desc of sec.itemDescriptions) {
+      parts.push(`📄 ${desc}`);
+    }
+  } else if (sec.itemTypes?.length) {
+    parts.push('');
+    for (const item of sec.itemTypes) {
+      parts.push(`📄 Item ${item}`);
+    }
+  }
+
+  // Company name
+  if (sec.companyName) {
+    parts.push('');
+    const cikStr = sec.cik ? ` (CIK: ${sec.cik})` : '';
+    parts.push(`Company: ${sec.companyName}${cikStr}`);
+  }
+
+  // Direction badge
+  parts.push('');
+  parts.push(directionBadge(alert));
+
+  // "What this means" (different framing for filings)
+  if (enrichment?.impact) {
+    parts.push('');
+    parts.push(`**What this means:** ${enrichment.impact}`);
+  }
+
+  // Historical stats — critical/high tier
+  appendHistoricalStats(parts, alert, tier);
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── Trading Halt ──────────────────────────────────────────────
+
+function buildTradingHaltDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  const parts: string[] = [];
+  const enrichment = alert.enrichment;
+  const halt = extractHaltMetadata(alert.event);
+
+  // Header: 🔒 Trading Halt · NYSE · NOW
+  const marketLabel = halt.market ? ` · ${halt.market}` : '';
+  parts.push(`🔒 Trading Halt${marketLabel} · NOW`);
+  parts.push('');
+
+  // Headline
+  parts.push(alert.event.title);
+
+  // Halt details
+  parts.push('');
+  if (halt.haltReasonDescription || halt.haltReasonCode) {
+    const reason = halt.haltReasonDescription ?? halt.haltReasonCode!;
+    const codeStr = halt.haltReasonCode && halt.haltReasonDescription ? ` (${halt.haltReasonCode})` : '';
+    parts.push(`⏸ Reason: ${reason}${codeStr}`);
+  }
+  if (halt.haltTime) {
+    parts.push(`⏱ Halted at: ${halt.haltTime}`);
+  }
+  if (halt.resumeTime) {
+    parts.push(`▶️ Resume: ${halt.resumeTime}`);
+  }
+  if (halt.isLULD) {
+    parts.push(`⚡ LULD Circuit Breaker`);
+  }
+
+  const eventPrice = alert.event.metadata?.['event_price'];
+  if (typeof eventPrice === 'number') {
+    parts.push(`📊 Last price: $${eventPrice.toFixed(2)}`);
+  }
+
+  // Direction badge
+  parts.push('');
+  parts.push(directionBadge(alert));
+
+  // "What typically happens" from enrichment
+  if (enrichment?.impact) {
+    parts.push('');
+    parts.push(`**What typically happens:** ${enrichment.impact}`);
+  }
+
+  // Historical stats — critical/high tier
+  appendHistoricalStats(parts, alert, tier);
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── Economic Data ─────────────────────────────────────────────
+
+function buildEconDataDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  const parts: string[] = [];
+  const enrichment = alert.enrichment;
+
+  // Header: 📊 Economic Data · 15m ago
+  const timeAgo = relativeTime(alert.event.timestamp);
+  parts.push(`📊 Economic Data · ${timeAgo}`);
+  parts.push('');
+
+  // Headline
+  parts.push(alert.event.title);
+
+  // Actual vs Expected vs Previous from metadata
+  const m = alert.event.metadata ?? {};
+  const actual = m.actual as string | number | undefined;
+  const expected = m.expected as string | number | undefined;
+  const previous = m.previous as string | number | undefined;
+
+  if (actual != null || expected != null || previous != null) {
+    parts.push('');
+    if (actual != null) parts.push(`📈 Actual: ${actual}`);
+    if (expected != null) parts.push(`📋 Expected: ${expected}`);
+    if (previous != null) parts.push(`📊 Previous: ${previous}`);
+
+    // Beat/miss indicator
+    if (typeof actual === 'number' && typeof expected === 'number' && expected !== 0) {
+      const diff = actual - expected;
+      const pctDiff = ((diff / Math.abs(expected)) * 100).toFixed(0);
+      if (diff > 0) {
+        parts.push(`💥 Beat by: +${pctDiff}% (${diff > 0 ? '+' : ''}${diff} above consensus)`);
+      } else if (diff < 0) {
+        parts.push(`📉 Missed by: ${pctDiff}% (${diff} below consensus)`);
+      }
+    }
+  }
+
+  // Direction badge
+  parts.push('');
+  parts.push(directionBadge(alert));
+
+  // "Market impact" from enrichment (different framing for econ)
+  if (enrichment?.impact) {
+    parts.push('');
+    parts.push(`**Market impact:** ${enrichment.impact}`);
+  }
+
+  // Historical stats — critical/high tier
+  appendHistoricalStats(parts, alert, tier);
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── Social (Reddit / StockTwits) ──────────────────────────────
+
+function buildSocialDescription(alert: AlertEvent, tier: DeliveryTier): string {
+  const parts: string[] = [];
+  const enrichment = alert.enrichment;
+
+  // Header: 💬 Social Buzz · StockTwits · 30m ago
+  const platformLabel = alert.event.source === 'stocktwits' ? 'StockTwits' : 'Reddit';
+  const timeAgo = relativeTime(alert.event.timestamp);
+  parts.push(`💬 Social Buzz · ${platformLabel} · ${timeAgo}`);
+  parts.push('');
+
+  // Headline
+  parts.push(alert.event.title);
+
+  // Volume/mention stats from metadata
+  const m = alert.event.metadata ?? {};
+  const mentionCount = m.mention_count as number | undefined;
+  const sentimentPct = m.sentiment_pct as number | undefined;
+  const volumeMultiple = m.volume_multiple as number | undefined;
+
+  if (mentionCount != null || sentimentPct != null || volumeMultiple != null) {
+    parts.push('');
+    if (volumeMultiple != null) {
+      parts.push(`🔥 Volume: ${volumeMultiple.toFixed(1)}x average`);
+    }
+    if (mentionCount != null) {
+      parts.push(`🔥 Trending mentions: ${mentionCount} in last hour`);
+    }
+    if (sentimentPct != null) {
+      parts.push(`📈 Sentiment: ${sentimentPct}% bullish`);
+    }
+  }
+
+  // Direction badge — always "Speculative" confidence for social
+  parts.push('');
+  parts.push(directionBadge(alert, 'Speculative'));
+
+  // "Context" from enrichment (different framing for social)
+  if (enrichment?.impact) {
+    parts.push('');
+    parts.push(`**Context:** ${enrichment.impact}`);
+  }
+
+  // Historical stats — critical/high tier
+  appendHistoricalStats(parts, alert, tier);
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── Default (fallback — same as original buildCompactDescription) ─
+
+function buildDefaultDescription(alert: AlertEvent, tier: DeliveryTier): string {
   const parts: string[] = [];
   const enrichment = alert.enrichment;
 
@@ -220,6 +500,51 @@ function buildCompactDescription(alert: AlertEvent, tier: DeliveryTier): string 
   }
 
   // Historical stats — critical & high only
+  appendHistoricalStats(parts, alert, tier);
+
+  // Risk — critical only
+  if (tier === 'critical' && enrichment?.risks) {
+    parts.push('');
+    parts.push(`**Risk:** ${enrichment.risks}`);
+  }
+
+  return truncate(parts.join('\n'), 2048);
+}
+
+// ── Shared helpers ────────────────────────────────────────────
+
+function directionBadge(alert: AlertEvent, confidenceOverride?: string): string {
+  const enrichment = alert.enrichment;
+  if (!enrichment?.tickers?.length) return '';
+
+  const primary = enrichment.tickers[0];
+  const dirEmoji = primary.direction === 'bullish' ? '▲'
+    : primary.direction === 'bearish' ? '▼'
+    : '▸';
+  const dirLabel = primary.direction.toUpperCase();
+  const confidence = confidenceOverride ?? confidenceLabel(alert);
+
+  return `${dirEmoji} ${dirLabel} · ${confidence}`;
+}
+
+function confidenceLabel(alert: AlertEvent): string {
+  if (alert.confidenceBucket) {
+    return capitalize(alert.confidenceBucket);
+  }
+  if (alert.classificationConfidence != null) {
+    if (alert.classificationConfidence >= 0.7) return 'High confidence';
+    if (alert.classificationConfidence >= 0.5) return 'Moderate confidence';
+    if (alert.classificationConfidence >= 0.3) return 'Low confidence';
+    return 'Unconfirmed';
+  }
+  return 'Moderate confidence';
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1) + ' confidence';
+}
+
+function appendHistoricalStats(parts: string[], alert: AlertEvent, tier: DeliveryTier): void {
   if (
     tier !== 'feed'
     && alert.historicalContext
@@ -229,16 +554,18 @@ function buildCompactDescription(alert: AlertEvent, tier: DeliveryTier): string 
     const ctx = alert.historicalContext;
     const sign5 = ctx.avgAlphaT5 >= 0 ? '+' : '';
     parts.push('');
-    parts.push(`**Similar events:** ${ctx.matchCount} cases | ${sign5}${(ctx.avgAlphaT5 * 100).toFixed(1)}% avg 5d | ${ctx.winRateT20.toFixed(0)}% win rate`);
+    parts.push(`📊 Similar events: ${ctx.matchCount} cases | ${sign5}${(ctx.avgAlphaT5 * 100).toFixed(1)}% avg 5d | ${ctx.winRateT20.toFixed(0)}% win rate`);
   }
+}
 
-  // Risk — critical only
-  if (tier === 'critical' && enrichment?.risks) {
-    parts.push('');
-    parts.push(`**Risk:** ${enrichment.risks}`);
-  }
-
-  return truncate(parts.join('\n'), 2048);
+function relativeTime(timestamp: Date): string {
+  const diffMs = Date.now() - timestamp.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return 'NOW';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return `${Math.floor(diffHrs / 24)}d ago`;
 }
 
 async function sleep(ms: number): Promise<void> {

@@ -76,8 +76,8 @@ describe('Rich Delivery Format', () => {
       );
       expect(aiField).toBeUndefined();
 
-      // Impact is in description as "Why it matters"
-      expect(embed.description).toContain('**Why it matters:**');
+      // Impact is in description (SEC filings use "What this means")
+      expect(embed.description).toContain('**What this means:**');
       expect(embed.description).toContain('Leadership vacuum');
     });
   });
