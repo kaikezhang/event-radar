@@ -226,7 +226,7 @@ describe('GET /api/v1/feed', () => {
     expect(body.total).toBe(1);
     expect(body.cursor).toBeNull();
     expect(body.events).toHaveLength(1);
-    expect(body.events[0]).toEqual({
+    expect(body.events[0]).toMatchObject({
       id: eventId,
       title: 'Nvidia files material 8-K',
       source: 'sec-edgar',

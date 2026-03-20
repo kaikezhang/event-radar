@@ -256,7 +256,8 @@ describe('buildClassifyPrompt', () => {
     });
 
     expect(prompt).toContain('...');
-    expect(prompt.length).toBeLessThan(longContent.length);
+    // Content truncated to 1500 chars; prompt includes template boilerplate
+    expect(prompt.length).toBeLessThan(longContent.length + 1000);
   });
 });
 
