@@ -145,15 +145,29 @@ describe('events history routes', () => {
   });
 
   it('returns 401 for history requests without an API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/events/history',
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/v1/events/history',
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-    });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({
+          error: 'Unauthorized',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns paginated history rows with pagination metadata', async () => {
@@ -302,12 +316,26 @@ describe('events history routes', () => {
   });
 
   it('returns 401 for sector aggregation without an API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/events/sectors',
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/v1/events/sectors',
+        });
 
-    expect(response.statusCode).toBe(401);
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns sector aggregation with mapped and fallback sectors', async () => {

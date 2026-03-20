@@ -377,15 +377,29 @@ describe('judge routes', () => {
   });
 
   it('requires an API key for judge routes', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/judge/recent',
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/v1/judge/recent',
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-    });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({
+          error: 'Unauthorized',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns llm enrichment details on audit events when present', async () => {

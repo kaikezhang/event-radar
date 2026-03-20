@@ -839,12 +839,26 @@ describe('historical routes', () => {
   });
 
   it('rejects historical route requests without an API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/historical/similar?eventType=earnings',
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/historical/similar?eventType=earnings',
+        });
 
-    expect(response.statusCode).toBe(401);
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns similarity matches from query parameters', async () => {

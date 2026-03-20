@@ -602,41 +602,71 @@ describe('GET /api/events?watchlist=true', () => {
 });
 
 describe('Watchlist auth regression', () => {
-  let ctx: AppContext;
-
-  beforeAll(async () => {
-    await cleanTestDb(sharedDb);
-    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
-    await ctx.server.ready();
-  });
-
-  afterAll(async () => {
-    await safeCloseServer(ctx.server);
-  });
-
   it('should return 401 for GET /api/watchlist without API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/watchlist',
-    });
-    expect(response.statusCode).toBe(401);
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/watchlist',
+        });
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('should return 401 for POST /api/watchlist without API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'POST',
-      url: '/api/watchlist',
-      payload: { ticker: 'AAPL' },
-    });
-    expect(response.statusCode).toBe(401);
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'POST',
+          url: '/api/watchlist',
+          payload: { ticker: 'AAPL' },
+        });
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('should return 401 for DELETE /api/watchlist/:ticker without API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'DELETE',
-      url: '/api/watchlist/AAPL',
-    });
-    expect(response.statusCode).toBe(401);
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'DELETE',
+          url: '/api/watchlist/AAPL',
+        });
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 });
 

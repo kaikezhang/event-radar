@@ -110,16 +110,28 @@ describe('GET /api/events', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('should return 401 without API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/events',
-    });
+  it('should allow public access without API key (public route)', async () => {
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/events',
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-    });
+        // /api/events is registered as a public route, so it returns 200 even without auth
+        expect(response.statusCode).toBe(200);
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('should return paginated events with valid API key', async () => {
@@ -254,15 +266,29 @@ describe('GET /api/events/:id', () => {
   });
 
   it('should return 401 without API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: `/api/events/${storedEventId}`,
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: `/api/events/${storedEventId}`,
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-    });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({
+          error: 'Unauthorized',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('should return a single event by id with valid API key', async () => {

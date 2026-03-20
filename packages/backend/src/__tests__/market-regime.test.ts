@@ -323,16 +323,26 @@ describe('GET /api/regime', () => {
   });
 
   it('requires an api key', async () => {
-    const ctx = buildApp({ logger: false });
-    await ctx.server.ready();
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const ctx = buildApp({ logger: false });
+      await ctx.server.ready();
+      try {
+        const response = await ctx.server.inject({
+          method: 'GET',
+          url: '/api/regime',
+        });
 
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/regime',
-    });
-
-    expect(response.statusCode).toBe(401);
-    await safeCloseServer(ctx.server);
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(ctx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns the current regime snapshot', async () => {
