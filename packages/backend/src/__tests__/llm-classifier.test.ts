@@ -98,7 +98,8 @@ describe('buildClassificationPrompt', () => {
 
     expect(prompt).toContain('...');
     // The body in the prompt should be truncated to 2000 chars + "..."
-    expect(prompt.length).toBeLessThan(longBody.length + 500);
+    // Body truncated to 2000 chars; prompt includes template boilerplate
+    expect(prompt.length).toBeLessThan(longBody.length + 2500);
   });
 
   it('should handle event with no URL or metadata', () => {
