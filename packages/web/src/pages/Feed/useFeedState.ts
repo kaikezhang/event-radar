@@ -465,6 +465,55 @@ export function useFeedState({
     return () => document.removeEventListener('mousedown', handler);
   }, [showAddFilterDropdown]);
 
+  // Desktop keyboard navigation: j/k to move, Enter to select, Escape to deselect
+  useEffect(() => {
+    if (!isDesktop) {
+      return;
+    }
+
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      if (event.key === 'j' || event.key === 'k') {
+        event.preventDefault();
+        const ids = filteredAlerts.map((alert) => alert.id);
+        if (ids.length === 0) {
+          return;
+        }
+
+        const currentIndex = selectedEventId ? ids.indexOf(selectedEventId) : -1;
+        let nextIndex: number;
+        if (event.key === 'j') {
+          nextIndex = currentIndex < ids.length - 1 ? currentIndex + 1 : currentIndex;
+        } else {
+          nextIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+        }
+
+        setSelectedEventId(ids[nextIndex]);
+
+        // Scroll the selected card into view
+        const card = document.querySelector(`[data-alert-id="${ids[nextIndex]}"]`);
+        card?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      if (event.key === 'Enter' && selectedEventId) {
+        event.preventDefault();
+        // Already selected — the right panel shows it automatically
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSelectedEventId(null);
+      }
+    };
+
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [filteredAlerts, isDesktop, selectedEventId, setSelectedEventId]);
+
   return {
     activeFilterCount,
     activeSeverities,

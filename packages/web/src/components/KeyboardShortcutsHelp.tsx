@@ -8,9 +8,10 @@ interface KeyboardShortcutsHelpProps {
 const shortcuts = [
   { keys: ['/  or  ⌘K'], description: 'Search tickers' },
   { keys: ['?'], description: 'Show this help' },
-  { keys: ['ESC'], description: 'Close overlay' },
+  { keys: ['ESC'], description: 'Close overlay / deselect event' },
   { keys: ['↑ ↓'], description: 'Navigate search results' },
   { keys: ['Enter'], description: 'Add selected ticker' },
+  { keys: ['j / k'], description: 'Navigate feed (desktop)' },
 ];
 
 export function KeyboardShortcutsHelp({ open, onClose }: KeyboardShortcutsHelpProps) {

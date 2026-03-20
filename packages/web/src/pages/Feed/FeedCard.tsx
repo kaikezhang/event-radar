@@ -38,6 +38,7 @@ export function FeedCard({
         isDesktop && isSelected && 'ring-2 ring-accent-default/50 bg-bg-elevated/50',
         !isDesktop && 'active:scale-[0.98]',
       )}
+      data-alert-id={alert.id}
       onClick={(event) => onCardClick(event, alert.id)}
       role={isDesktop ? 'button' : undefined}
       tabIndex={isDesktop ? 0 : undefined}
