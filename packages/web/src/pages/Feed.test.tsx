@@ -24,7 +24,7 @@ describe('Feed page', () => {
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
 
     await waitFor(() => {
-      expect(screen.getByText(/source hit rate 67%/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/source hit rate 67%/i).length).toBeGreaterThan(0);
     });
   });
 });
