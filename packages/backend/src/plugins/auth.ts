@@ -35,13 +35,30 @@ export async function registerAuthPlugin(
   const configuredApiKey = process.env.API_KEY ?? options.apiKey;
   const authRequired = process.env.AUTH_REQUIRED === 'true';
   const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+  const cspEnabled = process.env.CSP_ENABLED !== 'false'; // default: true
 
-  // CORS headers for all responses
+  const CSP_HEADER = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  // CORS + security headers for all responses
   server.addHook('onSend', async (_request, reply) => {
     reply.header('Access-Control-Allow-Origin', corsOrigin);
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     reply.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, X-CSRF-Token');
     reply.header('Access-Control-Allow-Credentials', 'true');
+
+    if (cspEnabled) {
+      reply.header('Content-Security-Policy', CSP_HEADER);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('X-Frame-Options', 'DENY');
+    }
   });
 
   server.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
