@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getFeed } from '../lib/api.js';
 import type { AlertSummary } from '../types/index.js';
 import { useAlertSound } from './useAlertSound.js';
+import { useAudioSquawk } from './useAudioSquawk.js';
 import { useWebSocket, type WebSocketStatus } from './useWebSocket.js';
 import { useSetConnectionStatus } from '../contexts/ConnectionContext.js';
 
@@ -51,6 +52,7 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
   const seenAlertIdsRef = useRef<Set<string>>(new Set());
   const prevWatchlistRef = useRef(watchlist);
   const { playForSeverity } = useAlertSound();
+  const { announceEvent } = useAudioSquawk();
 
   // Infinite scroll state
   const [cursorRef, setCursorState] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
 
       seenAlertIdsRef.current.add(alert.id);
       void playForSeverity(alert.severity);
+      announceEvent(alert);
 
       if (isAtTop) {
         setVisibleAlerts((current) => mergeAlerts([alert], current));

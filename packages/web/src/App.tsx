@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Zap } from 'lucide-react';
+import { Volume2, Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav.js';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
 import { TickerSearch } from './components/TickerSearch.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
+import { useAudioSquawk } from './hooks/useAudioSquawk.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { AuthVerify } from './pages/AuthVerify.js';
@@ -17,6 +18,21 @@ import { Settings } from './pages/Settings.js';
 import { TickerProfile } from './pages/TickerProfile.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Watchlist } from './pages/Watchlist.js';
+
+function SquawkIndicator() {
+  const { preferences, isSpeaking } = useAudioSquawk();
+
+  if (!preferences.enabled) return null;
+
+  return (
+    <span
+      className={`flex h-5 w-5 items-center justify-center text-accent-default${isSpeaking ? ' animate-pulse' : ''}`}
+      title={isSpeaking ? 'Squawk: speaking' : 'Squawk: active'}
+    >
+      <Volume2 className="h-3.5 w-3.5" />
+    </span>
+  );
+}
 
 function AppHeader() {
   const { user } = useAuth();
@@ -39,6 +55,7 @@ function AppHeader() {
       </Link>
 
       <div className="flex items-center gap-3">
+        <SquawkIndicator />
         {statusIndicator}
 
         {user ? (
