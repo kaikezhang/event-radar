@@ -548,4 +548,39 @@ describe('Auth middleware', () => {
     expect(res.headers['access-control-allow-credentials']).toBe('true');
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
   });
+
+  it('includes CSP and security headers by default', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(res.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(res.headers['content-security-policy']).toContain("script-src 'self'");
+    expect(res.headers['content-security-policy']).toContain("style-src 'self' 'unsafe-inline'");
+    expect(res.headers['content-security-policy']).toContain("img-src 'self' data: https:");
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+  });
+
+  it('omits CSP headers when CSP_ENABLED=false', async () => {
+    const original = process.env.CSP_ENABLED;
+    process.env.CSP_ENABLED = 'false';
+
+    const noCspServer = await buildTestServer();
+    const res = await noCspServer.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(res.headers['content-security-policy']).toBeUndefined();
+    expect(res.headers['x-content-type-options']).toBeUndefined();
+
+    await noCspServer.close();
+    if (original === undefined) {
+      delete process.env.CSP_ENABLED;
+    } else {
+      process.env.CSP_ENABLED = original;
+    }
+  });
 });

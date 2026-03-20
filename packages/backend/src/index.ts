@@ -1,6 +1,12 @@
 import { buildApp } from './app.js';
 import { createDb } from './db/connection.js';
 
+// Default AUTH_REQUIRED=true for production safety.
+// Only AUTH_REQUIRED=false when explicitly set in env (local dev).
+if (process.env.AUTH_REQUIRED === undefined) {
+  process.env.AUTH_REQUIRED = 'true';
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 const dbCtx = databaseUrl ? createDb(databaseUrl) : undefined;
 

@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { safeCloseServer } from './helpers/test-db.js';
+import { connectionTimestamps } from '../plugins/websocket.js';
 
 const TEST_API_KEY = 'test-api-key-12345';
 
@@ -19,8 +20,8 @@ function makeLiveEvent() {
   };
 }
 
-async function openSocket(url: string): Promise<WebSocket> {
-  const socket = new WebSocket(url);
+async function openSocket(url: string, protocols?: string | string[]): Promise<WebSocket> {
+  const socket = new WebSocket(url, protocols);
 
   await new Promise<void>((resolve, reject) => {
     socket.addEventListener('open', () => resolve(), { once: true });
@@ -30,6 +31,16 @@ async function openSocket(url: string): Promise<WebSocket> {
   });
 
   return socket;
+}
+
+function waitForClose(socket: WebSocket): Promise<{ code: number; reason: string }> {
+  return new Promise((resolve) => {
+    socket.addEventListener(
+      'close',
+      (event) => resolve({ code: event.code, reason: event.reason }),
+      { once: true },
+    );
+  });
 }
 
 async function nextMessage(socket: WebSocket): Promise<unknown> {
@@ -53,6 +64,7 @@ async function nextMessage(socket: WebSocket): Promise<unknown> {
 
 describe('WebSocket /ws/events', () => {
   let ctx: AppContext;
+  let baseWsUrl: string;
   let address: string;
 
   beforeAll(async () => {
@@ -64,15 +76,29 @@ describe('WebSocket /ws/events', () => {
       throw new Error('expected TCP server address');
     }
 
-    address = `ws://127.0.0.1:${serverAddress.port}/ws/events?apiKey=${TEST_API_KEY}`;
+    baseWsUrl = `ws://127.0.0.1:${serverAddress.port}/ws/events`;
+    address = `${baseWsUrl}?apiKey=${TEST_API_KEY}`;
+  });
+
+  afterEach(() => {
+    // Clear connection rate limit state between tests
+    connectionTimestamps.clear();
   });
 
   afterAll(async () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('accepts authenticated websocket connections', async () => {
+  it('accepts authenticated websocket connections (query string — backward compat)', async () => {
     const socket = await openSocket(address);
+
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+
+    socket.close();
+  });
+
+  it('accepts connections via Sec-WebSocket-Protocol subprotocol auth', async () => {
+    const socket = await openSocket(baseWsUrl, [`auth.${TEST_API_KEY}`]);
 
     expect(socket.readyState).toBe(WebSocket.OPEN);
 
@@ -95,17 +121,18 @@ describe('WebSocket /ws/events', () => {
   });
 
   it('rejects connections with an invalid api key', async () => {
-    const socket = new WebSocket('ws://127.0.0.1:' + new URL(address).port + '/ws/events?apiKey=wrong-key');
+    const socket = new WebSocket(`${baseWsUrl}?apiKey=wrong-key`);
 
-    const closeResult = await new Promise<{ code: number; reason: string }>((resolve) => {
-      socket.addEventListener(
-        'close',
-        (event) => {
-          resolve({ code: event.code, reason: event.reason });
-        },
-        { once: true },
-      );
-    });
+    const closeResult = await waitForClose(socket);
+
+    expect(closeResult.code).toBeGreaterThanOrEqual(1000);
+    expect(closeResult.reason).toMatch(/unauthorized/i);
+  });
+
+  it('rejects connections with invalid subprotocol auth', async () => {
+    const socket = new WebSocket(baseWsUrl, ['auth.wrong-key']);
+
+    const closeResult = await waitForClose(socket);
 
     expect(closeResult.code).toBeGreaterThanOrEqual(1000);
     expect(closeResult.reason).toMatch(/unauthorized/i);
@@ -129,5 +156,40 @@ describe('WebSocket /ws/events', () => {
     });
 
     socket.close();
+  });
+
+  it('rejects connections when connection rate limit is exceeded', async () => {
+    // Fill up the rate limit (10 connections per IP per minute)
+    const sockets: WebSocket[] = [];
+    for (let i = 0; i < 10; i++) {
+      sockets.push(await openSocket(address));
+    }
+
+    // 11th connection should be rejected
+    const rejected = new WebSocket(address);
+    const closeResult = await waitForClose(rejected);
+
+    expect(closeResult.code).toBeGreaterThanOrEqual(1000);
+    expect(closeResult.reason).toMatch(/too many connections/i);
+
+    for (const s of sockets) {
+      s.close();
+    }
+  });
+
+  it('closes connection when message rate limit is exceeded', async () => {
+    const socket = await openSocket(address);
+    const closePromise = waitForClose(socket);
+
+    // Send 101 messages rapidly (limit is 100/min)
+    for (let i = 0; i < 101; i++) {
+      if (socket.readyState !== WebSocket.OPEN) break;
+      socket.send(JSON.stringify({ type: 'ping', n: i }));
+    }
+
+    const closeResult = await closePromise;
+
+    expect(closeResult.code).toBeGreaterThanOrEqual(1000);
+    expect(closeResult.reason).toMatch(/rate limit/i);
   });
 });

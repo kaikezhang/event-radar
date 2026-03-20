@@ -153,6 +153,49 @@ function sendJson(socket: WebSocket, payload: unknown): void {
   socket.send(JSON.stringify(payload));
 }
 
+// ── Connection rate limiter (per IP) ─────────────────────────────────────────
+const WS_MAX_CONNECTIONS_PER_IP = 10;
+const WS_CONNECTION_WINDOW_MS = 60_000; // 1 minute
+const WS_MAX_MESSAGES_PER_CONNECTION = 100;
+const WS_MESSAGE_WINDOW_MS = 60_000; // 1 minute
+
+const connectionTimestamps = new Map<string, number[]>();
+
+function checkConnectionRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = (connectionTimestamps.get(ip) ?? []).filter(
+    (t) => now - t < WS_CONNECTION_WINDOW_MS,
+  );
+
+  if (timestamps.length >= WS_MAX_CONNECTIONS_PER_IP) {
+    connectionTimestamps.set(ip, timestamps);
+    return false;
+  }
+
+  timestamps.push(now);
+  connectionTimestamps.set(ip, timestamps);
+  return true;
+}
+
+// ── Message rate limiter (per connection) ────────────────────────────────────
+
+class MessageRateLimiter {
+  private timestamps: number[] = [];
+
+  check(): boolean {
+    const now = Date.now();
+    this.timestamps = this.timestamps.filter((t) => now - t < WS_MESSAGE_WINDOW_MS);
+    if (this.timestamps.length >= WS_MAX_MESSAGES_PER_CONNECTION) {
+      return false;
+    }
+    this.timestamps.push(now);
+    return true;
+  }
+}
+
+// Exported for testing
+export { checkConnectionRateLimit, connectionTimestamps, WS_MAX_CONNECTIONS_PER_IP, WS_MAX_MESSAGES_PER_CONNECTION };
+
 export async function registerWebsocketPlugin(
   server: FastifyInstance,
   options: WebsocketPluginOptions,
@@ -174,25 +217,68 @@ export async function registerWebsocketPlugin(
     '/ws/events',
     { websocket: true },
     async (socket, request) => {
-      // Browser WebSocket upgrades cannot attach custom headers, so authenticated clients
-      // currently send the API key in the query string. Keep this limited to dev/internal use.
-      const queryApiKey = typeof request.query.apiKey === 'string'
-        ? request.query.apiKey
-        : undefined;
+      // ── Connection rate limiting (per IP) ──
+      const ip = request.ip;
+      if (!checkConnectionRateLimit(ip)) {
+        socket.close(1008, 'Too many connections');
+        return;
+      }
+
+      // ── Auth: prefer header-based, keep query string for backward compat ──
+      // Sec-WebSocket-Protocol subprotocol auth: client sends "auth.<apiKey>"
+      const protocolHeader = request.headers['sec-websocket-protocol'];
+      let protocolApiKey: string | undefined;
+      if (typeof protocolHeader === 'string') {
+        const protocols = protocolHeader.split(',').map((p) => p.trim());
+        const authProtocol = protocols.find((p) => p.startsWith('auth.'));
+        if (authProtocol) {
+          protocolApiKey = authProtocol.slice(5); // strip "auth." prefix
+        }
+      }
+
       const headerApiKey = typeof request.headers['x-api-key'] === 'string'
         ? request.headers['x-api-key']
         : undefined;
-      const validation = validateApiKeyValue(queryApiKey ?? headerApiKey, options.apiKey);
+
+      // Query string auth — backward compat with deprecation warning
+      const queryApiKey = typeof request.query.apiKey === 'string'
+        ? request.query.apiKey
+        : undefined;
+      if (queryApiKey) {
+        server.log.warn(
+          '[ws] DEPRECATED: API key in query string (?apiKey=) is insecure and will be removed in a future release. ' +
+          'Use Sec-WebSocket-Protocol subprotocol (auth.<key>) or X-Api-Key header instead.',
+        );
+      }
+
+      // Priority: subprotocol > header > query string (deprecated)
+      const apiKeyToValidate = protocolApiKey ?? headerApiKey ?? queryApiKey;
+      const validation = validateApiKeyValue(apiKeyToValidate, options.apiKey);
 
       if (!validation.ok) {
         socket.close(1008, 'Unauthorized');
         return;
       }
 
+      // If authenticated via subprotocol, echo it back so the browser accepts
+      if (protocolApiKey) {
+        // The subprotocol is already negotiated by @fastify/websocket based on
+        // the Sec-WebSocket-Protocol header; no extra action needed here.
+      }
+
       clients.add(socket);
       if (options.clientState) {
         options.clientState.count = clients.size;
       }
+
+      // ── Message rate limiting ──
+      const msgLimiter = new MessageRateLimiter();
+
+      socket.on('message', () => {
+        if (!msgLimiter.check()) {
+          socket.close(1008, 'Message rate limit exceeded');
+        }
+      });
 
       const heartbeat = setInterval(() => {
         sendJson(socket, { type: 'ping' });
