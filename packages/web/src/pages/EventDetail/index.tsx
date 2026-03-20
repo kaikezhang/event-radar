@@ -20,7 +20,7 @@ function AnchorNav({ activeSection }: { activeSection: string }) {
   ];
 
   return (
-    <nav className="sticky top-[60px] z-10 flex gap-1 overflow-x-auto rounded-2xl border border-border-default bg-bg-primary/92 px-3 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.18)] backdrop-blur-md" aria-label="Page sections">
+    <nav className="sticky top-[60px] z-10 flex gap-1 overflow-x-auto rounded-2xl border border-border-default bg-bg-primary/92 px-3 py-2 shadow-[0_8px_20px_var(--shadow-color)] backdrop-blur-md" aria-label="Page sections">
       {sections.map((section) => (
         <button
           key={section.id}
@@ -29,7 +29,7 @@ function AnchorNav({ activeSection }: { activeSection: string }) {
           className={cn(
             'shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
             activeSection === section.id
-              ? 'border-b-2 border-accent-default bg-white/6 text-text-primary'
+              ? 'border-b-2 border-accent-default bg-overlay-light text-text-primary'
               : 'text-text-secondary hover:text-text-primary',
           )}
         >
@@ -50,11 +50,11 @@ function DetailToolbar({
   onShare?: () => void;
 }) {
   return (
-    <div className="sticky top-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur-md">
+    <div className="sticky top-0 z-20 flex items-center justify-between rounded-2xl border border-border-default bg-bg-primary/92 px-4 py-3 shadow-[0_12px_28px_var(--shadow-color)] backdrop-blur-md">
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+        className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
       >
         <ArrowLeft className="h-4 w-4" />
         {backLabel}
@@ -63,7 +63,7 @@ function DetailToolbar({
         <button
           type="button"
           onClick={onShare}
-          className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-white/10 bg-bg-elevated/70 px-3 py-2 text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+          className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 px-3 py-2 text-text-secondary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
           aria-label="Share alert"
         >
           <Share2 className="h-5 w-5" />
@@ -180,7 +180,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
             />
           </div>
 
-          <div className="border-t-2 border-white/10" />
+          <div className="border-t-2 border-overlay-medium" />
 
           <div id="zone-evidence" ref={evidenceRef} className="scroll-mt-28">
             <div className="lg:hidden">
@@ -195,7 +195,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
             />
           </div>
 
-          <div className="border-t-2 border-white/10" />
+          <div className="border-t-2 border-overlay-medium" />
 
           <div id="zone-trust" ref={trustRef} className="scroll-mt-28">
             <EventVerdict data={data} feedback={feedback} onFeedbackChange={setFeedback} />
@@ -215,7 +215,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                   href={data.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6"
+                  className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                 >
                   <ExternalLink className="h-4 w-4" /> View original
                 </a>
@@ -223,7 +223,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               <button
                 type="button"
                 onClick={handleShare}
-                className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-white/10 bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6"
+                className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
               >
                 <Share2 className="h-4 w-4" /> Share alert
               </button>

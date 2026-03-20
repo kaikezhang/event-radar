@@ -239,7 +239,7 @@ export function EventChart({ symbol, events, compact, height: heightProp, defaul
   }, [range]);
 
   return (
-    <section className={compact ? '' : 'rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(9,9,11,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]'}>
+    <section className={compact ? '' : 'rounded-[28px] border border-overlay-medium bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(9,9,11,0.96))] p-5 shadow-[0_18px_40px_var(--shadow-color)]'}>
       {!compact && (
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -265,7 +265,7 @@ export function EventChart({ symbol, events, compact, height: heightProp, defaul
                 className={`min-h-10 rounded-full px-3 text-xs font-semibold tracking-[0.18em] transition ${
                   range === option.value
                     ? 'bg-accent-default text-white'
-                    : 'bg-white/6 text-text-secondary hover:bg-white/10 hover:text-text-primary'
+                    : 'bg-overlay-light text-text-secondary hover:bg-overlay-medium hover:text-text-primary'
                 }`}
               >
                 {option.label}
@@ -275,7 +275,7 @@ export function EventChart({ symbol, events, compact, height: heightProp, defaul
         </div>
       )}
 
-      <div className={`relative overflow-hidden rounded-[24px] border border-white/6 bg-[#111111]`} style={{ height: `${chartHeight}px` }}>
+      <div className={`relative overflow-hidden rounded-[24px] border border-overlay-medium bg-[#111111]`} style={{ height: `${chartHeight}px` }}>
         <div ref={containerRef} className="h-full w-full" aria-label={`${symbol} candlestick chart`} />
 
         {isLoading ? (
@@ -301,7 +301,7 @@ export function EventChart({ symbol, events, compact, height: heightProp, defaul
             type="button"
             onClick={() => navigate(`/event/${selectedEvent.id}`)}
             aria-label={`Open event ${selectedEvent.title}`}
-            className="absolute left-4 top-4 max-w-[240px] rounded-2xl border border-white/10 bg-black/85 px-4 py-3 text-left shadow-[0_14px_28px_rgba(0,0,0,0.3)] backdrop-blur"
+            className="absolute left-4 top-4 max-w-[240px] rounded-2xl border border-overlay-medium bg-black/85 px-4 py-3 text-left shadow-[0_14px_28px_var(--shadow-color)] backdrop-blur"
           >
             <div className="flex items-center gap-2">
               <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${SEVERITY_CLASSNAME[selectedEvent.severity] ?? SEVERITY_CLASSNAME['LOW']}`}>

@@ -73,7 +73,7 @@ export function TickerProfile() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-[28px] border border-overlay-medium bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent-default">
@@ -93,7 +93,7 @@ export function TickerProfile() {
             className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
               onWatchlist
                 ? 'border-green-500/30 bg-green-500/12 text-green-400'
-                : 'border-white/10 bg-white/6 text-text-primary hover:bg-white/8'
+                : 'border-overlay-medium bg-overlay-light text-text-primary hover:bg-overlay-medium'
             }`}
             aria-label={onWatchlist ? `Remove ${data.symbol} from watchlist` : `Add ${data.symbol} to watchlist`}
           >
