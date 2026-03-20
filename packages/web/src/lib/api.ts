@@ -343,6 +343,9 @@ function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDe
     move: (item.move as string) ?? '',
   }));
 
+  const bestRaw = raw.bestCase as Record<string, unknown> | undefined;
+  const worstRaw = raw.worstCase as Record<string, unknown> | undefined;
+
   return {
     matchCount: typeof raw.matchCount === 'number' ? raw.matchCount : 0,
     confidence: (raw.confidence as string | null) ?? 'low',
@@ -350,6 +353,9 @@ function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDe
     avgMoveT20: typeof raw.avgMoveT20 === 'number' ? raw.avgMoveT20 : null,
     winRate: typeof raw.winRate === 'number' ? raw.winRate : null,
     similarEvents,
+    patternSummary: typeof raw.patternSummary === 'string' ? raw.patternSummary : undefined,
+    bestCase: bestRaw ? { ticker: String(bestRaw.ticker ?? ''), move: Number(bestRaw.move ?? 0) } : null,
+    worstCase: worstRaw ? { ticker: String(worstRaw.ticker ?? ''), move: Number(worstRaw.move ?? 0) } : null,
   };
 }
 
