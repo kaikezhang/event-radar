@@ -60,10 +60,10 @@
                     │
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     FRONTEND DASHBOARD                          │
+│                     FRONTEND APPS                               │
 │                                                                 │
-│  Next.js + WebSocket ← live event stream                       │
-│  See FRONTEND.md for UI design                                  │
+│  Vite + React 19 + WebSocket ← live event stream               │
+│  See FRONTEND.md for details                                    │
 └─────────────────────────────────────────────────────────────────┘
                     │
                     ▼
@@ -296,22 +296,22 @@ Not an afterthought. Baked in from day one.
 
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
-| Backend runtime | Node.js (TypeScript) | Async I/O, good for polling workloads |
-| Frontend | Next.js 15 + React | SSR + API routes + WebSocket |
-| UI components | shadcn/ui + Tailwind | Dark theme, financial aesthetic |
-| Virtual list | @tanstack/virtual or react-virtuoso | Lightweight virtual scrolling for event feed |
+| Backend runtime | Node.js 22 (TypeScript) | Async I/O, good for polling workloads |
+| Backend framework | Fastify 5 | High-performance, schema-first |
+| Frontend | Vite + React 19 | Fast builds, latest React features |
+| UI styling | Tailwind CSS 4 | Utility-first, responsive |
+| Data fetching | TanStack Query | Caching, refetch, mutations |
 | Charts | TradingView Lightweight Charts | Professional K-line + event markers |
-| Real-time | WebSocket (Socket.io) | Backend → Frontend live push |
-| Database | PostgreSQL | JSONB, full-text search, real concurrency |
-| Event bus | EventEmitter → Redis Streams | Durable, replayable event pipeline |
+| Real-time | Native WebSocket | Backend → Frontend live push |
+| Database | PostgreSQL 17 | JSONB, full-text search, real concurrency |
+| ORM | Drizzle | Type-safe, lightweight |
+| Event bus | In-memory EventEmitter | → Redis Streams planned |
 | SEC parsing | Python (FastAPI + edgartools) | Best-in-class SEC library |
-| Financial NLP | FinBERT / SEC-BERT | Fast, domain-specific sentiment analysis |
-| Scraping | Crawlee (Playwright-based) | Anti-detection, proxy rotation, queue management |
+| LLM | GPT-4o-mini (OpenAI) | Classification + enrichment |
 | Metrics | Prometheus | Industry standard observability |
-| Dashboards | Grafana | Visualization + alerting |
+| Build | pnpm workspaces + Turborepo | Monorepo management |
 | Containerization | Docker Compose | One-command deployment |
 
 ---
 
-*See [Frontend](FRONTEND.md) for the dashboard UI design.*
-*See [Sources](SOURCES.md) for the complete data source catalog.*
+*See [Frontend](FRONTEND.md) for frontend architecture details.*

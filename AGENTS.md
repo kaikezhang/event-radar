@@ -8,17 +8,18 @@ Real-time event-driven trading intelligence platform. Monitors 30+ sources (SEC 
 
 ## Tech Stack
 
-TypeScript monorepo (Turborepo). Backend: Fastify. Frontend: Next.js 15 + shadcn/ui + Tailwind. DB: PostgreSQL. Testing: Vitest + Playwright. SEC parsing: Python microservice (FastAPI + edgartools).
+TypeScript monorepo (pnpm + Turborepo). Backend: Fastify 5. Frontend: Vite + React 19 + TanStack Query + Tailwind CSS. DB: PostgreSQL 17 (Drizzle ORM). Testing: Vitest. SEC parsing: Python microservice (FastAPI + edgartools).
 
 ## 目录结构
 
 ```
 packages/shared/      — types, interfaces, schemas (zod)
-packages/backend/     — Fastify server, scanners, pipeline, delivery
-packages/frontend/    — Next.js 15 dashboard
-packages/sec-service/ — Python FastAPI microservice
+packages/backend/     — Fastify server, scanners, pipeline
+packages/web/         — Vite + React 19 user-facing PWA
+packages/dashboard/   — Vite + React 19 admin observability
 packages/delivery/    — Alert delivery (Bark, Discord, Telegram, webhook)
-packages/e2e/         — Playwright E2E tests
+packages/e2e/         — E2E tests
+services/sec-scanner/ — Python FastAPI microservice (SEC EDGAR)
 ```
 
 ## Commands
