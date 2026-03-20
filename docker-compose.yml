@@ -29,6 +29,7 @@ services:
       - seen-ids:/tmp/event-radar-seen
     environment:
       - PORT=3001
+      - AUTH_REQUIRED=false
       - DATABASE_URL=postgresql://radar:radar@postgres:5432/event_radar
       - BARK_KEY=${BARK_KEY:-}
       - BARK_SERVER_URL=${BARK_SERVER_URL:-https://api.day.app}
