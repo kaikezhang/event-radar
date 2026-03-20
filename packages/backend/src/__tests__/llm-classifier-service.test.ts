@@ -365,16 +365,26 @@ describe('POST /api/v1/classify', () => {
   });
 
   it('returns 401 without API key', async () => {
-    ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
+      await ctx.server.ready();
+      try {
+        const response = await ctx.server.inject({
+          method: 'POST',
+          url: '/api/v1/classify',
+          payload: { headline: 'test' },
+        });
 
-    const response = await ctx.server.inject({
-      method: 'POST',
-      url: '/api/v1/classify',
-      payload: { headline: 'test' },
-    });
-
-    expect(response.statusCode).toBe(401);
-
-    await ctx.server.close();
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await ctx.server.close();
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 });

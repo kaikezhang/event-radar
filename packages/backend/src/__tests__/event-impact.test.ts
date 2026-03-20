@@ -186,31 +186,59 @@ describe('event impact route', () => {
   });
 
   it('rejects requests without an API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/events/impact?ticker=AAPL',
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/v1/events/impact?ticker=AAPL',
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-    });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({
+          error: 'Unauthorized',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('rejects requests with an invalid API key', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/events/impact?ticker=AAPL',
-      headers: {
-        'x-api-key': 'wrong-key',
-      },
-    });
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/v1/events/impact?ticker=AAPL',
+          headers: {
+            'x-api-key': 'wrong-key',
+          },
+        });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({
-      error: 'Unauthorized',
-      message: 'Invalid API key',
-    });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({
+          error: 'Unauthorized',
+          message: 'Invalid API key',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('requires a ticker query parameter', async () => {

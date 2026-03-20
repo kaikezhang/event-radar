@@ -151,16 +151,26 @@ describe('GET /api/price/:ticker', () => {
   });
 
   it('requires an api key', async () => {
-    const ctx = buildApp({ logger: false });
-    await ctx.server.ready();
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const ctx = buildApp({ logger: false });
+      await ctx.server.ready();
+      try {
+        const response = await ctx.server.inject({
+          method: 'GET',
+          url: '/api/price/NVDA?range=1m',
+        });
 
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/price/NVDA?range=1m',
-    });
-
-    expect(response.statusCode).toBe(401);
-    await safeCloseServer(ctx.server);
+        expect(response.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(ctx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
   });
 
   it('returns candle data for a valid ticker and range', async () => {
