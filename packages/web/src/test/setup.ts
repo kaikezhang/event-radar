@@ -1,6 +1,45 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 
+// Mock lightweight-charts to avoid jsdom crashes (canvas + matchMedia)
+vi.mock('lightweight-charts', () => ({
+  createChart: () => ({
+    addCandlestickSeries: () => ({ setData: vi.fn(), setMarkers: vi.fn() }),
+    addLineSeries: () => ({ setData: vi.fn() }),
+    addAreaSeries: () => ({ setData: vi.fn() }),
+    addSeries: () => ({ setData: vi.fn(), setMarkers: vi.fn() }),
+    timeScale: () => ({ fitContent: vi.fn(), scrollToPosition: vi.fn(), getVisibleRange: vi.fn() }),
+    applyOptions: vi.fn(),
+    resize: vi.fn(),
+    remove: vi.fn(),
+    subscribeCrosshairMove: vi.fn(),
+    unsubscribeCrosshairMove: vi.fn(),
+    subscribeClick: vi.fn(),
+    unsubscribeClick: vi.fn(),
+  }),
+  CandlestickSeries: Symbol('CandlestickSeries'),
+  createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn(), destroy: vi.fn() })),
+  ColorType: { Solid: 0, VerticalGradient: 1 },
+  CrosshairMode: { Normal: 0, Magnet: 1 },
+  LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 },
+}));
+
+// Polyfill matchMedia for tests (used by lightweight-charts / fancy-canvas / useMediaQuery)
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  configurable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});
+
 // Polyfill IntersectionObserver for tests (used by Feed infinite scroll)
 if (typeof globalThis.IntersectionObserver === 'undefined') {
   globalThis.IntersectionObserver = class IntersectionObserver {
@@ -596,6 +635,15 @@ beforeEach(() => {
         range: url.searchParams.get('range') ?? '1m',
         candles: PRICE_CANDLES,
       });
+    }
+
+    // Ticker search endpoints
+    if (url.pathname === '/api/tickers/search') {
+      return jsonResponse({ data: [] });
+    }
+
+    if (url.pathname === '/api/tickers/trending') {
+      return jsonResponse({ data: [] });
     }
 
     // Watchlist endpoints

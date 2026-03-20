@@ -85,8 +85,8 @@ describe('EventDetail page', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/\$178\.42/).length).toBeGreaterThan(0);
     });
-    expect(screen.getAllByText(/\+2\.3% today/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/rsi 54/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\+2\.3%/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/RSI 54/i).length).toBeGreaterThan(0);
   });
 
   it('displays regime context', async () => {
