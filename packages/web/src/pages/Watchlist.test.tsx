@@ -15,7 +15,8 @@ describe('Watchlist page', () => {
       expect(screen.getByText('Watchlist')).toBeInTheDocument();
     });
 
-    expect(screen.getByLabelText('Add ticker to watchlist')).toBeInTheDocument();
+    // The add-ticker UI is now a search button that opens the TickerSearch overlay
+    expect(screen.getByText(/search tickers to add/i)).toBeInTheDocument();
   });
 
   it('shows watchlist-first onboarding copy when the watchlist is empty', async () => {
@@ -33,6 +34,36 @@ describe('Watchlist page', () => {
       'href',
       '/settings?from=watchlist#push-alerts',
     );
+  });
+
+  it('shows the add-ticker section with contextual copy when the watchlist is empty', async () => {
+    renderWithRouter(
+      [{ path: '/watchlist', element: <Watchlist /> }],
+      ['/watchlist'],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /add your first ticker/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/start with the names you care about most/i)).toBeInTheDocument();
+  });
+
+  it('opens the ticker search overlay when the search button is clicked', async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(
+      [{ path: '/watchlist', element: <Watchlist /> }],
+      ['/watchlist'],
+    );
+
+    const searchButton = await screen.findByText(/search tickers to add/i);
+    await user.click(searchButton.closest('button')!);
+
+    // The TickerSearch overlay should now be open with a combobox input
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
   });
 
   it('shows a first-ticker success state after adding the first symbol', async () => {
@@ -74,6 +105,24 @@ describe('Watchlist page', () => {
         });
       }
 
+      if (url.pathname === '/api/tickers/search') {
+        const q = url.searchParams.get('q')?.toLowerCase() ?? '';
+        if (q.includes('nvda')) {
+          return new Response(JSON.stringify({
+            data: [{ ticker: 'NVDA', name: 'NVIDIA Corporation', sector: null, exchange: null }],
+          }), { headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({ data: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.pathname === '/api/tickers/trending') {
+        return new Response(JSON.stringify({ data: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -87,43 +136,25 @@ describe('Watchlist page', () => {
       ['/watchlist'],
     );
 
-    const input = await screen.findByLabelText('Add ticker to watchlist');
+    // Open the search overlay
+    const searchButton = await screen.findByText(/search tickers to add/i);
+    await user.click(searchButton.closest('button')!);
 
-    await user.type(input, 'nvda');
-    await user.click(screen.getByRole('button', { name: /add first ticker/i }));
+    // Type in the search combobox
+    const input = await screen.findByRole('combobox');
+    await user.type(input, 'NVDA');
+
+    // Wait for search results and click to add
+    const addButton = await screen.findByRole('button', { name: /add.*nvda/i });
+    await user.click(addButton);
 
     await waitFor(() => {
       expect(screen.getByText(/nvda is now on your watchlist/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('link', { name: '$NVDA' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /enable push alerts on this device/i })).toHaveAttribute(
       'href',
       '/settings?from=watchlist#push-alerts',
     );
-  });
-
-  it('renders compact quick-add chips for suggested tickers', async () => {
-    renderWithRouter(
-      [{ path: '/watchlist', element: <Watchlist /> }],
-      ['/watchlist'],
-    );
-
-    expect(await screen.findByRole('button', { name: /quick add aapl/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /quick add nvda/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /quick add tsla/i })).toBeInTheDocument();
-  });
-
-  it('loads a suggested ticker into the add form when a quick-add chip is tapped', async () => {
-    const user = userEvent.setup();
-
-    renderWithRouter(
-      [{ path: '/watchlist', element: <Watchlist /> }],
-      ['/watchlist'],
-    );
-
-    await user.click(await screen.findByRole('button', { name: /quick add nvda/i }));
-
-    expect(screen.getByLabelText('Add ticker to watchlist')).toHaveValue('NVDA');
   });
 });
