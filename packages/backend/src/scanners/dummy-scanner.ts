@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { BaseScanner, ok, type EventBus, type RawEvent, type Result } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 
 export class DummyScanner extends BaseScanner {
   constructor(eventBus: EventBus) {
     super({
       name: 'dummy',
       source: 'dummy',
-      pollIntervalMs: 10_000,
+      pollIntervalMs: resolveScannerIntervalMs('DUMMY', 10_000),
       eventBus,
     });
   }

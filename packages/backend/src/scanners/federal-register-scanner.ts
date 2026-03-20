@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
 import type { FederalRegisterApiResponse, FederalRegisterDocument } from './whitehouse-scanner.js';
@@ -68,7 +69,7 @@ export class FederalRegisterScanner extends BaseScanner {
     super({
       name: 'federal-register',
       source: 'federal-register',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('FEDERAL_REGISTER', POLL_INTERVAL_MS),
       eventBus,
     });
   }

@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -184,7 +185,7 @@ export class BreakingNewsScanner extends BaseScanner {
     super({
       name: 'breaking-news',
       source: 'breaking-news',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('BREAKING_NEWS', POLL_INTERVAL_MS),
       eventBus,
     });
     this.feeds = feeds ?? DEFAULT_FEEDS;

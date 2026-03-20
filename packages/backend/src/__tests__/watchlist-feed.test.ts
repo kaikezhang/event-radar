@@ -8,8 +8,6 @@ import { storeEvent } from '../db/event-store.js';
 import { cleanTestDb, createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 
 const TEST_API_KEY = 'watchlist-feed-test-key';
-const TEST_USER_ID = 'test-user-watchlist';
-
 let sharedDb: Database;
 let sharedClient: PGlite;
 
@@ -117,8 +115,8 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('filters feed to only watchlist tickers', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
+    await seedUser('default');
+    await addWatchlistTicker('default', 'TSLA');
 
     await seedDeliveredEvent({
       title: 'Tesla event',
@@ -136,7 +134,6 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);
@@ -146,7 +143,7 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('returns empty when user has no watchlist items', async () => {
-    await seedUser(TEST_USER_ID);
+    await seedUser('default');
 
     await seedDeliveredEvent({
       title: 'Some event',
@@ -158,7 +155,6 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);
@@ -168,8 +164,8 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('matches events via enrichment.tickers[].symbol', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'MSFT');
+    await seedUser('default');
+    await addWatchlistTicker('default', 'MSFT');
 
     // Seed an event whose pa.ticker and metadata.ticker are not MSFT,
     // but enrichment tickers include MSFT
@@ -222,7 +218,6 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);
@@ -232,8 +227,8 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('returns all events when watchlist filter is not set', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
+    await seedUser('default');
+    await addWatchlistTicker('default', 'TSLA');
 
     await seedDeliveredEvent({
       title: 'Tesla event',
@@ -251,7 +246,6 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);
@@ -274,9 +268,9 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
   });
 
   it('returns per-ticker summary for watchlist', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
-    await addWatchlistTicker(TEST_USER_ID, 'NVDA');
+    await seedUser('default');
+    await addWatchlistTicker('default', 'TSLA');
+    await addWatchlistTicker('default', 'NVDA');
 
     // Seed recent events
     await seedDeliveredEvent({
@@ -297,7 +291,6 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed/watchlist-summary',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);
@@ -317,12 +310,11 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
   });
 
   it('returns empty tickers array when no watchlist', async () => {
-    await seedUser(TEST_USER_ID);
+    await seedUser('default');
 
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed/watchlist-summary',
-      headers: { 'x-user-id': TEST_USER_ID },
     });
 
     expect(response.statusCode).toBe(200);

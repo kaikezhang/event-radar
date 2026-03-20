@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
 
@@ -106,7 +107,7 @@ export class RedditScanner extends BaseScanner {
     super({
       name: 'reddit',
       source: 'reddit',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('REDDIT', POLL_INTERVAL_MS),
       eventBus,
     });
   }

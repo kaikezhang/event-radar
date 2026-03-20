@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 3_600_000; // 1 hour
@@ -78,7 +79,7 @@ export class WarnScanner extends BaseScanner {
     super({
       name: 'warn-act',
       source: 'warn-act',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('WARN', POLL_INTERVAL_MS),
       eventBus,
     });
   }

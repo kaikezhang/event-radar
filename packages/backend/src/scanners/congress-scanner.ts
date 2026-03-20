@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 1_800_000; // 30 minutes
@@ -86,7 +87,7 @@ export class CongressScanner extends BaseScanner {
     super({
       name: 'congress',
       source: 'congress',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('CONGRESS', POLL_INTERVAL_MS),
       eventBus,
     });
   }

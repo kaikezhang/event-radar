@@ -405,13 +405,18 @@ describe('Auth endpoints', () => {
       expect(body.displayName).toBe('Test User');
     });
 
-    it('returns 401 for missing cookie', async () => {
+    it('returns the default user for missing cookie when auth is not required', async () => {
       const res = await server.inject({
         method: 'GET',
         url: '/api/auth/me',
       });
 
-      expect(res.statusCode).toBe(401);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({
+        id: 'default',
+        email: null,
+        displayName: null,
+      });
     });
 
     it('returns 401 for invalid JWT', async () => {

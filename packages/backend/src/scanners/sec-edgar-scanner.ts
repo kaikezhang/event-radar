@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
 import {
@@ -421,24 +422,33 @@ export function parseEdgarAtomFeed(xml: string): EdgarAtomEntry[] {
 export class SecEdgarScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1000, 'sec-edgar');
   private lastForm4PollAt: number | null = null;
+  private readonly form4PollIntervalMs: number;
 
   public fetchFn: typeof scannerFetch = (url, options) =>
     scannerFetch(url, options);
 
   constructor(eventBus: EventBus) {
+    const eightKPollIntervalMs = resolveScannerIntervalMs('SEC', EIGHT_K_POLL_INTERVAL_MS);
+    const form4PollIntervalMs = resolveScannerIntervalMs(
+      ['SEC_FORM4', 'SEC'],
+      FORM_4_POLL_INTERVAL_MS,
+    );
+
     super({
       name: 'sec-edgar',
       source: 'sec-edgar',
-      pollIntervalMs: EIGHT_K_POLL_INTERVAL_MS,
+      pollIntervalMs: eightKPollIntervalMs,
       eventBus,
     });
+
+    this.form4PollIntervalMs = form4PollIntervalMs;
   }
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
     try {
       const now = Date.now();
       const shouldPollForm4 =
-        this.lastForm4PollAt === null || now - this.lastForm4PollAt >= FORM_4_POLL_INTERVAL_MS;
+        this.lastForm4PollAt === null || now - this.lastForm4PollAt >= this.form4PollIntervalMs;
 
       const filings8K = await this.fetchFeed(EIGHT_K_ATOM_URL);
       const form4Entries = shouldPollForm4

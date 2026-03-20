@@ -8,6 +8,7 @@ import {
   type Result,
 } from '@event-radar/shared';
 import { browserPool } from './scraping/browser-pool.js';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import type { Page } from 'playwright';
 import {
@@ -206,7 +207,7 @@ export class XScanner extends BaseScanner {
     super({
       name: 'x-elonmusk',
       source: 'x',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('X', POLL_INTERVAL_MS),
       eventBus,
     });
   }

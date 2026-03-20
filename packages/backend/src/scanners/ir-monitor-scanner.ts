@@ -10,6 +10,7 @@ import {
   type Result,
 } from '@event-radar/shared';
 import { parseRssXml, type RssItem } from './breaking-news-scanner.js';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 export const IR_MONITOR_POLL_INTERVAL_MS = 300_000;
@@ -317,7 +318,7 @@ export class IrMonitorScanner extends BaseScanner {
     super({
       name: 'ir-monitor',
       source: 'company-ir',
-      pollIntervalMs: IR_MONITOR_POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('IR_MONITOR', IR_MONITOR_POLL_INTERVAL_MS),
       eventBus,
     });
     this.companies = companies.map(normalizeCompanyConfig);

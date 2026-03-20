@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 
 const POLL_INTERVAL_MS = 300_000; // 5 minutes
 const PROBABILITY_SHIFT_THRESHOLD = 10; // percentage points
@@ -114,7 +115,7 @@ export class FedWatchScanner extends BaseScanner {
     super({
       name: 'fedwatch',
       source: 'fedwatch',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('FEDWATCH', POLL_INTERVAL_MS),
       eventBus,
     });
   }

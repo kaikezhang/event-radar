@@ -91,7 +91,7 @@ describe('push subscription routes', () => {
     expect(rows[0]?.lastSeenAt).toBeInstanceOf(Date);
   });
 
-  it('upserts an existing subscription for the same user and clears disabled state', async () => {
+  it('ignores x-user-id while upserting the default user subscription and clears disabled state', async () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/push-subscriptions',
@@ -108,7 +108,7 @@ describe('push subscription routes', () => {
         disabledAt: new Date('2026-03-14T00:00:00.000Z'),
       })
       .where(and(
-        eq(pushSubscriptions.userId, 'user-1'),
+        eq(pushSubscriptions.userId, 'default'),
         eq(pushSubscriptions.endpoint, 'https://push.example.test/subscriptions/device-1'),
       ));
 
@@ -132,7 +132,7 @@ describe('push subscription routes', () => {
     const rows = await db
       .select()
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.userId, 'user-1'));
+      .where(eq(pushSubscriptions.userId, 'default'));
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.p256dh).toBe('public-key-2');
@@ -140,7 +140,7 @@ describe('push subscription routes', () => {
     expect(rows[0]?.disabledAt).toBeNull();
   });
 
-  it('stores subscriptions independently per user', async () => {
+  it('ignores x-user-id and keeps subscriptions scoped to the default user', async () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/push-subscriptions',
@@ -164,10 +164,11 @@ describe('push subscription routes', () => {
     expect(response.statusCode).toBe(201);
 
     const rows = await db.select().from(pushSubscriptions);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.userId).toBe('default');
   });
 
-  it('unregisters a subscription for the current user only', async () => {
+  it('ignores x-user-id when unregistering subscriptions', async () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/push-subscriptions',
@@ -203,8 +204,7 @@ describe('push subscription routes', () => {
     expect(response.statusCode).toBe(200);
 
     const remaining = await db.select().from(pushSubscriptions);
-    expect(remaining).toHaveLength(1);
-    expect(remaining[0]?.userId).toBe('user-2');
+    expect(remaining).toHaveLength(0);
   });
 
   it('returns 404 when unregistering an unknown subscription', async () => {

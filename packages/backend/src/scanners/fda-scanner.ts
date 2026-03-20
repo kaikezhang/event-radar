@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { parseRssXml, type RssItem } from './breaking-news-scanner.js';
 import { extractTickers } from './ticker-extractor.js';
@@ -143,7 +144,7 @@ export class FdaScanner extends BaseScanner {
     super({
       name: 'fda',
       source: 'fda',
-      pollIntervalMs: RSS_POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('FDA', RSS_POLL_INTERVAL_MS),
       eventBus,
     });
   }

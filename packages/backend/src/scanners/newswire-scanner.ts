@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
 import { parseRssXml } from './breaking-news-scanner.js';
@@ -97,7 +98,7 @@ export class NewswireScanner extends BaseScanner {
     super({
       name: 'newswire',
       source: 'newswire',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('NEWSWIRE', POLL_INTERVAL_MS),
       eventBus,
     });
     this.feeds = feeds ?? DEFAULT_FEEDS;

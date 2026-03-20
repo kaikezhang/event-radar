@@ -9,6 +9,7 @@ import {
   type Result,
   type Severity,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 export const HALT_SCANNER_POLL_INTERVAL_MS = 15_000;
@@ -399,7 +400,7 @@ export class HaltScanner extends BaseScanner {
     super({
       name: 'trading-halt',
       source: 'trading-halt',
-      pollIntervalMs: HALT_SCANNER_POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('HALT', HALT_SCANNER_POLL_INTERVAL_MS),
       eventBus,
     });
   }

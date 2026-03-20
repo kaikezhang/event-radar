@@ -13,6 +13,7 @@ import {
   SEC_USER_AGENT,
   SEC_XML_ACCEPT,
 } from './sec-edgar-feed-utils.js';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -174,7 +175,7 @@ export class DilutionScanner extends BaseScanner {
     super({
       name: 'dilution-monitor',
       source: 'dilution-monitor',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('DILUTION', POLL_INTERVAL_MS),
       eventBus,
     });
   }

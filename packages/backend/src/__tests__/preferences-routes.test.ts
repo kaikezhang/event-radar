@@ -84,7 +84,6 @@ describe('preferences routes', () => {
       url: '/api/v1/preferences',
       headers: {
         'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-42',
       },
       payload: {
         quietStart: '22:30',
@@ -109,7 +108,6 @@ describe('preferences routes', () => {
       url: '/api/v1/preferences',
       headers: {
         'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-42',
       },
     });
 
@@ -129,7 +127,6 @@ describe('preferences routes', () => {
       url: '/api/v1/preferences',
       headers: {
         'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-7',
       },
       payload: {
         quietStart: '23:00',
@@ -142,7 +139,6 @@ describe('preferences routes', () => {
       url: '/api/v1/preferences',
       headers: {
         'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-7',
       },
       payload: {
         quietStart: null,
@@ -159,7 +155,7 @@ describe('preferences routes', () => {
     const [stored] = await db
       .select()
       .from(userPreferences)
-      .where(eq(userPreferences.userId, 'user-7'));
+      .where(eq(userPreferences.userId, 'default'));
 
     expect(stored?.quietStart).toBeNull();
     expect(stored?.quietEnd).toBeNull();

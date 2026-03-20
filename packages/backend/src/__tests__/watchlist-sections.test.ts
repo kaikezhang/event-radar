@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
+import { sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import type { Database } from '../db/connection.js';
 import { watchlistSections } from '../db/schema.js';

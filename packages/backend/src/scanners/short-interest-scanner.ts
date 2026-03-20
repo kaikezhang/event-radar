@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 3_600_000; // 1 hour (FINRA reports are bi-monthly)
@@ -83,7 +84,7 @@ export class ShortInterestScanner extends BaseScanner {
     super({
       name: 'short-interest',
       source: 'short-interest',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('SHORT_INTEREST', POLL_INTERVAL_MS),
       eventBus,
     });
   }

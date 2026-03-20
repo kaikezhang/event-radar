@@ -8,6 +8,7 @@ import {
   type Result,
 } from '@event-radar/shared';
 import { browserPool } from './scraping/browser-pool.js';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import type { Page } from 'playwright';
 import {
@@ -144,7 +145,7 @@ export class TruthSocialScanner extends BaseScanner {
     super({
       name: 'truth-social',
       source: 'truth-social',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('TRUTH_SOCIAL', POLL_INTERVAL_MS),
       eventBus,
     });
   }

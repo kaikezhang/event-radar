@@ -9,6 +9,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -124,7 +125,7 @@ export class EconCalendarScanner extends BaseScanner {
     super({
       name: 'econ-calendar',
       source: 'econ-calendar',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('ECON_CALENDAR', POLL_INTERVAL_MS),
       eventBus,
     });
 

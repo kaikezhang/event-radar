@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { TrendingStateTracker } from './trending-state.js';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -107,7 +108,7 @@ export class StockTwitsScanner extends BaseScanner {
     super({
       name: 'stocktwits',
       source: 'stocktwits',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('STOCKTWITS', POLL_INTERVAL_MS),
       eventBus,
     });
   }

@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
 
@@ -122,7 +123,7 @@ export class WhiteHouseScanner extends BaseScanner {
     super({
       name: 'whitehouse',
       source: 'whitehouse',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('WHITEHOUSE', POLL_INTERVAL_MS),
       eventBus,
     });
   }

@@ -7,6 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 300_000; // 5 minutes
@@ -98,7 +99,7 @@ export class UnusualOptionsScanner extends BaseScanner {
     super({
       name: 'unusual-options',
       source: 'unusual-options',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('OPTIONS', POLL_INTERVAL_MS),
       eventBus,
     });
   }

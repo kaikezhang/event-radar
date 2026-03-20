@@ -8,6 +8,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
+import { resolveScannerIntervalMs } from './scanner-intervals.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { parseRssXml } from './breaking-news-scanner.js';
 import { extractTickers } from './ticker-extractor.js';
@@ -87,7 +88,7 @@ export class DojScanner extends BaseScanner {
     super({
       name: 'doj-antitrust',
       source: 'doj',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      pollIntervalMs: resolveScannerIntervalMs('DOJ', POLL_INTERVAL_MS),
       eventBus,
     });
   }
