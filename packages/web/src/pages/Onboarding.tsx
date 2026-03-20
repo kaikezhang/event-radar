@@ -73,7 +73,7 @@ export function Onboarding() {
   return (
     <div className="space-y-4">
       {/* Welcome header */}
-      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">
           Welcome
         </p>
@@ -101,7 +101,7 @@ export function Onboarding() {
                 className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-left text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                   allSelected
                     ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
-                    : 'border-white/10 bg-bg-elevated/70 text-text-primary hover:bg-white/[0.06]'
+                    : 'border-overlay-medium bg-bg-elevated/70 text-text-primary hover:bg-overlay-medium'
                 }`}
               >
                 {allSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4 text-accent-default" />}
@@ -136,7 +136,7 @@ export function Onboarding() {
                   className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                     isSelected || onWatchlist
                       ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
-                      : 'border-white/10 bg-white/5 text-text-secondary hover:bg-white/8 hover:text-text-primary'
+                      : 'border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-overlay-medium hover:text-text-primary'
                   } ${onWatchlist ? 'opacity-60' : ''}`}
                 >
                   {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -159,7 +159,7 @@ export function Onboarding() {
             onChange={(e) => setManualInput(e.target.value.toUpperCase())}
             placeholder="Type ticker (e.g. AAPL)"
             maxLength={5}
-            className="min-h-11 flex-1 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
+            className="min-h-11 flex-1 rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
             aria-label="Add custom ticker"
           />
           <button
@@ -174,7 +174,7 @@ export function Onboarding() {
       </section>
 
       {/* Counter + continue */}
-      <section className="sticky bottom-20 rounded-2xl border border-border-default bg-bg-primary/95 p-5 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-md">
+      <section className="sticky bottom-20 rounded-2xl border border-border-default bg-bg-primary/95 p-5 shadow-[0_-8px_30px_var(--shadow-color)] backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[17px] font-semibold text-text-primary">

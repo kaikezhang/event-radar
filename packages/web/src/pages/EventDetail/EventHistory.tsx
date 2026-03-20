@@ -71,7 +71,7 @@ export function EventHistory({
       {similarEvents.length > 0 && (
         <div className="mt-4 space-y-3">
           {visibleSimilarEvents.map((event, index) => (
-            <div key={index} className="flex items-center justify-between rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
+            <div key={index} className="flex items-center justify-between rounded-2xl border border-overlay-medium bg-bg-elevated/70 p-4">
               <div>
                 <p className="text-sm font-medium text-text-primary">{event.title}</p>
                 <p className="mt-1 font-mono text-xs text-text-secondary">
@@ -85,7 +85,7 @@ export function EventHistory({
             <button
               type="button"
               onClick={onToggleShowAll}
-              className="mt-2 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+              className="mt-2 inline-flex min-h-11 items-center rounded-full border border-overlay-medium px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
             >
               {showAllSimilar ? 'Show fewer' : `Show all ${similarEvents.length} →`}
             </button>
@@ -106,7 +106,7 @@ function ConfidenceBar({ matchCount }: { matchCount: number }) {
   return (
     <div className="mt-4 flex items-center gap-3">
       <span className="text-xs font-medium text-text-secondary">Confidence:</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-overlay-medium">
         <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${fill}%` }} />
       </div>
       <span
@@ -125,7 +125,7 @@ function ConfidenceBar({ matchCount }: { matchCount: number }) {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+    <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_var(--shadow-color)]">
       <div className="font-mono text-2xl font-semibold text-text-primary">{value}</div>
       <div className="mt-1 text-sm text-text-secondary">{label}</div>
     </div>

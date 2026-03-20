@@ -141,13 +141,13 @@ function MoveSectionModal({ sections, onSelect, onClose }: { sections: Watchlist
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50" />
-      <div className="relative z-10 w-full max-w-sm rounded-t-2xl sm:rounded-2xl border border-border-default bg-bg-surface p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
+      <div className="relative z-10 w-full max-w-sm rounded-t-2xl sm:rounded-2xl border border-border-default bg-bg-surface p-4 shadow-[0_20px_50px_var(--shadow-color)]" onClick={(e) => e.stopPropagation()}>
         <h3 className="mb-3 text-sm font-semibold text-text-primary">Move to section</h3>
         <div className="space-y-1">
-          <button type="button" onClick={() => onSelect(null)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-text-primary hover:bg-white/5"><span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />Unsorted</button>
-          {sections.map((s) => (<button key={s.id} type="button" onClick={() => onSelect(s.id)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-text-primary hover:bg-white/5"><span className={`h-2.5 w-2.5 rounded-full ${SECTION_COLORS[s.color] ?? SECTION_COLORS.gray}`} />{s.name}</button>))}
+          <button type="button" onClick={() => onSelect(null)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-text-primary hover:bg-overlay-medium"><span className="h-2.5 w-2.5 rounded-full bg-zinc-600" />Unsorted</button>
+          {sections.map((s) => (<button key={s.id} type="button" onClick={() => onSelect(s.id)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-text-primary hover:bg-overlay-medium"><span className={`h-2.5 w-2.5 rounded-full ${SECTION_COLORS[s.color] ?? SECTION_COLORS.gray}`} />{s.name}</button>))}
         </div>
-        <button type="button" onClick={onClose} className="mt-3 w-full rounded-xl bg-white/5 px-3 py-2 text-sm text-text-secondary hover:bg-white/10">Cancel</button>
+        <button type="button" onClick={onClose} className="mt-3 w-full rounded-xl bg-overlay-subtle px-3 py-2 text-sm text-text-secondary hover:bg-overlay-medium">Cancel</button>
       </div>
     </div>
   );
@@ -159,12 +159,12 @@ function ConfirmRemoveDialog({ count, onConfirm, onCancel }: { count: number; on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onCancel}>
       <div className="fixed inset-0 bg-black/50" />
-      <div className="relative z-10 w-full max-w-xs rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
+      <div className="relative z-10 w-full max-w-xs rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_20px_50px_var(--shadow-color)]" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-semibold text-text-primary">Remove {count} ticker{count !== 1 ? 's' : ''} from watchlist?</h3>
         <p className="mt-2 text-xs text-text-secondary">This action cannot be undone.</p>
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={onConfirm} className="flex-1 rounded-lg bg-red-500/20 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/30">Remove</button>
-          <button type="button" onClick={onCancel} className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm font-medium text-text-secondary hover:bg-white/10">Cancel</button>
+          <button type="button" onClick={onCancel} className="flex-1 rounded-lg bg-overlay-subtle px-3 py-2 text-sm font-medium text-text-secondary hover:bg-overlay-medium">Cancel</button>
         </div>
       </div>
     </div>
@@ -209,7 +209,7 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-2xl border bg-bg-surface/96 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.22)] ${isSelected ? 'border-accent-default/60 bg-accent-default/5' : 'border-border-default'}`}
+      className={`rounded-2xl border bg-bg-surface/96 p-4 shadow-[0_18px_40px_var(--shadow-color)] ${isSelected ? 'border-accent-default/60 bg-accent-default/5' : 'border-border-default'}`}
       onPointerDown={handlePointerDown} onPointerUp={clearLongPress} onPointerCancel={clearLongPress} onPointerLeave={clearLongPress}
     >
       <div className="flex items-center gap-2">
@@ -249,7 +249,7 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
         {!editMode && (<button
           type="button"
           onClick={() => onRemove(item.ticker)}
-          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-white/6 p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-overlay-medium bg-overlay-light p-2 text-text-secondary transition hover:bg-red-500/20 hover:text-red-400"
           aria-label={`Remove ${item.ticker} from watchlist`}
         >
           <X className="h-4 w-4" />
@@ -259,7 +259,7 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
       <InlineNote ticker={item.ticker} notes={item.notes} onSave={onSaveNote} />
 
       {tickerSummary && tickerSummary.eventCount24h > 0 && (
-        <div className="mt-3 ml-6 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
+        <div className="mt-3 ml-6 rounded-2xl border border-overlay-medium bg-white/[0.02] px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-text-secondary">
               {tickerSummary.eventCount24h} event{tickerSummary.eventCount24h !== 1 ? 's' : ''} (24h)
@@ -295,7 +295,7 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
 
 function DragOverlayRow({ item, tickerSummary }: { item: WatchlistItem; tickerSummary?: WatchlistTickerSummary }) {
   return (
-    <div className="rounded-2xl border border-accent-default/40 bg-bg-surface p-4 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+    <div className="rounded-2xl border border-accent-default/40 bg-bg-surface p-4 shadow-[0_20px_50px_var(--shadow-color)]">
       <div className="flex items-center gap-2">
         <GripVertical className="h-4 w-4 text-text-secondary/40" />
         <span className="text-[17px] font-semibold text-text-primary">
@@ -420,7 +420,7 @@ function SectionHeader({
       <button
         type="button"
         onClick={onAddTicker}
-        className="rounded-full p-1 text-text-secondary/60 hover:bg-white/8 hover:text-text-primary"
+        className="rounded-full p-1 text-text-secondary/60 hover:bg-overlay-medium hover:text-text-primary"
         aria-label="Add ticker to section"
       >
         <Plus className="h-3.5 w-3.5" />
@@ -434,14 +434,14 @@ function SectionHeader({
             setColorPickerOpen(false);
             setConfirmDelete(false);
           }}
-          className="rounded-full p-1 text-text-secondary/60 hover:bg-white/8 hover:text-text-primary"
+          className="rounded-full p-1 text-text-secondary/60 hover:bg-overlay-medium hover:text-text-primary"
           aria-label="Section menu"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-border-default bg-bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.3)]">
+          <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-border-default bg-bg-surface shadow-[0_18px_40px_var(--shadow-color)]">
             {colorPickerOpen ? (
               <div className="p-2">
                 <p className="mb-2 text-xs font-medium text-text-secondary">Pick a color</p>
@@ -481,7 +481,7 @@ function SectionHeader({
                   <button
                     type="button"
                     onClick={() => setConfirmDelete(false)}
-                    className="flex-1 rounded-lg bg-white/5 px-2 py-1.5 text-xs font-medium text-text-secondary hover:bg-white/10"
+                    className="flex-1 rounded-lg bg-overlay-subtle px-2 py-1.5 text-xs font-medium text-text-secondary hover:bg-overlay-medium"
                   >
                     Cancel
                   </button>
@@ -496,7 +496,7 @@ function SectionHeader({
                     setEditName(section.name);
                     setIsEditing(true);
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-white/5"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-overlay-medium"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Rename
@@ -504,7 +504,7 @@ function SectionHeader({
                 <button
                   type="button"
                   onClick={() => setColorPickerOpen(true)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-white/5"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-overlay-medium"
                 >
                   <Palette className="h-3.5 w-3.5" />
                   Change Color
@@ -554,7 +554,7 @@ function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string)
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-sm text-text-secondary/60 transition hover:border-white/20 hover:text-text-secondary"
+        className="flex w-full items-center gap-2 rounded-xl border border-dashed border-overlay-medium px-3 py-2.5 text-sm text-text-secondary/60 transition hover:border-overlay-medium hover:text-text-secondary"
       >
         <Plus className="h-4 w-4" />
         New Section
@@ -574,7 +574,7 @@ function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string)
           if (e.key === 'Escape') setOpen(false);
         }}
         placeholder="Section name"
-        className="w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm text-text-primary placeholder-text-secondary/40 outline-none focus:border-accent-default"
+        className="w-full rounded-lg border border-overlay-medium bg-transparent px-3 py-2 text-sm text-text-primary placeholder-text-secondary/40 outline-none focus:border-accent-default"
         maxLength={100}
       />
       <div className="flex items-center gap-2">
@@ -603,7 +603,7 @@ function NewSectionForm({ onCreate }: { onCreate: (name: string, color?: string)
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-white/10"
+          className="rounded-lg bg-overlay-subtle px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-overlay-medium"
         >
           Cancel
         </button>
@@ -740,7 +740,7 @@ export function Watchlist() {
   if (!authLoading && !isAuthenticated) {
     return (
       <div className="space-y-4">
-        <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">
             Watchlist
           </p>
@@ -774,14 +774,14 @@ export function Watchlist() {
 
   return (
     <div className="space-y-4 pb-24">
-      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">Watchlist</p>
             <h1 className="mb-1 text-[20px] font-semibold leading-7 text-text-primary">{isEmpty ? 'Start with a watchlist' : 'Your radar list'}</h1>
             {isEmpty ? (<p className="mt-2 text-sm leading-6 text-text-secondary">Event Radar works best when you follow a small set of names. Add your first ticker so high-confidence alerts stay focused and useful.</p>) : (<p className="text-sm text-text-secondary">{items.length} ticker{items.length !== 1 ? 's' : ''} tracked{sections.length > 0 && ` across ${sections.length} section${sections.length !== 1 ? 's' : ''}`}</p>)}
           </div>
-          {!isEmpty && <button type="button" onClick={() => editMode ? exitEditMode() : setEditMode(true)} className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${editMode ? 'bg-accent-default text-white hover:brightness-110' : 'border border-white/10 bg-white/5 text-text-primary hover:bg-white/10'}`}>{editMode ? 'Done' : 'Edit'}</button>}
+          {!isEmpty && <button type="button" onClick={() => editMode ? exitEditMode() : setEditMode(true)} className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${editMode ? 'bg-accent-default text-white hover:brightness-110' : 'border border-overlay-medium bg-overlay-subtle text-text-primary hover:bg-overlay-medium'}`}>{editMode ? 'Done' : 'Edit'}</button>}
         </div>
       </section>
 
@@ -805,11 +805,11 @@ export function Watchlist() {
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
-          className="flex min-h-11 w-full items-center gap-3 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-[15px] text-text-secondary/60 transition hover:bg-white/8 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
+          className="flex min-h-11 w-full items-center gap-3 rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-[15px] text-text-secondary/60 transition hover:bg-overlay-medium focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
         >
           <Search className="h-4 w-4" />
           <span>{isEmpty ? 'Search tickers to add (e.g. AAPL)' : 'Search tickers...'}</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
             /
           </kbd>
         </button>
@@ -822,7 +822,7 @@ export function Watchlist() {
       />
 
       {isEmpty ? (
-        <section className="rounded-2xl border border-border-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
           <div className="flex items-start gap-3">
             <span className="mt-1 inline-flex h-11 w-11 items-center justify-center rounded-full bg-accent-default/12 text-accent-default">
               <Bell className="h-5 w-5" />
@@ -839,7 +839,7 @@ export function Watchlist() {
           </div>
 
           <div className="mt-4 grid gap-3">
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+            <div className="rounded-2xl border border-overlay-medium bg-white/[0.03] p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-default">
                 Step 1
               </p>
@@ -851,7 +851,7 @@ export function Watchlist() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+            <div className="rounded-2xl border border-overlay-medium bg-white/[0.03] p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-default">
                 Step 2
               </p>
@@ -874,7 +874,7 @@ export function Watchlist() {
             </Link>
             <Link
               to="/search"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[15px] font-semibold text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-overlay-subtle px-4 py-2 text-[15px] font-semibold text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
             >
               Browse tickers
             </Link>
@@ -883,7 +883,7 @@ export function Watchlist() {
       ) : (
         <section className="space-y-3">
           {hasFirstTickerSuccess ? (
-            <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/10 p-5 text-emerald-50 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+            <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/10 p-5 text-emerald-50 shadow-[0_18px_40px_var(--shadow-color)]">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-300" />
                 <div className="flex-1">
@@ -995,7 +995,7 @@ export function Watchlist() {
 
       {editMode && (
         <div className="fixed bottom-6 left-1/2 z-40 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/98 px-4 py-3 shadow-[0_20px_50px_var(--shadow-color)] backdrop-blur-sm">
             <span className="text-sm font-medium text-text-primary">{selected.size} selected</span>
             <button type="button" onClick={selected.size === items.length ? deselectAll : selectAll} className="ml-1 text-xs text-accent-default hover:underline">{selected.size === items.length ? 'Deselect all' : 'Select all'}</button>
             <div className="ml-auto flex gap-2">

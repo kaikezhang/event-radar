@@ -98,9 +98,9 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
       />
 
       {/* Modal */}
-      <div className="relative mt-[10vh] w-full max-w-lg mx-4 sm:mx-0 rounded-2xl border border-border-default bg-[#0a1628] shadow-[0_25px_60px_rgba(0,0,0,0.5)] overflow-hidden max-h-[70vh] flex flex-col sm:mt-[15vh]">
+      <div className="relative mt-[10vh] w-full max-w-lg mx-4 sm:mx-0 rounded-2xl border border-border-default bg-[#0a1628] shadow-[0_25px_60px_var(--shadow-color)] overflow-hidden max-h-[70vh] flex flex-col sm:mt-[15vh]">
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
+        <div className="flex items-center gap-3 border-b border-overlay-medium px-4 py-3">
           <Search className="h-4 w-4 shrink-0 text-text-secondary" />
           <input
             ref={inputRef}
@@ -118,7 +118,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
             spellCheck={false}
           />
           {isSearching && <Loader2 className="h-4 w-4 animate-spin text-text-secondary" />}
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
             ESC
           </kbd>
         </div>
@@ -141,7 +141,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                       aria-selected={isActive}
                       data-ticker-result
                       className={`flex items-center justify-between gap-3 px-4 py-2.5 transition-colors ${
-                        isActive ? 'bg-white/8' : 'hover:bg-white/5'
+                        isActive ? 'bg-overlay-medium' : 'hover:bg-overlay-medium'
                       }`}
                     >
                       <div className="flex-1 min-w-0">
@@ -166,7 +166,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                         className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
                           onWatchlist
                             ? 'bg-emerald-500/15 text-emerald-400'
-                            : 'border border-white/10 bg-white/5 text-text-secondary hover:bg-accent-default/20 hover:text-accent-default'
+                            : 'border border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-accent-default/20 hover:text-accent-default'
                         }`}
                         aria-label={onWatchlist ? `${result.ticker} is on watchlist` : `Add ${result.ticker} to watchlist`}
                       >
@@ -214,7 +214,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                         onClick={() => {
                           setQuery(ticker);
                         }}
-                        className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-white/8"
+                        className="inline-flex items-center rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-overlay-medium"
                       >
                         {ticker}
                       </button>
@@ -240,7 +240,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                         onClick={() => {
                           setQuery(t.ticker);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-white/8"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1.5 text-xs font-medium text-text-primary transition hover:bg-overlay-medium"
                       >
                         {t.ticker}
                         {t.eventCount > 0 && (

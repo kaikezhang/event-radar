@@ -7,7 +7,7 @@ export function RangeBar({ low, high, current }: { low: number; high: number; cu
           <span>52-Week Range</span>
           <span>${high.toFixed(0)}</span>
         </div>
-        <div className="relative h-1.5 rounded-full bg-white/10">
+        <div className="relative h-1.5 rounded-full bg-overlay-medium">
           <div
             className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-accent-default border-2 border-bg-surface"
             style={{ left: '50%' }}
@@ -25,7 +25,7 @@ export function RangeBar({ low, high, current }: { low: number; high: number; cu
         <span>52-Week Range</span>
         <span>${high.toFixed(0)}</span>
       </div>
-      <div className="relative h-1.5 rounded-full bg-white/10">
+      <div className="relative h-1.5 rounded-full bg-overlay-medium">
         <div
           className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-accent-default border-2 border-bg-surface"
           style={{ left: `${pct}%` }}

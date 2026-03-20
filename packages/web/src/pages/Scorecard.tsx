@@ -36,10 +36,10 @@ export function Scorecard() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <section className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-          <div className="h-5 w-28 animate-pulse rounded-full bg-white/8" />
-          <div className="mt-3 h-8 w-48 animate-pulse rounded-full bg-white/8" />
-          <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-white/6" />
+        <section className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
+          <div className="h-5 w-28 animate-pulse rounded-full bg-overlay-medium" />
+          <div className="mt-3 h-8 w-48 animate-pulse rounded-full bg-overlay-medium" />
+          <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-overlay-light" />
         </section>
         <section className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, index) => (
@@ -81,7 +81,7 @@ export function Scorecard() {
   if (data.totals.alertsWithUsableVerdicts === 0) {
     return (
       <div className="space-y-4">
-        <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+        <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
             <Target className="h-3.5 w-3.5" />
             Scorecard
@@ -117,7 +117,7 @@ export function Scorecard() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
@@ -138,7 +138,7 @@ export function Scorecard() {
             </p>
           </div>
 
-          <div className="hidden rounded-2xl border border-white/10 bg-white/6 p-3 text-text-secondary sm:block">
+          <div className="hidden rounded-2xl border border-overlay-medium bg-overlay-light p-3 text-text-secondary sm:block">
             <CalendarRange className="h-5 w-5" />
           </div>
         </div>
@@ -156,7 +156,7 @@ export function Scorecard() {
               className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                 windowValue === option.value
                   ? 'border-accent-default/30 bg-accent-default/14 text-accent-default'
-                  : 'border-white/10 bg-white/6 text-text-secondary hover:bg-white/8'
+                  : 'border-overlay-medium bg-overlay-light text-text-secondary hover:bg-overlay-medium'
               }`}
             >
               {option.label}
@@ -236,7 +236,7 @@ function BucketSection({
         {buckets.map((bucket) => (
           <article
             key={`${group}-${bucket.bucket}`}
-            className="rounded-2xl border border-white/8 bg-bg-elevated/52 p-4"
+            className="rounded-2xl border border-overlay-medium bg-bg-elevated/52 p-4"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -247,7 +247,7 @@ function BucketSection({
                   {bucket.alertsWithUsableVerdicts} usable verdicts
                 </p>
               </div>
-              <span className="rounded-full border border-white/10 bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
+              <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
                 {bucket.totalAlerts} alerts
               </span>
             </div>
@@ -256,7 +256,7 @@ function BucketSection({
               {BUCKET_COLUMNS.map((column) => (
                 <div
                   key={column.key}
-                  className="rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-3"
+                  className="rounded-2xl border border-overlay-medium bg-white/[0.03] px-3 py-3"
                 >
                   <dt className="text-[11px] uppercase tracking-[0.16em] text-text-secondary">
                     {column.label}

@@ -1,7 +1,7 @@
 export function SkeletonCard() {
   return (
     <div
-      className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface p-4 animate-pulse shadow-[0_12px_32px_rgba(0,0,0,0.24)]"
+      className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface p-4 animate-pulse shadow-[0_12px_32px_var(--shadow-color)]"
       data-testid="skeleton-card"
       aria-hidden="true"
     >

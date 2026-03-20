@@ -1,6 +1,6 @@
 export function InfoField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/6 bg-bg-elevated/70 p-4">
+    <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/70 p-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
         {label}
       </p>

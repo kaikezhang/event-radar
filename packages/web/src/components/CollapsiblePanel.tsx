@@ -32,7 +32,7 @@ export function CollapsiblePanel({
     <section
       id={id}
       className={cn(
-        'rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_36px_rgba(0,0,0,0.22)]',
+        'rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_36px_var(--shadow-color)]',
         className,
       )}
     >
@@ -59,7 +59,7 @@ export function CollapsiblePanel({
           ) : null}
         </div>
         {headerSlot ? <div className="hidden sm:block">{headerSlot}</div> : null}
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-bg-elevated/70 text-text-secondary">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
           <ChevronDown
             className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')}
             aria-hidden="true"

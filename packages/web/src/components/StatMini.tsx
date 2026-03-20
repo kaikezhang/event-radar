@@ -6,7 +6,7 @@ export function StatMini({ label, value, tone }: {
   tone?: 'positive' | 'negative' | 'neutral';
 }) {
   return (
-    <div className="rounded-xl border border-white/6 bg-bg-elevated/70 p-3">
+    <div className="rounded-xl border border-overlay-medium bg-bg-elevated/70 p-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">{label}</p>
       <p className={cn(
         'mt-1 font-mono text-sm font-medium',

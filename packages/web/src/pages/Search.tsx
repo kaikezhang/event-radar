@@ -35,7 +35,7 @@ export function Search() {
   return (
     <div className="space-y-4">
       {/* Search header */}
-      <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(168,85,247,0.12),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <section className="rounded-[28px] border border-overlay-medium bg-[linear-gradient(135deg,rgba(168,85,247,0.12),rgba(20,20,20,0.96))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <h1 className="mb-3 text-[20px] font-semibold leading-7 text-text-primary">
           Search Events
         </h1>
@@ -46,7 +46,7 @@ export function Search() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search events or tickers..."
-            className="min-h-11 w-full rounded-full border border-white/10 bg-white/6 py-2.5 pl-11 pr-10 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
+            className="min-h-11 w-full rounded-full border border-overlay-medium bg-overlay-light py-2.5 pl-11 pr-10 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
             aria-label="Search events"
           />
           {query && (
@@ -70,7 +70,7 @@ export function Search() {
               key={ticker}
               type="button"
               onClick={() => navigate(`/ticker/${ticker}`)}
-              className="inline-flex min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold text-accent-default transition hover:bg-white/8"
+              className="inline-flex min-h-9 items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1.5 text-xs font-semibold text-accent-default transition hover:bg-overlay-medium"
             >
               ${ticker}
             </button>
@@ -124,7 +124,7 @@ export function Search() {
                     key={term}
                     type="button"
                     onClick={() => { setQuery(term); addToRecent(term); }}
-                    className="flex w-full min-h-9 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-text-secondary transition hover:bg-white/6"
+                    className="flex w-full min-h-9 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-text-secondary transition hover:bg-overlay-light"
                   >
                     <Clock className="h-3.5 w-3.5 shrink-0" />
                     {term}
@@ -142,7 +142,7 @@ export function Search() {
                   key={ticker}
                   type="button"
                   onClick={() => navigate(`/ticker/${ticker}`)}
-                  className="inline-flex min-h-9 items-center rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-sm font-medium text-text-primary transition hover:bg-white/8"
+                  className="inline-flex min-h-9 items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1.5 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                 >
                   ${ticker}
                 </button>

@@ -1,7 +1,9 @@
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
 import { useAlertSound } from '../hooks/useAlertSound.js';
+import { useTheme, type Theme } from '../hooks/useTheme.js';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -45,8 +47,15 @@ function serializeNotificationPreferences(preferences: NotificationPreferences):
   });
 }
 
+const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
+
 export function Settings() {
   const location = useLocation();
+  const { theme, setTheme } = useTheme();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
   const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
     ...getWebPushSupport(),
@@ -245,10 +254,10 @@ export function Settings() {
     backendRegistrationFailed,
   });
   const pushToneClassName = {
-    neutral: 'border-white/10 bg-white/5 text-text-primary',
-    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100',
-    warning: 'border-amber-300/20 bg-amber-300/10 text-amber-100',
-    danger: 'border-rose-300/20 bg-rose-300/10 text-rose-100',
+    neutral: 'border-overlay-medium bg-overlay-subtle text-text-primary',
+    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-800 dark:text-emerald-100',
+    warning: 'border-amber-300/20 bg-amber-300/10 text-amber-800 dark:text-amber-100',
+    danger: 'border-rose-300/20 bg-rose-300/10 text-rose-800 dark:text-rose-100',
   }[pushDetails.tone];
   const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
   const quietHoursEnabled =
@@ -256,7 +265,7 @@ export function Settings() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+      <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
           Settings
         </p>
@@ -267,6 +276,40 @@ export function Settings() {
           Keep your watchlist alerts understandable on the page and reachable when the app is backgrounded.
         </p>
       </div>
+
+      <CollapsiblePanel
+        id="appearance"
+        title="Appearance"
+        eyebrow="Theme"
+        description="Choose how Event Radar looks on this device."
+        defaultOpen
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium text-text-primary">Theme</p>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Select light, dark, or match your system preference.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTheme(value)}
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
+                  theme === value
+                    ? 'border-accent-default bg-accent-default/10 text-accent-default'
+                    : 'border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-overlay-medium'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CollapsiblePanel>
 
       <CollapsiblePanel
         id="push-alerts"
@@ -314,25 +357,25 @@ export function Settings() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+          <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
               Enable push in under a minute
             </p>
             <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
               <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
                   1
                 </span>
                 <span>Tap {pushDetails.enableLabel}.</span>
               </li>
               <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
                   2
                 </span>
                 <span>Allow browser notifications in the prompt.</span>
               </li>
               <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/8 text-[11px] font-semibold text-text-primary">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
                   3
                 </span>
                 <span>Return to your watchlist to keep alerts focused.</span>
@@ -347,7 +390,7 @@ export function Settings() {
                 void enableWebPush();
               }}
               disabled={!pushDetails.canEnable}
-              className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pushDetails.enableLabel}
             </button>
@@ -357,7 +400,7 @@ export function Settings() {
                 void disableWebPush();
               }}
               disabled={!pushDetails.canDisable}
-              className="inline-flex min-h-11 items-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pushDetails.disableLabel}
             </button>
@@ -366,13 +409,13 @@ export function Settings() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               to="/watchlist"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-accent-default"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
             >
               Review watchlist
             </Link>
             <Link
               to="/"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-white/6 focus:outline-none focus:ring-2 focus:ring-accent-default"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default"
             >
               Open live feed
             </Link>
@@ -396,24 +439,24 @@ export function Settings() {
                 Control when Event Radar can ping you and how much push volume you allow each day.
               </p>
             </div>
-            <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
               {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
             </div>
           </div>
 
           {notificationError ? (
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-800 dark:text-rose-100">
               {notificationError}
             </div>
           ) : null}
 
           {!notificationPreferences ? (
-            <div className="rounded-2xl border border-white/8 bg-bg-elevated/40 p-4 text-sm text-text-secondary">
+            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/40 p-4 text-sm text-text-secondary">
               Loading notification preferences…
             </div>
           ) : (
             <>
-              <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
                 <div>
                   <p className="text-sm font-medium text-text-primary">Quiet hours</p>
                   <p className="mt-2 text-sm leading-6 text-text-secondary">
@@ -428,7 +471,7 @@ export function Settings() {
                     type="checkbox"
                     checked={quietHoursEnabled}
                     onChange={(event) => toggleQuietHours(event.target.checked)}
-                    className="h-5 w-5 rounded border-white/15 bg-transparent text-accent-default focus:ring-accent-default"
+                    className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
                   />
                 </label>
 
@@ -444,7 +487,7 @@ export function Settings() {
                           ...current,
                           quietStart: event.target.value,
                         }))}
-                        className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
                       />
                     </label>
 
@@ -458,7 +501,7 @@ export function Settings() {
                           ...current,
                           quietEnd: event.target.value,
                         }))}
-                        className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
                       />
                     </label>
 
@@ -471,7 +514,7 @@ export function Settings() {
                           ...current,
                           timezone: event.target.value,
                         }))}
-                        className="min-h-11 w-full rounded-2xl border border-white/10 bg-[#111723] px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
                       >
                         {US_TIMEZONES.map((timezone) => (
                           <option key={timezone} value={timezone}>
@@ -484,7 +527,7 @@ export function Settings() {
                 ) : null}
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
                 <div>
                   <label className="block text-sm font-medium text-text-primary" htmlFor="daily-push-limit">
                     Daily push limit
@@ -501,7 +544,7 @@ export function Settings() {
                     ...current,
                     dailyPushCap: Number(event.target.value),
                   }))}
-                  className="min-h-11 w-full rounded-2xl border border-white/10 bg-[#111723] px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                  className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
                 >
                   <option value="5">5 alerts</option>
                   <option value="10">10 alerts</option>
@@ -511,7 +554,7 @@ export function Settings() {
                 </select>
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-white/8 bg-bg-elevated/50 p-4">
+              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
                 <div>
                   <p className="text-sm font-medium text-text-primary">Non-watchlist alerts</p>
                   <p className="mt-2 text-sm leading-6 text-text-secondary">
@@ -534,7 +577,7 @@ export function Settings() {
                       ...current,
                       pushNonWatchlist: event.target.checked,
                     }))}
-                    className="h-5 w-5 rounded border-white/15 bg-transparent text-accent-default focus:ring-accent-default"
+                    className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
                   />
                 </label>
               </div>
@@ -570,7 +613,7 @@ export function Settings() {
               type="checkbox"
               checked={preferences.enabled}
               onChange={(event) => setEnabled(event.target.checked)}
-              className="h-5 w-5 rounded border-white/15 bg-transparent text-accent-default focus:ring-accent-default"
+              className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
             />
           </label>
 
@@ -598,7 +641,7 @@ export function Settings() {
                 max="23"
                 value={preferences.quietHoursStart}
                 onChange={(event) => setQuietHours(Number(event.target.value), preferences.quietHoursEnd)}
-                className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
               />
             </label>
 
@@ -610,7 +653,7 @@ export function Settings() {
                 max="23"
                 value={preferences.quietHoursEnd}
                 onChange={(event) => setQuietHours(preferences.quietHoursStart, Number(event.target.value))}
-                className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
               />
             </label>
           </div>
@@ -618,7 +661,7 @@ export function Settings() {
       </CollapsiblePanel>
 
       {toastMessage ? (
-        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${saveState === 'error' ? 'border-rose-400/20 bg-[#240d0d] text-rose-100' : 'border-emerald-400/20 bg-[#0d241d] text-emerald-100'}`}>
+        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_var(--shadow-color)] ${saveState === 'error' ? 'border-rose-400/20 bg-rose-50 text-rose-800 dark:bg-[#240d0d] dark:text-rose-100' : 'border-emerald-400/20 bg-emerald-50 text-emerald-800 dark:bg-[#0d241d] dark:text-emerald-100'}`}>
           {toastMessage}
         </div>
       ) : null}

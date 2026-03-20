@@ -17,7 +17,7 @@ export function EventHeader({
   directionContextLine: string | null;
 }) {
   return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
       <div className="flex items-center gap-3">
         <SeverityBadge
           severity={data.severity}
@@ -42,7 +42,7 @@ export function EventHeader({
           size="md"
         />
         {data.enrichment?.action && (
-          <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium text-text-primary">
+          <span className="rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-medium text-text-primary">
             {data.enrichment.action}
           </span>
         )}

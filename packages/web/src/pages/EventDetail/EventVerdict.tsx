@@ -39,7 +39,7 @@ export function EventVerdict({
               </h2>
             </div>
             {data.scorecard?.notes.verdictWindow && (
-              <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
+              <div className="rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-text-primary">
                 {data.scorecard.notes.verdictWindow} window
               </div>
             )}
@@ -78,7 +78,7 @@ export function EventVerdict({
               </div>
 
               {data.scorecard.notes.items.length > 0 && (
-                <div className="mt-4 rounded-2xl border border-white/6 bg-bg-elevated/50 p-4">
+                <div className="mt-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
                     Verification notes
                   </h3>
@@ -121,7 +121,7 @@ export function EventVerdict({
           {data.provenance.length > 1 && (
             <div className="mt-4 space-y-3">
               {data.provenance.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-white/6 bg-bg-elevated/60 p-4">
+                <div key={item.id} className="rounded-2xl border border-overlay-medium bg-bg-elevated/60 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-text-primary">{item.source}</span>
                     <span className="font-mono text-xs text-text-secondary">
@@ -174,7 +174,7 @@ export function EventVerdict({
                 'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
                 feedback === 'up'
                   ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
-                  : 'border-white/10 text-text-primary hover:bg-white/6',
+                  : 'border-overlay-medium text-text-primary hover:bg-overlay-medium',
               )}
             >
               <ThumbsUp className="h-3.5 w-3.5" /> Useful
@@ -189,7 +189,7 @@ export function EventVerdict({
                 'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
                 feedback === 'down'
                   ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical'
-                  : 'border-white/10 text-text-primary hover:bg-white/6',
+                  : 'border-overlay-medium text-text-primary hover:bg-overlay-medium',
               )}
             >
               <ThumbsDown className="h-3.5 w-3.5" /> Not useful
@@ -204,7 +204,7 @@ export function EventVerdict({
                 'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
                 feedback === 'bad'
                   ? 'border-amber-400/40 bg-amber-400/10 text-amber-300'
-                  : 'border-white/10 text-text-primary hover:bg-white/6',
+                  : 'border-overlay-medium text-text-primary hover:bg-overlay-medium',
               )}
             >
               <Ban className="h-3.5 w-3.5" /> Bad data
@@ -284,7 +284,7 @@ function ProvenanceTimeline({ data }: { data: EventDetailData }) {
   if (steps.length === 0) return null;
 
   return (
-    <div className="relative ml-4 border-l-2 border-white/10 pl-6">
+    <div className="relative ml-4 border-l-2 border-overlay-medium pl-6">
       {steps.map((step, index) => (
         <div key={index} className="relative mb-5 last:mb-0">
           <div className="absolute -left-[31px] top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg-surface text-xs">
@@ -325,7 +325,7 @@ function Disclaimer() {
             Disclaimer
           </span>
         </div>
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-bg-elevated/70 text-text-secondary">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
           <ChevronDown
             className={cn('h-4 w-4 transition-transform', open ? 'rotate-180' : '')}
             aria-hidden="true"
