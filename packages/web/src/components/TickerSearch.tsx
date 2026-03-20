@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, Loader2, Plus, Search, X, TrendingUp, Clock } from 'lucide-react';
+import { Check, Loader2, Plus, Search, TrendingUp, Clock } from 'lucide-react';
 import { useTickerSearch } from '../hooks/useTickerSearch.js';
 import { useWatchlist } from '../hooks/useWatchlist.js';
 import { useAuth } from '../contexts/AuthContext.js';

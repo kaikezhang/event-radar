@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ChevronDown, RefreshCw, SlidersHorizontal, X, Plus } from 'lucide-react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../components/EmptyState.js';
 import { AlertCard } from '../components/AlertCard.js';
@@ -136,7 +136,6 @@ export function Feed() {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { items: watchlistItems, isLoading: isWatchlistLoading, isOnWatchlist, add, addAsync } = useWatchlist({ enabled: isAuthenticated });
   const hasWatchlist = watchlistItems.length > 0;
-  const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
