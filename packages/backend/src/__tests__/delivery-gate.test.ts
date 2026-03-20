@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ConfidenceLevel, LLMDirection, LLMEnrichment, RawEvent, Severity } from '@event-radar/shared';
+import type { LLMEnrichment, RawEvent } from '@event-radar/shared';
 import { DeliveryGate, type DeliveryGateInput } from '../pipeline/delivery-gate.js';
 
 /* ── helpers ─────────────────────────────────────────────────────── */

@@ -71,7 +71,7 @@ export class DeliveryGate {
   }
 
   evaluate(input: DeliveryGateInput): DeliveryGateResult {
-    const { event, enrichment, classificationConfidence, confidenceBucket, classifierDirection, classifierSeverity } = input;
+    const { event, enrichment, confidenceBucket, classifierDirection, classifierSeverity } = input;
 
     const enrichmentAvailable = enrichment !== null;
     const action = enrichment?.action ?? null;

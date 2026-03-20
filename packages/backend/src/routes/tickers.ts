@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
-import { tickerReference, events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 
 /** Escape SQL LIKE special characters so they are matched literally. */

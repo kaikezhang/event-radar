@@ -20,7 +20,8 @@ interface SecEdgarEntry {
 }
 
 // Major US exchanges — skip OTC and foreign listings
-const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'ARCA', 'BATS', 'CBOE']);
+// Major US exchanges — skip OTC and foreign listings (reserved for future filtering)
+// const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'ARCA', 'BATS', 'CBOE']);
 
 async function main() {
   console.log('[seed-tickers] Fetching ticker data from SEC EDGAR...');
