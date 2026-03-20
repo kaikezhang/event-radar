@@ -7,6 +7,7 @@ import { userPreferences } from '../db/schema.js';
 import { cleanTestDb, createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 
 const TEST_API_KEY = 'test-api-key';
+const AUTH_HEADERS = { 'x-api-key': TEST_API_KEY };
 
 describe('preferences routes', () => {
   let db: Database;
@@ -51,9 +52,7 @@ describe('preferences routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -82,10 +81,7 @@ describe('preferences routes', () => {
     const updateResponse = await ctx.server.inject({
       method: 'PUT',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-42',
-      },
+      headers: AUTH_HEADERS,
       payload: {
         quietStart: '22:30',
         quietEnd: '07:15',
@@ -107,10 +103,7 @@ describe('preferences routes', () => {
     const fetchResponse = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-42',
-      },
+      headers: AUTH_HEADERS,
     });
 
     expect(fetchResponse.statusCode).toBe(200);
@@ -127,10 +120,7 @@ describe('preferences routes', () => {
     await ctx.server.inject({
       method: 'PUT',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-7',
-      },
+      headers: AUTH_HEADERS,
       payload: {
         quietStart: '23:00',
         quietEnd: '08:00',
@@ -140,10 +130,7 @@ describe('preferences routes', () => {
     const response = await ctx.server.inject({
       method: 'PUT',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-        'x-user-id': 'user-7',
-      },
+      headers: AUTH_HEADERS,
       payload: {
         quietStart: null,
         quietEnd: null,
@@ -159,7 +146,7 @@ describe('preferences routes', () => {
     const [stored] = await db
       .select()
       .from(userPreferences)
-      .where(eq(userPreferences.userId, 'user-7'));
+      .where(eq(userPreferences.userId, 'default'));
 
     expect(stored?.quietStart).toBeNull();
     expect(stored?.quietEnd).toBeNull();
@@ -169,9 +156,7 @@ describe('preferences routes', () => {
     const response = await ctx.server.inject({
       method: 'PUT',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
+      headers: AUTH_HEADERS,
       payload: {
         quietStart: '23:00',
       },
@@ -187,9 +172,7 @@ describe('preferences routes', () => {
     const response = await ctx.server.inject({
       method: 'PUT',
       url: '/api/v1/preferences',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
+      headers: AUTH_HEADERS,
       payload: {
         timezone: 'Mars/Olympus',
       },

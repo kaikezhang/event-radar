@@ -8,7 +8,8 @@ import { storeEvent } from '../db/event-store.js';
 import { cleanTestDb, createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 
 const TEST_API_KEY = 'watchlist-feed-test-key';
-const TEST_USER_ID = 'test-user-watchlist';
+const DEFAULT_USER_ID = 'default';
+const AUTH_HEADERS = { 'x-api-key': TEST_API_KEY };
 
 let sharedDb: Database;
 let sharedClient: PGlite;
@@ -117,8 +118,8 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('filters feed to only watchlist tickers', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
+    await seedUser(DEFAULT_USER_ID);
+    await addWatchlistTicker(DEFAULT_USER_ID, 'TSLA');
 
     await seedDeliveredEvent({
       title: 'Tesla event',
@@ -136,7 +137,7 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -146,7 +147,7 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('returns empty when user has no watchlist items', async () => {
-    await seedUser(TEST_USER_ID);
+    await seedUser(DEFAULT_USER_ID);
 
     await seedDeliveredEvent({
       title: 'Some event',
@@ -158,7 +159,7 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -168,11 +169,9 @@ describe('GET /api/v1/feed?watchlist=true', () => {
   });
 
   it('matches events via enrichment.tickers[].symbol', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'MSFT');
+    await seedUser(DEFAULT_USER_ID);
+    await addWatchlistTicker(DEFAULT_USER_ID, 'MSFT');
 
-    // Seed an event whose pa.ticker and metadata.ticker are not MSFT,
-    // but enrichment tickers include MSFT
     const rawEvent = makeEvent({
       source: 'breaking-news',
       title: 'Broad tech news',
@@ -222,18 +221,17 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed?watchlist=true',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    // Should match via enrichment tickers even though pa.ticker is AAPL
     expect(body.events).toHaveLength(1);
   });
 
   it('returns all events when watchlist filter is not set', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
+    await seedUser(DEFAULT_USER_ID);
+    await addWatchlistTicker(DEFAULT_USER_ID, 'TSLA');
 
     await seedDeliveredEvent({
       title: 'Tesla event',
@@ -251,7 +249,7 @@ describe('GET /api/v1/feed?watchlist=true', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -274,11 +272,10 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
   });
 
   it('returns per-ticker summary for watchlist', async () => {
-    await seedUser(TEST_USER_ID);
-    await addWatchlistTicker(TEST_USER_ID, 'TSLA');
-    await addWatchlistTicker(TEST_USER_ID, 'NVDA');
+    await seedUser(DEFAULT_USER_ID);
+    await addWatchlistTicker(DEFAULT_USER_ID, 'TSLA');
+    await addWatchlistTicker(DEFAULT_USER_ID, 'NVDA');
 
-    // Seed recent events
     await seedDeliveredEvent({
       title: 'Tesla files 8-K',
       ticker: 'TSLA',
@@ -297,7 +294,7 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed/watchlist-summary',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -317,12 +314,12 @@ describe('GET /api/v1/feed/watchlist-summary', () => {
   });
 
   it('returns empty tickers array when no watchlist', async () => {
-    await seedUser(TEST_USER_ID);
+    await seedUser(DEFAULT_USER_ID);
 
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/feed/watchlist-summary',
-      headers: { 'x-user-id': TEST_USER_ID },
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
