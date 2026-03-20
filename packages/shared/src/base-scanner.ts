@@ -41,7 +41,12 @@ export abstract class BaseScanner implements Scanner {
   constructor(options: BaseScannerOptions) {
     this.name = options.name;
     this.source = options.source;
-    this.pollIntervalMs = options.pollIntervalMs;
+    // Allow env var override: SCANNER_INTERVAL_{SOURCE_UPPER} or SCANNER_INTERVAL_DEFAULT
+    const envKey = `SCANNER_INTERVAL_${options.source.replace(/-/g, '_').toUpperCase()}`;
+    const envVal = typeof process !== 'undefined'
+      ? (process.env[envKey] || process.env['SCANNER_INTERVAL_DEFAULT'])
+      : undefined;
+    this.pollIntervalMs = envVal ? parseInt(envVal, 10) : options.pollIntervalMs;
     this.eventBus = options.eventBus;
   }
 

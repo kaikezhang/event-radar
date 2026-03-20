@@ -4,7 +4,7 @@ import { render } from '@testing-library/react';
 import { BottomNav } from './BottomNav.js';
 
 describe('BottomNav', () => {
-  it('renders four primary tabs', () => {
+  it('renders five primary tabs', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <BottomNav />
@@ -13,6 +13,7 @@ describe('BottomNav', () => {
 
     expect(screen.getByRole('link', { name: /feed/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /watchlist/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /scorecard/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /search/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
   });
