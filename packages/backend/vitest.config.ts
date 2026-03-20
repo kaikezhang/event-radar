@@ -5,7 +5,7 @@ export default defineConfig({
     globals: true,
     hookTimeout: 10000,
     teardownTimeout: 5000,
-    // setupFiles disabled - persistence handled via process.env checks
+    setupFiles: ["./src/__tests__/helpers/vitest-setup.ts"],
     pool: 'forks',
     poolOptions: {
       forks: {

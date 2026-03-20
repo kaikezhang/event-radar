@@ -423,8 +423,8 @@ describe('HaltScanner', () => {
   });
 
   describe('app registration', () => {
-    it('wires HaltScanner behind HALT_SCANNER_ENABLED in app.ts', () => {
-      const appSource = readFileSync(join(__dirname, '..', 'app.ts'), 'utf-8');
+    it('wires HaltScanner behind HALT_SCANNER_ENABLED in scanner-registry-setup.ts', () => {
+      const appSource = readFileSync(join(__dirname, '..', 'scanner-registry-setup.ts'), 'utf-8');
 
       expect(appSource).toContain("process.env.HALT_SCANNER_ENABLED === 'true'");
       expect(appSource).toContain('new HaltScanner(eventBus)');

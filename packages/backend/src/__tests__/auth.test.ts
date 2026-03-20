@@ -417,6 +417,14 @@ describe('Auth endpoints', () => {
       expect(body.email).toBeNull();
     });
 
+
+
+
+
+
+
+
+
     it('returns 401 for invalid JWT', async () => {
       const res = await server.inject({
         method: 'GET',
