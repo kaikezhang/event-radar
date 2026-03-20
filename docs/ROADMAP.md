@@ -1,311 +1,111 @@
-# Roadmap
+# Event Radar — Unified Roadmap
 
-## Overview
+**Date:** 2026-03-20
+**Based on:** CC + Codex comprehensive analyses
 
-```
-Phase 0: Foundation         [4 weeks]    ← You are here
-Phase 1A: Pipeline Core     [3 weeks]
-Phase 1B: Political + AI    [3 weeks]
-Phase 1C: Newswires + Polish[2 weeks]
-Phase 2: Dashboard MVP      [4 weeks]
-Phase 3: Full Sources       [6 weeks]
-Phase 4: Intelligence       [4 weeks]
-Phase 5: Polish & Scale     [ongoing]
-```
+## Product Vision
 
-Total to usable MVP: ~14 weeks (Phase 0 through 2).
-Total to full vision: ~26 weeks.
+> Self-hosted, event-driven, AI-assisted alert intelligence with visible receipts.
 
-> **Design principle**: ship 5 scanners that work perfectly before adding 25 more that are flaky. The value isn't "30+ sources" — it's "every alert is trustworthy."
+不跟 Benzinga 比新闻速度，不跟 AlphaSense 比研究深度，不跟 Trade Ideas 比扫描器。
+我们的护城河是：**开源 + 可审计 pipeline + outcome tracking + 多源事件检测**。
 
 ---
 
-## Phase 0: Foundation 🏗️
-*Weeks 1-4 · Goal: one scanner, one alert channel, end-to-end proof*
+## Phase 1: Foundation Hardening (2 weeks)
 
-### Milestones
+可靠性优先，不加新功能。两份分析都强调这是最高 ROI。
 
-- [ ] **P0.1** — Project scaffold
-  - TypeScript monorepo (turborepo)
-  - Backend: Node.js + Fastify
-  - Shared types package (Event schema, Scanner interface)
-  - Docker Compose skeleton (app + PostgreSQL)
-  - CI/CD (GitHub Actions: lint + test + build)
+### Batch 1 — Architecture Cleanup (3-4 days)
+- [ ] **拆分 app.ts (1418行)** → `pipeline/index.ts`, `scanner-manager.ts`, `websocket-manager.ts`, `route-loader.ts`，app.ts 降到 ~200 行
+- [ ] **拆分 Feed.tsx (990行)** → `FeedFilters`, `FeedList`, `FeedCard` 等子组件
+- [ ] **拆分 EventDetail.tsx (1206行)** → `EventHeader`, `EventEnrichment`, `EventHistory`, `EventChart`
 
-- [ ] **P0.2** — Scanner plugin framework
-  - Base Scanner class with common interface (see [Architecture](ARCHITECTURE.md))
-  - Scanner registry (enable/disable via config)
-  - In-memory event bus behind a swappable interface (prep for Redis Streams later)
+### Batch 2 — Test & CI Stabilization (3-4 days)
+- [ ] **修 web 测试** — `useAlerts.test.tsx` (Maximum update depth), `matchMedia` mock, lightweight-charts jsdom 兼容
+- [ ] **重启 E2E 测试** — CI 加 Docker Compose，跑关键 pipeline 路径 E2E
+- [ ] **加 coverage 报告** — `@vitest/coverage-v8`，设 70% 最低门槛
+- [ ] **修 PGlite test timeout** — 根治 cleanup 问题而非 120s workaround
 
-- [ ] **P0.3** — First scanner: SEC EDGAR 8-K
-  - Python microservice wrapping [edgartools](REFERENCES.md#edgartools) (FastAPI)
-  - RSS polling loop (30s interval)
-  - Emit events in unified schema
-  - Input validation + dedup (hash-based)
-
-- [ ] **P0.4** — Delivery: Bark + Discord
-  - Bark push with severity-based levels (critical/timeSensitive/active)
-  - Discord webhook with rich embeds
-  - **End-to-end proof**: SEC files 8-K → Bark push on iPhone in <60s
-
-- [ ] **P0.5** — Testing foundation
-  - Unit tests for scanner + parser + delivery
-  - Mock SEC data for deterministic testing
-  - >80% coverage for scanner and classification code
-
-### Exit Criteria
-✅ SEC 8-K scanner running, detecting real filings, pushing to Bark (iOS) + Discord. Tests passing in CI.
+### Batch 3 — Contract & Doc Cleanup (2-3 days)
+- [ ] **修文档漂移** — AGENTS.md, ARCHITECTURE.md, FRONTEND.md 还在说 Next.js，改成 Vite+React 实际情况
+- [ ] **统一 source naming** — pipeline 各阶段 source identifier 不一致，会导致 gatekeeper 策略错误
+- [ ] **统一前后端类型** — web 包的类型应复用 `@event-radar/shared`，不要重复定义
 
 ---
 
-## Phase 1A: Pipeline Core 🔧
-*Weeks 5-7 · Goal: storage + more Tier 1 scanners + rule-based classification*
+## Phase 2: Pipeline Durability (2-3 weeks)
 
-### Milestones
+单点故障消除。两份分析一致认为这是最大结构性风险。
 
-- [ ] **P1A.1** — Storage layer
-  - PostgreSQL schema: events, classifications, outcomes
-  - Query API: by ticker, type, severity, date range
-  - Retention policy (archive after 6 months)
+### Batch 4 — Redis EventBus (1 week)
+- [ ] **引入 Redis Streams 替代内存 EventBus** — 崩溃不丢事件，支持重播
+- [ ] **持久化 dedup 窗口** — 当前内存滑动窗口 OOM 会丢状态
+- [ ] **story-group 接入 live pipeline** — 或者删掉这个 claim
 
-- [ ] **P1A.2** — Rule-based classification engine (Stage 1)
-  - Keyword matching for known patterns
-  - 8-K item number mapping (2.05 → restructuring)
-  - Severity and direction rules
-  - Confidence scoring
+### Batch 5 — Auth & Security Hardening (1 week)
+- [ ] **默认 AUTH_REQUIRED=true** — production 路径不能 open
+- [ ] **多用户隔离** — 停止把未认证请求塌缩到 `default` 用户
+- [ ] **删 WebSocket query-string API key** — 安全隐患
+- [ ] **加 CSP headers** — XSS 防护
+- [ ] **加 WebSocket rate limiting** — 防滥用
 
-- [ ] **P1A.3** — Additional Tier 1 scanners
-  - SEC Form 4 (insider trading) — via edgartools microservice
-  - Fed (FOMC statements, speeches) — RSS
-  - BLS economic data (CPI, NFP, PPI) — calendar-driven
-
-- [ ] **P1A.4** — Observability
-  - Prometheus metrics (scanner polls, events detected, errors, latency)
-  - Grafana dashboard (scanner health, event volume, classification distribution)
-  - Health check endpoint (`/health`)
-
-- [ ] **P1A.5** — Integration tests
-  - Full pipeline tests: mock source → event → classification → storage → delivery
-  - Delivery retry with exponential backoff (3 attempts)
-  - Dead letter queue for failed deliveries
-
-### Exit Criteria
-✅ 4 scanners (8-K, Form 4, Fed, BLS). Rule-based classification. Events stored in PostgreSQL. Observability dashboard live.
+### Batch 6 — Operational Improvements (3-4 days)
+- [ ] **Scanner interval 配置化** — 从硬编码移到 env vars
+- [ ] **Dark mode** — Tailwind `dark:` 变体 + 系统偏好检测
+- [ ] **Scorecard 加入主导航** — 当前隐藏太深
 
 ---
 
-## Phase 1B: Political + AI 🤖
-*Weeks 8-10 · Goal: Tier 2 sources + LLM classification*
+## Phase 3: Product Polish (3-4 weeks)
 
-### Milestones
+从"能用"到"好用"。
 
-- [ ] **P1B.1** — LLM classification engine (Stage 2)
-  - Event type, severity, direction with reasoning
-  - Support API models (Claude/GPT) + optional local (Llama/Mistral)
-  - FinBERT/SEC-BERT for fast financial sentiment (supplement LLM)
-  - Backpressure: concurrency limit on LLM requests, priority queue (Tier 1 before Tier 4)
+### Batch 7 — Desktop & UX (1-2 weeks)
+- [ ] **桌面双栏布局** — feed + detail 并排
+- [ ] **键盘快捷键** — j/k 导航、s 收藏、f 过滤
+- [ ] **Onboarding 优化** — 围绕 watchlist + push + trust 说明
+- [ ] **Feed/Push 分级 UI** — 清晰区分"仅 feed"和"推送"信号
 
-- [ ] **P1B.2** — Tier 2: Political figures
-  - Trump Truth Social scanner (Crawlee-based scraping, 15s polling)
-  - Fallback: 3rd-party aggregator if direct scraping breaks
-  - Elon Musk X scanner (scraping for MVP, evaluate API later)
-  - AI classification for political posts (tariff/trade/crypto/company-specific)
-
-- [ ] **P1B.3** — Event deduplication
-  - Cross-source dedup (same event from multiple sources → merge)
-  - Content similarity matching (ticker + time window + keyword overlap)
-  - "Developing story" grouping for related events within 30min window
-
-- [ ] **P1B.4** — Delivery: Telegram + webhook
-  - Telegram bot (free, rich formatting, large trading community)
-  - Outbound webhook (HTTP POST event JSON to user-configured URL)
-  - Per-ticker alert filtering (basic watchlist)
-  - Cross-channel dedup (one event = max one push per channel)
-
-### Exit Criteria
-✅ 6+ scanners including Trump/Musk. AI classifying events. Telegram + webhook delivery. Deduplication working.
+### Batch 8 — Historical & Intelligence (2 weeks)
+- [ ] **历史事件回填** — 从 SEC/政府源回填 2-3 年数据，pattern matching 质量依赖历史深度
+- [ ] **历史浏览器** — 按 sector/event type 浏览历史事件
+- [ ] **Audio Squawk** — TTS 朗读 critical/high 事件（browser SpeechSynthesis 或 MiniMax）
+- [ ] **Source 命中率可视化** — 把 scorecard 做成核心差异化功能
 
 ---
 
-## Phase 1C: Newswires + Polish 📰
-*Weeks 11-12 · Goal: Tier 3 + classification refinement*
+## Phase 4: Scale & Monetization (6-12 months)
 
-### Milestones
+### 架构演进
+- [ ] **分离 runtime 角色** — scanner workers / pipeline workers / API server / scheduled jobs
+- [ ] **PostgreSQL read replicas** + connection pooling
+- [ ] **Custom ML classifier** — 用积累的 event+outcome 数据训练，替代 GPT-4o-mini
+- [ ] **Learn-to-rank alert quality** — 从 outcome 和 user feedback 学习排序
 
-- [ ] **P1C.1** — Tier 3: Corporate newswires
-  - PR Newswire RSS scanner
-  - BusinessWire RSS scanner
-  - GlobeNewswire RSS scanner
-
-- [ ] **P1C.2** — Classification refinement
-  - Tune rule-based and LLM classifiers based on real data
-  - Add confidence UX: "unconfirmed" badge for low-confidence events
-  - Scraping reliability monitoring + auto-alert on scanner failure
-
-- [ ] **P1C.3** — REST API v1
-  - GET /events (filter by ticker, type, severity, date range)
-  - GET /events/:id (full event detail)
-  - GET /health (system status)
-  - API key authentication
-
-### Exit Criteria
-✅ 9+ scanners across Tier 1-3. REST API live. Classification accuracy tracking begun.
+### 产品扩展
+- [ ] **Hosted SaaS** — Freemium: Free(延迟5分钟) / Pro($29/月) / Trader($79/月)
+- [ ] **RBAC** — admin/analyst/viewer 角色
+- [ ] **Enterprise API** — REST + WebSocket + webhook + 自定义过滤 DSL
+- [ ] **国际市场** — EU(ESMA/ECB), UK(FCA/BoE), Asia(HKEX/TSE)
+- [ ] **Portfolio integration** — 对接 Alpaca/IB，只推送影响持仓的事件
 
 ---
 
-## Phase 2: Dashboard MVP 🖥️
-*Weeks 13-16 · Goal: usable web dashboard with live event feed*
+## 定价策略（SaaS 阶段）
 
-### Milestones
+| Tier | 价格 | 特性 |
+|------|------|------|
+| Free | $0 | Feed(5分钟延迟), 3 watchlist, web only |
+| Pro | $29/月 | 实时 feed, 无限 watchlist, push(20/天), API(100 req/hr) |
+| Trader | $79/月 | + Audio squawk, API(1000 req/hr), 自定义 alert DSL |
+| Enterprise | Custom | 独立实例, SLA, WebSocket firehose, 自定义 scanner |
 
-- [ ] **P2.1** — Frontend scaffold
-  - Next.js 15 project with App Router
-  - shadcn/ui + Tailwind (dark + light theme)
-  - react-grid-layout for draggable panels
-  - Authentication (basic auth / API key)
-
-- [ ] **P2.2** — Live Event Feed
-  - WebSocket connection to backend
-  - Virtual scrolling list (`@tanstack/virtual` or `react-virtuoso`)
-  - Event cards (severity color, source icon, ticker, headline, direction, confidence)
-  - Filter by tier, severity, type, ticker
-  - Saved filter presets ("My Watchlist", "High Conviction", "Full Firehose")
-  - Sound alerts (configurable per severity, volume, quiet hours)
-
-- [ ] **P2.3** — Event Detail panel
-  - Full classification with AI reasoning + confidence score
-  - Source link to original filing/post
-  - Historical similar events with outcomes
-  - "Copy Event JSON" + "Export CSV" buttons
-
-- [ ] **P2.4** — Chart panel
-  - TradingView Lightweight Charts (candlestick)
-  - Event markers overlay (green/red triangles)
-  - Click marker → jump to event detail
-
-- [ ] **P2.5** — System Health bar + Security
-  - Per-scanner status indicators
-  - Embedded Grafana link
-  - CSP headers, HTTPS, input sanitization
-  - Secrets in env vars (not config files)
-
-- [ ] **P2.6** — Deployment + E2E tests
-  - Docker Compose: backend + frontend + PostgreSQL + prometheus + grafana + bark-server
-  - Cloudflare Tunnel for remote access
-  - E2E tests for dashboard (Playwright)
-
-### Exit Criteria
-✅ Web dashboard with live events, charts, health monitoring. Saved filters + export. Accessible remotely with auth. E2E tests passing.
+低于 Benzinga Pro($37-177), Unusual Whales($48), The Fly($45-75)。
+自托管永远免费，保持开源信誉。
 
 ---
 
-## Phase 3: Full Source Coverage 📡
-*Weeks 17-22 · Goal: all 6 tiers operational*
+## 立即开始: Phase 1 Batch 1
 
-### Milestones
-
-- [ ] **P3.1** — Tier 4: Social media
-  - X/Twitter $TICKER mention volume tracker (anomaly detection)
-  - Reddit WSB scanner (hot posts, unusual mentions)
-  - StockTwits sentiment tracker
-
-- [ ] **P3.2** — Tier 5: Macro & Geopolitical
-  - Economic calendar integration
-  - CME FedWatch rate probability tracker
-  - Reuters/AP breaking news RSS
-  - OPEC decisions
-
-- [ ] **P3.3** — Tier 6: Smart money
-  - Unusual options activity scanner
-  - Congress trades (STOCK Act disclosures)
-  - Short interest changes
-  - Dark pool prints
-
-- [ ] **P3.4** — Additional Tier 1
-  - FDA (PDUFA dates, approvals)
-  - White House executive orders (Federal Register API)
-  - DOJ/FTC antitrust actions
-  - WARN Act mass layoff notices
-  - Bankruptcy filings (PACER)
-
-- [ ] **P3.5** — Analyst ratings + earnings
-  - Upgrade/downgrade tracker
-  - Price target changes
-  - Earnings call transcript monitoring (real-time)
-
-- [ ] **P3.6** — Scanner Plugin SDK
-  - `create-scanner` CLI template generator
-  - Plugin development guide + typed interface
-  - Example community scanner
-
-### Exit Criteria
-✅ 25+ scanners across all 6 tiers. Scanner Plugin SDK documented. Full source coverage as described in [Sources](SOURCES.md).
-
----
-
-## Phase 4: Intelligence Layer 🧠
-*Weeks 23-26 · Goal: correlation engine + backtesting + accuracy tracking*
-
-### Milestones
-
-- [ ] **P4.1** — Multi-signal correlation engine
-  - Cross-source event matching (ticker + time window + theme)
-  - Confidence boosting for multi-source confirmation
-  - Auto-upgrade severity when correlation detected
-
-- [ ] **P4.2** — Backtesting framework
-  - Historical event database (backfill from SEC, news archives)
-  - Outcome tracking: price at T+1h, T+1d, T+1w, T+1m
-  - Strategy evaluation: win rate by event type
-
-- [ ] **P4.3** — Accuracy tracking & self-improvement
-  - Classification accuracy over time
-  - Direction signal accuracy
-  - Feedback loop: adjust classification based on outcomes
-
-- [ ] **P4.4** — Smart alerts & rules engine
-  - Custom rules: `IF source=trump AND keyword=tariff AND severity>=HIGH THEN critical`
-  - Alert budgeting (max N pushes/hour to prevent fatigue)
-  - Progressive severity (escalate only if corroborated)
-
-- [ ] **P4.5** — Advanced dashboard
-  - Historical event explorer
-  - Sector heatmap
-  - Event impact chart
-  - Multi-window support (BroadcastChannel API for detached panels)
-
-### Exit Criteria
-✅ Correlation engine live. Backtesting data proving strategy edges. Custom alert rules working.
-
----
-
-## Phase 5: Polish & Scale ✨
-*Ongoing · Goal: production-grade, community-ready*
-
-- [ ] Performance: load testing, graceful degradation, auto-recovery
-- [ ] PWA: installable, responsive, mobile-optimized
-- [ ] Community: scanner marketplace, contributing guidelines, co-maintainer recruitment
-- [ ] Multi-user: per-user watchlists + alert config
-- [ ] Email digest: daily/weekly summary at market close
-- [ ] Launch: documentation, video, Product Hunt, blog post
-
----
-
-## Key Risks
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| **Truth Social scraping breaks** | Lose highest-impact source | 3rd-party aggregator as primary, direct scraping as fallback; legal ToS review |
-| **X API costs $200+/mo** | Budget constraint | Scrape for MVP; evaluate API ROI after launch |
-| **SEC rate limits (10 req/s)** | Slower polling | RSS feed (single request for many filings) |
-| **AI classification latency** | Delays alerts | Rule-based Stage 1 for instant alerts; LLM runs async |
-| **Alert fatigue** | Users disable notifications | Alert budgeting, progressive severity, per-ticker filtering |
-| **Legal liability for scraping** | C&D letters or lawsuits | ToS review per source; always have non-scraping fallback |
-| **Data quality / false signals** | User loses trust or money | Validation layer, confidence thresholds, "unconfirmed" badge |
-| **Single maintainer bus factor** | Project dies | Document decisions, write contributor guides early, recruit co-maintainers |
-| **Python/TypeScript boundary** | Deployment complexity | Clean microservice boundary; consider all-Python backend if friction is high |
-
----
-
-*See [Architecture](ARCHITECTURE.md) for technical design.*
-*See [References](REFERENCES.md) for projects we build on.*
+**任务**: 拆分 app.ts — 项目最大的技术债
