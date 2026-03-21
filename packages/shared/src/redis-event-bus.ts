@@ -11,8 +11,6 @@ const RAW_GROUP_NAME = 'pipeline-workers';
 const CONSUMER_NAME = `worker-${process.pid}`;
 const BLOCK_MS = 1000;
 
-const instanceId = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-
 export interface RedisEventBusOptions {
   redisUrl?: string;
   maxLen?: number;
@@ -27,6 +25,7 @@ interface StreamLoop {
 export class RedisEventBus implements EventBus {
   private readonly redisUrl: string;
   private readonly maxLen: number;
+  private readonly instanceId: string;
   private client: Redis | null = null;
   private readClient: Redis | null = null;
   private handlers: Handler[] = [];
@@ -37,6 +36,7 @@ export class RedisEventBus implements EventBus {
   constructor(redisUrl = 'redis://localhost:6379', options?: { maxLen?: number }) {
     this.redisUrl = redisUrl;
     this.maxLen = options?.maxLen ?? Number(process.env.REDIS_STREAM_MAXLEN || '10000');
+    this.instanceId = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   private async getClient(): Promise<Redis> {
@@ -87,7 +87,7 @@ export class RedisEventBus implements EventBus {
     if (!handlers) {
       handlers = [];
       this.topicHandlers.set(topic, handlers);
-      const topicGroupName = `topic-${instanceId}`;
+      const topicGroupName = `topic-${this.instanceId}`;
       this.startReadLoop(streamKey, handlers, '[RedisEventBus] Unhandled error in topic subscriber:', false, topicGroupName);
     }
     handlers.push(handler);
@@ -108,6 +108,7 @@ export class RedisEventBus implements EventBus {
     const loop = this.streamLoops.get(streamKey);
     if (loop) {
       loop.running = false;
+      this.streamLoops.delete(streamKey);
     }
   }
 

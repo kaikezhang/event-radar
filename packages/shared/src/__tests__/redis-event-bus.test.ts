@@ -429,6 +429,81 @@ describe('RedisEventBus', () => {
     });
   });
 
+  describe('per-instance topic groups', () => {
+    it('should give each RedisEventBus instance its own topic consumer group', async () => {
+      const busA = new RedisEventBus('redis://localhost:6379');
+      const busB = new RedisEventBus('redis://localhost:6379');
+
+      busA.subscribeTopic('alerts', () => {});
+      await new Promise((r) => setTimeout(r, 100));
+      const readClientA = lastMock();
+      const groupA = readClientA.xgroupCalls[0][2] as string;
+
+      busB.subscribeTopic('alerts', () => {});
+      await new Promise((r) => setTimeout(r, 100));
+      const readClientB = lastMock();
+      const groupB = readClientB.xgroupCalls[0][2] as string;
+
+      expect(groupA).toMatch(/^topic-/);
+      expect(groupB).toMatch(/^topic-/);
+      expect(groupA).not.toBe(groupB);
+
+      await busA.shutdown();
+      await busB.shutdown();
+    });
+  });
+
+  describe('re-subscribe after unsubscribe', () => {
+    it('should restart the read loop after all handlers unsubscribe and a new one subscribes', async () => {
+      const received: unknown[] = [];
+
+      // Subscribe and then unsubscribe
+      const unsub = bus.subscribe((e) => { received.push(e); });
+      await new Promise((r) => setTimeout(r, 100));
+      unsub();
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Re-subscribe — this must start a new read loop
+      bus.subscribe((e) => { received.push(e); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+      const event = makeEvent();
+      readClient.pendingMessages.push([
+        ['event-radar:events', [
+          ['re-sub-1', ['data', JSON.stringify(event)]],
+        ]],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 200));
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ id: event.id });
+    });
+
+    it('should restart topic read loop after unsubscribe and re-subscribe', async () => {
+      const received: unknown[] = [];
+
+      const unsub = bus.subscribeTopic('alerts', (p) => { received.push(p); });
+      await new Promise((r) => setTimeout(r, 100));
+      unsub();
+      await new Promise((r) => setTimeout(r, 100));
+
+      bus.subscribeTopic('alerts', (p) => { received.push(p); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+      readClient.pendingMessages.push([
+        ['event-radar:topic:alerts', [
+          ['re-topic-1', ['data', JSON.stringify({ restarted: true })]],
+        ]],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 200));
+      expect(received).toHaveLength(1);
+      expect(received[0]).toEqual({ restarted: true });
+    });
+  });
+
   describe('metrics', () => {
     it('should have zero counts initially', () => {
       expect(bus.publishedCount).toBe(0);
