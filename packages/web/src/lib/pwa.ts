@@ -32,7 +32,8 @@ export function canRegisterServiceWorker(options: {
   isProduction: boolean;
   navigator?: NavigatorLike;
 }): boolean {
-  return Boolean(options.isProduction && options.navigator?.serviceWorker);
+  // Register in both dev and prod so push notifications work during development
+  return Boolean(options.navigator?.serviceWorker);
 }
 
 export function registerPwaServiceWorker({

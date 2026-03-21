@@ -349,31 +349,72 @@ export function Settings() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              Enable push in under a minute
-            </p>
-            <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-              <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
-                  1
-                </span>
-                <span>Tap {pushDetails.enableLabel}.</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
-                  2
-                </span>
-                <span>Allow browser notifications in the prompt.</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
-                  3
-                </span>
-                <span>Return to your watchlist to keep alerts focused.</span>
-              </li>
-            </ol>
-          </div>
+          {pushState.permission === 'denied' ? (
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 text-xl" aria-hidden="true">🔒</span>
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">
+                    Browser notifications are blocked for this site
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    You previously denied notification permissions. To re-enable push alerts:
+                  </p>
+                  <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+                    <li className="flex gap-3">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
+                        1
+                      </span>
+                      <span>Click the <strong className="text-text-primary">lock</strong> or <strong className="text-text-primary">info icon</strong> in the address bar</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
+                        2
+                      </span>
+                      <span>Find <strong className="text-text-primary">Notifications</strong> → change to <strong className="text-text-primary">Allow</strong></span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
+                        3
+                      </span>
+                      <span><strong className="text-text-primary">Refresh the page</strong> and return here to enable push</span>
+                    </li>
+                  </ol>
+                  <div className="mt-4 rounded-xl border border-overlay-medium bg-bg-surface/50 p-3">
+                    <p className="text-xs text-text-tertiary">
+                      Or get alerts via email instead <span className="italic">(coming soon)</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                Enable push in under a minute
+              </p>
+              <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+                <li className="flex gap-3">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                    1
+                  </span>
+                  <span>Tap {pushDetails.enableLabel}.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                    2
+                  </span>
+                  <span>Allow browser notifications in the prompt.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                    3
+                  </span>
+                  <span>Return to your watchlist to keep alerts focused.</span>
+                </li>
+              </ol>
+            </div>
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button

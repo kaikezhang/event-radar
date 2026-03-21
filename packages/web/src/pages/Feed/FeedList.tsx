@@ -5,6 +5,7 @@ import { EmptyState } from '../../components/EmptyState.js';
 import { PillBanner } from '../../components/PillBanner.js';
 import { SkeletonCard } from '../../components/SkeletonCard.js';
 import { cn } from '../../lib/utils.js';
+import { DailyBriefing } from '../../components/DailyBriefing.js';
 import type { AlertSummary, FilterPreset, ScorecardSummary } from '../../types/index.js';
 import { FeedCard } from './FeedCard.js';
 import { FeedFilters } from './FeedFilters.js';
@@ -215,6 +216,10 @@ export function FeedList({
       </div>
 
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
+
+      {!isInitialLoading && !error && filteredAlerts.length > 0 && (
+        <DailyBriefing alerts={filteredAlerts} />
+      )}
 
       {showWatchlistOnboarding ? (
         <EmptyState

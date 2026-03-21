@@ -2,13 +2,13 @@ import { describe, expect, test, vi } from 'vitest';
 import { canRegisterServiceWorker, registerPwaServiceWorker } from './pwa.js';
 
 describe('canRegisterServiceWorker', () => {
-  test('returns false outside production', () => {
+  test('returns true outside production when service workers are supported', () => {
     expect(
       canRegisterServiceWorker({
         isProduction: false,
         navigator: { serviceWorker: { register: vi.fn() } },
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test('returns false when navigator is unavailable', () => {
@@ -42,7 +42,7 @@ describe('registerPwaServiceWorker', () => {
     expect(addEventListener).toHaveBeenCalledWith('load', expect.any(Function), { once: true });
   });
 
-  test('does not add a load listener outside production', () => {
+  test('adds a load listener outside production when service workers are supported', () => {
     const addEventListener = vi.fn();
 
     registerPwaServiceWorker({
@@ -51,7 +51,7 @@ describe('registerPwaServiceWorker', () => {
       window: { addEventListener },
     });
 
-    expect(addEventListener).not.toHaveBeenCalled();
+    expect(addEventListener).toHaveBeenCalledWith('load', expect.any(Function), { once: true });
   });
 
   test('does not add a load listener when service workers are unsupported', () => {
