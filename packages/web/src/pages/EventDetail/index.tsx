@@ -10,6 +10,7 @@ import { EventHeader } from './EventHeader.js';
 import { EventHistory } from './EventHistory.js';
 import { EventMarketData } from './EventMarketData.js';
 import { EventVerdict } from './EventVerdict.js';
+import { WhatHappenedNext } from './WhatHappenedNext.js';
 import { getDirectionContextLine, getPrimaryConfidence, getPrimaryDirection } from './utils.js';
 
 type TabId = 'verdict' | 'evidence' | 'trust';
@@ -156,6 +157,9 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 enrichment={data.enrichment}
                 direction={direction}
               />
+              {data.outcome && (
+                <WhatHappenedNext outcome={data.outcome} direction={direction} />
+              )}
               <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 lg:hidden">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
                   Quick actions

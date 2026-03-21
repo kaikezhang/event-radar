@@ -3,6 +3,7 @@ import type {
   ChartRange,
   EnrichmentTicker,
   EventMarketData,
+  EventOutcome,
   EventScorecard,
   EventDetailData,
   HistoricalContext,
@@ -589,6 +590,30 @@ export async function getEventScorecard(id: string): Promise<EventScorecard | nu
   }
 }
 
+export async function getEventOutcome(eventId: string): Promise<EventOutcome | null> {
+  try {
+    const data = await apiFetch(`/v1/outcomes/${eventId}`);
+    if (!data) return null;
+    return {
+      eventId: (data.eventId as string) ?? (data.event_id as string) ?? eventId,
+      ticker: (data.ticker as string) ?? '',
+      eventTime: (data.eventTime as string) ?? (data.event_time as string) ?? '',
+      eventPrice: data.eventPrice != null ? Number(data.eventPrice ?? data.event_price) : null,
+      price1d: data.price1d != null ? Number(data.price1d ?? data.price_1d) : null,
+      priceT5: data.priceT5 != null ? Number(data.priceT5 ?? data.price_t5) : null,
+      priceT20: data.priceT20 != null ? Number(data.priceT20 ?? data.price_t20) : null,
+      change1d: data.change1d != null ? Number(data.change1d ?? data.change_1d) : null,
+      changeT5: data.changeT5 != null ? Number(data.changeT5 ?? data.change_t5) : null,
+      changeT20: data.changeT20 != null ? Number(data.changeT20 ?? data.change_t20) : null,
+    };
+  } catch (err) {
+    // 404 = no outcome data yet (normal) — return null silently
+    if (err instanceof Error && err.message.includes('404')) return null;
+    // Other errors (network, 500, etc.) — re-throw so callers can handle
+    throw err;
+  }
+}
+
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
     const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20`);
@@ -901,6 +926,13 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
     sourceMetadata: (event.sourceMetadata as Record<string, unknown>) ?? undefined,
     pushed: mapPushedState(event, metadata, deliveryChannels),
     deliveryChannels,
+    eventPrice: typeof event.eventPrice === 'number' ? event.eventPrice : null,
+    change1d: typeof event.change1d === 'number' ? event.change1d : null,
+    change5d: typeof event.change5d === 'number' ? event.change5d : null,
+    change20d: typeof event.change20d === 'number' ? event.change20d : null,
+    price1d: typeof event.price1d === 'number' ? event.price1d : null,
+    price5d: typeof event.price5d === 'number' ? event.price5d : null,
+    price20d: typeof event.price20d === 'number' ? event.price20d : null,
   };
 }
 

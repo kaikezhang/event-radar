@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getEventDetail, getEventScorecard } from '../lib/api.js';
+import { getEventDetail, getEventOutcome, getEventScorecard } from '../lib/api.js';
 
 export function useEventDetail(id: string | undefined) {
   return useQuery({
@@ -9,9 +9,10 @@ export function useEventDetail(id: string | undefined) {
         return null;
       }
 
-      const [detail, scorecard] = await Promise.all([
+      const [detail, scorecard, outcome] = await Promise.all([
         getEventDetail(id),
         getEventScorecard(id),
+        getEventOutcome(id).catch(() => null),
       ]);
 
       if (!detail) {
@@ -21,6 +22,7 @@ export function useEventDetail(id: string | undefined) {
       return {
         ...detail,
         scorecard,
+        outcome,
       };
     },
     enabled: Boolean(id),
