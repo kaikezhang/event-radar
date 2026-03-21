@@ -111,18 +111,14 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
   const handleInputChange = (value: string) => {
     if (searchTab === 'tickers') {
       setQuery(value.toUpperCase());
-    } else {
-      setEventQuery(value);
-    }
-    // Auto-switch tab based on query shape
-    const inferred = inferSearchTab(value);
-    if (inferred !== searchTab && value.trim().length > 0) {
-      setSearchTab(inferred);
-      if (inferred === 'tickers') {
-        setQuery(value.toUpperCase());
-      } else {
+      // Auto-switch from tickers→events if query looks like natural language
+      const inferred = inferSearchTab(value);
+      if (inferred === 'events' && value.trim().length > 0) {
+        setSearchTab('events');
         setEventQuery(value);
       }
+    } else {
+      setEventQuery(value);
     }
   };
 

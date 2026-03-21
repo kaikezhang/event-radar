@@ -30,7 +30,7 @@ export function FeedHeader({
   const connectionStatus = useConnectionStatus();
 
   return (
-    <div className="flex items-center gap-2 py-1">
+    <div className="flex flex-wrap items-center gap-2 py-1">
       <FeedTabs
         activeTab={activeTab}
         onTabChange={onTabChange}
