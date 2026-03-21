@@ -18,6 +18,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     mutationFn: (ticker: string) => addToWatchlist(ticker),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
     },
   });
 
@@ -25,6 +26,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     mutationFn: (ticker: string) => removeFromWatchlist(ticker),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
     },
   });
 
@@ -33,6 +35,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
       updateWatchlistItem(ticker, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
     },
   });
 
@@ -41,6 +44,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
       bulkAddWatchlist(tickers),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
     },
   });
 

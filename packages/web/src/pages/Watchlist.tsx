@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpRight,
   Bell,
@@ -44,7 +45,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useWatchlist, useWatchlistSummary } from '../hooks/useWatchlist.js';
 import { useWatchlistSections } from '../hooks/useWatchlistSections.js';
 import type { WatchlistItem, WatchlistSection } from '../types/index.js';
-import type { WatchlistTickerSummary } from '../lib/api.js';
+import { getFeed, type WatchlistTickerSummary } from '../lib/api.js';
 
 const PUSH_SETTINGS_PATH = '/settings?from=watchlist#push-alerts';
 
@@ -618,6 +619,37 @@ export function Watchlist() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { items, isLoading, remove, updateItem } = useWatchlist();
   const { summary } = useWatchlistSummary();
+  const sortedTickers = useMemo(
+    () => items.map((i) => i.ticker).sort(),
+    [items],
+  );
+  const { data: watchlistFeed } = useQuery({
+    queryKey: ['watchlist-feed-stats', ...sortedTickers],
+    queryFn: () => getFeed(50, { watchlist: true }),
+    staleTime: 300_000,
+    enabled: isAuthenticated && sortedTickers.length > 0,
+  });
+  const weeklyStats = useMemo(() => {
+    if (!watchlistFeed?.alerts.length) return null;
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const weekAlerts = watchlistFeed.alerts.filter(
+      (a) => new Date(a.time).getTime() >= oneWeekAgo,
+    );
+    const withOutcome = weekAlerts.filter(
+      (a) => a.direction && a.direction !== 'neutral' && a.change5d != null,
+    );
+    const correct = withOutcome.filter((a) => {
+      const isBearish = a.direction?.toLowerCase() === 'bearish';
+      const priceDown = (a.change5d ?? 0) < 0;
+      return isBearish ? priceDown : !priceDown;
+    }).length;
+    return {
+      total: weekAlerts.length,
+      withOutcome: withOutcome.length,
+      correct,
+      pct: withOutcome.length > 0 ? Math.round((correct / withOutcome.length) * 100) : null,
+    };
+  }, [watchlistFeed]);
   const {
     sections,
     isLoading: sectionsLoading,
@@ -780,6 +812,12 @@ export function Watchlist() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-default">Watchlist</p>
             <h1 className="mb-1 text-[20px] font-semibold leading-7 text-text-primary">{isEmpty ? 'Start with a watchlist' : 'Your radar list'}</h1>
             {isEmpty ? (<p className="mt-2 text-sm leading-6 text-text-secondary">Event Radar works best when you follow a small set of names. Add your first ticker so high-confidence alerts stay focused and useful.</p>) : (<p className="text-sm text-text-secondary">{items.length} ticker{items.length !== 1 ? 's' : ''} tracked{sections.length > 0 && ` across ${sections.length} section${sections.length !== 1 ? 's' : ''}`}</p>)}
+            {weeklyStats && weeklyStats.total > 0 && (
+              <p className="mt-1 text-xs text-text-tertiary">
+                This week: {weeklyStats.total} alert{weeklyStats.total !== 1 ? 's' : ''}
+                {weeklyStats.withOutcome > 0 && <>, {weeklyStats.correct} correct ({weeklyStats.pct}%)</>}
+              </p>
+            )}
           </div>
           {!isEmpty && <button type="button" onClick={() => editMode ? exitEditMode() : setEditMode(true)} className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${editMode ? 'bg-accent-default text-white hover:brightness-110' : 'border border-overlay-medium bg-overlay-subtle text-text-primary hover:bg-overlay-medium'}`}>{editMode ? 'Done' : 'Edit'}</button>}
         </div>
