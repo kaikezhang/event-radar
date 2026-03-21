@@ -34,8 +34,8 @@
 
 ## Phase 2: Pipeline Durability (进行中)
 
-### Batch 4 — Redis EventBus (未开始)
-- [ ] **引入 Redis Streams 替代内存 EventBus** — 崩溃不丢事件，支持重播
+### Batch 4 — Redis EventBus ✅
+- [x] **引入 Redis Streams 替代内存 EventBus** — PR #174, #175, #176 (consumer groups, fanout, unsubscribe safety)
 - [ ] **持久化 dedup 窗口** — 当前内存滑动窗口 OOM 会丢状态
 - [ ] **story-group 接入 live pipeline** — 或者删掉这个 claim
 
@@ -59,11 +59,11 @@
 - [x] **桌面双栏布局** — PR #168 (already existed, confirmed)
 - [x] **键盘快捷键** — PR #168 (j/k/Enter/Escape)
 - [x] **Onboarding 优化** — PR #171 (multi-step wizard)
-- [ ] **Feed/Push 分级 UI** — 清晰区分"仅 feed"和"推送"信号
+- [x] **Feed/Push 分级 UI** — PR #173 (signal tier badges + filter)
 
 ### Batch 8 — Historical & Intelligence (部分完成)
 - [ ] **历史事件回填** — 从 SEC/政府源回填 2-3 年数据
-- [ ] **历史浏览器** — 按 sector/event type 浏览历史事件
+- [x] **历史浏览器** — PR #172 (按 sector/event type 浏览历史事件)
 - [x] **Audio Squawk** — PR #169 (browser SpeechSynthesis)
 - [x] **Source 命中率可视化** — PR #170 (Recharts, 3 chart types)
 
