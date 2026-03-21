@@ -1,39 +1,36 @@
-# TASK: Fix Sprint 3 Retention PR #184 Review Issues
+# TASK: Fix PR #185 Review Issues (Sprint 4 UX Polish)
+
+⚠️ **DO NOT MERGE THE PR. DO NOT MERGE. STOP AFTER PUSHING.** ⚠️
 
 ## Context
-PR #184 (`feat/sprint-3-retention`) was reviewed by Codex. Four issues found, all require fixes. You are fixing the existing branch. Commit, push, and **⚠️ DO NOT MERGE THE PR. DO NOT MERGE. STOP AFTER PUSHING.**
+PR #185 (`feat/sprint-4-ux-polish`) was reviewed by Codex with CHANGES REQUESTED. You are on the `feat/sprint-4-ux-polish` branch. Fix all 4 issues, commit, and push. 
 
 ## Issues to Fix
 
-### 1. 🚨 Watchlist stats query not invalidated on mutations
-**Files**: `packages/web/src/pages/Watchlist.tsx`, `packages/web/src/hooks/useWatchlist.ts`
-**Problem**: The `['watchlist-feed-stats']` query is not keyed by watchlist contents, and watchlist mutations (add/remove/reorder) don't invalidate it. With 5min staleTime, stats show stale data after changes. Stats even persist after removing all tickers.
-**Fix**: 
-- Key the query by sorted ticker list: `['watchlist-feed-stats', ...sortedTickers]`
-- Add `queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] })` to all mutation onSuccess callbacks in useWatchlist.ts
-- Disable the query when watchlist is empty (return no data)
+### 1. History date filters not counted as active
+**Files**: `packages/web/src/pages/History.tsx` (~lines 34, 83)
+**Problem**: `hasActiveFilters` / `activeFilterCount` only checks severity, source, ticker. Date range (from/to) is ignored. If user changes date range, Filters button stays inactive, Reset disappears, collapsed chip row shows nothing.
+**Fix**: Include non-default `from`/`to` in `hasActiveFilters` and `activeFilterCount`. Show date range in collapsed filter summary chips.
 
-### 2. ⚠️ Daily briefing dismiss uses UTC, display uses local time
-**File**: `packages/web/src/components/DailyBriefing.tsx`
-**Problem**: Dismissal key uses `new Date().toISOString().slice(0, 10)` (UTC date), but the banner shows `toLocaleDateString` (local date). In US timezones the briefing can reappear in the evening.
-**Fix**: Use the same local date string for both dismissal key and display. E.g. `new Date().toLocaleDateString('en-CA')` (YYYY-MM-DD format in local time) for the dismiss key.
+### 2. History filters missing aria attributes
+**File**: `packages/web/src/pages/History.tsx` (~line 61)
+**Problem**: Filter toggle button doesn't have `aria-expanded`/`aria-controls`. Panel has no label. Screen readers can't tell if filter region is open/closed.
+**Fix**: Add `aria-expanded={isOpen}`, `aria-controls="history-filters-panel"` to toggle button. Add `id="history-filters-panel"` and `role="region"` with `aria-label="Event filters"` to the panel.
 
-### 3. ⚠️ Daily briefing label wrong on non-watchlist tabs
-**File**: `packages/web/src/components/DailyBriefing.tsx`, `packages/web/src/pages/Feed/FeedList.tsx`
-**Problem**: Briefing always says "for your watchlist" but on the `all` tab it's summarizing all events, not just watchlist. Misleading.
-**Fix**: Pass a `scope` or `label` prop from FeedList to DailyBriefing. When on `all` tab, say "across all events" instead of "for your watchlist". Or only render DailyBriefing on the watchlist tab.
+### 3. Blue accent migration incomplete in feed filters
+**Files**: `packages/web/src/pages/Feed/FeedHeader.tsx` (~line 63), `packages/web/src/pages/Feed/FeedFilters.tsx` (~lines 63, 123)
+**Problem**: Header/filter trigger migrated to `interactive-default` but active chips, selected options, and save controls inside FeedFilters still use `accent-default`. Mixed accent systems visible simultaneously.
+**Fix**: Migrate all feed filter components to use the same token consistently. Use `interactive-default` throughout (or `accent-default` throughout — pick one and be consistent).
 
-### 4. ⚠️ Push permission denied recovery UX not PWA-compatible
-**File**: `packages/web/src/pages/Settings.tsx`
-**Problem**: Recovery instructions say "click the lock/info icon in the address bar" — doesn't work on iOS Safari or installed PWA (no address bar).
-**Fix**: Detect platform and show appropriate instructions:
-- Desktop browsers: current lock icon guidance
-- iOS Safari: "Go to Settings > Safari > [website] > Notifications"
-- Android PWA: "Go to Settings > Apps > [app name] > Notifications"
-- Installed PWA (no address bar): "Reinstall the app or check your device notification settings"
+### 4. WebSocket indicator lacks accessible name
+**File**: `packages/web/src/App.tsx` (~line 42)
+**Problem**: Top-bar WS indicator is color-only with `title` for meaning. Not focusable, no accessible name. Touch/screen-reader users can't get connection status.
+**Fix**: Add `role="status"` and `aria-label` with the current connection state text (e.g., "Connected", "Reconnecting", "Offline"). Or add a visually-hidden `<span>` with the status text.
 
 ## Requirements
-- Build must pass: `pnpm --filter @event-radar/web build`
-- Commit message: `fix: address Sprint 3 review — cache keys, timezone, briefing scope, PWA UX`
+- Build passes: `pnpm --filter @event-radar/web build`
+- Lint passes: `pnpm --filter @event-radar/web lint`
+- Commit message: `fix: address PR #185 review — filters, a11y, accent consistency`
+- Push to `feat/sprint-4-ux-polish` branch
 
-## ⚠️ CRITICAL: DO NOT MERGE THE PR. PUSH AND STOP.
+## ⚠️ DO NOT MERGE. PUSH AND STOP.
