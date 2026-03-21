@@ -504,6 +504,35 @@ describe('RedisEventBus', () => {
     });
   });
 
+  describe('in-flight batch after unsubscribe', () => {
+    it('should NOT ack messages delivered after handler is unsubscribed', async () => {
+      const received: RawEvent[] = [];
+      const unsub = bus.subscribe((e) => { received.push(e); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+
+      // Unsubscribe before any message arrives
+      unsub();
+
+      // Now publish a message AFTER unsubscribe — it should remain pending (not acked)
+      const event = makeEvent();
+      readClient.pendingMessages.push([
+        ['event-radar:events', [
+          ['msg-leaked', ['data', JSON.stringify(event)]],
+        ]],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 300));
+
+      // Handler should NOT have been called
+      expect(received).toHaveLength(0);
+      // Message should NOT have been acked — it remains pending for the next subscriber
+      const ackedIds = readClient.xackCalls.map((c) => c[2]);
+      expect(ackedIds).not.toContain('msg-leaked');
+    });
+  });
+
   describe('metrics', () => {
     it('should have zero counts initially', () => {
       expect(bus.publishedCount).toBe(0);
