@@ -47,6 +47,18 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
   const [searchTab, setSearchTab] = useState<SearchTab>('tickers');
   const [eventQuery, setEventQuery] = useState('');
   const [debouncedEventQuery, setDebouncedEventQuery] = useState('');
+
+  // Sync query text when manually switching tabs
+  const switchTab = (tab: SearchTab) => {
+    if (tab === searchTab) return;
+    if (tab === 'events' && query.trim()) {
+      setEventQuery(query);
+    } else if (tab === 'tickers' && eventQuery.trim()) {
+      setQuery(eventQuery.toUpperCase());
+    }
+    setSearchTab(tab);
+    setActiveIndex(-1);
+  };
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +77,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
     queryFn: () => searchEvents(debouncedEventQuery, 10),
     enabled: open && searchTab === 'events' && debouncedEventQuery.trim().length > 0,
     staleTime: 30_000,
+    retry: 1,
   });
 
   // Focus input when overlay opens
@@ -124,7 +137,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
 
   const handleEventClick = (event: AlertSummary) => {
     onClose();
-    navigate(`/events/${event.id}`);
+    navigate(`/event/${event.id}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -183,7 +196,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
         <div className="flex border-b border-overlay-medium">
           <button
             type="button"
-            onClick={() => setSearchTab('tickers')}
+            onClick={() => switchTab('tickers')}
             className={cn(
               'flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition',
               searchTab === 'tickers'
@@ -195,7 +208,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
           </button>
           <button
             type="button"
-            onClick={() => setSearchTab('events')}
+            onClick={() => switchTab('events')}
             className={cn(
               'flex-1 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition',
               searchTab === 'events'
