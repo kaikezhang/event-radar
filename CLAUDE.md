@@ -1,5 +1,8 @@
 # CLAUDE.md — Event Radar
 
+## ⛔ CRITICAL: NEVER MERGE PRs! NEVER PUSH TO MAIN!
+Create your PR and STOP. Do not run `gh pr merge`. Do not run `git push origin main`. Only 晚晚 (the orchestrator) merges PRs. Violating this rule wastes everyone's time.
+
 ## Project
 Real-time stock market event detection + AI-powered historical analysis platform. Monorepo with pnpm workspaces.
 
