@@ -410,13 +410,27 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
               const enrichTickers = llmEnrichResult.tickers;
               const enrichTicker = enrichTickers?.[0]?.symbol;
               if (typeof enrichTicker === 'string' && enrichTicker.length > 0) {
+                const normalizedTicker = enrichTicker.toUpperCase();
                 // Update events.ticker so the LEFT JOIN + future queries work
-                await db.execute(sql`
-                  UPDATE events SET ticker = ${enrichTicker.toUpperCase()}
+                const updateResult = await db.execute(sql`
+                  UPDATE events SET ticker = ${normalizedTicker}
                   WHERE id = ${eventId} AND ticker IS NULL
+                  RETURNING id
                 `);
-                // Schedule outcome tracking now that we have a ticker
-                await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
+                const rowCount = Array.isArray(updateResult)
+                  ? updateResult.length
+                  : (updateResult as { rowCount?: number }).rowCount ?? 0;
+
+                if (rowCount > 0) {
+                  // Sync metadata with the persisted ticker
+                  event.metadata = {
+                    ...(event.metadata ?? {}),
+                    ticker: normalizedTicker,
+                  };
+                  await persistEventMetadata();
+                  // Schedule outcome tracking now that we have a ticker
+                  await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
+                }
               }
             }
           } else {
