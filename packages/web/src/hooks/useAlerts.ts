@@ -37,12 +37,13 @@ function mergeAlerts(incoming: AlertSummary[], existing: AlertSummary[]): AlertS
   });
 }
 
-export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlistTickers?: string[] }): UseAlertsResult {
+export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlistTickers?: string[]; mode?: string }): UseAlertsResult {
   const watchlist = options?.watchlist ?? false;
   const watchlistTickers = options?.watchlistTickers;
+  const mode = options?.mode;
   const query = useQuery({
-    queryKey: ['feed', limit, watchlist],
-    queryFn: () => getFeed(limit, { watchlist }),
+    queryKey: ['feed', limit, watchlist, mode],
+    queryFn: () => getFeed(limit, { watchlist, mode }),
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
@@ -51,6 +52,7 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
   const [isAtTop, setIsAtTop] = useState(true);
   const seenAlertIdsRef = useRef<Set<string>>(new Set());
   const prevWatchlistRef = useRef(watchlist);
+  const prevModeRef = useRef(mode);
   const { playForSeverity } = useAlertSound();
   const { announceEvent } = useAudioSquawk();
 
@@ -59,17 +61,18 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Clear state when switching between watchlist/all tabs
+  // Clear state when switching between feed modes
   useEffect(() => {
-    if (prevWatchlistRef.current !== watchlist) {
+    if (prevWatchlistRef.current !== watchlist || prevModeRef.current !== mode) {
       prevWatchlistRef.current = watchlist;
+      prevModeRef.current = mode;
       setVisibleAlerts([]);
       setPendingAlerts([]);
       seenAlertIdsRef.current = new Set();
       setCursorState(null);
       setHasMore(true);
     }
-  }, [watchlist]);
+  }, [watchlist, mode]);
 
   const rememberAlerts = (alerts: AlertSummary[]) => {
     for (const alert of alerts) {
@@ -187,7 +190,7 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
     if (isLoadingMore || !hasMore || !cursorRef) return;
     setIsLoadingMore(true);
     try {
-      const result = await getFeed(limit, { watchlist, before: cursorRef });
+      const result = await getFeed(limit, { watchlist, before: cursorRef, mode });
       if (result.alerts.length < limit) {
         setHasMore(false);
       }
@@ -206,7 +209,7 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMore, cursorRef, limit, watchlist]);
+  }, [isLoadingMore, hasMore, cursorRef, limit, watchlist, mode]);
 
   const pendingCount = pendingAlerts.length;
   const isInitialLoading = query.isLoading && visibleAlerts.length === 0;

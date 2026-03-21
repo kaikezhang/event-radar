@@ -62,6 +62,7 @@ interface FeedListProps {
   showFilters: boolean;
   showModeDropdown: boolean;
   showUnauthBanner: boolean;
+  showSmartFeedEmpty: boolean;
   showWatchlistOnboarding: boolean;
   sortMode: SortMode;
   sources: string[];
@@ -120,6 +121,7 @@ export function FeedList({
   showAddFilterDropdown,
   showFilters,
   showModeDropdown,
+  showSmartFeedEmpty,
   showUnauthBanner,
   showWatchlistOnboarding,
   sortMode,
@@ -220,8 +222,24 @@ export function FeedList({
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
 
       {!isInitialLoading && !error && filteredAlerts.length > 0 && (
-        <DailyBriefing alerts={filteredAlerts} scope={activeTab === 'all' ? 'all' : 'watchlist'} />
+        <DailyBriefing alerts={filteredAlerts} scope={activeTab === 'smart' ? 'watchlist' : activeTab === 'all' ? 'all' : 'watchlist'} />
       )}
+
+      {showSmartFeedEmpty ? (
+        <EmptyState
+          icon="\u{1F324}\uFE0F"
+          title="Quiet day for your watchlist"
+          description="No significant events detected in the last 24 hours for your tickers. We're monitoring 15+ sources."
+        >
+          <button
+            type="button"
+            onClick={() => handleTabChange('all')}
+            className="text-sm font-medium text-accent-default"
+          >
+            View all events &rarr;
+          </button>
+        </EmptyState>
+      ) : null}
 
       {showWatchlistOnboarding ? (
         <EmptyState

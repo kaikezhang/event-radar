@@ -625,6 +625,7 @@ export function registerDashboardRoutes(
       before?: string;
       ticker?: string;
       watchlist?: string;
+      mode?: string;
     };
   }>('/api/v1/feed', async (request, reply) => {
     if (!deps.db) {
@@ -636,7 +637,8 @@ export function registerDashboardRoutes(
       ? Math.min(Math.floor(rawLimit), 200)
       : 50;
     const ticker = request.query.ticker?.trim().toUpperCase();
-    const watchlistFilter = request.query.watchlist === 'true';
+    const feedMode = request.query.mode; // 'smart' | undefined
+    const watchlistFilter = feedMode !== 'smart' && request.query.watchlist === 'true';
     const cursor = request.query.before
       ? decodeFeedCursor(request.query.before)
       : null;
@@ -655,7 +657,50 @@ export function registerDashboardRoutes(
         sqlTag`pa.outcome = 'delivered'`,
       ];
 
-      if (watchlistFilter) {
+      if (feedMode === 'smart') {
+        // Smart Feed: watchlist tickers + CRITICAL + HIGH from trusted sources
+        const userId = resolveRequestUserId(request);
+        const watchlistRows = await deps.db
+          .select({ ticker: watchlist.ticker })
+          .from(watchlist)
+          .where(eq(watchlist.userId, userId));
+        const tickers = watchlistRows.map((w) => w.ticker);
+
+        const smartParts: ReturnType<typeof sqlTag>[] = [];
+
+        // 1) Watchlist ticker match
+        if (tickers.length > 0) {
+          const tickerConditions = tickers.map(
+            (t) => sqlTag`(
+              UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}
+              OR EXISTS (
+                SELECT 1 FROM jsonb_array_elements(e.metadata->'llm_enrichment'->'tickers') AS et
+                WHERE UPPER(et->>'symbol') = ${t}
+              )
+            )`,
+          );
+          const combined = tickerConditions.reduce(
+            (acc, cond) => sqlTag`${acc} OR ${cond}`,
+          );
+          smartParts.push(sqlTag`(${combined})`);
+        }
+
+        // 2) CRITICAL severity always shown
+        smartParts.push(sqlTag`(UPPER(COALESCE(e.severity, '')) = 'CRITICAL')`);
+
+        // 3) HIGH severity from trusted sources
+        smartParts.push(sqlTag`(UPPER(COALESCE(e.severity, '')) = 'HIGH' AND LOWER(e.source) IN ('breaking-news', 'sec-edgar', 'trading-halt', 'newswire'))`);
+
+        if (smartParts.length > 0) {
+          const smartFilter = smartParts.reduce(
+            (acc, part) => sqlTag`${acc} OR ${part}`,
+          );
+          conds.push(sqlTag`(${smartFilter})`);
+        }
+
+        // Exclude noisy sources
+        conds.push(sqlTag`LOWER(e.source) NOT IN ('stocktwits-trending', 'federal-register')`);
+      } else if (watchlistFilter) {
         const userId = resolveRequestUserId(request);
         const watchlistRows = await deps.db
           .select({ ticker: watchlist.ticker })
