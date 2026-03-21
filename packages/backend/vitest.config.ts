@@ -7,10 +7,5 @@ export default defineConfig({
     teardownTimeout: 5000,
     setupFiles: ["./src/__tests__/helpers/vitest-setup.ts"],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
   },
 });
