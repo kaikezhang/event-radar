@@ -12,7 +12,7 @@ export function useEventDetail(id: string | undefined) {
       const [detail, scorecard, outcome] = await Promise.all([
         getEventDetail(id),
         getEventScorecard(id),
-        getEventOutcome(id),
+        getEventOutcome(id).catch(() => null),
       ]);
 
       if (!detail) {

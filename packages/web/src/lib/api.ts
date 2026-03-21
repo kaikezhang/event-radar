@@ -606,8 +606,11 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
       changeT5: data.changeT5 != null ? Number(data.changeT5 ?? data.change_t5) : null,
       changeT20: data.changeT20 != null ? Number(data.changeT20 ?? data.change_t20) : null,
     };
-  } catch {
-    return null;
+  } catch (err) {
+    // 404 = no outcome data yet (normal) — return null silently
+    if (err instanceof Error && err.message.includes('404')) return null;
+    // Other errors (network, 500, etc.) — re-throw so callers can handle
+    throw err;
   }
 }
 
