@@ -21,10 +21,11 @@ async function main() {
 
   const tickerResult = await db.execute(sql`
     UPDATE events
-    SET ticker = UPPER(LEFT(metadata->'llm_enrichment'->'tickers'->0->>'symbol', 10))
+    SET ticker = UPPER(TRIM(metadata->'llm_enrichment'->'tickers'->0->>'symbol'))
     WHERE ticker IS NULL
       AND metadata->'llm_enrichment'->'tickers'->0->>'symbol' IS NOT NULL
-      AND LENGTH(metadata->'llm_enrichment'->'tickers'->0->>'symbol') <= 10
+      AND LENGTH(TRIM(metadata->'llm_enrichment'->'tickers'->0->>'symbol')) BETWEEN 1 AND 10
+      AND TRIM(metadata->'llm_enrichment'->'tickers'->0->>'symbol') ~ '^[A-Za-z][A-Za-z0-9.\-]{0,9}$'
   `);
 
   const tickerCount = tickerResult.rowCount ?? 0;
