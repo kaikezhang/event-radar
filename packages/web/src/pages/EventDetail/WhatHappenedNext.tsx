@@ -87,11 +87,14 @@ export function WhatHappenedNext({ outcome, direction }: WhatHappenedNextProps) 
     return (
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <SectionHeading eyebrow="Price outcome" title="What Happened Next" />
-        <div className="flex items-center gap-3 rounded-lg border border-border-default bg-bg-elevated/50 px-4 py-3">
-          <span className="text-lg">📊</span>
-          <p className="text-sm text-text-secondary">
-            Outcome tracking in progress — results appear after 5 trading days
-          </p>
+        <div className="space-y-2">
+          <PriceRow label="Price at event" price={outcome.eventPrice} change={null} isPending={false} />
+          <div className="flex items-center gap-3 rounded-lg border border-border-default bg-bg-elevated/50 px-4 py-3">
+            <span className="text-lg">📊</span>
+            <p className="text-sm text-text-secondary">
+              Outcome tracking in progress — first results typically appear within 1 trading day
+            </p>
+          </div>
         </div>
       </section>
     );

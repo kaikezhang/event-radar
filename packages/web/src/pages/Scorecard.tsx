@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarRange, ChevronDown, Target } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -77,6 +77,27 @@ const SEVERITY_LINE_COLORS: Record<string, string> = {
   Medium: '#facc15',
   Low: '#94a3b8',
 };
+
+function usePanelState(panelKey: string, defaultOpen: boolean): [boolean, () => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paramValue = searchParams.get(panelKey);
+  const isOpen = paramValue != null ? paramValue === '1' : defaultOpen;
+
+  const toggle = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const newValue = !isOpen;
+      if (newValue === defaultOpen) {
+        next.delete(panelKey);
+      } else {
+        next.set(panelKey, newValue ? '1' : '0');
+      }
+      return next;
+    }, { replace: true });
+  }, [panelKey, defaultOpen, isOpen, setSearchParams]);
+
+  return [isOpen, toggle];
+}
 
 export function Scorecard() {
   const [windowValue, setWindowValue] = useState<ScorecardWindow>(90);
@@ -228,11 +249,11 @@ export function Scorecard() {
         </p>
         <p className="mt-2 text-lg font-semibold text-text-primary">Events Detected</p>
         <p className="mt-1 text-sm text-text-secondary">
-          from 15+ sources, 24/7 monitoring
+          from {data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase())).length} sources, 24/7 monitoring
         </p>
       </section>
 
-      <section className="grid grid-cols-3 gap-3">
+      <section className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
           <div className="font-mono text-2xl font-semibold text-text-primary">
             {data.totals.alertsWithUsableVerdicts.toLocaleString()}
@@ -240,12 +261,10 @@ export function Scorecard() {
           <div className="mt-1 text-sm text-text-secondary">Outcomes Tracked</div>
         </div>
         <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">15</div>
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase())).length}
+          </div>
           <div className="mt-1 text-sm text-text-secondary">Active Sources</div>
-        </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">&lt; 5 min</div>
-          <div className="mt-1 text-sm text-text-secondary">Avg Alert Latency</div>
         </div>
       </section>
 
@@ -544,7 +563,7 @@ function RollingAccuracyTrend({ data, isDark }: { data: ScorecardSummary; isDark
 /* ── Advanced Analytics (collapsible) ── */
 
 function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, toggle] = usePanelState('analytics', false);
 
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_36px_var(--shadow-color)]">
@@ -552,7 +571,7 @@ function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
         type="button"
         aria-expanded={isOpen}
         aria-controls="advanced-analytics-panel"
-        onClick={() => setIsOpen((c) => !c)}
+        onClick={toggle}
         className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
       >
         <div className="flex-1">
@@ -621,14 +640,14 @@ function BucketSection({
   buckets: ScorecardBucketSummary[];
   defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpen, toggle] = usePanelState(group, defaultOpen);
 
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <button
         type="button"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((c) => !c)}
+        onClick={toggle}
         className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
       >
         <div className="flex-1">
