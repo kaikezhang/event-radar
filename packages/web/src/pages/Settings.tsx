@@ -6,7 +6,11 @@ import { useAudioSquawk, type SquawkThreshold } from '../hooks/useAudioSquawk.js
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
+  getNotificationChannelSettings,
+  saveNotificationChannelSettings,
+  testDiscordWebhook,
   type NotificationPreferences,
+  type NotificationChannelSettings,
 } from '../lib/api.js';
 import {
   getWebPushDeviceState,
@@ -168,6 +172,14 @@ export function Settings() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
+  const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
+  const [channelLoaded, setChannelLoaded] = useState(false);
+  const [discordUrlDraft, setDiscordUrlDraft] = useState('');
+  const [emailDraft, setEmailDraft] = useState('');
+  const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
+  const [channelSaving, setChannelSaving] = useState(false);
+  const [discordTesting, setDiscordTesting] = useState(false);
   const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
 
   useEffect(() => {
@@ -230,6 +242,30 @@ export function Settings() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadChannelSettings(): Promise<void> {
+      try {
+        setChannelLoadError(null);
+        const loaded = await getNotificationChannelSettings();
+        if (cancelled) return;
+        setChannelSettings(loaded);
+        setChannelLoaded(true);
+        setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
+        setEmailDraft(loaded.emailAddress ?? '');
+        setChannelMinSeverity(loaded.minSeverity);
+      } catch {
+        if (!cancelled) {
+          setChannelLoadError('Could not load notification channel settings.');
+        }
+      }
+    }
+
+    void loadChannelSettings();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -306,6 +342,36 @@ export function Settings() {
         quietEnd: current.quietEnd ?? '08:00',
       };
     });
+  }
+
+  async function saveChannelSettings(): Promise<void> {
+    try {
+      setChannelSaving(true);
+      const saved = await saveNotificationChannelSettings({
+        discordWebhookUrl: discordUrlDraft.trim() || null,
+        emailAddress: emailDraft.trim() || null,
+        minSeverity: channelMinSeverity,
+      });
+      setChannelSettings(saved);
+      setToastMessage('Notification settings saved');
+    } catch {
+      setToastMessage('Could not save notification settings');
+    } finally {
+      setChannelSaving(false);
+    }
+  }
+
+  async function handleTestDiscord(): Promise<void> {
+    if (!discordUrlDraft.trim()) return;
+    try {
+      setDiscordTesting(true);
+      await testDiscordWebhook(discordUrlDraft.trim());
+      setToastMessage('Test notification sent to Discord');
+    } catch {
+      setToastMessage('Discord webhook test failed');
+    } finally {
+      setDiscordTesting(false);
+    }
   }
 
   async function enableWebPush(): Promise<void> {
@@ -438,9 +504,12 @@ export function Settings() {
                   </p>
                   <PushDeniedRecoverySteps />
                   <div className="mt-4 rounded-xl border border-overlay-medium bg-bg-surface/50 p-3">
-                    <p className="text-xs text-text-tertiary">
-                      Or get alerts via email instead <span className="italic">(coming soon)</span>
-                    </p>
+                    <a
+                      href="#notification-channels"
+                      className="text-xs text-accent-default hover:underline"
+                    >
+                      Set up Discord or email notifications instead &rarr;
+                    </a>
                   </div>
                 </div>
               </div>
@@ -510,6 +579,135 @@ export function Settings() {
               Open live feed
             </Link>
           </div>
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="notification-channels"
+        title="Notification channels"
+        eyebrow="Channels"
+        description="Discord webhook and email fallback channels."
+        defaultOpen
+        className="scroll-mt-24"
+      >
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-[22px] font-semibold text-text-primary">
+              Notification channels
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Get event alerts delivered to Discord or email when push notifications are unavailable.
+            </p>
+          </div>
+
+          {channelLoadError && (
+            <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+              <span>{channelLoadError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setChannelLoadError(null);
+                  void (async () => {
+                    try {
+                      const loaded = await getNotificationChannelSettings();
+                      setChannelSettings(loaded);
+                      setChannelLoaded(true);
+                      setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
+                      setEmailDraft(loaded.emailAddress ?? '');
+                      setChannelMinSeverity(loaded.minSeverity);
+                    } catch {
+                      setChannelLoadError('Could not load notification channel settings.');
+                    }
+                  })();
+                }}
+                className="shrink-0 rounded-full border border-red-500/30 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-500/20"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Discord Webhook</p>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                Get a webhook URL from Discord: Server Settings &rarr; Integrations &rarr; Webhooks &rarr; New Webhook
+              </p>
+            </div>
+
+            <label className="block space-y-2" htmlFor="discord-webhook-url">
+              <span className="block text-sm font-medium text-text-primary">Discord Webhook URL</span>
+              <input
+                id="discord-webhook-url"
+                type="url"
+                value={discordUrlDraft}
+                onChange={(e) => setDiscordUrlDraft(e.target.value)}
+                placeholder="https://discord.com/api/webhooks/..."
+                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-default"
+              />
+            </label>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { void handleTestDiscord(); }}
+                disabled={!discordUrlDraft.trim() || discordTesting}
+                className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {discordTesting ? 'Testing...' : 'Test'}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Email Digest</p>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                Coming soon — daily email digest of important events
+              </p>
+            </div>
+
+            <label className="block space-y-2" htmlFor="email-address">
+              <span className="block text-sm font-medium text-text-tertiary">Email address</span>
+              <input
+                id="email-address"
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="user@example.com"
+                disabled
+                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-tertiary placeholder:text-text-tertiary outline-none opacity-50 cursor-not-allowed"
+              />
+            </label>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+            <label className="block space-y-2" htmlFor="channel-min-severity">
+              <span className="block text-sm font-medium text-text-primary">Minimum severity</span>
+              <p className="mt-1 text-sm leading-6 text-text-secondary">
+                Only deliver events at or above this severity level.
+              </p>
+              <select
+                id="channel-min-severity"
+                value={channelMinSeverity}
+                onChange={(e) => setChannelMinSeverity(e.target.value)}
+                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
+              >
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+              </select>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => { void saveChannelSettings(); }}
+            disabled={channelSaving || (!channelLoaded && !channelSettings)}
+            className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {channelSaving ? 'Saving...' : 'Save'}
+          </button>
         </div>
       </CollapsiblePanel>
 

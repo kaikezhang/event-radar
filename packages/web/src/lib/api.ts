@@ -1052,3 +1052,34 @@ export function formatScorecardBucketLabel(group: 'action' | 'confidence' | 'sou
 
   return bucket;
 }
+
+// ── Notification Channel Settings ──────────────────────────────────────────
+
+export interface NotificationChannelSettings {
+  discordWebhookUrl: string | null;
+  emailAddress: string | null;
+  minSeverity: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getNotificationChannelSettings(): Promise<NotificationChannelSettings> {
+  return apiFetch('/v1/settings/notifications');
+}
+
+export async function saveNotificationChannelSettings(
+  settings: Partial<Pick<NotificationChannelSettings, 'discordWebhookUrl' | 'emailAddress' | 'minSeverity' | 'enabled'>>,
+): Promise<NotificationChannelSettings> {
+  return apiFetch('/v1/settings/notifications', {
+    method: 'POST',
+    body: settings,
+  });
+}
+
+export async function testDiscordWebhook(webhookUrl: string): Promise<{ success: boolean }> {
+  return apiFetch('/v1/settings/notifications/test-discord', {
+    method: 'POST',
+    body: { webhookUrl },
+  });
+}

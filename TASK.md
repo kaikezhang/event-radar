@@ -1,40 +1,49 @@
-# ⚠️ DO NOT MERGE. CREATE COMMITS AND PUSH ONLY.
+# ⚠️ DO NOT MERGE THIS PR. CREATE COMMITS AND PUSH ONLY.
 
-# TASK: Fix PR #188 Review Issues — Feed Events Price Data
+# TASK: Fix PR #190 Round 2 Review Issues
 
 ## Context
-PR #188 (`fix/sprint-6-feed-prices`) was reviewed by Codex. Three issues found. You are on the `fix/sprint-6-feed-prices` branch. Fix all issues, commit, and push.
+PR #190 (feat/sprint-8-notification-channels) was re-reviewed by Codex. Issues 2 and 5 are resolved. Issues 1, 3, 4, 6 still need fixes. You are on branch `feat/sprint-8-notification-channels`. Fix all remaining issues, commit, and push.
 
-**⚠️ DO NOT MERGE THE PR. DO NOT MERGE. ONLY COMMIT AND PUSH.**
+## Remaining Issues
 
-## Issues to Fix
+### 1. Auth security — API key path rejects valid callers (BLOCKING)
+**Problem**: In `AUTH_REQUIRED=false` mode, valid API-key requests get `userId = 'default'`, then `requireAuth` middleware rejects `default` unconditionally. So both anonymous AND valid API-key callers are rejected.
+**Fix**: The notification-settings routes should accept requests with a valid API key OR a real authenticated user. Update `requireAuth` or create a new middleware that:
+- Allows requests with valid API key (even if userId is 'default')
+- Allows requests with real authenticated userId (not 'default')
+- Rejects truly unauthenticated requests (no API key, no auth token)
 
-### 1. Metadata inconsistency — ticker not written back to event.metadata
-**File**: `packages/backend/src/event-pipeline.ts`
-**Problem**: The late-enrichment branch updates `events.ticker` in the DB but does NOT write the ticker back into `event.metadata.ticker` or the persisted JSON metadata. Downstream readers (events-history.ts, event-similarity.ts, websocket.ts) that resolve tickers from metadata still see no ticker.
-**Fix**: After setting `event.ticker`, also update `event.metadata.ticker` (or equivalent field in the stored JSON metadata). Update the DB row's metadata JSON column too.
+### 3. Retry/backoff — missing failure logging detail
+**Problem**: Failed deliveries only increment `errors++` counter. 4xx/5xx/429 failures don't log status code, response body, or user context.
+**Fix**: Add structured logging for webhook delivery failures including: HTTP status, response body (truncated), userId, webhookUrl (masked), eventId. Use the project's existing logger pattern.
 
-### 2. Concurrency race — ticker casing mismatch + outcome scheduling
-**File**: `packages/backend/src/event-pipeline.ts` + `packages/backend/src/services/outcome-tracker.ts`
-**Problems**:
-- `extractTicker()` returns LLM symbol verbatim (mixed case) but SQL update uses UPPER() — casing diverges between in-memory event and DB
-- `scheduleOutcomeTrackingForEvent()` is called regardless of whether the `UPDATE ... WHERE ticker IS NULL` actually matched. If two enrichments race, one wins the DB update but the other still inserts event_outcomes with its own ticker.
-**Fix**: 
-- Normalize ticker to uppercase in `extractTicker()` or immediately after extraction
-- Only call `scheduleOutcomeTrackingForEvent()` if the UPDATE actually affected a row (check result.rowCount or equivalent)
+### 4. Delivery accounting — user webhook outside main accounting path
+**Problem**: User webhook delivery doesn't contribute to `okCount`/`failCount`, `channels`, or `auditLog.record()`. Downstream audit consumers can't see this channel.
+**Fix**: Integrate user webhook delivery into the same delivery accounting path as bark/discord/telegram. It should:
+- Contribute to `routeResult.deliveries` 
+- Appear in `channels` array
+- Be recorded in audit log via `auditLog.record()`
 
-### 3. Test coverage — need pipeline integration tests
-**Problem**: Only `extractTicker()` is tested. No test for: late LLM ticker discovery updating the stored event, scheduling outcome tracking exactly once, metadata consistency.
+### 6. Test coverage gaps
 **Fix**: Add tests for:
-- Late LLM ticker updates both `events.ticker` AND metadata
-- Outcome tracking is scheduled only when UPDATE succeeds (not on race loser)
-- Ticker is normalized (uppercase) consistently
+- Route auth: anonymous requests rejected, API-key requests allowed
+- Invalid webhook payload validation
+- 429/Retry-After handling in webhook delivery
+- Pipeline integration: user_discord_webhook channel in delivery accounting
+
+### Also fix existing test failures
+14 tests are currently failing:
+- `delivery.test.ts` (3 failures)
+- `breaking-news-scanner.test.ts` (3 failures) 
+- `congress-scanner.test.ts` (4 failures)
+- `analyst-scanner.test.ts` (4 failures)
+
+These may be caused by schema/type changes in this PR. Fix them.
 
 ## Requirements
-- Run `pnpm --filter @event-radar/backend build` — must pass
-- Commit message: `fix: address PR #188 review — metadata sync, race safety, ticker normalization`
+- `pnpm --filter @event-radar/backend build` must pass
+- `pnpm --filter @event-radar/backend test` must pass (ALL tests green)
+- Commit message: `fix: resolve remaining PR #190 review issues (auth, logging, accounting, tests)`
 
-## ⚠️ REMINDERS
-- **DO NOT MERGE THE PR**
-- **DO NOT CREATE A NEW PR**
-- Only commit and push to the existing branch
+## ⚠️ DO NOT MERGE. Push commits to the branch only.

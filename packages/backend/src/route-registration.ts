@@ -33,6 +33,7 @@ import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes } from './routes/price.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
 import { registerRegimeRoutes } from './routes/regime.js';
 import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { createLLMProvider } from './services/llm-provider.js';
@@ -106,6 +107,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerOnboardingRoutes(server, db, { apiKey });
     registerPushSubscriptionRoutes(server, db, { apiKey });
     registerPreferencesRoutes(server, db, { apiKey });
+    registerNotificationSettingsRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {

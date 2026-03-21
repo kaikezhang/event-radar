@@ -43,6 +43,13 @@
       "when": 1773712706780,
       "tag": "0005_cool_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774110525189,
+      "tag": "0006_add-user-notification-settings",
+      "breakpoints": true
     }
   ]
 }
