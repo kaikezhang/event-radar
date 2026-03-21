@@ -526,6 +526,19 @@ export const deliveryKillSwitch = pgTable('delivery_kill_switch', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const userNotificationSettings = pgTable('user_notification_settings', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull().unique(),
+  discordWebhookUrl: text('discord_webhook_url'),
+  emailAddress: text('email_address'),
+  minSeverity: varchar('min_severity', { length: 20 }).notNull().default('HIGH'),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('idx_user_notification_settings_user_id').on(table.userId),
+]);
+
 export const severityChanges = pgTable(
   'severity_changes',
   {
