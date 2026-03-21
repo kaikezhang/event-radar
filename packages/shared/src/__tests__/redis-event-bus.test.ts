@@ -46,7 +46,9 @@ vi.mock('ioredis', () => {
 
       async xreadgroup(...args: unknown[]) {
         this.xreadgroupCalls.push(args);
+        if (this.disconnected) return null;
         await new Promise((r) => setTimeout(r, 50));
+        if (this.disconnected) return null;
         // Consume from the front of the queue
         if (this.pendingMessages.length > 0) {
           return this.pendingMessages.shift();
@@ -94,6 +96,10 @@ describe('RedisEventBus', () => {
   });
 
   afterEach(async () => {
+    // Disconnect all mock clients first so any pending xreadgroup calls return immediately
+    for (const mock of mockInstances) {
+      mock.disconnected = true;
+    }
     await bus.shutdown();
   });
 
@@ -157,7 +163,7 @@ describe('RedisEventBus', () => {
     });
 
     it('should create consumer group on first subscribe', async () => {
-      bus.subscribe(() => {});
+      const unsub = bus.subscribe(() => {});
       await new Promise((r) => setTimeout(r, 100));
 
       const readClient = lastMock();
@@ -165,6 +171,7 @@ describe('RedisEventBus', () => {
       expect(readClient.xgroupCalls[0]).toEqual(
         expect.arrayContaining(['CREATE', 'event-radar:events', 'pipeline-workers', '0', 'MKSTREAM']),
       );
+      unsub();
     });
 
     it('should deliver messages to handlers via XREADGROUP', async () => {
@@ -562,12 +569,12 @@ describe('RedisEventBus', () => {
   describe('per-message handler check within a batch', () => {
     it('should stop processing remaining messages when handlers are removed mid-batch', async () => {
       const received: RawEvent[] = [];
-      let unsub!: () => void;
+      const ref: { unsub: (() => void) | null } = { unsub: null };
 
       // Handler that unsubscribes itself after first message
-      unsub = bus.subscribe((e) => {
+      ref.unsub = bus.subscribe((e) => {
         received.push(e);
-        unsub(); // remove all handlers mid-batch
+        ref.unsub?.(); // remove all handlers mid-batch
       });
       await new Promise((r) => setTimeout(r, 100));
 
