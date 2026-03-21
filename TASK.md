@@ -1,46 +1,36 @@
-# TASK: Comprehensive Project Analysis & Future Roadmap
+# TASK: Fix Redis EventBus Review Issues (PR #174)
 
-## Objective
-Perform a **comprehensive analysis** of the Event Radar project and write results to a file.
+## Context
+PR #174 (`feat/redis-streams-eventbus`) was reviewed by Codex. Three issues were found. You are on the `feat/redis-streams-eventbus` branch already. Fix all issues, commit, and push. **Do NOT merge. Do NOT create a new PR.**
 
-## What to Analyze
+## Issues to Fix
 
-### 1. Project Assessment
-- Architecture quality, code organization, tech stack evaluation
-- Current scanner coverage and data source health
-- Pipeline reliability (dedup, enrichment, delivery)
-- Dashboard/web app UX and feature completeness
-- Test coverage and CI/CD maturity
-- Security posture (auth, rate limiting, API key management)
-- Performance bottlenecks and scalability concerns
+### 1. 🚨 PRODUCTION BLOCKER — Raw event read loop never starts
+**File**: `packages/shared/src/redis-event-bus.ts`
+**Problem**: `startReadLoop()` sets `this.running = true` globally. When `subscribeTopic()` is called before `subscribe()` (which happens in `packages/backend/src/app.ts` — websocket plugin subscribes to `event:classified` before the pipeline wires up), the `running` flag is already `true`. So `subscribe()` sees `this.running === true` and skips starting the raw event read loop. Result: raw events pile up in Redis but are never consumed.
+**Fix**: Remove the single global `running` flag. Track running state per-stream (each `startReadLoop` should manage its own loop lifecycle independently). The `subscribe()` guard should only check if the *raw event* loop is already running, not a global flag.
 
-### 2. Competitive Landscape
-- Research and compare with market competitors:
-  - Unusual Whales, Benzinga Pro, MarketBeat, Stocktwits (premium), TipRanks
-  - Event-driven trading platforms: Hammerstone, The Fly, Trade Ideas
-  - AI-powered market intelligence: Kavout, Sentifi, Accern, Alphasense
-  - Open-source alternatives: any similar OSS projects
-- Feature comparison matrix
-- Pricing comparison
-- What they do better, what Event Radar does uniquely
+### 2. ⚠️ Topic fanout semantics broken — consumer group = work queue
+**File**: `packages/shared/src/redis-event-bus.ts`
+**Problem**: All instances share `GROUP_NAME = 'pipeline-workers'` for topic streams. `XREADGROUP` with a shared group means each message goes to ONE consumer only (work queue semantics). But `InMemoryEventBus` broadcasts to ALL subscribers. The websocket plugin needs every backend instance to see `event:classified` events so all connected clients get updates.
+**Fix**: For **topic streams**, use per-instance consumer group names (e.g. `topic-${process.pid}-${randomId}`) so every instance gets every message (fanout/broadcast). For the **raw event stream** (`event-radar:events`), keep the shared `pipeline-workers` group (work queue is correct there — only one worker should process each raw event).
 
-### 3. Future Enhancement Roadmap
-Based on the analysis and competitive research, propose:
-- **Short-term (1-2 months)**: Quick wins, reliability improvements
-- **Medium-term (3-6 months)**: Major features, monetization prep
-- **Long-term (6-12 months)**: Scale, ML/AI, enterprise features
-- Priority ranking with effort estimates
-- Technical architecture changes needed
+### 3. ⚠️ Unsubscribe leaks — messages consumed after last handler removed
+**File**: `packages/shared/src/redis-event-bus.ts`  
+**Problem**: When the last handler is unsubscribed, the read loop keeps running. It reads and XACKs messages with no handlers to deliver to, silently losing events.
+**Fix**: When the last handler for a stream is removed, stop that stream's read loop. Use per-stream `AbortController` or per-stream running flag. On stop, the loop should break out of its `while` loop and clean up.
 
-## Output
-Write your complete analysis to: `docs/analysis-{agent}.md`
-- CC writes to `docs/analysis-cc.md`
-- Codex writes to `docs/analysis-codex.md`
+## Requirements
+- All existing tests must pass: `pnpm --filter @event-radar/shared test`
+- Build must pass: `pnpm --filter @event-radar/shared build`
+- Add tests for:
+  - `subscribeTopic()` called before `subscribe()` — both loops must run
+  - Unsubscribe last handler stops the loop
+  - Multiple topic subscribers all receive the same message (fanout)
+- Keep the public API surface identical (subscribe, subscribeTopic, publish, publishTopic, shutdown)
+- Commit message: `fix: resolve Redis EventBus review issues (running flag, fanout, unsubscribe)`
 
-## Rules
-- Read the actual codebase thoroughly — don't guess
-- Use web search for competitor research
-- Be specific and actionable, not generic
-- Include code examples or architecture diagrams where helpful
-- Be honest about weaknesses
-- DO NOT create any PRs or branches — just write the analysis file to the main branch
+## DO NOT
+- Do not merge or create a new PR
+- Do not modify files outside `packages/shared/`
+- Do not change the InMemoryEventBus
