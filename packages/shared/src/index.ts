@@ -165,6 +165,8 @@ export {
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { scannerFetch, type ScannerFetchOptions } from './scanner-fetch.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
+export { RedisEventBus, type RedisEventBusOptions } from './redis-event-bus.js';
+export { createEventBus } from './create-event-bus.js';
 export { ScannerRegistry } from './scanner-registry.js';
 export {
   ConditionOperatorSchema,
