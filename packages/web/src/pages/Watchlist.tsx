@@ -619,11 +619,15 @@ export function Watchlist() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { items, isLoading, remove, updateItem } = useWatchlist();
   const { summary } = useWatchlistSummary();
+  const sortedTickers = useMemo(
+    () => items.map((i) => i.ticker).sort(),
+    [items],
+  );
   const { data: watchlistFeed } = useQuery({
-    queryKey: ['watchlist-feed-stats'],
+    queryKey: ['watchlist-feed-stats', ...sortedTickers],
     queryFn: () => getFeed(50, { watchlist: true }),
     staleTime: 300_000,
-    enabled: isAuthenticated && items.length > 0,
+    enabled: isAuthenticated && sortedTickers.length > 0,
   });
   const weeklyStats = useMemo(() => {
     if (!watchlistFeed?.alerts.length) return null;

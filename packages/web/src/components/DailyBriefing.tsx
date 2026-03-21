@@ -11,7 +11,7 @@ const SEVERITY_ORDER: Record<string, number> = {
 };
 
 function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function isDismissedToday(): boolean {
@@ -24,9 +24,10 @@ function isDismissedToday(): boolean {
 
 interface DailyBriefingProps {
   alerts: AlertSummary[];
+  scope?: 'watchlist' | 'all';
 }
 
-export function DailyBriefing({ alerts }: DailyBriefingProps) {
+export function DailyBriefing({ alerts, scope = 'watchlist' }: DailyBriefingProps) {
   const [dismissed, setDismissed] = useState(isDismissedToday);
 
   if (dismissed) return null;
@@ -92,7 +93,7 @@ export function DailyBriefing({ alerts }: DailyBriefingProps) {
         <p>
           <span className="font-semibold text-text-primary">{count}</span>{' '}
           {count === 1 ? 'event' : 'events'} detected in the last 24h
-          {count > 0 ? ' for your watchlist' : ''}
+          {count > 0 ? (scope === 'all' ? ' across all events' : ' for your watchlist') : ''}
         </p>
 
         {topEvent && (

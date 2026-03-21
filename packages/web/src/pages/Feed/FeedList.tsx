@@ -218,7 +218,7 @@ export function FeedList({
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
 
       {!isInitialLoading && !error && filteredAlerts.length > 0 && (
-        <DailyBriefing alerts={filteredAlerts} />
+        <DailyBriefing alerts={filteredAlerts} scope={activeTab === 'all' ? 'all' : 'watchlist'} />
       )}
 
       {showWatchlistOnboarding ? (

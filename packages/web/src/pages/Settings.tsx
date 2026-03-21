@@ -73,6 +73,68 @@ const SIGNAL_TIER_ROWS = [
   },
 ] as const;
 
+function getPlatformHint(): 'ios' | 'android-pwa' | 'pwa' | 'desktop' {
+  const ua = navigator.userAgent;
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    ('standalone' in navigator && (navigator as unknown as { standalone: boolean }).standalone);
+
+  if (/iPad|iPhone|iPod/.test(ua)) return 'ios';
+  if (isStandalone && /Android/i.test(ua)) return 'android-pwa';
+  if (isStandalone) return 'pwa';
+  return 'desktop';
+}
+
+function PushDeniedRecoverySteps() {
+  const platform = getPlatformHint();
+
+  const stepBadge = (n: number) => (
+    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
+      {n}
+    </span>
+  );
+
+  if (platform === 'ios') {
+    return (
+      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings</strong> app</span></li>
+        <li className="flex gap-3">{stepBadge(2)}<span>Go to <strong className="text-text-primary">Safari → Websites → Notifications</strong></span></li>
+        <li className="flex gap-3">{stepBadge(3)}<span>Find this site and set to <strong className="text-text-primary">Allow</strong></span></li>
+        <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
+      </ol>
+    );
+  }
+
+  if (platform === 'android-pwa') {
+    return (
+      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings → Apps</strong></span></li>
+        <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Event Radar</strong> (or the browser hosting the app)</span></li>
+        <li className="flex gap-3">{stepBadge(3)}<span>Tap <strong className="text-text-primary">Notifications → Allow</strong></span></li>
+        <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
+      </ol>
+    );
+  }
+
+  if (platform === 'pwa') {
+    return (
+      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">notification settings</strong></span></li>
+        <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Event Radar</strong> and allow notifications</span></li>
+        <li className="flex gap-3">{stepBadge(3)}<span>If that doesn&apos;t work, <strong className="text-text-primary">reinstall the app</strong> and grant permission when prompted</span></li>
+      </ol>
+    );
+  }
+
+  return (
+    <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
+      <li className="flex gap-3">{stepBadge(1)}<span>Click the <strong className="text-text-primary">lock</strong> or <strong className="text-text-primary">info icon</strong> in the address bar</span></li>
+      <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Notifications</strong> → change to <strong className="text-text-primary">Allow</strong></span></li>
+      <li className="flex gap-3">{stepBadge(3)}<span><strong className="text-text-primary">Refresh the page</strong> and return here to enable push</span></li>
+    </ol>
+  );
+}
+
 export function Settings() {
   const location = useLocation();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
@@ -360,26 +422,7 @@ export function Settings() {
                   <p className="mt-2 text-sm leading-6 text-text-secondary">
                     You previously denied notification permissions. To re-enable push alerts:
                   </p>
-                  <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-                    <li className="flex gap-3">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
-                        1
-                      </span>
-                      <span>Click the <strong className="text-text-primary">lock</strong> or <strong className="text-text-primary">info icon</strong> in the address bar</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
-                        2
-                      </span>
-                      <span>Find <strong className="text-text-primary">Notifications</strong> → change to <strong className="text-text-primary">Allow</strong></span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
-                        3
-                      </span>
-                      <span><strong className="text-text-primary">Refresh the page</strong> and return here to enable push</span>
-                    </li>
-                  </ol>
+                  <PushDeniedRecoverySteps />
                   <div className="mt-4 rounded-xl border border-overlay-medium bg-bg-surface/50 p-3">
                     <p className="text-xs text-text-tertiary">
                       Or get alerts via email instead <span className="italic">(coming soon)</span>
