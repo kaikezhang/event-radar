@@ -138,7 +138,7 @@ export function FeedList({
 
   return (
     <div
-      className="space-y-3"
+      className="space-y-3 overflow-x-hidden"
       onTouchStart={touchHandlers.onTouchStart}
       onTouchMove={touchHandlers.onTouchMove}
       onTouchEnd={touchHandlers.onTouchEnd}
