@@ -42,9 +42,8 @@ export function FeedTabs({
           aria-label="What is Smart Feed?"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
-          onFocus={() => setShowTooltip(true)}
-          onBlur={() => setShowTooltip(false)}
           onClick={() => setShowTooltip((prev) => !prev)}
+          onBlur={() => setTimeout(() => setShowTooltip(false), 150)}
         >
           <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help" />
           {showTooltip && (
