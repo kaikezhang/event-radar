@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { Plus, X } from 'lucide-react';
+import { BellRing, Plus, X } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 import type { FilterPreset } from '../../types/index.js';
 
@@ -10,6 +10,7 @@ interface FeedFiltersProps {
   allPresets: FilterPreset[];
   builtinPresetNames: string[];
   hasActiveFilters: boolean;
+  pushOnly: boolean;
   onApplyPreset: (preset: FilterPreset) => void;
   onCloseAddFilterDropdown?: () => void;
   onClearFilters: () => void;
@@ -17,6 +18,7 @@ interface FeedFiltersProps {
   onPresetNameChange: (value: string) => void;
   onSavePreset: () => void;
   onToggleAddFilterDropdown: () => void;
+  onTogglePushOnly: () => void;
   onToggleSeverity: (severity: string) => void;
   onToggleSource: (source: string) => void;
   presetName: string;
@@ -33,6 +35,7 @@ export function FeedFilters({
   allPresets,
   builtinPresetNames,
   hasActiveFilters,
+  pushOnly,
   onApplyPreset,
   onCloseAddFilterDropdown,
   onClearFilters,
@@ -40,6 +43,7 @@ export function FeedFilters({
   onPresetNameChange,
   onSavePreset,
   onToggleAddFilterDropdown,
+  onTogglePushOnly,
   onToggleSeverity,
   onToggleSource,
   presetName,
@@ -76,6 +80,22 @@ export function FeedFilters({
             <X className="h-3 w-3" />
           </button>
         ))}
+
+        <button
+          type="button"
+          onClick={onTogglePushOnly}
+          className={cn(
+            'inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+            pushOnly
+              ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
+              : 'border-border-default text-text-secondary hover:border-sky-400/30 hover:text-text-primary',
+          )}
+          aria-label="Push alerts only"
+        >
+          <BellRing className="h-3 w-3" />
+          Push alerts only
+          {pushOnly && <X className="h-3 w-3" />}
+        </button>
 
         <div className="relative" ref={addFilterRef}>
           <button
@@ -132,6 +152,25 @@ export function FeedFilters({
                   </div>
                 </div>
               )}
+
+              <div>
+                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h4>
+                <button
+                  type="button"
+                  onClick={onTogglePushOnly}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                    pushOnly
+                      ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
+                      : 'border-border-default text-text-secondary hover:text-text-primary',
+                  )}
+                  aria-label="Push alerts only"
+                  aria-pressed={pushOnly}
+                >
+                  <BellRing className="h-3 w-3" />
+                  Push alerts only
+                </button>
+              </div>
 
               <div>
                 <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Presets</h4>
@@ -215,6 +254,25 @@ export function FeedFilters({
               </button>
             </div>
           )}
+
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h3>
+            <button
+              type="button"
+              onClick={onTogglePushOnly}
+              className={cn(
+                'inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-3 py-1.5 text-sm font-medium transition',
+                pushOnly
+                  ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
+                  : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
+              )}
+              aria-label="Push alerts only"
+              aria-pressed={pushOnly}
+            >
+              <BellRing className="h-4 w-4" />
+              Push alerts only
+            </button>
+          </div>
 
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Severity</h3>

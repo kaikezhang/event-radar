@@ -16,6 +16,8 @@ export interface AlertSummary {
   confirmationCount?: number;
   confirmedSources?: string[];
   sourceMetadata?: Record<string, unknown>;
+  pushed?: boolean;
+  deliveryChannels?: string[];
 }
 
 export interface TickerDirection {

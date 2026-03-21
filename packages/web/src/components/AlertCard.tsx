@@ -1,4 +1,4 @@
-import { Star, CircleCheckBig } from 'lucide-react';
+import { BellRing, Star, CircleCheckBig } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AlertSummary } from '../types/index.js';
 import { DirectionBadge } from './DirectionBadge.js';
@@ -62,6 +62,7 @@ export function AlertCard({
   const primaryTicker = alert.tickers[0];
   const isCritical = alert.severity === 'CRITICAL';
   const isLow = alert.severity === 'LOW';
+  const showPushBadge = alert.pushed === true;
 
   // LOW tier: compressed single-line card
   if (isLow) {
@@ -82,6 +83,12 @@ export function AlertCard({
           <span>{displaySource(alert.source, alert.sourceKey)}</span>
           <span>·</span>
           <span>{formatRelativeTime(alert.time)}</span>
+          {showPushBadge && (
+            <>
+              <span>·</span>
+              <PushDeliveryBadge compact />
+            </>
+          )}
           <div className="ml-auto flex items-center gap-2">
             {alert.direction && (
               <span className={cn(
@@ -197,6 +204,7 @@ export function AlertCard({
             {trustCue.label}
           </span>
         )}
+        {showPushBadge && <PushDeliveryBadge />}
       </div>
 
       {/* Row 2: Headline */}
@@ -285,6 +293,22 @@ export function AlertCard({
         )}
       </div>
     </article>
+  );
+}
+
+function PushDeliveryBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border border-sky-400/20 bg-sky-400/10 font-semibold uppercase tracking-[0.16em] text-sky-300',
+        compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+      )}
+      aria-label="Sent as a push alert"
+      title="Sent as a push alert"
+    >
+      <BellRing className={compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} />
+      Push alert
+    </span>
   );
 }
 

@@ -141,4 +141,25 @@ describe('Settings page', () => {
     expect(soundToggle).toHaveAttribute('aria-expanded', 'false');
     expect(budgetToggle).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('shows a signal-tier delivery explainer under notification preferences', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
+
+    expect(screen.getByText(/critical/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/push notification \+ feed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/feed only/i).length).toBeGreaterThan(0);
+  });
+
+  it('marks the high tier delivery row as conditional', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
+
+    expect(screen.getByText(/^High$/)).toBeInTheDocument();
+    expect(screen.getByText(/if enabled/i)).toBeInTheDocument();
+  });
 });

@@ -51,6 +51,8 @@ const criticalAlert: AlertSummary = {
   saved: false,
   direction: 'bullish',
   confidence: 0.92,
+  pushed: true,
+  deliveryChannels: ['web-push'],
 };
 
 const lowAlert: AlertSummary = {
@@ -173,5 +175,26 @@ describe('AlertCard', () => {
     const starButton = screen.getByRole('button', { name: /add nvda to watchlist/i });
     await user.click(starButton);
     expect(onToggle).toHaveBeenCalledWith('NVDA');
+  });
+
+  it('renders a push badge for alerts delivered via push', () => {
+    render(
+      <MemoryRouter>
+        <AlertCard alert={criticalAlert} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/sent as a push alert/i)).toBeInTheDocument();
+    expect(screen.getByText(/push alert/i)).toBeInTheDocument();
+  });
+
+  it('omits the push badge for feed-only alerts', () => {
+    render(
+      <MemoryRouter>
+        <AlertCard alert={sampleAlert2} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText(/sent as a push alert/i)).not.toBeInTheDocument();
   });
 });
