@@ -256,8 +256,12 @@ export async function registerWebsocketPlugin(
       const validation = validateApiKeyValue(apiKeyToValidate, options.apiKey);
 
       if (!validation.ok) {
-        socket.close(1008, 'Unauthorized');
-        return;
+        // Allow keyless connections when auth is not required
+        const authRequired = process.env.AUTH_REQUIRED === 'true';
+        if (authRequired || apiKeyToValidate) {
+          socket.close(1008, 'Unauthorized');
+          return;
+        }
       }
 
       // If authenticated via subprotocol, echo it back so the browser accepts

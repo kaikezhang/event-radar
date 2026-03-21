@@ -847,10 +847,12 @@ export async function getHistoricalEvents(params: HistoryParams): Promise<Histor
   };
 }
 
+const HIDDEN_SOURCES = new Set(['dummy', 'test', 'internal']);
+
 export async function getEventSources(): Promise<string[]> {
   const data = await apiFetch('/events/sources');
   const raw: string[] = data.sources ?? [];
-  return [...new Set(raw.map(mapSource))].sort();
+  return [...new Set(raw.filter((s) => !HIDDEN_SOURCES.has(s)).map(mapSource))].sort();
 }
 
 function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
@@ -986,6 +988,12 @@ export function mapSource(source: string): string {
     'truth-social': 'Truth Social',
     'x-scanner': 'X/Twitter',
     'warn': 'WARN Act',
+    'cfpb': 'CFPB',
+    'fed': 'Federal Reserve',
+    'trading-halt': 'Trading Halt',
+    'ftc': 'FTC',
+    'sec-regulatory': 'SEC Regulatory',
+    'manual': 'Manual',
   };
   return MAP[source] ?? source;
 }
