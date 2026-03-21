@@ -133,7 +133,7 @@ export function useFeedState({
   watchlistItems,
 }: UseFeedStateOptions) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<FeedTab>('watchlist');
+  const [activeTab, setActiveTab] = useState<FeedTab>('all');
   const tabInitializedRef = useRef(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showAddFilterDropdown, setShowAddFilterDropdown] = useState(false);

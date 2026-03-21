@@ -1,5 +1,5 @@
 import { ArrowLeft, ExternalLink, Share2 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState.js';
 import { SkeletonCard } from '../../components/SkeletonCard.js';
@@ -87,6 +87,11 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   const [feedback, setFeedback] = useState<'up' | 'down' | 'bad' | null>(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const [activeSection, setActiveSection] = useState<TabId>('verdict');
+
+  useEffect(() => {
+    setActiveSection('verdict');
+  }, [id]);
+
   const shouldFallbackToWatchlist = location.key === 'default';
   const backLabel = isInline ? '← Back to list' : shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back';
 
@@ -202,8 +207,12 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
         </div>
 
         <aside className="hidden space-y-4 lg:sticky lg:top-20 lg:block lg:flex-1 lg:self-start">
-          <EventMarketData data={data} />
-          <RegimeContextCard regimeContext={data.enrichment?.regimeContext} />
+          {activeSection !== 'evidence' && (
+            <>
+              <EventMarketData data={data} />
+              <RegimeContextCard regimeContext={data.enrichment?.regimeContext} />
+            </>
+          )}
           <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
               Quick actions
