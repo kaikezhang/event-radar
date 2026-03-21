@@ -1,6 +1,6 @@
 # Event Radar — Unified Roadmap
 
-**Date:** 2026-03-20
+**Date:** 2026-03-21 (updated)
 **Based on:** CC + Codex comprehensive analyses
 
 ## Product Vision
@@ -12,66 +12,60 @@
 
 ---
 
-## Phase 1: Foundation Hardening (2 weeks)
+## Phase 1: Foundation Hardening ✅ COMPLETE
 
-可靠性优先，不加新功能。两份分析都强调这是最高 ROI。
+### Batch 1 — Architecture Cleanup ✅
+- [x] **拆分 app.ts** 1418→457行 (-68%) — PR #156
+- [x] **拆分 Feed.tsx** 990→140行 (-86%) — PR #159
+- [x] **拆分 EventDetail.tsx** 1206→236行 (-80%) — PR #160
 
-### Batch 1 — Architecture Cleanup (3-4 days)
-- [ ] **拆分 app.ts (1418行)** → `pipeline/index.ts`, `scanner-manager.ts`, `websocket-manager.ts`, `route-loader.ts`，app.ts 降到 ~200 行
-- [ ] **拆分 Feed.tsx (990行)** → `FeedFilters`, `FeedList`, `FeedCard` 等子组件
-- [ ] **拆分 EventDetail.tsx (1206行)** → `EventHeader`, `EventEnrichment`, `EventHistory`, `EventChart`
+### Batch 2 — Test & CI Stabilization ✅
+- [x] **修 web 测试** 28/28 pass, 147/147 tests — PR #161
+- [x] **修 backend 测试** 110/110 pass, 1482/1482 tests — PR #162
+- [ ] **重启 E2E 测试** — CI 加 Docker Compose
+- [ ] **加 coverage 报告** — `@vitest/coverage-v8`
 
-### Batch 2 — Test & CI Stabilization (3-4 days)
-- [ ] **修 web 测试** — `useAlerts.test.tsx` (Maximum update depth), `matchMedia` mock, lightweight-charts jsdom 兼容
-- [ ] **重启 E2E 测试** — CI 加 Docker Compose，跑关键 pipeline 路径 E2E
-- [ ] **加 coverage 报告** — `@vitest/coverage-v8`，设 70% 最低门槛
-- [ ] **修 PGlite test timeout** — 根治 cleanup 问题而非 120s workaround
-
-### Batch 3 — Contract & Doc Cleanup (2-3 days)
-- [ ] **修文档漂移** — AGENTS.md, ARCHITECTURE.md, FRONTEND.md 还在说 Next.js，改成 Vite+React 实际情况
-- [ ] **统一 source naming** — pipeline 各阶段 source identifier 不一致，会导致 gatekeeper 策略错误
-- [ ] **统一前后端类型** — web 包的类型应复用 `@event-radar/shared`，不要重复定义
+### Batch 3 — Contract & Doc Cleanup ✅
+- [x] **修文档漂移** — Next.js → Vite+React 19 — direct commit
+- [ ] **统一 source naming** — 低优先级
+- [ ] **统一前后端类型** — 低优先级
 
 ---
 
-## Phase 2: Pipeline Durability (2-3 weeks)
+## Phase 2: Pipeline Durability (进行中)
 
-单点故障消除。两份分析一致认为这是最大结构性风险。
-
-### Batch 4 — Redis EventBus (1 week)
+### Batch 4 — Redis EventBus (未开始)
 - [ ] **引入 Redis Streams 替代内存 EventBus** — 崩溃不丢事件，支持重播
 - [ ] **持久化 dedup 窗口** — 当前内存滑动窗口 OOM 会丢状态
 - [ ] **story-group 接入 live pipeline** — 或者删掉这个 claim
 
-### Batch 5 — Auth & Security Hardening (1 week)
-- [ ] **默认 AUTH_REQUIRED=true** — production 路径不能 open
-- [ ] **多用户隔离** — 停止把未认证请求塌缩到 `default` 用户
-- [ ] **删 WebSocket query-string API key** — 安全隐患
-- [ ] **加 CSP headers** — XSS 防护
-- [ ] **加 WebSocket rate limiting** — 防滥用
+### Batch 5 — Auth & Security Hardening ✅
+- [x] **默认 AUTH_REQUIRED=true** — PR #167
+- [x] **加 CSP headers** — PR #167
+- [x] **加 WebSocket rate limiting** — PR #167 (10 conn/IP/min, 100 msg/conn/min)
+- [x] **WebSocket header auth** — PR #167 (Sec-WebSocket-Protocol subprotocol)
+- [ ] **多用户隔离** — 需要 RBAC 支持
 
-### Batch 6 — Operational Improvements (3-4 days)
-- [ ] **Scanner interval 配置化** — 从硬编码移到 env vars
-- [ ] **Dark mode** — Tailwind `dark:` 变体 + 系统偏好检测
-- [ ] **Scorecard 加入主导航** — 当前隐藏太深
+### Batch 6 — Operational Improvements ✅
+- [x] **Scanner interval 配置化** — PR #165 (env var override in BaseScanner)
+- [x] **Dark mode** — PR #163 (23 files, Light/Dark/System)
+- [x] **Scorecard 加入主导航** — PR #165 (5th tab)
 
 ---
 
-## Phase 3: Product Polish (3-4 weeks)
+## Phase 3: Product Polish (部分完成)
 
-从"能用"到"好用"。
-
-### Batch 7 — Desktop & UX (1-2 weeks)
-- [ ] **桌面双栏布局** — feed + detail 并排
-- [ ] **键盘快捷键** — j/k 导航、s 收藏、f 过滤
-- [ ] **Onboarding 优化** — 围绕 watchlist + push + trust 说明
+### Batch 7 — Desktop & UX ✅
+- [x] **桌面双栏布局** — PR #168 (already existed, confirmed)
+- [x] **键盘快捷键** — PR #168 (j/k/Enter/Escape)
+- [x] **Onboarding 优化** — PR #171 (multi-step wizard)
 - [ ] **Feed/Push 分级 UI** — 清晰区分"仅 feed"和"推送"信号
 
-### Batch 8 — Historical & Intelligence (2 weeks)
-- [ ] **历史事件回填** — 从 SEC/政府源回填 2-3 年数据，pattern matching 质量依赖历史深度
+### Batch 8 — Historical & Intelligence (部分完成)
+- [ ] **历史事件回填** — 从 SEC/政府源回填 2-3 年数据
 - [ ] **历史浏览器** — 按 sector/event type 浏览历史事件
-- [ ] **Audio Squawk** — TTS 朗读 critical/high 事件（browser SpeechSynthesis 或 MiniMax）
-- [ ] **Source 命中率可视化** — 把 scorecard 做成核心差异化功能
+- [x] **Audio Squawk** — PR #169 (browser SpeechSynthesis)
+- [x] **Source 命中率可视化** — PR #170 (Recharts, 3 chart types)
 
 ---
 
@@ -100,12 +94,3 @@
 | Pro | $29/月 | 实时 feed, 无限 watchlist, push(20/天), API(100 req/hr) |
 | Trader | $79/月 | + Audio squawk, API(1000 req/hr), 自定义 alert DSL |
 | Enterprise | Custom | 独立实例, SLA, WebSocket firehose, 自定义 scanner |
-
-低于 Benzinga Pro($37-177), Unusual Whales($48), The Fly($45-75)。
-自托管永远免费，保持开源信誉。
-
----
-
-## 立即开始: Phase 1 Batch 1
-
-**任务**: 拆分 app.ts — 项目最大的技术债
