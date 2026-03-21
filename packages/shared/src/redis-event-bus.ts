@@ -7,13 +7,21 @@ type TopicHandler = (payload: unknown) => void | Promise<void>;
 
 const STREAM_KEY = 'event-radar:events';
 const topicStreamKey = (topic: string) => `event-radar:topic:${topic}`;
-const GROUP_NAME = 'pipeline-workers';
+const RAW_GROUP_NAME = 'pipeline-workers';
 const CONSUMER_NAME = `worker-${process.pid}`;
 const BLOCK_MS = 1000;
+
+const instanceId = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
 export interface RedisEventBusOptions {
   redisUrl?: string;
   maxLen?: number;
+}
+
+interface StreamLoop {
+  running: boolean;
+  promise: Promise<void>;
+  groupName: string;
 }
 
 export class RedisEventBus implements EventBus {
@@ -23,8 +31,7 @@ export class RedisEventBus implements EventBus {
   private readClient: Redis | null = null;
   private handlers: Handler[] = [];
   private topicHandlers = new Map<string, TopicHandler[]>();
-  private running = false;
-  private readLoops: Promise<void>[] = [];
+  private streamLoops = new Map<string, StreamLoop>();
   private _publishedCount = 0;
 
   constructor(redisUrl = 'redis://localhost:6379', options?: { maxLen?: number }) {
@@ -57,11 +64,14 @@ export class RedisEventBus implements EventBus {
 
   subscribe(handler: Handler): () => void {
     this.handlers.push(handler);
-    if (!this.running && this.handlers.length === 1) {
-      this.startReadLoop(STREAM_KEY, this.handlers, '[RedisEventBus] Unhandled error in subscriber:', true);
+    if (!this.streamLoops.has(STREAM_KEY) && this.handlers.length === 1) {
+      this.startReadLoop(STREAM_KEY, this.handlers, '[RedisEventBus] Unhandled error in subscriber:', true, RAW_GROUP_NAME);
     }
     return () => {
       this.handlers = this.handlers.filter((h) => h !== handler);
+      if (this.handlers.length === 0) {
+        this.stopStreamLoop(STREAM_KEY);
+      }
     };
   }
 
@@ -73,10 +83,12 @@ export class RedisEventBus implements EventBus {
 
   subscribeTopic(topic: string, handler: TopicHandler): () => void {
     let handlers = this.topicHandlers.get(topic);
+    const streamKey = topicStreamKey(topic);
     if (!handlers) {
       handlers = [];
       this.topicHandlers.set(topic, handlers);
-      this.startReadLoop(topicStreamKey(topic), handlers, '[RedisEventBus] Unhandled error in topic subscriber:', false);
+      const topicGroupName = `topic-${instanceId}`;
+      this.startReadLoop(streamKey, handlers, '[RedisEventBus] Unhandled error in topic subscriber:', false, topicGroupName);
     }
     handlers.push(handler);
     return () => {
@@ -84,9 +96,19 @@ export class RedisEventBus implements EventBus {
       if (arr) {
         const idx = arr.indexOf(handler);
         if (idx >= 0) arr.splice(idx, 1);
-        if (arr.length === 0) this.topicHandlers.delete(topic);
+        if (arr.length === 0) {
+          this.topicHandlers.delete(topic);
+          this.stopStreamLoop(streamKey);
+        }
       }
     };
+  }
+
+  private stopStreamLoop(streamKey: string): void {
+    const loop = this.streamLoops.get(streamKey);
+    if (loop) {
+      loop.running = false;
+    }
   }
 
   private startReadLoop(
@@ -94,16 +116,23 @@ export class RedisEventBus implements EventBus {
     handlers: (Handler | TopicHandler)[],
     errorPrefix: string,
     parseAsRawEvent: boolean,
+    groupName: string,
   ): void {
-    this.running = true;
-    const loop = (async () => {
-      const reader = await this.getReadClient();
-      await this.ensureGroup(reader, streamKey);
+    const loopState: StreamLoop = {
+      running: true,
+      promise: Promise.resolve(),
+      groupName,
+    };
+    this.streamLoops.set(streamKey, loopState);
 
-      while (this.running) {
+    loopState.promise = (async () => {
+      const reader = await this.getReadClient();
+      await this.ensureGroup(reader, streamKey, groupName);
+
+      while (loopState.running) {
         try {
           const results = await reader.xreadgroup(
-            'GROUP', GROUP_NAME, CONSUMER_NAME,
+            'GROUP', groupName, CONSUMER_NAME,
             'COUNT', '10',
             'BLOCK', String(BLOCK_MS),
             'STREAMS', streamKey, '>',
@@ -127,7 +156,7 @@ export class RedisEventBus implements EventBus {
                 }
               } catch {
                 console.error(`[RedisEventBus] Failed to parse message ${messageId}`);
-                await reader.xack(streamKey, GROUP_NAME, messageId);
+                await reader.xack(streamKey, groupName, messageId);
                 continue;
               }
 
@@ -139,22 +168,21 @@ export class RedisEventBus implements EventBus {
                 }
               }
 
-              await reader.xack(streamKey, GROUP_NAME, messageId);
+              await reader.xack(streamKey, groupName, messageId);
             }
           }
         } catch (error) {
-          if (!this.running) break;
+          if (!loopState.running) break;
           console.error('[RedisEventBus] Read loop error, retrying in 1s:', error);
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
     })();
-    this.readLoops.push(loop);
   }
 
-  private async ensureGroup(client: Redis, streamKey: string): Promise<void> {
+  private async ensureGroup(client: Redis, streamKey: string, groupName: string): Promise<void> {
     try {
-      await client.xgroup('CREATE', streamKey, GROUP_NAME, '0', 'MKSTREAM');
+      await client.xgroup('CREATE', streamKey, groupName, '0', 'MKSTREAM');
     } catch (error) {
       if (error instanceof Error && !error.message.includes('BUSYGROUP')) {
         throw error;
@@ -171,8 +199,11 @@ export class RedisEventBus implements EventBus {
   }
 
   async shutdown(): Promise<void> {
-    this.running = false;
-    await Promise.allSettled(this.readLoops);
+    for (const loop of this.streamLoops.values()) {
+      loop.running = false;
+    }
+    await Promise.allSettled([...this.streamLoops.values()].map((l) => l.promise));
+    this.streamLoops.clear();
     if (this.readClient) {
       this.readClient.disconnect();
       this.readClient = null;

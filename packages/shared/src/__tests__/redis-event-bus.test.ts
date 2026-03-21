@@ -278,15 +278,18 @@ describe('RedisEventBus', () => {
       unsub();
     });
 
-    it('should create consumer group for topic stream', async () => {
+    it('should create per-instance consumer group for topic stream (fanout)', async () => {
       bus.subscribeTopic('alerts', () => {});
       await new Promise((r) => setTimeout(r, 100));
 
       const readClient = lastMock();
       expect(readClient.xgroupCalls).toHaveLength(1);
-      expect(readClient.xgroupCalls[0]).toEqual(
-        expect.arrayContaining(['CREATE', 'event-radar:topic:alerts', 'pipeline-workers']),
-      );
+      const groupArgs = readClient.xgroupCalls[0];
+      expect(groupArgs[0]).toBe('CREATE');
+      expect(groupArgs[1]).toBe('event-radar:topic:alerts');
+      // Topic group should NOT be 'pipeline-workers' — it must be per-instance for fanout
+      expect(groupArgs[2]).not.toBe('pipeline-workers');
+      expect(groupArgs[2]).toMatch(/^topic-/);
     });
   });
 
@@ -309,6 +312,120 @@ describe('RedisEventBus', () => {
 
     it('should be safe to call without subscribing', async () => {
       await expect(bus.shutdown()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('subscribeTopic before subscribe — both loops must run', () => {
+    it('should start both raw event and topic read loops independently', async () => {
+      // subscribeTopic first (like websocket plugin does)
+      bus.subscribeTopic('event:classified', () => {});
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Now subscribe for raw events (pipeline)
+      const received: RawEvent[] = [];
+      bus.subscribe((e) => { received.push(e); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+
+      // Both consumer groups should have been created
+      expect(readClient.xgroupCalls.length).toBeGreaterThanOrEqual(2);
+      const streamKeys = readClient.xgroupCalls.map((c) => c[1]);
+      expect(streamKeys).toContain('event-radar:topic:event:classified');
+      expect(streamKeys).toContain('event-radar:events');
+
+      // Deliver a raw event — it should be consumed
+      const event = makeEvent();
+      readClient.pendingMessages.push([
+        ['event-radar:events', [
+          ['raw-1', ['data', JSON.stringify(event)]],
+        ]],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 200));
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ id: event.id });
+    });
+  });
+
+  describe('unsubscribe last handler stops the loop', () => {
+    it('should stop consuming messages after last handler is removed', async () => {
+      const received: unknown[] = [];
+      const unsub = bus.subscribeTopic('alerts', (p) => { received.push(p); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+
+      // Deliver a message before unsub — should be received
+      readClient.pendingMessages.push([
+        ['event-radar:topic:alerts', [
+          ['msg-1', ['data', JSON.stringify({ n: 1 })]],
+        ]],
+      ]);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(received).toHaveLength(1);
+
+      // Unsubscribe the only handler
+      unsub();
+
+      // Queue another message — should NOT be consumed (loop stopped)
+      const callsBefore = readClient.xreadgroupCalls.length;
+      await new Promise((r) => setTimeout(r, 200));
+      // The loop should have stopped, so xreadgroup call count should not increase significantly
+      const callsAfter = readClient.xreadgroupCalls.length;
+      // Allow at most 1 extra call (in-flight at time of stop)
+      expect(callsAfter - callsBefore).toBeLessThanOrEqual(1);
+    });
+
+    it('should stop raw event loop when last handler removed', async () => {
+      const unsub = bus.subscribe(() => {});
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+      unsub();
+
+      const callsBefore = readClient.xreadgroupCalls.length;
+      await new Promise((r) => setTimeout(r, 200));
+      const callsAfter = readClient.xreadgroupCalls.length;
+      expect(callsAfter - callsBefore).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('topic fanout — multiple subscribers all receive the same message', () => {
+    it('should deliver to all handlers on the same topic', async () => {
+      const received1: unknown[] = [];
+      const received2: unknown[] = [];
+
+      bus.subscribeTopic('alerts', (p) => { received1.push(p); });
+      bus.subscribeTopic('alerts', (p) => { received2.push(p); });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+      readClient.pendingMessages.push([
+        ['event-radar:topic:alerts', [
+          ['msg-fanout-1', ['data', JSON.stringify({ severity: 'high' })]],
+        ]],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Both handlers should receive the message (local fanout)
+      expect(received1).toHaveLength(1);
+      expect(received2).toHaveLength(1);
+      expect(received1[0]).toEqual({ severity: 'high' });
+      expect(received2[0]).toEqual({ severity: 'high' });
+    });
+
+    it('should use per-instance group names so different instances get all messages', async () => {
+      bus.subscribeTopic('alerts', () => {});
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+      const groupName = readClient.xgroupCalls[0][2] as string;
+
+      // Group name should be instance-specific, not the shared 'pipeline-workers'
+      expect(groupName).not.toBe('pipeline-workers');
+      expect(groupName).toMatch(/^topic-\d+-/);
     });
   });
 
