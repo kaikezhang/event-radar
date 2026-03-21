@@ -214,12 +214,13 @@ export function useFeedState({
     const param = searchParams.get('source');
     return param ? param.split(',') : [];
   }, [searchParams]);
+  const pushOnly = searchParams.get('push') === 'only';
 
   const allPresets = useMemo(() => [...BUILT_IN_PRESETS, ...customPresets], [customPresets]);
   const isWatchlistMode = activeTab === 'watchlist';
   const isDefaultSeverity = !searchParams.has('severity');
-  const hasActiveFilters = (!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0;
-  const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + activeSources.length;
+  const hasActiveFilters = ((!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0) || pushOnly;
+  const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + activeSources.length + (pushOnly ? 1 : 0);
 
   const {
     alerts,
@@ -239,13 +240,16 @@ export function useFeedState({
   });
 
   const updateFilters = useCallback(
-    (severities: string[], sources: string[]) => {
+    (severities: string[], sources: string[], nextPushOnly: boolean) => {
       const params = new URLSearchParams();
       if (severities.length > 0) {
         params.set('severity', severities.join(','));
       }
       if (sources.length > 0) {
         params.set('source', sources.join(','));
+      }
+      if (nextPushOnly) {
+        params.set('push', 'only');
       }
       setSearchParams(params, { replace: true });
     },
@@ -256,15 +260,19 @@ export function useFeedState({
     const next = activeSeverities.includes(severity)
       ? activeSeverities.filter((value) => value !== severity)
       : [...activeSeverities, severity];
-    updateFilters(next, activeSources);
-  }, [activeSeverities, activeSources, updateFilters]);
+    updateFilters(next, activeSources, pushOnly);
+  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
 
   const toggleSource = useCallback((source: string) => {
     const next = activeSources.includes(source)
       ? activeSources.filter((value) => value !== source)
       : [...activeSources, source];
-    updateFilters(activeSeverities, next);
-  }, [activeSeverities, activeSources, updateFilters]);
+    updateFilters(activeSeverities, next, pushOnly);
+  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
+
+  const togglePushOnly = useCallback(() => {
+    updateFilters(activeSeverities, activeSources, !pushOnly);
+  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams();
@@ -273,8 +281,8 @@ export function useFeedState({
   }, [setSearchParams]);
 
   const applyPreset = useCallback((preset: FilterPreset) => {
-    updateFilters(preset.severities, preset.sources);
-  }, [updateFilters]);
+    updateFilters(preset.severities, preset.sources, pushOnly);
+  }, [pushOnly, updateFilters]);
 
   const savePreset = useCallback(() => {
     if (!presetName.trim()) {
@@ -357,6 +365,9 @@ export function useFeedState({
     if (activeSources.length > 0) {
       result = result.filter((alert) => activeSources.includes(alert.source));
     }
+    if (pushOnly) {
+      result = result.filter((alert) => alert.pushed);
+    }
     if (sortMode === 'severity') {
       result = [...result].sort((a, b) => {
         const severityDiff = (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4);
@@ -367,7 +378,7 @@ export function useFeedState({
       });
     }
     return result;
-  }, [activeSeverities, activeSources, alerts, dismissedIds, sortMode]);
+  }, [activeSeverities, activeSources, alerts, dismissedIds, pushOnly, sortMode]);
 
   useEffect(() => {
     if (selectedEventId && filteredAlerts.length > 0 && !filteredAlerts.some((alert) => alert.id === selectedEventId)) {
@@ -544,6 +555,7 @@ export function useFeedState({
     newAlertIds,
     pendingCount,
     presetName,
+    pushOnly,
     pullDistance,
     savePreset,
     selectedEventId,
@@ -564,6 +576,7 @@ export function useFeedState({
     toastVisible,
     toggleSeverity,
     toggleSource,
+    togglePushOnly,
     applyPreset,
     applyPendingAlerts,
   };

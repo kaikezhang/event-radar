@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getEventDetail, searchEvents } from './api.js';
+import { getEventDetail, getFeed, searchEvents } from './api.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -131,6 +131,60 @@ describe('searchEvents', () => {
 
     expect(results).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('getFeed push delivery mapping', () => {
+  it('keeps an explicit pushed flag from the feed response', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+      expect(url.pathname).toBe('/api/v1/feed');
+
+      return jsonResponse({
+        events: [{
+          id: 'evt-pushed-1',
+          severity: 'HIGH',
+          source: 'sec-edgar',
+          title: 'Pushed event',
+          summary: 'Explicit pushed flag',
+          pushed: true,
+          metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
+          receivedAt: '2026-03-16T12:00:00.000Z',
+        }],
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getFeed(20);
+
+    expect(result.alerts[0]?.pushed).toBe(true);
+    expect(result.alerts[0]?.deliveryChannels).toEqual([]);
+  });
+
+  it('marks alerts as pushed when deliveryChannels include a push transport', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      events: [{
+        id: 'evt-pushed-2',
+        severity: 'CRITICAL',
+        source: 'breaking-news',
+        title: 'Delivery channels event',
+        summary: 'Derived pushed state',
+        deliveryChannels: [
+          { channel: 'discord', ok: true },
+          { channel: 'web-push', ok: true },
+        ],
+        metadata: { ticker: 'SPY', tickers: ['SPY'] },
+        receivedAt: '2026-03-16T12:01:00.000Z',
+      }],
+    }));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getFeed();
+
+    expect(result.alerts[0]?.pushed).toBe(true);
+    expect(result.alerts[0]?.deliveryChannels).toEqual(['discord', 'web-push']);
   });
 });
 

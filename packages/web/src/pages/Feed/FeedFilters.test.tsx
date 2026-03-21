@@ -19,6 +19,7 @@ describe('FeedFilters', () => {
         allPresets={presets}
         builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
+        pushOnly={false}
         onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -26,6 +27,7 @@ describe('FeedFilters', () => {
         onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
+        onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
         presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
@@ -48,6 +50,7 @@ describe('FeedFilters', () => {
         allPresets={presets}
         builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters={false}
+        pushOnly
         onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -55,6 +58,7 @@ describe('FeedFilters', () => {
         onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
+        onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
         presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
@@ -67,6 +71,7 @@ describe('FeedFilters', () => {
     expect(screen.getByText('Severity')).toBeInTheDocument();
     expect(screen.getByText('Source')).toBeInTheDocument();
     expect(screen.getByText('Presets')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /push alerts only/i }).length).toBeGreaterThan(0);
   });
 
   it('shows the save preset controls when the filter panel is expanded with active filters', async () => {
@@ -81,6 +86,7 @@ describe('FeedFilters', () => {
         allPresets={presets}
         builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
+        pushOnly={false}
         onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -88,6 +94,7 @@ describe('FeedFilters', () => {
         onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
+        onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
         presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
@@ -101,5 +108,70 @@ describe('FeedFilters', () => {
 
     expect(onPresetNameChange).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+  });
+
+  it('renders an active push-only chip and toggles it off when clicked', async () => {
+    const user = userEvent.setup();
+    const onTogglePushOnly = vi.fn();
+
+    render(
+      <FeedFilters
+        activeSeverities={[]}
+        activeSources={[]}
+        addFilterRef={createRef<HTMLDivElement>()}
+        allPresets={presets}
+        builtinPresetNames={['Full Firehose', 'High Conviction']}
+        hasActiveFilters
+        pushOnly
+        onApplyPreset={vi.fn()}
+        onClearFilters={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onPresetNameChange={vi.fn()}
+        onSavePreset={vi.fn()}
+        onToggleSeverity={vi.fn()}
+        onToggleSource={vi.fn()}
+        onTogglePushOnly={onTogglePushOnly}
+        onToggleAddFilterDropdown={vi.fn()}
+        presetName=""
+        severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
+        showAddFilterDropdown={false}
+        showFilters={false}
+        sources={['sec-edgar', 'fed']}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /push alerts only/i }));
+
+    expect(onTogglePushOnly).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows clear all when push-only is the only active filter', () => {
+    render(
+      <FeedFilters
+        activeSeverities={[]}
+        activeSources={[]}
+        addFilterRef={createRef<HTMLDivElement>()}
+        allPresets={presets}
+        builtinPresetNames={['Full Firehose', 'High Conviction']}
+        hasActiveFilters
+        pushOnly
+        onApplyPreset={vi.fn()}
+        onClearFilters={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onPresetNameChange={vi.fn()}
+        onSavePreset={vi.fn()}
+        onToggleSeverity={vi.fn()}
+        onToggleSource={vi.fn()}
+        onTogglePushOnly={vi.fn()}
+        onToggleAddFilterDropdown={vi.fn()}
+        presetName=""
+        severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
+        showAddFilterDropdown={false}
+        showFilters={false}
+        sources={['sec-edgar', 'fed']}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
   });
 });

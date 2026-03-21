@@ -16,6 +16,16 @@ import type {
 } from '../types/index.js';
 
 const API_BASE = '/api';
+const PUSH_DELIVERY_CHANNELS = new Set([
+  'apns',
+  'bark',
+  'ios-push',
+  'push',
+  'push-notification',
+  'push_notification',
+  'web-push',
+  'web_push',
+]);
 
 // ── HTML sanitization helpers ────────────────────────────────────────────────
 
@@ -207,6 +217,53 @@ export async function updateNotificationPreferences(
     method: 'PUT',
     body: preferences,
   });
+}
+
+function normalizeDeliveryChannelName(channel: string): string {
+  return channel.trim().toLowerCase();
+}
+
+function mapDeliveryChannels(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const channels = raw.flatMap((entry) => {
+    if (typeof entry === 'string') {
+      return [normalizeDeliveryChannelName(entry)];
+    }
+
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+
+    const channel = 'channel' in entry && typeof entry.channel === 'string'
+      ? entry.channel
+      : 'type' in entry && typeof entry.type === 'string'
+        ? entry.type
+        : null;
+    const ok = !('ok' in entry) || entry.ok !== false;
+
+    return channel && ok ? [normalizeDeliveryChannelName(channel)] : [];
+  });
+
+  return Array.from(new Set(channels));
+}
+
+function mapPushedState(
+  event: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  deliveryChannels: string[],
+): boolean {
+  if (typeof event.pushed === 'boolean') {
+    return event.pushed;
+  }
+
+  if (typeof metadata.pushed === 'boolean') {
+    return metadata.pushed;
+  }
+
+  return deliveryChannels.some((channel) => PUSH_DELIVERY_CHANNELS.has(channel));
 }
 
 function mapLlmEnrichment(meta: Record<string, unknown>): LlmEnrichment | null {
@@ -760,9 +817,16 @@ export async function getEventSources(): Promise<string[]> {
 function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
   const source = (event.source as string) ?? 'unknown';
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+  const audit = (event.audit ?? {}) as Record<string, unknown>;
   const tickers = (event.tickers as string[] | undefined)
     ?? (metadata.tickers as string[] | undefined)
     ?? (metadata.ticker ? [metadata.ticker as string] : []);
+  const deliveryChannels = mapDeliveryChannels(
+    event.deliveryChannels
+    ?? metadata.deliveryChannels
+    ?? metadata.delivery_channels
+    ?? audit.deliveryChannels,
+  );
 
   const rawTitle = cleanHtml((event.title as string) ?? '');
   const rawSummary = cleanHtml((event.summary as string) ?? '');
@@ -794,6 +858,8 @@ function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
         ? (metadata.confirmedSources as string[]).map(mapSource)
         : undefined,
     sourceMetadata: (event.sourceMetadata as Record<string, unknown>) ?? undefined,
+    pushed: mapPushedState(event, metadata, deliveryChannels),
+    deliveryChannels,
   };
 }
 

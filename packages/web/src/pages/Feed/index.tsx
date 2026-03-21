@@ -75,6 +75,7 @@ export function Feed() {
       onToggleWatchlist={add}
       pendingCount={state.pendingCount}
       presetName={state.presetName}
+      pushOnly={state.pushOnly}
       pullDistance={state.pullDistance}
       savePreset={state.savePreset}
       scorecardSummary={scorecardSummary}
@@ -89,6 +90,7 @@ export function Feed() {
       sources={sources}
       toggleAddFilterDropdown={() => state.setShowAddFilterDropdown((current) => !current)}
       toggleFilters={() => state.setShowFilters((current) => !current)}
+      togglePushOnly={state.togglePushOnly}
       toggleSortMode={state.setSortMode}
       toggleSeverity={state.toggleSeverity}
       toggleSource={state.toggleSource}

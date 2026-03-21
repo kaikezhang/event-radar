@@ -52,6 +52,7 @@ interface FeedListProps {
   onToggleWatchlist: (ticker: string) => void;
   pendingCount: number;
   presetName: string;
+  pushOnly: boolean;
   pullDistance: number;
   savePreset: () => void;
   scorecardSummary: ScorecardSummary | null;
@@ -66,6 +67,7 @@ interface FeedListProps {
   sources: string[];
   toggleAddFilterDropdown: () => void;
   toggleFilters: () => void;
+  togglePushOnly: () => void;
   toggleSortMode: (mode: SortMode) => void;
   toggleSeverity: (severity: string) => void;
   toggleSource: (source: string) => void;
@@ -109,6 +111,7 @@ export function FeedList({
   onToggleWatchlist,
   pendingCount,
   presetName,
+  pushOnly,
   pullDistance,
   savePreset,
   scorecardSummary,
@@ -123,6 +126,7 @@ export function FeedList({
   sources,
   toggleAddFilterDropdown,
   toggleFilters,
+  togglePushOnly,
   toggleSortMode,
   toggleSeverity,
   toggleSource,
@@ -175,6 +179,7 @@ export function FeedList({
         allPresets={allPresets}
         builtinPresetNames={BUILT_IN_PRESETS.map((preset) => preset.name)}
         hasActiveFilters={hasActiveFilters}
+        pushOnly={pushOnly}
         onApplyPreset={applyPreset}
         onCloseAddFilterDropdown={toggleAddFilterDropdown}
         onClearFilters={clearFilters}
@@ -182,6 +187,7 @@ export function FeedList({
         onPresetNameChange={onPresetNameChange}
         onSavePreset={savePreset}
         onToggleAddFilterDropdown={toggleAddFilterDropdown}
+        onTogglePushOnly={togglePushOnly}
         onToggleSeverity={toggleSeverity}
         onToggleSource={toggleSource}
         presetName={presetName}

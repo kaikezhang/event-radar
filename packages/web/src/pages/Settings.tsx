@@ -54,6 +54,33 @@ const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: 'system', label: 'System', icon: Monitor },
 ];
 
+const SIGNAL_TIER_ROWS = [
+  {
+    severity: 'Critical',
+    severityClassName: 'border-severity-critical/20 bg-severity-critical/10 text-severity-critical',
+    delivery: 'Push notification + Feed',
+    detail: 'Always treated as top-priority.',
+  },
+  {
+    severity: 'High',
+    severityClassName: 'border-severity-high/20 bg-severity-high/10 text-severity-high',
+    delivery: 'Push notification + Feed',
+    detail: 'If enabled for the names and volume you allow.',
+  },
+  {
+    severity: 'Medium',
+    severityClassName: 'border-severity-medium/20 bg-severity-medium/10 text-severity-medium',
+    delivery: 'Feed only',
+    detail: 'Visible in the live feed without sending a push.',
+  },
+  {
+    severity: 'Low',
+    severityClassName: 'border-severity-low/20 bg-severity-low/10 text-severity-low',
+    delivery: 'Feed only',
+    detail: 'Kept available in feed for lower-priority review.',
+  },
+] as const;
+
 export function Settings() {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
@@ -462,6 +489,36 @@ export function Settings() {
             </div>
           ) : (
             <>
+              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Signal tier delivery</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    This is how Event Radar separates push-worthy alerts from feed-only activity.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {SIGNAL_TIER_ROWS.map((row) => (
+                    <div
+                      key={row.severity}
+                      className="flex flex-col gap-3 rounded-2xl border border-overlay-medium bg-bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${row.severityClassName}`}
+                        >
+                          {row.severity}
+                        </span>
+                        <p className="text-sm leading-6 text-text-secondary">{row.detail}</p>
+                      </div>
+                      <div className="inline-flex items-center rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-primary">
+                        {row.delivery}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
                 <div>
                   <p className="text-sm font-medium text-text-primary">Quiet hours</p>
