@@ -104,10 +104,11 @@ export class RedisEventBus implements EventBus {
     };
   }
 
-  private stopStreamLoop(streamKey: string): void {
+  private async stopStreamLoop(streamKey: string): Promise<void> {
     const loop = this.streamLoops.get(streamKey);
     if (loop) {
       loop.running = false;
+      await loop.promise;
       this.streamLoops.delete(streamKey);
     }
   }
