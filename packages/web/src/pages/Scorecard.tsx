@@ -229,7 +229,7 @@ export function Scorecard() {
         <StatCard value={formatMove(data.totals.avgT20Move)} label="Avg T+20 move" />
       </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <SourceAccuracyChart data={data} isDark={isDark} />
         <SeverityBreakdownChart data={data} isDark={isDark} />
       </div>
@@ -322,15 +322,15 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
   const chartHeight = Math.max(200, chartData.length * barHeight + 40);
 
   return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
         Source accuracy
       </h2>
-      <ResponsiveContainer width="100%" height={chartHeight}>
+      <ResponsiveContainer width="100%" height={chartHeight} minWidth={0}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
           <XAxis type="number" domain={[0, 100]} tick={{ fill: axisColor, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-          <YAxis type="category" dataKey="name" width={100} tick={{ fill: axisColor, fontSize: 11 }} />
+          <YAxis type="category" dataKey="name" width={70} tick={{ fill: axisColor, fontSize: 10 }} />
           <Tooltip
             contentStyle={{
               backgroundColor: isDark ? '#171923' : '#ffffff',
@@ -384,12 +384,12 @@ function SeverityBreakdownChart({ data, isDark }: { data: ScorecardSummary; isDa
   if (severityData.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
         Severity breakdown
       </h2>
       <div className="flex flex-col items-center gap-4 sm:flex-row">
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={220} minWidth={0}>
           <PieChart>
             <Pie
               data={severityData}
@@ -468,14 +468,14 @@ function RollingAccuracyTrend({ data, isDark }: { data: ScorecardSummary; isDark
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
 
   return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
         Rolling accuracy trend
       </h2>
       <p className="mb-4 text-xs text-text-secondary">
         7-day rolling directional hit rate by severity level
       </p>
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" height={280} minWidth={0}>
         <LineChart data={trendData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
           <XAxis
