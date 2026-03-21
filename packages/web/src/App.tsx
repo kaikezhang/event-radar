@@ -39,12 +39,11 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
   const { user } = useAuth();
   const connectionStatus = useConnectionStatus();
 
-  // Connected = green dot (no label), reconnecting = amber dot, disconnected = hidden
   const statusIndicator = connectionStatus === 'connected'
-    ? <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" title="Live" />
+    ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" title="Live — connected" />
     : connectionStatus === 'reconnecting'
-      ? <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" title="Reconnecting" />
-      : null;
+      ? <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" title="Reconnecting…" />
+      : <span className="h-1.5 w-1.5 rounded-full bg-red-500" title="Offline" />;
 
   return (
     <header className="flex h-12 items-center justify-between">

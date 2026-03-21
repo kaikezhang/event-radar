@@ -3,7 +3,6 @@ import { Plus, RefreshCw, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState.js';
 import { PillBanner } from '../../components/PillBanner.js';
-import { SkeletonCard } from '../../components/SkeletonCard.js';
 import { cn } from '../../lib/utils.js';
 import { DailyBriefing } from '../../components/DailyBriefing.js';
 import type { AlertSummary, FilterPreset, ScorecardSummary } from '../../types/index.js';
@@ -200,19 +199,22 @@ export function FeedList({
 
       <div
         className={cn(
-          'flex items-center justify-center transition-opacity',
-          pullDistance > 0 ? 'opacity-100' : 'opacity-0',
+          'flex items-center justify-center gap-2 transition-opacity',
+          pullDistance > 0 || isRefreshing ? 'opacity-100' : 'opacity-0',
         )}
-        style={{ height: pullDistance > 0 ? `${pullDistance * 0.3}px` : '0px' }}
+        style={{ height: pullDistance > 0 || isRefreshing ? `${Math.max(pullDistance * 0.3, isRefreshing ? 32 : 0)}px` : '0px' }}
       >
         <RefreshCw
           className={cn(
             'h-4 w-4 text-text-tertiary transition-transform',
             isRefreshing && 'animate-spin',
-            pullDistance >= PULL_THRESHOLD && 'text-accent-default',
+            pullDistance >= PULL_THRESHOLD && 'text-interactive-default',
           )}
-          style={{ transform: `rotate(${Math.min(pullDistance * 2, 360)}deg)` }}
+          style={!isRefreshing ? { transform: `rotate(${Math.min(pullDistance * 2, 360)}deg)` } : undefined}
         />
+        {isRefreshing && (
+          <span className="text-xs text-text-secondary">Refreshing&hellip;</span>
+        )}
       </div>
 
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
@@ -259,8 +261,11 @@ export function FeedList({
       {!showWatchlistOnboarding && (
         <section aria-live="polite">
           {isInitialLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, index) => <SkeletonCard key={index} />)}
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <RefreshCw className="h-6 w-6 animate-spin text-interactive-default" />
+              <p className="mt-3 text-sm font-medium text-text-secondary animate-pulse">
+                Scanning 15 sources for your watchlist&hellip;
+              </p>
             </div>
           ) : null}
 
