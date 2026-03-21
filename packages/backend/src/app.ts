@@ -116,7 +116,13 @@ export function buildApp(options?: {
   const marketRegimeService = options?.marketRegimeService ?? new MarketRegimeService({
     logger: server.log,
   });
-  const deduplicator = new EventDeduplicator({ db });
+  const dedupRedisEnabled = process.env.DEDUP_REDIS_ENABLED === 'true';
+  const deduplicator = new EventDeduplicator({
+    db,
+    redisUrl: dedupRedisEnabled
+      ? (process.env.DEDUP_REDIS_URL ?? 'redis://localhost:6379')
+      : undefined,
+  });
   const alertFilter = new AlertFilter(options?.alertFilterConfig);
   const auditLog = new AuditLog(db);
   const deliveryGate = new DeliveryGate();
@@ -438,6 +444,7 @@ export function buildApp(options?: {
     healthMonitor?.stop();
     outcomeProcessingLoop?.stop();
     auditCleanupLoop?.stop();
+    await deduplicator.shutdown();
   });
 
   return {
