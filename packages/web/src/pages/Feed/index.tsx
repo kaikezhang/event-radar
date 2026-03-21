@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Toast } from '../../components/Toast.js';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { useWatchlist } from '../../hooks/useWatchlist.js';
@@ -8,7 +10,16 @@ import { EventDetail } from '../EventDetail.js';
 import { FeedList } from './FeedList.js';
 import { useFeedState } from './useFeedState.js';
 
+const ONBOARDING_KEY = 'onboardingComplete';
+
 export function Feed() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!localStorage.getItem(ONBOARDING_KEY)) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [navigate]);
   const { data: sources = [] } = useQuery<string[]>({
     queryKey: ['event-sources'],
     queryFn: getEventSources,

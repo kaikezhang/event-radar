@@ -81,6 +81,10 @@ export async function registerAuthPlugin(
     }
 
     if (publicRoutes.has(pathname)) {
+      // Still set userId so route-level requireApiKey preHandlers pass
+      if (!authRequired) {
+        request.userId = 'default';
+      }
       return;
     }
 
