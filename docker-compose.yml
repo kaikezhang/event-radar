@@ -94,6 +94,21 @@ services:
     networks:
       - event-radar-network
 
+  # Redis (opt-in for Redis Streams EventBus)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - event-radar-network
+
 networks:
   event-radar-network:
     driver: bridge
@@ -101,3 +116,4 @@ networks:
 volumes:
   pgdata:
   seen-ids:
+  redisdata:

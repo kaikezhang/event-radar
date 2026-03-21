@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import backendPackage from '../package.json' with { type: 'json' };
 import {
-  InMemoryEventBus,
+  createEventBus,
   ScannerRegistry,
   RawEventSchema,
   type EventBus,
@@ -105,7 +105,7 @@ export function buildApp(options?: {
   const server = Fastify({ logger: options?.logger ?? true });
   const startedAt = new Date().toISOString();
   const startTime = Date.now();
-  const eventBus = new InMemoryEventBus();
+  const eventBus = createEventBus();
   const registry = new ScannerRegistry();
   const db = options?.db;
   const alertRouter = options?.alertRouter ?? buildAlertRouter(db);
