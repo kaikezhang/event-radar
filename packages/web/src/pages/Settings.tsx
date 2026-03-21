@@ -100,9 +100,9 @@ function PushDeniedRecoverySteps() {
   if (platform === 'ios-pwa') {
     return (
       <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings</strong> app</span></li>
-        <li className="flex gap-3">{stepBadge(2)}<span>Scroll down and tap <strong className="text-text-primary">Event Radar</strong> (under your installed web apps)</span></li>
-        <li className="flex gap-3">{stepBadge(3)}<span>Tap <strong className="text-text-primary">Notifications → Allow Notifications</strong></span></li>
+        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings → Apps</strong></span></li>
+        <li className="flex gap-3">{stepBadge(2)}<span>Find this app in the list and tap <strong className="text-text-primary">Notifications</strong></span></li>
+        <li className="flex gap-3">{stepBadge(3)}<span>Toggle <strong className="text-text-primary">Allow Notifications</strong> on</span></li>
         <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
       </ol>
     );
