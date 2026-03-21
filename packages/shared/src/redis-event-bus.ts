@@ -70,7 +70,14 @@ export class RedisEventBus implements EventBus {
     return () => {
       this.handlers = this.handlers.filter((h) => h !== handler);
       if (this.handlers.length === 0) {
-        this.stopStreamLoop(STREAM_KEY);
+        // Synchronously delete from map to prevent race with immediate re-subscribe,
+        // then drain the loop in background
+        const loop = this.streamLoops.get(STREAM_KEY);
+        if (loop) {
+          loop.running = false;
+          this.streamLoops.delete(STREAM_KEY);
+          loop.promise.catch(() => {}); // drain in background, errors logged inside loop
+        }
       }
     };
   }
@@ -98,7 +105,14 @@ export class RedisEventBus implements EventBus {
         if (idx >= 0) arr.splice(idx, 1);
         if (arr.length === 0) {
           this.topicHandlers.delete(topic);
-          this.stopStreamLoop(streamKey);
+          // Synchronously delete from map to prevent race with immediate re-subscribe,
+          // then drain the loop in background
+          const loop = this.streamLoops.get(streamKey);
+          if (loop) {
+            loop.running = false;
+            this.streamLoops.delete(streamKey);
+            loop.promise.catch(() => {}); // drain in background, errors logged inside loop
+          }
         }
       }
     };
@@ -108,8 +122,12 @@ export class RedisEventBus implements EventBus {
     const loop = this.streamLoops.get(streamKey);
     if (loop) {
       loop.running = false;
-      await loop.promise;
-      this.streamLoops.delete(streamKey);
+      try {
+        await loop.promise;
+      } finally {
+        // Always clean up even if the loop promise rejects
+        this.streamLoops.delete(streamKey);
+      }
     }
   }
 
