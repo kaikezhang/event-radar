@@ -160,6 +160,11 @@ export class RedisEventBus implements EventBus {
 
           if (!results) continue;
 
+          // Re-check after blocking xreadgroup: if all handlers were removed
+          // while we were waiting, do NOT process or XACK — leave messages
+          // pending in the consumer group for the next subscriber.
+          if (!loopState.running) break;
+
           for (const [, messages] of results) {
             for (const [messageId, fields] of messages) {
               const dataIndex = fields.indexOf('data');
