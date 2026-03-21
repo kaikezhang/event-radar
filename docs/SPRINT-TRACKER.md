@@ -4,12 +4,12 @@
 
 | Sprint | 状态 | PR(s) | 备注 |
 |--------|------|-------|------|
-| S0: Bug 修复 | 🔄 进行中 | — | CC 正在修 B1-B5 |
-| S1: 股价集成 | ⏳ 排队 | — | 数据源暂不变（用已有的 yfinance/outcome data） |
-| S2: 命中率 Reframe | ⏳ 排队 | — | |
-| S3: 留存机制 | ⏳ 排队 | — | |
-| S4: UX 打磨 | ⏳ 排队 | — | |
-| S5: Smart Feed | ⏳ 排队 | — | |
+| S0: Bug 修复 | ✅ 完成 | #181 | 底部导航、tabs、scorecard mobile、hide light mode |
+| S1: 股价集成 | ✅ 完成 | #182 | Feed API join outcomes + cards + detail + outcome badges |
+| S2: 命中率 Reframe | ✅ 完成 | #183 | Scorecard hero 重构 + Advanced Analytics 折叠 + Similar Events |
+| S3: 留存机制 | ✅ 完成 | #184 | VAPID push + permission denied UX + daily briefing + outcome stats |
+| S4: UX 打磨 | ✅ 完成 | #185 | Thesis preview + blue accent + loading states + WS status + filters |
+| S5: Smart Feed | ✅ 完成 | #186 | Smart Feed mode + global event search + empty state |
 
 ## 决策记录
 
