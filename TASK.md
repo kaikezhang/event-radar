@@ -1,31 +1,36 @@
-# TASK: Fix PR #186 Review Issues (Sprint 5 — Smart Feed)
+# ⚠️ DO NOT MERGE THIS PR. CREATE COMMITS AND PUSH ONLY.
 
-⚠️ **DO NOT MERGE THE PR. DO NOT MERGE. NEVER MERGE.** ⚠️
-Create commits, push to the branch, and STOP.
+# TASK: Fix PR #188 Review Issues — Feed Price Ticker Consistency
 
 ## Context
-You are on branch `feat/sprint-5-smart-feed`. Codex reviewed PR #186 and found 3 issues. Fix all of them.
+PR #188 (`fix/sprint-6-feed-prices`) was reviewed by Codex with **CHANGES REQUESTED**. You are on the `fix/sprint-6-feed-prices` branch. Fix all three issues below, commit, and push. **DO NOT MERGE.**
 
 ## Issues to Fix
 
-### 1. Smart Feed not invalidated on watchlist change
-**Files**: `packages/web/src/hooks/useAlerts.ts`, `packages/web/src/hooks/useWatchlist.ts`
-**Problem**: `useAlerts()` keys the feed query as `['feed', limit, watchlist, mode]`. Watchlist mutations only invalidate `['watchlist']` / `['watchlist-feed-stats']`. When a user adds/removes a ticker while on Smart Feed, the feed shows stale data until the 30s poll or manual refresh.
-**Fix**: After watchlist mutation (add/remove ticker), also invalidate queries starting with `['feed']`. Use `queryClient.invalidateQueries({ queryKey: ['feed'] })` in the watchlist mutation callbacks.
+### 1. 🚨 Metadata inconsistency after late-enrichment
+**File**: `packages/backend/src/event-pipeline.ts`
+**Problem**: The late-enrichment branch only updates `events.ticker` in the DB. It does NOT write the ticker back into `event.metadata.ticker` or the persisted JSON metadata. Downstream readers (`events-history.ts`, `event-similarity.ts`, `websocket.ts`) resolve tickers from metadata and still see no ticker.
+**Fix**: After updating `events.ticker`, also update the stored event's `metadata` JSON to include the ticker. Use an `UPDATE events SET metadata = jsonb_set(metadata, '{ticker}', ...)` or equivalent Drizzle ORM pattern.
 
-### 2. Event search has no error handling
-**Files**: `packages/web/src/components/TickerSearch.tsx`
-**Problem**: `searchEvents()` throws on API/auth/network failures, but the component only reads `data` + `isLoading`. Errors fall through to "No events found" empty state, masking real outages.
-**Fix**: Read `error` / `isError` from the query hook. Show an error state (e.g. "Search failed — please try again") when `isError` is true. Add a retry button.
+### 2. ⚠️ Concurrency safety + casing normalization
+**File**: `packages/backend/src/event-pipeline.ts` + `packages/backend/src/services/outcome-tracker.ts`
+**Problems**:
+- `extractTicker()` returns the LLM symbol verbatim, but the SQL update uppercases it → casing can diverge between in-memory and DB
+- `scheduleOutcomeTrackingForEvent()` is called regardless of whether the `UPDATE ... WHERE ticker IS NULL` actually won the race → can cause mismatched tickers in `event_outcomes`
+**Fix**:
+- Normalize ticker to uppercase immediately in `extractTicker()` (or right after calling it)
+- Only call `scheduleOutcomeTrackingForEvent()` if the UPDATE actually affected a row (check row count / returning clause)
 
-### 3. Smart Feed explainer not accessible
-**Files**: `packages/web/src/pages/Feed/FeedTabs.tsx`
-**Problem**: The Info tooltip uses `onMouseEnter`/`onMouseLeave` on a `<div>`. Not keyboard-focusable, not touch-accessible.
-**Fix**: Change the `<div>` to a `<button>` with `aria-label="What is Smart Feed?"`. Add `onFocus`/`onBlur` handlers alongside hover handlers. For mobile, toggle on click/tap.
+### 3. ⚠️ Inadequate test coverage
+**Problem**: Tests only cover `extractTicker()` helper. No tests for the actual pipeline behavior.
+**Fix**: Add at least one integration-style test that verifies:
+- Late LLM ticker discovery updates both `events.ticker` AND `events.metadata`
+- Outcome tracking is only scheduled when the update wins (row affected)
+- Ticker casing is consistent across all stores
 
 ## Requirements
-- Build passes: `pnpm --filter @event-radar/web build`
-- Commit message: `fix: address PR #186 review — feed invalidation, search errors, a11y`
-- Push to `feat/sprint-5-smart-feed`
+- Run `pnpm --filter @event-radar/backend build` — must pass
+- Commit message: `fix: address PR #188 review — metadata sync, concurrency, tests`
+- Push to `fix/sprint-6-feed-prices` branch
 
-## ⚠️ DO NOT MERGE. Push and stop. ⚠️
+## ⚠️ DO NOT MERGE. Push only.
