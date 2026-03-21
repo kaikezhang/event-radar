@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CalendarRange, Target } from 'lucide-react';
+import { AlertTriangle, CalendarRange, ChevronDown, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Bar,
@@ -18,8 +18,8 @@ import {
   YAxis,
 } from 'recharts';
 import { EmptyState } from '../components/EmptyState.js';
-import { StatCard } from '../components/StatCard.js';
 import { formatScorecardBucketLabel, getScorecardSummary } from '../lib/api.js';
+import { cn } from '../lib/utils.js';
 import type { ScorecardBucketSummary, ScorecardSummary } from '../types/index.js';
 
 const EXCLUDED_SOURCE_NAMES = new Set(['dummy', 'test', 'internal']);
@@ -222,12 +222,34 @@ export function Scorecard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3">
-        <StatCard value={String(data.totals.totalAlerts)} label="Total alerts" />
-        <StatCard value={formatRate(data.totals.directionalHitRate)} label="Directional hit rate" />
-        <StatCard value={formatRate(data.totals.setupWorkedRate)} label="Setup worked rate" />
-        <StatCard value={formatMove(data.totals.avgT20Move)} label="Avg T+20 move" />
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-6 text-center shadow-[0_18px_40px_var(--shadow-color)]">
+        <p className="font-mono text-5xl font-bold text-text-primary sm:text-6xl">
+          {data.totals.totalAlerts.toLocaleString()}
+        </p>
+        <p className="mt-2 text-lg font-semibold text-text-primary">Events Detected</p>
+        <p className="mt-1 text-sm text-text-secondary">
+          from 15+ sources, 24/7 monitoring
+        </p>
       </section>
+
+      <section className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {data.totals.alertsWithUsableVerdicts.toLocaleString()}
+          </div>
+          <div className="mt-1 text-sm text-text-secondary">Outcomes Tracked</div>
+        </div>
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">15</div>
+          <div className="mt-1 text-sm text-text-secondary">Active Sources</div>
+        </div>
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">&lt; 5 min</div>
+          <div className="mt-1 text-sm text-text-secondary">Avg Alert Latency</div>
+        </div>
+      </section>
+
+      <AdvancedAnalytics data={data} />
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <SourceAccuracyChart data={data} isDark={isDark} />
@@ -255,6 +277,7 @@ export function Scorecard() {
         description="Outcome quality grouped by the product signal labels users see first."
         group="action"
         buckets={data.actionBuckets}
+        defaultOpen
       />
       <BucketSection
         title="Confidence buckets"
@@ -518,6 +541,67 @@ function RollingAccuracyTrend({ data, isDark }: { data: ScorecardSummary; isDark
   );
 }
 
+/* ── Advanced Analytics (collapsible) ── */
+
+function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_36px_var(--shadow-color)]">
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls="advanced-analytics-panel"
+        onClick={() => setIsOpen((c) => !c)}
+        className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
+      >
+        <div className="flex-1">
+          <span className="block text-[17px] font-semibold leading-6 text-text-primary">
+            🔬 Advanced Analytics
+          </span>
+          <span className="mt-1 block text-sm leading-6 text-text-secondary">
+            Directional accuracy, setup worked rate, and average moves
+          </span>
+        </div>
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
+          <ChevronDown
+            className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+
+      {isOpen && (
+        <div id="advanced-analytics-panel" className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
+              <div className="font-mono text-2xl font-semibold text-text-primary">
+                {formatRate(data.totals.directionalHitRate)}
+              </div>
+              <div className="mt-1 text-sm text-text-secondary">Directional hit rate</div>
+            </div>
+            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
+              <div className="font-mono text-2xl font-semibold text-text-primary">
+                {formatRate(data.totals.setupWorkedRate)}
+              </div>
+              <div className="mt-1 text-sm text-text-secondary">Setup worked rate</div>
+            </div>
+            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
+              <div className="font-mono text-2xl font-semibold text-text-primary">
+                {formatMove(data.totals.avgT20Move)}
+              </div>
+              <div className="mt-1 text-sm text-text-secondary">Avg T+20 move</div>
+            </div>
+          </div>
+          <p className="text-xs leading-5 text-text-secondary">
+            Directional analysis is supplementary context for your own research. Event Radar's core value is comprehensive event detection and speed, not directional trading signals.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ── Helpers ── */
 
 function clamp(value: number, min: number, max: number): number {
@@ -529,57 +613,81 @@ function BucketSection({
   description,
   group,
   buckets,
+  defaultOpen = false,
 }: {
   title: string;
   description: string;
   group: 'action' | 'confidence' | 'source' | 'eventType';
   buckets: ScorecardBucketSummary[];
+  defaultOpen?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-      <div className="mb-4">
-        <h2 className="text-[17px] font-semibold leading-6 text-text-primary">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-text-secondary">{description}</p>
-      </div>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((c) => !c)}
+        className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
+      >
+        <div className="flex-1">
+          <h2 className="text-[17px] font-semibold leading-6 text-text-primary">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-text-secondary">
+            {description}
+          </p>
+        </div>
+        <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
+          {buckets.length} tiers
+        </span>
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
+          <ChevronDown
+            className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
 
-      <div className="space-y-3">
-        {buckets.map((bucket) => (
-          <article
-            key={`${group}-${bucket.bucket}`}
-            className="rounded-2xl border border-overlay-medium bg-bg-elevated/52 p-4"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-text-primary">
-                  {formatScorecardBucketLabel(group, bucket.bucket)}
-                </h3>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {bucket.alertsWithUsableVerdicts} usable verdicts
-                </p>
-              </div>
-              <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
-                {bucket.totalAlerts} alerts
-              </span>
-            </div>
-
-            <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {BUCKET_COLUMNS.map((column) => (
-                <div
-                  key={column.key}
-                  className="rounded-2xl border border-overlay-medium bg-white/[0.03] px-3 py-3"
-                >
-                  <dt className="text-[11px] uppercase tracking-[0.16em] text-text-secondary">
-                    {column.label}
-                  </dt>
-                  <dd className="mt-2 text-sm font-semibold text-text-primary">
-                    {formatBucketValue(bucket, column.key)}
-                  </dd>
+      {isOpen && (
+        <div className="mt-4 space-y-3">
+          {buckets.map((bucket) => (
+            <article
+              key={`${group}-${bucket.bucket}`}
+              className="rounded-2xl border border-overlay-medium bg-bg-elevated/52 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-text-primary">
+                    {formatScorecardBucketLabel(group, bucket.bucket)}
+                  </h3>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {bucket.alertsWithUsableVerdicts} usable verdicts
+                  </p>
                 </div>
-              ))}
-            </dl>
-          </article>
-        ))}
-      </div>
+                <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
+                  {bucket.totalAlerts} alerts
+                </span>
+              </div>
+
+              <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {BUCKET_COLUMNS.map((column) => (
+                  <div
+                    key={column.key}
+                    className="rounded-2xl border border-overlay-medium bg-white/[0.03] px-3 py-3"
+                  >
+                    <dt className="text-[11px] uppercase tracking-[0.16em] text-text-secondary">
+                      {column.label}
+                    </dt>
+                    <dd className="mt-2 text-sm font-semibold text-text-primary">
+                      {formatBucketValue(bucket, column.key)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

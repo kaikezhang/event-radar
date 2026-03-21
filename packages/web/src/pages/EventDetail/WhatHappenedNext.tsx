@@ -69,13 +69,52 @@ function PriceRow({
   );
 }
 
+/** Check if ALL follow-up price fields are still pending (null). */
+function isAllPending(outcome: EventOutcome): boolean {
+  return outcome.price1d == null && outcome.priceT5 == null && outcome.priceT20 == null;
+}
+
+/** Check if at least one follow-up price field has data. */
+function hasSomeData(outcome: EventOutcome): boolean {
+  return outcome.price1d != null || outcome.priceT5 != null || outcome.priceT20 != null;
+}
+
 export function WhatHappenedNext({ outcome, direction }: WhatHappenedNextProps) {
   if (outcome.eventPrice == null) return null;
+
+  // If ALL outcome fields are pending, show a single-line message instead of a wall of "pending..."
+  if (isAllPending(outcome)) {
+    return (
+      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+        <SectionHeading eyebrow="Price outcome" title="What Happened Next" />
+        <div className="flex items-center gap-3 rounded-lg border border-border-default bg-bg-elevated/50 px-4 py-3">
+          <span className="text-lg">📊</span>
+          <p className="text-sm text-text-secondary">
+            Outcome tracking in progress — results appear after 5 trading days
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   const verdict5d = getVerdict(direction, outcome.changeT5);
   const verdict20d = getVerdict(direction, outcome.changeT20);
   // Use the best available verdict window
   const primaryVerdict = outcome.changeT5 != null ? verdict5d : verdict20d;
+
+  // Build rows — only show available data rows fully, gray out pending ones
+  const rows: Array<{ label: string; price: number | null; change: number | null; isPending: boolean }> = [
+    { label: 'Price at event', price: outcome.eventPrice, change: null, isPending: false },
+  ];
+
+  if (hasSomeData(outcome)) {
+    // Show all rows but with pending styling for unavailable ones
+    rows.push(
+      { label: 'After 1 day', price: outcome.price1d, change: outcome.change1d, isPending: outcome.price1d == null },
+      { label: 'After 5 days', price: outcome.priceT5, change: outcome.changeT5, isPending: outcome.priceT5 == null },
+      { label: 'After 20 days', price: outcome.priceT20, change: outcome.changeT20, isPending: outcome.priceT20 == null },
+    );
+  }
 
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -89,30 +128,15 @@ export function WhatHappenedNext({ outcome, direction }: WhatHappenedNextProps) 
       </div>
 
       <div className="space-y-2">
-        <PriceRow
-          label="Price at event"
-          price={outcome.eventPrice}
-          change={null}
-          isPending={false}
-        />
-        <PriceRow
-          label="After 1 day"
-          price={outcome.price1d}
-          change={outcome.change1d}
-          isPending={outcome.price1d == null}
-        />
-        <PriceRow
-          label="After 5 days"
-          price={outcome.priceT5}
-          change={outcome.changeT5}
-          isPending={outcome.priceT5 == null}
-        />
-        <PriceRow
-          label="After 20 days"
-          price={outcome.priceT20}
-          change={outcome.changeT20}
-          isPending={outcome.priceT20 == null}
-        />
+        {rows.map((row) => (
+          <PriceRow
+            key={row.label}
+            label={row.label}
+            price={row.price}
+            change={row.change}
+            isPending={row.isPending}
+          />
+        ))}
       </div>
     </section>
   );
