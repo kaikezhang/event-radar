@@ -4,22 +4,16 @@ import { EventSourceCard } from './EventSourceCard.js';
 import { SectionHeading } from './shared.js';
 import { deriveBullBear } from './utils.js';
 
-export function EventEnrichment({
+/** Summary tab content: What Happened + Bull/Bear Thesis */
+export function EventSummaryContent({
   summary,
   enrichment,
   direction,
-  source,
-  sourceMetadata,
 }: {
   summary: string;
   enrichment: LlmEnrichment | null;
   direction: string;
-  source: string;
-  sourceMetadata?: Record<string, unknown>;
 }) {
-  const whyNowBullets = [enrichment?.impact, enrichment?.whyNow, enrichment?.currentSetup].filter(
-    (value): value is string => Boolean(value),
-  );
   const { bullPoints, bearPoints } = deriveBullBear(enrichment, direction);
 
   return (
@@ -29,6 +23,29 @@ export function EventEnrichment({
         <p className="text-[15px] leading-relaxed text-text-primary">{summary}</p>
       </section>
 
+      <div className="mt-4">
+        <BullBearColumns bullPoints={bullPoints} bearPoints={bearPoints} />
+      </div>
+    </>
+  );
+}
+
+/** Evidence tab content: Market Context + Source Details + Risk Factors */
+export function EventEvidenceContent({
+  enrichment,
+  source,
+  sourceMetadata,
+}: {
+  enrichment: LlmEnrichment | null;
+  source: string;
+  sourceMetadata?: Record<string, unknown>;
+}) {
+  const whyNowBullets = [enrichment?.impact, enrichment?.whyNow, enrichment?.currentSetup].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  return (
+    <>
       {whyNowBullets.length > 0 && (
         <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <SectionHeading eyebrow="Market context" title="Why It Matters Now" />
@@ -42,9 +59,9 @@ export function EventEnrichment({
         </section>
       )}
 
-      <div className="mt-4">
-        <BullBearColumns bullPoints={bullPoints} bearPoints={bearPoints} />
-      </div>
+      {sourceMetadata && Object.keys(sourceMetadata).length > 0 && (
+        <EventSourceCard source={source} metadata={sourceMetadata} />
+      )}
 
       {enrichment?.risks && (
         <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -60,10 +77,6 @@ export function EventEnrichment({
           <SectionHeading eyebrow="SEC filing" title="Filing Items" />
           <p className="font-mono text-[15px] leading-7 text-text-primary">{enrichment.filingItems.join(', ')}</p>
         </section>
-      )}
-
-      {sourceMetadata && Object.keys(sourceMetadata).length > 0 && (
-        <EventSourceCard source={source} metadata={sourceMetadata} />
       )}
     </>
   );
