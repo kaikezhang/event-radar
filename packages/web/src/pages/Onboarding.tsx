@@ -70,6 +70,33 @@ function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
         Let's set up your feed in 30 seconds.
       </p>
 
+      {/* Sample alert preview */}
+      <div className="mt-6 w-full max-w-sm rounded-2xl border border-border-default bg-bg-surface/96 p-4 text-left">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase bg-severity-high/15 text-severity-high">
+            HIGH
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-red-400">BEARISH ▼</span>
+              <span className="text-xs font-semibold text-text-primary">AAL</span>
+            </div>
+            <p className="mt-1 text-sm font-medium text-text-primary">
+              American Airlines reports unexpected Q4 revenue miss
+            </p>
+            <div className="mt-1.5 flex items-center gap-2 text-xs text-text-secondary">
+              <span>$10.43 → $10.12</span>
+              <span className="text-red-400">−2.9%</span>
+              <span>·</span>
+              <span>Breaking News</span>
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-center text-xs text-text-tertiary">
+          AI-powered event analysis with price tracking — here's what your alerts look like
+        </p>
+      </div>
+
       <button
         type="button"
         onClick={onNext}
