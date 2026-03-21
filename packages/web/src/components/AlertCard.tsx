@@ -147,7 +147,7 @@ export function AlertCard({
               +{alert.tickers.length - 3}
             </span>
           )}
-          {alert.direction && alert.eventPrice != null && (
+          {alert.direction && (
             <OutcomeBadge direction={alert.direction} change5d={alert.change5d} />
           )}
         </div>
