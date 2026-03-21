@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-vi.mock('ioredis', async () => {
-  const RedisMock = (await import('ioredis-mock')).default;
-  return { default: RedisMock };
+vi.mock('ioredis', () => {
+  return {
+    default: class MockRedis {
+      disconnect() {}
+      async xadd() { return '0-0'; }
+      async xgroup() { return 'OK'; }
+      async xreadgroup() { return null; }
+      async xack() { return 1; }
+    },
+  };
 });
 
 describe('createEventBus', () => {
