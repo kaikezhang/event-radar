@@ -167,9 +167,10 @@ export interface FeedResponse {
   total: number;
 }
 
-export async function getFeed(limit = 50, options?: { watchlist?: boolean; before?: string }): Promise<FeedResponse> {
+export async function getFeed(limit = 50, options?: { watchlist?: boolean; before?: string; mode?: string }): Promise<FeedResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (options?.watchlist) params.set('watchlist', 'true');
+  if (options?.mode) params.set('mode', options.mode);
+  else if (options?.watchlist) params.set('watchlist', 'true');
   if (options?.before) params.set('before', options.before);
   const res = await apiFetch(`/v1/feed?${params.toString()}`, { public: true });
   const events: Record<string, unknown>[] = res.events ?? [];

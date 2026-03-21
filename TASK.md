@@ -1,36 +1,31 @@
-# TASK: Fix PR #185 Review Issues (Sprint 4 UX Polish)
+# TASK: Fix PR #186 Review Issues (Sprint 5 — Smart Feed)
 
-⚠️ **DO NOT MERGE THE PR. DO NOT MERGE. STOP AFTER PUSHING.** ⚠️
+⚠️ **DO NOT MERGE THE PR. DO NOT MERGE. NEVER MERGE.** ⚠️
+Create commits, push to the branch, and STOP.
 
 ## Context
-PR #185 (`feat/sprint-4-ux-polish`) was reviewed by Codex with CHANGES REQUESTED. You are on the `feat/sprint-4-ux-polish` branch. Fix all 4 issues, commit, and push. 
+You are on branch `feat/sprint-5-smart-feed`. Codex reviewed PR #186 and found 3 issues. Fix all of them.
 
 ## Issues to Fix
 
-### 1. History date filters not counted as active
-**Files**: `packages/web/src/pages/History.tsx` (~lines 34, 83)
-**Problem**: `hasActiveFilters` / `activeFilterCount` only checks severity, source, ticker. Date range (from/to) is ignored. If user changes date range, Filters button stays inactive, Reset disappears, collapsed chip row shows nothing.
-**Fix**: Include non-default `from`/`to` in `hasActiveFilters` and `activeFilterCount`. Show date range in collapsed filter summary chips.
+### 1. Smart Feed not invalidated on watchlist change
+**Files**: `packages/web/src/hooks/useAlerts.ts`, `packages/web/src/hooks/useWatchlist.ts`
+**Problem**: `useAlerts()` keys the feed query as `['feed', limit, watchlist, mode]`. Watchlist mutations only invalidate `['watchlist']` / `['watchlist-feed-stats']`. When a user adds/removes a ticker while on Smart Feed, the feed shows stale data until the 30s poll or manual refresh.
+**Fix**: After watchlist mutation (add/remove ticker), also invalidate queries starting with `['feed']`. Use `queryClient.invalidateQueries({ queryKey: ['feed'] })` in the watchlist mutation callbacks.
 
-### 2. History filters missing aria attributes
-**File**: `packages/web/src/pages/History.tsx` (~line 61)
-**Problem**: Filter toggle button doesn't have `aria-expanded`/`aria-controls`. Panel has no label. Screen readers can't tell if filter region is open/closed.
-**Fix**: Add `aria-expanded={isOpen}`, `aria-controls="history-filters-panel"` to toggle button. Add `id="history-filters-panel"` and `role="region"` with `aria-label="Event filters"` to the panel.
+### 2. Event search has no error handling
+**Files**: `packages/web/src/components/TickerSearch.tsx`
+**Problem**: `searchEvents()` throws on API/auth/network failures, but the component only reads `data` + `isLoading`. Errors fall through to "No events found" empty state, masking real outages.
+**Fix**: Read `error` / `isError` from the query hook. Show an error state (e.g. "Search failed — please try again") when `isError` is true. Add a retry button.
 
-### 3. Blue accent migration incomplete in feed filters
-**Files**: `packages/web/src/pages/Feed/FeedHeader.tsx` (~line 63), `packages/web/src/pages/Feed/FeedFilters.tsx` (~lines 63, 123)
-**Problem**: Header/filter trigger migrated to `interactive-default` but active chips, selected options, and save controls inside FeedFilters still use `accent-default`. Mixed accent systems visible simultaneously.
-**Fix**: Migrate all feed filter components to use the same token consistently. Use `interactive-default` throughout (or `accent-default` throughout — pick one and be consistent).
-
-### 4. WebSocket indicator lacks accessible name
-**File**: `packages/web/src/App.tsx` (~line 42)
-**Problem**: Top-bar WS indicator is color-only with `title` for meaning. Not focusable, no accessible name. Touch/screen-reader users can't get connection status.
-**Fix**: Add `role="status"` and `aria-label` with the current connection state text (e.g., "Connected", "Reconnecting", "Offline"). Or add a visually-hidden `<span>` with the status text.
+### 3. Smart Feed explainer not accessible
+**Files**: `packages/web/src/pages/Feed/FeedTabs.tsx`
+**Problem**: The Info tooltip uses `onMouseEnter`/`onMouseLeave` on a `<div>`. Not keyboard-focusable, not touch-accessible.
+**Fix**: Change the `<div>` to a `<button>` with `aria-label="What is Smart Feed?"`. Add `onFocus`/`onBlur` handlers alongside hover handlers. For mobile, toggle on click/tap.
 
 ## Requirements
 - Build passes: `pnpm --filter @event-radar/web build`
-- Lint passes: `pnpm --filter @event-radar/web lint`
-- Commit message: `fix: address PR #185 review — filters, a11y, accent consistency`
-- Push to `feat/sprint-4-ux-polish` branch
+- Commit message: `fix: address PR #186 review — feed invalidation, search errors, a11y`
+- Push to `feat/sprint-5-smart-feed`
 
-## ⚠️ DO NOT MERGE. PUSH AND STOP.
+## ⚠️ DO NOT MERGE. Push and stop. ⚠️

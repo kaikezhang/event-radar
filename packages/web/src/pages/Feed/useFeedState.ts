@@ -10,7 +10,7 @@ const PRESETS_KEY = 'event-radar-filter-presets';
 const FEED_TAB_KEY = 'event-radar-feed-tab';
 const UNAUTH_BANNER_KEY = 'event-radar-unauth-banner-dismissed';
 
-export type FeedTab = 'watchlist' | 'all';
+export type FeedTab = 'smart' | 'watchlist' | 'all';
 export type SortMode = 'latest' | 'severity';
 
 export interface DateGroup {
@@ -43,7 +43,7 @@ function saveCustomPresets(presets: FilterPreset[]) {
 export function loadFeedTab(): FeedTab | null {
   try {
     const raw = localStorage.getItem(FEED_TAB_KEY);
-    return raw === 'watchlist' || raw === 'all' ? raw : null;
+    return raw === 'smart' || raw === 'watchlist' || raw === 'all' ? raw : null;
   } catch {
     return null;
   }
@@ -172,7 +172,7 @@ export function useFeedState({
     tabInitializedRef.current = true;
 
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'watchlist' || tabParam === 'all') {
+    if (tabParam === 'smart' || tabParam === 'watchlist' || tabParam === 'all') {
       setActiveTab(tabParam);
       if (isAuthenticated) {
         saveFeedTab(tabParam);
@@ -187,9 +187,10 @@ export function useFeedState({
       const saved = loadFeedTab();
       if (saved) {
         setActiveTab(saved);
+      } else if (hasWatchlist) {
+        // Default to Smart Feed for users with a watchlist
+        setActiveTab('smart');
       }
-      // If no saved tab preference, keep the default ('all').
-      // Don't auto-switch to watchlist — let the user choose.
     }
   }, [
     hasWatchlist,
@@ -215,6 +216,7 @@ export function useFeedState({
   const pushOnly = searchParams.get('push') === 'only';
 
   const allPresets = useMemo(() => [...BUILT_IN_PRESETS, ...customPresets], [customPresets]);
+  const isSmartMode = activeTab === 'smart';
   const isWatchlistMode = activeTab === 'watchlist';
   const isDefaultSeverity = !searchParams.has('severity');
   const hasActiveFilters = ((!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0) || pushOnly;
@@ -235,6 +237,7 @@ export function useFeedState({
   } = useAlerts(10, {
     watchlist: isWatchlistMode,
     watchlistTickers: isWatchlistMode ? watchlistItems.map((item) => item.ticker) : undefined,
+    mode: isSmartMode ? 'smart' : undefined,
   });
 
   const updateFilters = useCallback(
@@ -386,6 +389,7 @@ export function useFeedState({
 
   const dateGroups = useMemo(() => groupAlertsByDate(filteredAlerts), [filteredAlerts]);
   const showWatchlistOnboarding = isWatchlistMode && !hasWatchlist && !isWatchlistLoading;
+  const showSmartFeedEmpty = isSmartMode && isEmpty && !isInitialLoading && !error;
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -549,6 +553,7 @@ export function useFeedState({
     isInitialLoading,
     isLoadingMore,
     isRefreshing,
+    isSmartMode,
     isWatchlistMode,
     newAlertIds,
     pendingCount,
@@ -568,6 +573,7 @@ export function useFeedState({
     showAddFilterDropdown,
     showFilters,
     showModeDropdown,
+    showSmartFeedEmpty,
     showWatchlistOnboarding,
     sortMode,
     toastMessage,

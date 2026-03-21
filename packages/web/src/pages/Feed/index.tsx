@@ -95,6 +95,7 @@ export function Feed() {
       showAddFilterDropdown={state.showAddFilterDropdown}
       showFilters={state.showFilters}
       showModeDropdown={state.showModeDropdown}
+      showSmartFeedEmpty={state.showSmartFeedEmpty}
       showUnauthBanner={!user && !state.bannerDismissed}
       showWatchlistOnboarding={state.showWatchlistOnboarding}
       sortMode={state.sortMode}
