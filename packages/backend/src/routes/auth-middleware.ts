@@ -75,3 +75,27 @@ export async function requireApiKey(
 
   request.apiKeyAuthenticated = true;
 }
+
+/**
+ * Stricter auth middleware for sensitive routes.
+ * Rejects the anonymous 'default' user — requires a real authenticated identity
+ * (JWT or valid API key with a non-default userId).
+ */
+export async function requireAuth(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  apiKey?: string,
+): Promise<void> {
+  // First run normal API key check
+  await requireApiKey(request, reply, apiKey);
+  if (reply.sent) return;
+
+  // Reject anonymous/default user on sensitive routes
+  const userId = request.userId;
+  if (!userId || userId === 'default') {
+    await reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Authentication required for this endpoint',
+    });
+  }
+}

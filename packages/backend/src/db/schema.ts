@@ -528,7 +528,10 @@ export const deliveryKillSwitch = pgTable('delivery_kill_switch', {
 
 export const userNotificationSettings = pgTable('user_notification_settings', {
   id: serial('id').primaryKey(),
-  userId: varchar('user_id', { length: 255 }).notNull().unique(),
+  userId: varchar('user_id', { length: 100 })
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
   discordWebhookUrl: text('discord_webhook_url'),
   emailAddress: text('email_address'),
   minSeverity: varchar('min_severity', { length: 20 }).notNull().default('HIGH'),

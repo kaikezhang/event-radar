@@ -1,8 +1,7 @@
 import type { Severity } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
-import { createNotificationSettingsStore } from './notification-settings-store.js';
 import { watchlist, userNotificationSettings } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 const SEVERITY_RANK: Record<string, number> = {
   CRITICAL: 3,
@@ -27,6 +26,82 @@ function recordDelivery(userId: string): void {
   const timestamps = rateLimitMap.get(userId) ?? [];
   timestamps.push(Date.now());
   rateLimitMap.set(userId, timestamps);
+}
+
+const MAX_RETRIES = 3;
+const DELIVERY_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function deliverWithRetry(
+  url: string,
+  body: string,
+): Promise<{ ok: boolean; status?: number; error?: string }> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      }, DELIVERY_TIMEOUT_MS);
+
+      if (response.ok) {
+        return { ok: true, status: response.status };
+      }
+
+      // Handle Discord 429 rate limit
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after');
+        const waitMs = retryAfter
+          ? Math.min(Number(retryAfter) * 1000, 30_000)
+          : 1000 * 2 ** attempt;
+        if (attempt < MAX_RETRIES - 1) {
+          await sleep(waitMs);
+          continue;
+        }
+        return { ok: false, status: 429, error: 'Rate limited by Discord after retries' };
+      }
+
+      // 4xx (non-429) are permanent — don't retry
+      if (response.status >= 400 && response.status < 500) {
+        const text = await response.text().catch(() => '');
+        return { ok: false, status: response.status, error: `Discord ${response.status}: ${text.slice(0, 200)}` };
+      }
+
+      // 5xx — retry with backoff
+      if (attempt < MAX_RETRIES - 1) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
+      }
+
+      return { ok: false, status: response.status, error: `Discord ${response.status} after ${MAX_RETRIES} retries` };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (attempt < MAX_RETRIES - 1) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
+      }
+      return { ok: false, error: `Network error after ${MAX_RETRIES} retries: ${message}` };
+    }
+  }
+
+  return { ok: false, error: 'Exhausted retries' };
 }
 
 export interface UserWebhookAlert {
@@ -87,32 +162,26 @@ export function createUserWebhookDelivery(db: Database): UserWebhookDeliveryServ
         // Rate limit check
         if (isRateLimited(userId)) continue;
 
-        try {
-          const response = await fetch(settings.discordWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: 'Event Radar',
-              embeds: [{
-                title: alert.title,
-                description: alert.description,
-                color: alert.severity === 'CRITICAL' ? 0xed4245
-                  : alert.severity === 'HIGH' ? 0xf57c00
-                  : alert.severity === 'MEDIUM' ? 0xfee75c
-                  : 0x57f287,
-                timestamp: alert.timestamp.toISOString(),
-                footer: { text: `Event Radar · ${alert.source}` },
-              }],
-            }),
-          });
+        const body = JSON.stringify({
+          username: 'Event Radar',
+          embeds: [{
+            title: alert.title,
+            description: alert.description,
+            color: alert.severity === 'CRITICAL' ? 0xed4245
+              : alert.severity === 'HIGH' ? 0xf57c00
+              : alert.severity === 'MEDIUM' ? 0xfee75c
+              : 0x57f287,
+            timestamp: alert.timestamp.toISOString(),
+            footer: { text: `Event Radar · ${alert.source}` },
+          }],
+        });
 
-          if (response.ok) {
-            recordDelivery(userId);
-            sent++;
-          } else {
-            errors++;
-          }
-        } catch {
+        const result = await deliverWithRetry(settings.discordWebhookUrl, body);
+
+        if (result.ok) {
+          recordDelivery(userId);
+          sent++;
+        } else {
           errors++;
         }
       }
@@ -121,3 +190,6 @@ export function createUserWebhookDelivery(db: Database): UserWebhookDeliveryServ
     },
   };
 }
+
+// Export for testing
+export { deliverWithRetry as _deliverWithRetry, MAX_RETRIES, DELIVERY_TIMEOUT_MS };

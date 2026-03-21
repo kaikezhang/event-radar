@@ -1,6 +1,6 @@
 CREATE TABLE "user_notification_settings" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" varchar(255) NOT NULL,
+	"user_id" varchar(100) NOT NULL,
 	"discord_webhook_url" text,
 	"email_address" text,
 	"min_severity" varchar(20) DEFAULT 'HIGH' NOT NULL,
@@ -9,6 +9,8 @@ CREATE TABLE "user_notification_settings" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "user_notification_settings_user_id_unique" UNIQUE("user_id")
 );
+--> statement-breakpoint
+ALTER TABLE "user_notification_settings" ADD CONSTRAINT "user_notification_settings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 CREATE TABLE "watchlist_sections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

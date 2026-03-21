@@ -28,6 +28,7 @@ export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM delivery_kill_switch`);
   await db.execute(sql`DELETE FROM pipeline_audit`);
   await db.execute(sql`DELETE FROM push_subscriptions`);
+  await db.execute(sql`DELETE FROM user_notification_settings`);
   await db.execute(sql`DELETE FROM user_preferences`);
   await db.execute(sql`DELETE FROM refresh_tokens`);
   await db.execute(sql`DELETE FROM magic_link_tokens`);
@@ -378,6 +379,20 @@ export async function createTestDb(): Promise<{
       reason TEXT,
       updated_by VARCHAR(50),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS user_notification_settings (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      discord_webhook_url TEXT,
+      email_address TEXT,
+      min_severity VARCHAR(20) NOT NULL DEFAULT 'HIGH',
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT user_notification_settings_user_id_unique UNIQUE (user_id)
     )
   `);
 

@@ -173,6 +173,8 @@ export function Settings() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
+  const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
+  const [channelLoaded, setChannelLoaded] = useState(false);
   const [discordUrlDraft, setDiscordUrlDraft] = useState('');
   const [emailDraft, setEmailDraft] = useState('');
   const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
@@ -247,14 +249,18 @@ export function Settings() {
 
     async function loadChannelSettings(): Promise<void> {
       try {
+        setChannelLoadError(null);
         const loaded = await getNotificationChannelSettings();
         if (cancelled) return;
         setChannelSettings(loaded);
+        setChannelLoaded(true);
         setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
         setEmailDraft(loaded.emailAddress ?? '');
         setChannelMinSeverity(loaded.minSeverity);
       } catch {
-        // Settings not yet created — use defaults
+        if (!cancelled) {
+          setChannelLoadError('Could not load notification channel settings.');
+        }
       }
     }
 
@@ -594,6 +600,33 @@ export function Settings() {
             </p>
           </div>
 
+          {channelLoadError && (
+            <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+              <span>{channelLoadError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setChannelLoadError(null);
+                  void (async () => {
+                    try {
+                      const loaded = await getNotificationChannelSettings();
+                      setChannelSettings(loaded);
+                      setChannelLoaded(true);
+                      setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
+                      setEmailDraft(loaded.emailAddress ?? '');
+                      setChannelMinSeverity(loaded.minSeverity);
+                    } catch {
+                      setChannelLoadError('Could not load notification channel settings.');
+                    }
+                  })();
+                }}
+                className="shrink-0 rounded-full border border-red-500/30 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-500/20"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
             <div>
               <p className="text-sm font-medium text-text-primary">Discord Webhook</p>
@@ -670,7 +703,7 @@ export function Settings() {
           <button
             type="button"
             onClick={() => { void saveChannelSettings(); }}
-            disabled={channelSaving}
+            disabled={channelSaving || (!channelLoaded && !channelSettings)}
             className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
           >
             {channelSaving ? 'Saving...' : 'Save'}

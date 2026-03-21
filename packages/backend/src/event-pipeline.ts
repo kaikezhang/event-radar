@@ -624,17 +624,33 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
       // Deliver to users with Discord webhook configured for matching watchlist tickers
       if (userWebhookDelivery && ticker) {
-        void userWebhookDelivery.deliverToMatchingUsers({
-          title: event.title,
-          description: enrichment?.impact ?? event.title,
-          severity: result.severity,
-          ticker,
-          source: event.source,
-          timestamp: event.timestamp ?? new Date(),
-          url: typeof event.url === 'string' ? event.url : undefined,
-        }).catch((err) => {
+        const webhookStart = Date.now();
+        try {
+          const webhookResult = await userWebhookDelivery.deliverToMatchingUsers({
+            title: event.title,
+            description: enrichment?.impact ?? event.title,
+            severity: result.severity,
+            ticker,
+            source: event.source,
+            timestamp: event.timestamp ?? new Date(),
+            url: typeof event.url === 'string' ? event.url : undefined,
+          });
+
+          const webhookMs = Date.now() - webhookStart;
+
+          if (webhookResult.sent > 0) {
+            deliveriesSentTotal.inc({ channel: 'user_discord_webhook', status: 'success' }, webhookResult.sent);
+            deliveriesByChannel.inc({ channel: 'user_discord_webhook' }, webhookResult.sent);
+            deliveryLatencySeconds.observe({ channel: 'user_discord_webhook' }, webhookMs / 1000);
+          }
+          if (webhookResult.errors > 0) {
+            deliveriesSentTotal.inc({ channel: 'user_discord_webhook', status: 'failure' }, webhookResult.errors);
+            deliveryErrorsTotal.inc({ channel: 'user_discord_webhook', error_type: 'webhook_delivery_failed' }, webhookResult.errors);
+          }
+        } catch (err) {
+          deliveryErrorsTotal.inc({ channel: 'user_discord_webhook', error_type: 'webhook_delivery_exception' });
           server.log.warn({ err, ticker }, 'user webhook delivery failed');
-        });
+        }
       }
 
       server.log.info({
