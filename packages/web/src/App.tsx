@@ -17,6 +17,7 @@ import { Search } from './pages/Search.js';
 import { Settings } from './pages/Settings.js';
 import { TickerProfile } from './pages/TickerProfile.js';
 import { Onboarding } from './pages/Onboarding.js';
+import { History } from './pages/History.js';
 import { Watchlist } from './pages/Watchlist.js';
 
 function SquawkIndicator() {
@@ -150,6 +151,7 @@ const router = createBrowserRouter([
       { path: 'ticker/:symbol', element: <TickerProfile /> },
       { path: 'onboarding', element: <Onboarding /> },
       { path: 'watchlist', element: <Watchlist /> },
+      { path: 'history', element: <History /> },
       { path: 'search', element: <Search /> },
       { path: 'settings', element: <Settings /> },
       { path: 'login', element: <Login /> },
