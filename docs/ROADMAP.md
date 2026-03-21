@@ -36,8 +36,8 @@
 
 ### Batch 4 — Redis EventBus ✅
 - [x] **引入 Redis Streams 替代内存 EventBus** — PR #174, #175, #176 (consumer groups, fanout, unsubscribe safety)
-- [ ] **持久化 dedup 窗口** — 当前内存滑动窗口 OOM 会丢状态
-- [ ] **story-group 接入 live pipeline** — 或者删掉这个 claim
+- [x] **持久化 dedup 窗口** — PR #177 (Redis sorted set, hydration on startup)
+- [ ] ~~**story-group 接入 live pipeline**~~ — deferred (API exists but not wired to pipeline, low priority)
 
 ### Batch 5 — Auth & Security Hardening ✅
 - [x] **默认 AUTH_REQUIRED=true** — PR #167
