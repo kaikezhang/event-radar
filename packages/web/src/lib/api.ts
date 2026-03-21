@@ -751,6 +751,45 @@ export async function bulkAddToWatchlist(tickers: string[]): Promise<{ added: nu
   return apiFetch('/v1/onboarding/bulk-add', { method: 'POST', body: { tickers } });
 }
 
+// ── History / Browse API ─────────────────────────────────────────────────────
+
+export interface HistoryParams {
+  from?: string;
+  to?: string;
+  type?: string;
+  severity?: string;
+  source?: string;
+  ticker?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface HistoryResponse {
+  alerts: AlertSummary[];
+  total: number;
+}
+
+export async function getHistoricalEvents(params: HistoryParams): Promise<HistoryResponse> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.type) qs.set('type', params.type);
+  if (params.severity) qs.set('severity', params.severity);
+  if (params.source) qs.set('source', params.source);
+  if (params.ticker) qs.set('ticker', params.ticker);
+  qs.set('limit', String(params.limit ?? 50));
+  qs.set('offset', String(params.offset ?? 0));
+
+  const data = await apiFetch(`/events?${qs.toString()}`, { public: true });
+  const events: Record<string, unknown>[] = data.data ?? data.events ?? [];
+  const alerts = events.map(mapAlertSummary);
+
+  return {
+    alerts,
+    total: typeof data.total === 'number' ? data.total : alerts.length,
+  };
+}
+
 export async function getEventSources(): Promise<string[]> {
   const data = await apiFetch('/events/sources');
   const raw: string[] = data.sources ?? [];
