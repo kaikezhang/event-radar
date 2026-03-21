@@ -129,6 +129,7 @@ export interface EventDetailData {
     enrichedAt: string | null;
   } | null;
   scorecard?: EventScorecard | null;
+  outcome?: EventOutcome | null;
 }
 
 export interface EventScorecardWindow {

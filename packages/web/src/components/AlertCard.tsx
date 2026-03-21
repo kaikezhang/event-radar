@@ -463,11 +463,12 @@ function SourceDetailStrip({
 function PriceChange({ change, label }: { change?: number | null; label: string }) {
   if (change == null) return null;
   const isPositive = change > 0;
-  const arrow = isPositive ? '▲' : '▼';
-  const color = isPositive ? 'text-emerald-400' : 'text-red-400';
+  const isFlat = change === 0;
+  const arrow = isFlat ? '—' : isPositive ? '▲' : '▼';
+  const color = isFlat ? 'text-zinc-400' : isPositive ? 'text-emerald-400' : 'text-red-400';
   return (
     <span className={cn('font-medium', color)}>
-      {arrow} {change > 0 ? '+' : ''}{change.toFixed(1)}% ({label})
+      {arrow} {isFlat ? 'Flat' : `${isPositive ? '+' : ''}${change.toFixed(1)}%`} ({label})
     </span>
   );
 }
@@ -478,6 +479,10 @@ function OutcomeBadge({ direction, change5d }: { direction: string; change5d?: n
 
   if (change5d == null) {
     return <span className="text-zinc-500" title="Outcome pending">&#x23F3;</span>;
+  }
+
+  if (change5d === 0) {
+    return <span className="text-zinc-400" title="Flat — unclear outcome">&#x2796;</span>;
   }
 
   const isBearish = direction.toLowerCase() === 'bearish';

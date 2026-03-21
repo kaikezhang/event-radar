@@ -15,6 +15,9 @@ function formatPrice(value: number | null): string {
 function formatChange(value: number | null): { text: string; color: string; arrow: string } | null {
   if (value == null) return null;
   const pct = value; // DB stores as percentage already (e.g. -5.94 = -5.94%)
+  if (pct === 0) {
+    return { text: 'Flat', color: 'text-zinc-400', arrow: '—' };
+  }
   const isPositive = pct > 0;
   return {
     text: `${isPositive ? '+' : ''}${pct.toFixed(1)}%`,
@@ -25,6 +28,7 @@ function formatChange(value: number | null): { text: string; color: string; arro
 
 function getVerdict(direction: string, change: number | null): { icon: string; label: string } {
   if (change == null) return { icon: '\u23F3', label: 'Pending' };
+  if (change === 0) return { icon: '\u2796', label: 'Unclear' };
 
   const isBearish = direction.toLowerCase() === 'bearish';
   const priceDown = change < 0;
