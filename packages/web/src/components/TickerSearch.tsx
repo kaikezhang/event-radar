@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, Loader2, Plus, Search, TrendingUp, Clock } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Plus, Search, TrendingUp, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTickerSearch } from '../hooks/useTickerSearch.js';
@@ -60,7 +60,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
     return () => clearTimeout(timer);
   }, [eventQuery]);
 
-  const { data: eventResults = [], isLoading: isEventSearching } = useQuery<AlertSummary[]>({
+  const { data: eventResults = [], isLoading: isEventSearching, isError: isEventError, refetch: refetchEvents } = useQuery<AlertSummary[]>({
     queryKey: ['event-search', debouncedEventQuery],
     queryFn: () => searchEvents(debouncedEventQuery, 10),
     enabled: open && searchTab === 'events' && debouncedEventQuery.trim().length > 0,
@@ -372,7 +372,19 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
             )
           ) : (
             /* ── Events tab ── */
-            hasQuery ? (
+            isEventError ? (
+              <div className="px-4 py-8 text-center">
+                <AlertTriangle className="mx-auto mb-2 h-5 w-5 text-severity-high" />
+                <p className="text-sm text-text-secondary">Search failed — please try again</p>
+                <button
+                  type="button"
+                  onClick={() => void refetchEvents()}
+                  className="mt-3 rounded-lg border border-overlay-medium bg-overlay-subtle px-4 py-1.5 text-xs font-medium text-text-primary transition hover:bg-overlay-medium"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : hasQuery ? (
               eventResults.length > 0 ? (
                 <div className="py-2" role="listbox" id="search-listbox" aria-label="Event search results">
                   {eventResults.map((event, index) => {

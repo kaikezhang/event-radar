@@ -19,6 +19,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
       void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 
@@ -27,6 +28,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
       void queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 

@@ -36,10 +36,15 @@ export function FeedTabs({
       </button>
 
       {activeTab === 'smart' && (
-        <div
+        <button
+          type="button"
           className="relative"
+          aria-label="What is Smart Feed?"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
+          onFocus={() => setShowTooltip(true)}
+          onBlur={() => setShowTooltip(false)}
+          onClick={() => setShowTooltip((prev) => !prev)}
         >
           <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help" />
           {showTooltip && (
@@ -47,7 +52,7 @@ export function FeedTabs({
               AI-curated events for your watchlist + critical market events
             </div>
           )}
-        </div>
+        </button>
       )}
 
       {showModeDropdown && (
