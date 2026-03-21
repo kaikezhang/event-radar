@@ -986,14 +986,20 @@ export function mapSource(source: string): string {
     'analyst': 'Analyst',
     'earnings': 'Earnings',
     'truth-social': 'Truth Social',
+    'x': 'X/Twitter',
     'x-scanner': 'X/Twitter',
     'warn': 'WARN Act',
+    'warn-act': 'WARN Act',
     'cfpb': 'CFPB',
     'fed': 'Federal Reserve',
+    'fedwatch': 'CME FedWatch',
     'trading-halt': 'Trading Halt',
     'ftc': 'FTC',
     'sec-regulatory': 'SEC Regulatory',
     'manual': 'Manual',
+    'doj': 'DOJ',
+    'company-ir': 'Company IR',
+    'dilution-monitor': 'Dilution Monitor',
   };
   return MAP[source] ?? source;
 }
