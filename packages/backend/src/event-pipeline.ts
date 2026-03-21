@@ -403,6 +403,36 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
             };
             await persistEventMetadata();
             llmEnrichmentTotal.inc({ result: 'success' });
+
+            // If the event had no ticker before, try to extract one from LLM enrichment
+            // and schedule outcome tracking (which was skipped earlier due to missing ticker)
+            if (!ticker && db && eventId && outcomeTracker) {
+              const enrichTickers = llmEnrichResult.tickers;
+              const enrichTicker = enrichTickers?.[0]?.symbol;
+              if (typeof enrichTicker === 'string' && enrichTicker.length > 0) {
+                const normalizedTicker = enrichTicker.toUpperCase();
+                // Update events.ticker so the LEFT JOIN + future queries work
+                const updateResult = await db.execute(sql`
+                  UPDATE events SET ticker = ${normalizedTicker}
+                  WHERE id = ${eventId} AND ticker IS NULL
+                  RETURNING id
+                `);
+                const rowCount = Array.isArray(updateResult)
+                  ? updateResult.length
+                  : (updateResult as { rowCount?: number }).rowCount ?? 0;
+
+                if (rowCount > 0) {
+                  // Sync metadata with the persisted ticker
+                  event.metadata = {
+                    ...(event.metadata ?? {}),
+                    ticker: normalizedTicker,
+                  };
+                  await persistEventMetadata();
+                  // Schedule outcome tracking now that we have a ticker
+                  await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
+                }
+              }
+            }
           } else {
             llmEnrichmentTotal.inc({ result: 'empty' });
           }

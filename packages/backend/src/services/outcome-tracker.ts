@@ -241,9 +241,17 @@ export class OutcomeTracker {
   private extractTicker(event: RawEvent): string | null {
     if (event.metadata && typeof event.metadata === 'object') {
       const meta = event.metadata as Record<string, unknown>;
-      if (typeof meta['ticker'] === 'string') return meta['ticker'];
+      if (typeof meta['ticker'] === 'string') return meta['ticker'].toUpperCase();
       if (Array.isArray(meta['tickers']) && typeof meta['tickers'][0] === 'string') {
-        return meta['tickers'][0];
+        return (meta['tickers'][0] as string).toUpperCase();
+      }
+      // Check LLM enrichment tickers (e.g. breaking-news events)
+      const enrichment = meta['llm_enrichment'] as Record<string, unknown> | undefined;
+      if (enrichment && Array.isArray(enrichment['tickers'])) {
+        const first = enrichment['tickers'][0] as Record<string, unknown> | undefined;
+        if (first && typeof first['symbol'] === 'string') {
+          return first['symbol'].toUpperCase();
+        }
       }
     }
     return null;

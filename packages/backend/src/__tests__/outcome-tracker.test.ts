@@ -115,6 +115,41 @@ describe('OutcomeTracker', () => {
       const ticker = (tracker as any).extractTicker(event);
       expect(ticker).toBeNull();
     });
+
+    it('should extract ticker from llm_enrichment tickers', async () => {
+      const db = makeMockDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tracker = new OutcomeTracker(db as any);
+      const event = makeEvent({
+        metadata: {
+          llm_enrichment: {
+            tickers: [{ symbol: 'XLE', direction: 'bearish' }],
+          },
+        },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ticker = (tracker as any).extractTicker(event);
+      expect(ticker).toBe('XLE');
+    });
+
+    it('should prefer direct ticker over llm_enrichment ticker', async () => {
+      const db = makeMockDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tracker = new OutcomeTracker(db as any);
+      const event = makeEvent({
+        metadata: {
+          ticker: 'AAPL',
+          llm_enrichment: {
+            tickers: [{ symbol: 'XLE', direction: 'bearish' }],
+          },
+        },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ticker = (tracker as any).extractTicker(event);
+      expect(ticker).toBe('AAPL');
+    });
   });
 
   describe('scheduleOutcomeTracking', () => {
