@@ -1,33 +1,34 @@
-# ⚠️ DO NOT MERGE THIS PR. CREATE PR AND STOP.
+# TASK: Fix PR #181 Review Issues (Round 2)
 
-# TASK: Fix remaining unsubscribe issues in Redis EventBus (Round 3)
-
-**⚠️ DO NOT MERGE. Only commit, push, and update the existing PR #175.**
+⚠️ **DO NOT MERGE THIS PR. DO NOT MERGE. ONLY COMMIT AND PUSH.** ⚠️
 
 ## Context
-Codex re-reviewed PR #175 and found 3 remaining issues. You are on branch `fix/redis-eventbus-unsubscribe-leak`. Fix all three, commit, push. The PR will update automatically.
+PR #181 (`fix/sprint-0-bug-fixes`) was reviewed by Codex. Four issues found. You are on the `fix/sprint-0-bug-fixes` branch. Fix all issues, commit, and push. **DO NOT create a new PR. DO NOT merge.**
 
 ## Issues to Fix
 
-### 1. Stranded pending messages after unsubscribe
-**Problem**: When the loop exits without acking, messages stay pending forever. The implementation only reads new messages (`XREADGROUP ... '>'`), never reclaims pending ones.
-**Fix**: When a new subscriber registers via `subscribe()` or `subscribeTopic()`, if there are pending messages for this consumer, reclaim them first using `XAUTOCLAIM` or `XREADGROUP ... '0'` before switching to `'>'`. This ensures stranded messages from a previous subscriber are delivered to the next one.
+### 1. B5 regression — activeTab defaults to watchlist for all users
+**File**: `packages/web/src/pages/Feed/useFeedState.ts:136`
+**Problem**: `activeTab` now starts as `'watchlist'` unconditionally. The init effect only overrides for explicit `tab=` params or authenticated users. Logged-out users and authenticated users without a saved tab default into empty Watchlist.
+**Fix**: Default `activeTab` to `'all'`. Only switch to `'watchlist'` when the user is authenticated AND has a saved tab preference of `'watchlist'`.
 
-### 2. Test not deterministic for in-flight race
-**Problem**: The test unsubscribes then publishes, but if the read loop already exited, the test passes on both old and new code — it doesn't actually test the race.
-**Fix**: Rewrite the test to:
-- Make `xreadgroup` mock hold/block (e.g. return a pending Promise)
-- Call `unsub()` while `xreadgroup` is blocked
-- Then resolve `xreadgroup` with a batch of messages
-- Assert: messages are NOT acked, handler is NOT called
+### 2. B4 incomplete — light mode users stuck with no recovery
+**File**: `packages/web/src/pages/Settings.tsx:304` and `packages/web/index.html:16-17`
+**Problem**: Settings panel hides the theme toggle, but the bootstrap script in index.html still reads `localStorage.er-theme`. Users who previously selected light mode are stuck with broken light theme and no way to switch back.
+**Fix**: On app startup, force-remove any stored theme preference and set dark mode. Add a one-time migration: if `localStorage.er-theme` exists and is not `'dark'`, delete it and apply dark class. This ensures all users are on dark mode.
 
-### 3. Per-message handler check within a batch
-**Problem**: `loopState.running` is only checked once per `xreadgroup()` result. If unsubscribe happens mid-batch, remaining messages in the batch are still processed and acked.
-**Fix**: Inside the message iteration loop, before processing each message, check if handlers are still present. If handlers array is empty, stop processing and do NOT ack remaining messages in the batch.
+### 3. B2 duplicate content — Evidence tab shows market context twice on desktop
+**File**: `packages/web/src/pages/EventDetail/index.tsx:181-189` and `:204-206`
+**Problem**: Evidence tab renders `EventMarketData` and `RegimeContextCard` in both the main column AND the desktop aside. On `lg` screens, users see duplicate blocks.
+**Fix**: Only render market context cards in ONE location. For the Evidence tab, render them in the main column only (not in the aside). The aside should show different content or be empty for the Evidence tab.
+
+### 4. Tab state not reset when switching events in split view
+**File**: `packages/web/src/pages/EventDetail/index.tsx:89`
+**Problem**: `activeSection` is initialized once and never resets when `id` (selectedEventId) changes. Clicking a new event in the feed keeps the old event's tab.
+**Fix**: Add a `useEffect` that resets `activeSection` to `'summary'` whenever `id` changes.
 
 ## Requirements
-- All tests pass: `pnpm --filter @event-radar/shared test`
-- Build passes: `pnpm --filter @event-radar/shared build`
-- Commit message: `fix: address round 3 review — pending reclaim, deterministic test, per-message check`
+- Build must pass: `pnpm --filter @event-radar/web build`
+- Commit message: `fix: address review issues — tab default, dark mode migration, evidence dedup, tab reset`
 
-## ⚠️ DO NOT MERGE. DO NOT CREATE A NEW PR. Just commit and push to this branch.
+## ⚠️ DO NOT MERGE. COMMIT AND PUSH ONLY. ⚠️
