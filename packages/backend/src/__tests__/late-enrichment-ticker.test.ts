@@ -169,6 +169,17 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     // The second call should have the uppercase ticker in metadata
     const secondCall = outcomeTracker.scheduleOutcomeTrackingForEvent.mock.calls[1];
     expect(secondCall[1].metadata).toHaveProperty('ticker', 'AAPL');
+
+    // Verify the DB UPDATE was actually executed to persist the ticker
+    const executeCalls = (mockDb.execute as ReturnType<typeof vi.fn>).mock.calls;
+    const updateCall = executeCalls.find((call: unknown[]) => {
+      const sqlArg = call[0];
+      // drizzle sql tagged templates produce objects with queryChunks or sql strings
+      const sqlStr = typeof sqlArg === 'string' ? sqlArg
+        : JSON.stringify(sqlArg);
+      return sqlStr.includes('UPDATE') && sqlStr.includes('ticker');
+    });
+    expect(updateCall).toBeDefined();
   });
 
   it('does NOT schedule outcome tracking when UPDATE loses the race (0 rows affected)', async () => {
