@@ -18,6 +18,14 @@ export interface AlertSummary {
   sourceMetadata?: Record<string, unknown>;
   pushed?: boolean;
   deliveryChannels?: string[];
+  // Outcome/price data (from feed JOIN)
+  eventPrice?: number | null;
+  change1d?: number | null;
+  change5d?: number | null;
+  change20d?: number | null;
+  price1d?: number | null;
+  price5d?: number | null;
+  price20d?: number | null;
 }
 
 export interface TickerDirection {
@@ -164,6 +172,19 @@ export interface EventScorecard {
     items: string[];
     verdictWindow: string | null;
   };
+}
+
+export interface EventOutcome {
+  eventId: string;
+  ticker: string;
+  eventTime: string;
+  eventPrice: number | null;
+  price1d: number | null;
+  priceT5: number | null;
+  priceT20: number | null;
+  change1d: number | null;
+  changeT5: number | null;
+  changeT20: number | null;
 }
 
 export interface TickerProfileData {

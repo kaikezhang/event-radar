@@ -120,6 +120,14 @@ interface FeedRow {
   audit_ticker: string | null;
   audit_confidence: string | number | null;
   event_type: string | null;
+  // outcome fields from LEFT JOIN
+  event_price: string | null;
+  change_1d: string | null;
+  change_t5: string | null;
+  change_t20: string | null;
+  price_1d: string | null;
+  price_t5: string | null;
+  price_t20: string | null;
 }
 
 const FEED_CATEGORIES = new Set<FeedCategory>([
@@ -713,9 +721,17 @@ export function registerDashboardRoutes(
           e.confirmed_sources,
           e.received_at,
           e.created_at,
-          e.event_type
+          e.event_type,
+          eo.event_price,
+          eo.change_1d,
+          eo.change_t5,
+          eo.change_t20,
+          eo.price_1d,
+          eo.price_t5,
+          eo.price_t20
         FROM pipeline_audit pa
         INNER JOIN events e ON e.source_event_id = pa.event_id
+        LEFT JOIN event_outcomes eo ON eo.event_id = e.id
         WHERE ${whereClause}
         ORDER BY pa.created_at DESC, pa.id DESC
         LIMIT ${limit + 1}
@@ -759,6 +775,15 @@ export function registerDashboardRoutes(
             direction: getFeedDirection(metadata),
             ...getFeedConfidence(metadata, row.audit_confidence),
             sourceMetadata: extractSourceMetadata(row.source, metadata, row.event_type),
+            ...(row.event_price != null ? {
+              eventPrice: parseFloat(row.event_price),
+              change1d: row.change_1d != null ? parseFloat(row.change_1d) : null,
+              change5d: row.change_t5 != null ? parseFloat(row.change_t5) : null,
+              change20d: row.change_t20 != null ? parseFloat(row.change_t20) : null,
+              price1d: row.price_1d != null ? parseFloat(row.price_1d) : null,
+              price5d: row.price_t5 != null ? parseFloat(row.price_t5) : null,
+              price20d: row.price_t20 != null ? parseFloat(row.price_t20) : null,
+            } : {}),
           };
         }),
         cursor: hasMore && lastRow

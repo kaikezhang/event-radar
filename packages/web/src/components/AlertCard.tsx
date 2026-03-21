@@ -147,6 +147,9 @@ export function AlertCard({
               +{alert.tickers.length - 3}
             </span>
           )}
+          {alert.direction && alert.eventPrice != null && (
+            <OutcomeBadge direction={alert.direction} change5d={alert.change5d} />
+          )}
         </div>
       </article>
     );
@@ -241,6 +244,18 @@ export function AlertCard({
           </p>
         </Link>
       </div>
+
+      {/* Row 3.5: Price data + outcome badge */}
+      {alert.eventPrice != null && (
+        <div className="mt-2 flex items-center gap-3 text-[12px]">
+          <span className="text-text-tertiary">${alert.eventPrice.toFixed(2)}</span>
+          <PriceChange change={alert.change1d} label="1d" />
+          <PriceChange change={alert.change5d} label="5d" />
+          {alert.direction && (
+            <OutcomeBadge direction={alert.direction} change5d={alert.change5d} />
+          )}
+        </div>
+      )}
 
       {/* Row 3.5: Source-specific detail strip */}
       <SourceDetailStrip source={alert.source} sourceKey={alert.sourceKey} metadata={alert.sourceMetadata} />
@@ -442,6 +457,36 @@ function SourceDetailStrip({
     default:
       return null;
   }
+}
+
+/** Compact price change indicator */
+function PriceChange({ change, label }: { change?: number | null; label: string }) {
+  if (change == null) return null;
+  const isPositive = change > 0;
+  const arrow = isPositive ? '▲' : '▼';
+  const color = isPositive ? 'text-emerald-400' : 'text-red-400';
+  return (
+    <span className={cn('font-medium', color)}>
+      {arrow} {change > 0 ? '+' : ''}{change.toFixed(1)}% ({label})
+    </span>
+  );
+}
+
+/** Outcome badge: correct/wrong/pending */
+function OutcomeBadge({ direction, change5d }: { direction: string; change5d?: number | null }) {
+  if (!direction || direction === 'neutral') return null;
+
+  if (change5d == null) {
+    return <span className="text-zinc-500" title="Outcome pending">&#x23F3;</span>;
+  }
+
+  const isBearish = direction.toLowerCase() === 'bearish';
+  const priceDown = change5d < 0;
+  const correct = isBearish ? priceDown : !priceDown;
+
+  return correct
+    ? <span className="text-emerald-400" title="Prediction correct">&#x2705;</span>
+    : <span className="text-red-400" title="Prediction wrong">&#x274C;</span>;
 }
 
 /** Extract a historical pattern preview from the summary text for CRITICAL cards */
