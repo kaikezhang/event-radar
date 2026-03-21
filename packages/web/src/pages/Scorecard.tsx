@@ -22,6 +22,8 @@ import { StatCard } from '../components/StatCard.js';
 import { formatScorecardBucketLabel, getScorecardSummary } from '../lib/api.js';
 import type { ScorecardBucketSummary, ScorecardSummary } from '../types/index.js';
 
+const EXCLUDED_SOURCE_NAMES = new Set(['dummy', 'test', 'internal']);
+
 const WINDOWS = [
   { value: 30, label: '30d', description: 'Recent setups only' },
   { value: 90, label: '90d', description: 'Recommended default' },
@@ -264,7 +266,7 @@ export function Scorecard() {
         title="Source buckets"
         description="Signal quality by source family to surface where alerts deserve more trust."
         group="source"
-        buckets={data.sourceBuckets}
+        buckets={data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase()))}
       />
       <BucketSection
         title="Event type buckets"
@@ -282,6 +284,7 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
   const chartData = useMemo(
     () =>
       data.sourceBuckets
+        .filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase()))
         .filter((b) => b.directionalHitRate != null)
         .map((b) => ({
           name: formatScorecardBucketLabel('source', b.bucket),
