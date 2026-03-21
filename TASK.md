@@ -1,37 +1,39 @@
-# TASK: Fix PR #183 Review Issues (Sprint 2 Trust Reframe)
-
-⚠️ **DO NOT MERGE THE PR. DO NOT MERGE. STOP AFTER PUSHING.**
+# TASK: Fix Sprint 3 Retention PR #184 Review Issues
 
 ## Context
-PR #183 (`feat/sprint-2-trust-reframe`) was reviewed by Codex. Three issues found — CHANGES REQUESTED. You are on the `feat/sprint-2-trust-reframe` branch. Fix all issues, commit, and push.
+PR #184 (`feat/sprint-3-retention`) was reviewed by Codex. Four issues found, all require fixes. You are fixing the existing branch. Commit, push, and **⚠️ DO NOT MERGE THE PR. DO NOT MERGE. STOP AFTER PUSHING.**
 
 ## Issues to Fix
 
-### 1. 🔴 Hard-coded scorecard metrics (HIGH)
-**File**: `packages/web/src/pages/Scorecard.tsx:230-248`
-**Problem**: "15+ sources", "15 Active Sources", "< 5 min Avg Alert Latency" are hard-coded values, not from API data. They will become stale.
-**Fix**: Either:
-- Pull these values from `ScorecardSummary` API response (preferred — add fields to the API if needed), OR
-- If the API doesn't have these fields yet, clearly label them as static product description (e.g. "Up to 15 sources" or similar framing that doesn't imply live data), OR
-- Remove them and replace with actual dynamic metrics from the existing API data
+### 1. 🚨 Watchlist stats query not invalidated on mutations
+**Files**: `packages/web/src/pages/Watchlist.tsx`, `packages/web/src/hooks/useWatchlist.ts`
+**Problem**: The `['watchlist-feed-stats']` query is not keyed by watchlist contents, and watchlist mutations (add/remove/reorder) don't invalidate it. With 5min staleTime, stats show stale data after changes. Stats even persist after removing all tickers.
+**Fix**: 
+- Key the query by sorted ticker list: `['watchlist-feed-stats', ...sortedTickers]`
+- Add `queryClient.invalidateQueries({ queryKey: ['watchlist-feed-stats'] })` to all mutation onSuccess callbacks in useWatchlist.ts
+- Disable the query when watchlist is empty (return no data)
 
-### 2. 🔴 Wrong "5 trading days" copy (HIGH)
-**File**: `packages/web/src/pages/EventDetail/WhatHappenedNext.tsx:80-93`
-**Problem**: New all-pending branch says "results appear after 5 trading days" but the component uses a 1-day outcome window. First follow-up can appear after 1 trading day.
-**Fix**:
-- Change copy to accurately reflect the outcome window (e.g. "first results typically appear within 1 trading day")
-- Restore the event-price baseline row that was removed from the pending state
+### 2. ⚠️ Daily briefing dismiss uses UTC, display uses local time
+**File**: `packages/web/src/components/DailyBriefing.tsx`
+**Problem**: Dismissal key uses `new Date().toISOString().slice(0, 10)` (UTC date), but the banner shows `toLocaleDateString` (local date). In US timezones the briefing can reappear in the evening.
+**Fix**: Use the same local date string for both dismissal key and display. E.g. `new Date().toLocaleDateString('en-CA')` (YYYY-MM-DD format in local time) for the dismiss key.
 
-### 3. ⚠️ Collapsible panel state not in URL (MEDIUM)
-**File**: `packages/web/src/pages/Scorecard.tsx:546-690`
-**Problem**: Five collapsible panels use local `useState` — state resets on reload, can't be deep-linked/shared.
-**Fix**: Either:
-- Sync expanded panel state to URL search params (preferred, consistent with existing app patterns), OR
-- Keep the most important sections (like "Recent Alerts" and the main scorecard grid) expanded by default so reload doesn't hide critical content
+### 3. ⚠️ Daily briefing label wrong on non-watchlist tabs
+**File**: `packages/web/src/components/DailyBriefing.tsx`, `packages/web/src/pages/Feed/FeedList.tsx`
+**Problem**: Briefing always says "for your watchlist" but on the `all` tab it's summarizing all events, not just watchlist. Misleading.
+**Fix**: Pass a `scope` or `label` prop from FeedList to DailyBriefing. When on `all` tab, say "across all events" instead of "for your watchlist". Or only render DailyBriefing on the watchlist tab.
+
+### 4. ⚠️ Push permission denied recovery UX not PWA-compatible
+**File**: `packages/web/src/pages/Settings.tsx`
+**Problem**: Recovery instructions say "click the lock/info icon in the address bar" — doesn't work on iOS Safari or installed PWA (no address bar).
+**Fix**: Detect platform and show appropriate instructions:
+- Desktop browsers: current lock icon guidance
+- iOS Safari: "Go to Settings > Safari > [website] > Notifications"
+- Android PWA: "Go to Settings > Apps > [app name] > Notifications"
+- Installed PWA (no address bar): "Reinstall the app or check your device notification settings"
 
 ## Requirements
-- Build passes: `pnpm --filter @event-radar/web build`
-- Lint passes: `pnpm --filter @event-radar/web lint`
-- Commit message: `fix: address PR #183 review — dynamic metrics, correct copy, URL-synced panels`
+- Build must pass: `pnpm --filter @event-radar/web build`
+- Commit message: `fix: address Sprint 3 review — cache keys, timezone, briefing scope, PWA UX`
 
-## ⚠️ DO NOT MERGE. Push and stop. Only 晚晚 merges.
+## ⚠️ CRITICAL: DO NOT MERGE THE PR. PUSH AND STOP.
