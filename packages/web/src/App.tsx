@@ -129,7 +129,7 @@ function AppShell() {
     <AuthProvider>
       <ConnectionProvider>
         <div className="min-h-screen bg-bg-primary text-text-primary">
-          <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-20 pt-[calc(env(safe-area-inset-top)+8px)] lg:max-w-7xl">
+          <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-24 pt-[calc(env(safe-area-inset-top)+8px)] lg:max-w-7xl">
             <AppHeader onShowHelp={handleShowHelp} />
 
             <main className="flex-1">

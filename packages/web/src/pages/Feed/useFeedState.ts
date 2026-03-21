@@ -187,11 +187,9 @@ export function useFeedState({
       const saved = loadFeedTab();
       if (saved) {
         setActiveTab(saved);
-        return;
       }
-      if (hasWatchlist) {
-        setActiveTab('watchlist');
-      }
+      // If no saved tab preference, keep the default ('all').
+      // Don't auto-switch to watchlist — let the user choose.
     }
   }, [
     hasWatchlist,

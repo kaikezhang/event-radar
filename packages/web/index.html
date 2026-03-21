@@ -14,7 +14,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Event Radar</title>
     <script>
-      (function(){var t=localStorage.getItem('er-theme')||'dark';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark');document.documentElement.style.colorScheme=d?'dark':'light'})();
+      (function(){var t=localStorage.getItem('er-theme');if(t&&t!=='dark')localStorage.removeItem('er-theme');document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'})();
     </script>
   </head>
   <body>

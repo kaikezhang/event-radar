@@ -1,10 +1,8 @@
-import { Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
 import { useAlertSound } from '../hooks/useAlertSound.js';
 import { useAudioSquawk, type SquawkThreshold } from '../hooks/useAudioSquawk.js';
-import { useTheme, type Theme } from '../hooks/useTheme.js';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -48,12 +46,6 @@ function serializeNotificationPreferences(preferences: NotificationPreferences):
   });
 }
 
-const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-];
-
 const SIGNAL_TIER_ROWS = [
   {
     severity: 'Critical',
@@ -83,7 +75,6 @@ const SIGNAL_TIER_ROWS = [
 
 export function Settings() {
   const location = useLocation();
-  const { theme, setTheme } = useTheme();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
   const {
     preferences: squawkPreferences,
@@ -310,39 +301,7 @@ export function Settings() {
         </p>
       </div>
 
-      <CollapsiblePanel
-        id="appearance"
-        title="Appearance"
-        eyebrow="Theme"
-        description="Choose how Event Radar looks on this device."
-        defaultOpen
-      >
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm font-medium text-text-primary">Theme</p>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Select light, dark, or match your system preference.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTheme(value)}
-                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
-                  theme === value
-                    ? 'border-accent-default bg-accent-default/10 text-accent-default'
-                    : 'border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-overlay-medium'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </CollapsiblePanel>
+      {/* Appearance/theme panel hidden — light mode is broken, dark only for now */}
 
       <CollapsiblePanel
         id="push-alerts"

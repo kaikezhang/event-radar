@@ -1,19 +1,21 @@
 import { ArrowLeft, ExternalLink, Share2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState.js';
 import { SkeletonCard } from '../../components/SkeletonCard.js';
 import { useEventDetail } from '../../hooks/useEventDetail.js';
 import { cn } from '../../lib/utils.js';
-import { EventEnrichment, RegimeContextCard } from './EventEnrichment.js';
+import { EventEvidenceContent, EventSummaryContent, RegimeContextCard } from './EventEnrichment.js';
 import { EventHeader } from './EventHeader.js';
 import { EventHistory } from './EventHistory.js';
 import { EventMarketData } from './EventMarketData.js';
 import { EventVerdict } from './EventVerdict.js';
 import { getDirectionContextLine, getPrimaryConfidence, getPrimaryDirection } from './utils.js';
 
-function AnchorNav({ activeSection }: { activeSection: string }) {
-  const sections = [
+type TabId = 'verdict' | 'evidence' | 'trust';
+
+function TabNav({ activeSection, onTabChange }: { activeSection: TabId; onTabChange: (tab: TabId) => void }) {
+  const sections: { id: TabId; label: string }[] = [
     { id: 'verdict', label: 'Summary' },
     { id: 'evidence', label: 'Evidence' },
     { id: 'trust', label: 'Trust' },
@@ -25,7 +27,7 @@ function AnchorNav({ activeSection }: { activeSection: string }) {
         <button
           key={section.id}
           type="button"
-          onClick={() => document.getElementById(`zone-${section.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          onClick={() => onTabChange(section.id)}
           className={cn(
             'shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default',
             activeSection === section.id
@@ -84,37 +86,14 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   const { data, isLoading } = useEventDetail(id);
   const [feedback, setFeedback] = useState<'up' | 'down' | 'bad' | null>(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
-  const [activeSection, setActiveSection] = useState('verdict');
-  const shouldFallbackToWatchlist = location.key === 'default';
-  const verdictRef = useRef<HTMLDivElement>(null);
-  const evidenceRef = useRef<HTMLDivElement>(null);
-  const trustRef = useRef<HTMLDivElement>(null);
-  const backLabel = isInline ? '← Back to list' : shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back';
+  const [activeSection, setActiveSection] = useState<TabId>('verdict');
 
   useEffect(() => {
-    const refs = [
-      { id: 'verdict', ref: verdictRef },
-      { id: 'evidence', ref: evidenceRef },
-      { id: 'trust', ref: trustRef },
-    ];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const match = refs.find((section) => section.ref.current === entry.target);
-            if (match) setActiveSection(match.id);
-          }
-        }
-      },
-      { rootMargin: '-80px 0px -60% 0px', threshold: 0.1 },
-    );
+    setActiveSection('verdict');
+  }, [id]);
 
-    for (const { ref } of refs) {
-      if (ref.current) observer.observe(ref.current);
-    }
-
-    return () => observer.disconnect();
-  }, [data]);
+  const shouldFallbackToWatchlist = location.key === 'default';
+  const backLabel = isInline ? '← Back to list' : shouldFallbackToWatchlist ? 'Back to watchlist' : 'Back';
 
   const handleBack = useCallback(() => {
     if (onBack) return onBack();
@@ -161,50 +140,79 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   return (
     <div className="space-y-4">
       <DetailToolbar backLabel={backLabel} onBack={handleBack} onShare={handleShare} />
-      <AnchorNav activeSection={activeSection} />
+      <TabNav activeSection={activeSection} onTabChange={setActiveSection} />
       <div className="lg:flex lg:gap-6">
         <div className="min-w-0 space-y-4 lg:flex-[2]">
-          <div id="zone-verdict" ref={verdictRef} className="scroll-mt-28">
-            <EventHeader
-              data={data}
-              direction={direction}
-              confidence={confidence}
-              directionContextLine={directionContextLine}
-            />
-            <EventEnrichment
-              summary={data.aiAnalysis.summary}
-              enrichment={data.enrichment}
-              direction={direction}
-              source={data.sourceKey ?? data.source}
-              sourceMetadata={data.sourceMetadata}
-            />
-          </div>
+          {activeSection === 'verdict' && (
+            <>
+              <EventHeader
+                data={data}
+                direction={direction}
+                confidence={confidence}
+                directionContextLine={directionContextLine}
+              />
+              <EventSummaryContent
+                summary={data.aiAnalysis.summary}
+                enrichment={data.enrichment}
+                direction={direction}
+              />
+              <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 lg:hidden">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                  Quick actions
+                </p>
+                <div className="space-y-2">
+                  {data.url && (
+                    <a
+                      href={data.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
+                    >
+                      <ExternalLink className="h-4 w-4" /> View original
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
+                  >
+                    <Share2 className="h-4 w-4" /> Share alert
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
-          <div className="border-t-2 border-overlay-medium" />
-
-          <div id="zone-evidence" ref={evidenceRef} className="scroll-mt-28">
-            <div className="lg:hidden">
+          {activeSection === 'evidence' && (
+            <>
               <EventMarketData data={data} />
-            </div>
-            <RegimeContextCard regimeContext={data.enrichment?.regimeContext} className="mt-4 lg:mt-0" />
-            <EventHistory
-              historicalPattern={data.historicalPattern}
-              visibleSimilarEvents={visibleSimilarEvents}
-              showAllSimilar={showAllSimilar}
-              onToggleShowAll={() => setShowAllSimilar((current) => !current)}
-            />
-          </div>
+              <RegimeContextCard regimeContext={data.enrichment?.regimeContext} className="mt-4" />
+              <EventEvidenceContent
+                enrichment={data.enrichment}
+                source={data.sourceKey ?? data.source}
+                sourceMetadata={data.sourceMetadata}
+              />
+              <EventHistory
+                historicalPattern={data.historicalPattern}
+                visibleSimilarEvents={visibleSimilarEvents}
+                showAllSimilar={showAllSimilar}
+                onToggleShowAll={() => setShowAllSimilar((current) => !current)}
+              />
+            </>
+          )}
 
-          <div className="border-t-2 border-overlay-medium" />
-
-          <div id="zone-trust" ref={trustRef} className="scroll-mt-28">
+          {activeSection === 'trust' && (
             <EventVerdict data={data} feedback={feedback} onFeedbackChange={setFeedback} />
-          </div>
+          )}
         </div>
 
         <aside className="hidden space-y-4 lg:sticky lg:top-20 lg:block lg:flex-1 lg:self-start">
-          <EventMarketData data={data} />
-          <RegimeContextCard regimeContext={data.enrichment?.regimeContext} />
+          {activeSection !== 'evidence' && (
+            <>
+              <EventMarketData data={data} />
+              <RegimeContextCard regimeContext={data.enrichment?.regimeContext} />
+            </>
+          )}
           <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
               Quick actions
