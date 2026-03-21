@@ -18,6 +18,8 @@
   --severity-low: #64748b;
   --accent: #ea580c;
   --accent-strong: #f97316;
+  --interactive: #3b82f6;
+  --interactive-strong: #2563eb;
   --overlay-subtle: rgba(0, 0, 0, 0.04);
   --overlay-light: rgba(0, 0, 0, 0.06);
   --overlay-medium: rgba(0, 0, 0, 0.10);
@@ -42,6 +44,8 @@
   --severity-low: #94a3b8;
   --accent: #f97316;
   --accent-strong: #fb923c;
+  --interactive: #60a5fa;
+  --interactive-strong: #3b82f6;
   --overlay-subtle: rgba(255, 255, 255, 0.05);
   --overlay-light: rgba(255, 255, 255, 0.06);
   --overlay-medium: rgba(255, 255, 255, 0.10);
@@ -63,6 +67,8 @@
   --color-severity-low: var(--severity-low);
   --color-accent-default: var(--accent);
   --color-accent-strong: var(--accent-strong);
+  --color-interactive-default: var(--interactive);
+  --color-interactive-strong: var(--interactive-strong);
   --color-overlay-subtle: var(--overlay-subtle);
   --color-overlay-light: var(--overlay-light);
   --color-overlay-medium: var(--overlay-medium);

@@ -223,6 +223,9 @@ export function AlertCard({
         </h2>
       </Link>
 
+      {/* Row 2.5: Thesis preview */}
+      <ThesisPreview summary={alert.summary} direction={alert.direction} />
+
       {/* Row 3: Direction + Summary */}
       <div className="mt-2.5 flex items-start gap-3">
         {alert.direction && (
@@ -492,6 +495,21 @@ function OutcomeBadge({ direction, change5d }: { direction: string; change5d?: n
   return correct
     ? <span className="text-emerald-400" title="Prediction correct">&#x2705;</span>
     : <span className="text-red-400" title="Prediction wrong">&#x274C;</span>;
+}
+
+/** One-line thesis preview extracted from the summary */
+function ThesisPreview({ summary, direction }: { summary?: string; direction?: string }) {
+  if (!summary || !direction || direction === 'neutral') return null;
+
+  // Extract the first sentence as a thesis snippet
+  const firstSentence = summary.match(/^[^.!?]+[.!?]/)?.[0] ?? summary;
+  const thesis = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '\u2026' : firstSentence;
+
+  return (
+    <p className="mt-1.5 line-clamp-1 text-[13px] leading-5 text-text-tertiary italic">
+      {thesis}
+    </p>
+  );
 }
 
 /** Extract a historical pattern preview from the summary text for CRITICAL cards */

@@ -60,7 +60,7 @@ export function FeedFilters({
             key={`sev-${severity}`}
             type="button"
             onClick={() => onToggleSeverity(severity)}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
             role="listitem"
           >
             {severity}
@@ -73,7 +73,7 @@ export function FeedFilters({
             key={`src-${source}`}
             type="button"
             onClick={() => onToggleSource(source)}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-accent-default/20 bg-accent-default/10 px-2 py-1 text-[11px] font-medium text-accent-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
             role="listitem"
           >
             {source}
@@ -120,7 +120,7 @@ export function FeedFilters({
                       className={cn(
                         'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
                         activeSeverities.includes(severity)
-                          ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                          ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                           : 'border-border-default text-text-secondary hover:text-text-primary',
                       )}
                     >
@@ -142,7 +142,7 @@ export function FeedFilters({
                         className={cn(
                           'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
                           activeSources.includes(source)
-                            ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                            ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                             : 'border-border-default text-text-secondary hover:text-text-primary',
                         )}
                       >
@@ -242,13 +242,13 @@ export function FeedFilters({
                 value={presetName}
                 onChange={(event) => onPresetNameChange(event.target.value)}
                 placeholder="Preset name..."
-                className="flex-1 rounded-xl border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent-default focus:outline-none"
+                className="flex-1 rounded-xl border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-interactive-default focus:outline-none"
               />
               <button
                 type="button"
                 onClick={onSavePreset}
                 disabled={!presetName.trim()}
-                className="inline-flex items-center rounded-xl bg-accent-default px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex items-center rounded-xl bg-interactive-default px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               >
                 Save
               </button>
@@ -285,7 +285,7 @@ export function FeedFilters({
                   className={cn(
                     'inline-flex items-center rounded-xl border px-3 py-1.5 text-sm font-medium transition',
                     activeSeverities.includes(severity)
-                      ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                      ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                       : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
                   )}
                 >
@@ -306,7 +306,7 @@ export function FeedFilters({
                   className={cn(
                     'inline-flex items-center rounded-xl border px-3 py-1.5 text-sm font-medium transition',
                     activeSources.includes(source)
-                      ? 'border-accent-default bg-accent-default/20 text-accent-default'
+                      ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                       : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
                   )}
                 >

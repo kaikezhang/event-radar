@@ -23,7 +23,7 @@ export function BottomNav() {
               cn(
                 'relative flex flex-col items-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors',
                 isActive
-                  ? 'text-accent-default'
+                  ? 'text-interactive-default'
                   : 'text-text-tertiary',
               )
             }
@@ -33,12 +33,12 @@ export function BottomNav() {
                 <Icon className="h-5 w-5" strokeWidth={isActive ? 2.5 : 1.5} />
                 <span>{label}</span>
                 {badge && (
-                  <span className="absolute -right-0.5 top-0.5 rounded-full bg-accent-default/20 px-1 text-[7px] font-bold uppercase tracking-wider text-accent-default">
+                  <span className="absolute -right-0.5 top-0.5 rounded-full bg-interactive-default/20 px-1 text-[7px] font-bold uppercase tracking-wider text-interactive-default">
                     {badge}
                   </span>
                 )}
                 {isActive && (
-                  <span className="mt-0.5 h-0.5 w-4 rounded-full bg-accent-default" />
+                  <span className="mt-0.5 h-0.5 w-4 rounded-full bg-interactive-default" />
                 )}
               </>
             )}

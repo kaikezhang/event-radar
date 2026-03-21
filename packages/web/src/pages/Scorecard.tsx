@@ -113,21 +113,11 @@ export function Scorecard() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <section className="overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <div className="h-5 w-28 animate-pulse rounded-full bg-overlay-medium" />
-          <div className="mt-3 h-8 w-48 animate-pulse rounded-full bg-overlay-medium" />
-          <div className="mt-3 h-4 w-full animate-pulse rounded-full bg-overlay-light" />
-        </section>
-        <section className="grid grid-cols-2 gap-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              data-testid="scorecard-skeleton-card"
-              className="relative h-24 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96"
-            />
-          ))}
-        </section>
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Target className="h-6 w-6 animate-spin text-interactive-default" />
+        <p className="mt-3 text-sm font-medium text-text-secondary animate-pulse">
+          Calculating accuracy from tracked events&hellip;
+        </p>
       </div>
     );
   }
