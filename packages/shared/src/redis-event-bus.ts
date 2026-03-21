@@ -68,7 +68,8 @@ export class RedisEventBus implements EventBus {
       this.startReadLoop(STREAM_KEY, this.handlers, '[RedisEventBus] Unhandled error in subscriber:', true, RAW_GROUP_NAME);
     }
     return () => {
-      this.handlers = this.handlers.filter((h) => h !== handler);
+      const idx = this.handlers.indexOf(handler);
+      if (idx >= 0) this.handlers.splice(idx, 1);
       if (this.handlers.length === 0) {
         // Synchronously delete from map to prevent race with immediate re-subscribe,
         // then drain the loop in background
@@ -149,6 +150,9 @@ export class RedisEventBus implements EventBus {
       const reader = await this.getReadClient();
       await this.ensureGroup(reader, streamKey, groupName);
 
+      // Reclaim any pending messages left by a previous consumer before reading new ones
+      await this.processPending(reader, streamKey, groupName, handlers, errorPrefix, parseAsRawEvent, loopState);
+
       while (loopState.running) {
         try {
           const results = await reader.xreadgroup(
@@ -165,8 +169,13 @@ export class RedisEventBus implements EventBus {
           // pending in the consumer group for the next subscriber.
           if (!loopState.running) break;
 
-          for (const [, messages] of results) {
+          batch: for (const [, messages] of results) {
             for (const [messageId, fields] of messages) {
+              // Mid-batch check: if all handlers were removed or loop was stopped
+              // while processing earlier messages, leave remaining messages un-acked
+              // (pending in the consumer group for the next subscriber).
+              if (!loopState.running || handlers.length === 0) break batch;
+
               const dataIndex = fields.indexOf('data');
               if (dataIndex === -1 || dataIndex + 1 >= fields.length) continue;
 
@@ -185,7 +194,14 @@ export class RedisEventBus implements EventBus {
                 continue;
               }
 
-              for (const handler of [...handlers]) {
+              // Snapshot current handlers — if an unsubscribe happens during
+              // async handler execution, subsequent handlers in this iteration
+              // are skipped but the message is still acked (it was delivered to
+              // at least one handler).
+              const currentHandlers = [...handlers];
+              if (currentHandlers.length === 0) break batch;
+
+              for (const handler of currentHandlers) {
                 try {
                   await Promise.resolve((handler as (p: unknown) => void | Promise<void>)(payload));
                 } catch (error) {
@@ -203,6 +219,71 @@ export class RedisEventBus implements EventBus {
         }
       }
     })();
+  }
+
+  private async processPending(
+    reader: Redis,
+    streamKey: string,
+    groupName: string,
+    handlers: (Handler | TopicHandler)[],
+    errorPrefix: string,
+    parseAsRawEvent: boolean,
+    loopState: StreamLoop,
+  ): Promise<void> {
+    // Read pending messages (id '0' returns already-delivered but un-acked messages)
+    while (loopState.running) {
+      const results = (await reader.xreadgroup(
+        'GROUP',
+        groupName,
+        CONSUMER_NAME,
+        'COUNT',
+        '10',
+        'STREAMS',
+        streamKey,
+        '0',
+      )) as [string, [string, string[]][]][] | null;
+
+      if (!results) break;
+
+      let totalMessages = 0;
+      for (const [, messages] of results) {
+        totalMessages += messages.length;
+        for (const [messageId, fields] of messages) {
+          if (handlers.length === 0) return;
+
+          const dataIndex = fields.indexOf('data');
+          if (dataIndex === -1 || dataIndex + 1 >= fields.length) continue;
+
+          const raw = fields[dataIndex + 1];
+          let payload: unknown;
+          try {
+            payload = JSON.parse(raw);
+            if (parseAsRawEvent && payload && typeof payload === 'object' && 'timestamp' in payload) {
+              (payload as Record<string, unknown>).timestamp = new Date(
+                (payload as Record<string, unknown>).timestamp as string,
+              );
+            }
+          } catch {
+            console.error(`[RedisEventBus] Failed to parse pending message ${messageId}`);
+            await reader.xack(streamKey, groupName, messageId);
+            continue;
+          }
+
+          for (const handler of [...handlers]) {
+            try {
+              await Promise.resolve((handler as (p: unknown) => void | Promise<void>)(payload));
+            } catch (error) {
+              console.error(errorPrefix, error);
+            }
+          }
+
+          await reader.xack(streamKey, groupName, messageId);
+        }
+      }
+
+      // If no messages were returned, all pending have been consumed
+      if (totalMessages === 0) break;
+    }
   }
 
   private async ensureGroup(client: Redis, streamKey: string, groupName: string): Promise<void> {

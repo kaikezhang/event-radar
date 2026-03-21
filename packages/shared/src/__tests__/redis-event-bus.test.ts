@@ -505,31 +505,100 @@ describe('RedisEventBus', () => {
   });
 
   describe('in-flight batch after unsubscribe', () => {
-    it('should NOT ack messages delivered after handler is unsubscribed', async () => {
+    it('should NOT ack or handle messages when xreadgroup returns after unsubscribe', async () => {
       const received: RawEvent[] = [];
-      const unsub = bus.subscribe((e) => { received.push(e); });
+
+      // We'll intercept xreadgroup to control when it resolves
+      let resolveBlocked!: (value: unknown) => void;
+      const blockedPromise = new Promise((resolve) => {
+        resolveBlocked = resolve;
+      });
+
+      const unsub = bus.subscribe((e) => {
+        received.push(e);
+      });
       await new Promise((r) => setTimeout(r, 100));
 
       const readClient = lastMock();
 
-      // Unsubscribe before any message arrives
+      // Override xreadgroup to block on the next call
+      const originalXreadgroup = readClient.xreadgroup.bind(readClient);
+      let intercepted = false;
+      (readClient as unknown as Record<string, unknown>).xreadgroup = async (
+        ...args: unknown[]
+      ) => {
+        if (!intercepted) {
+          intercepted = true;
+          return blockedPromise;
+        }
+        return originalXreadgroup(...args);
+      };
+
+      // Wait for the loop to enter our blocked xreadgroup
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Unsubscribe while xreadgroup is blocked
       unsub();
 
-      // Now publish a message AFTER unsubscribe — it should remain pending (not acked)
+      // Now resolve xreadgroup with a batch of messages
       const event = makeEvent();
+      resolveBlocked([
+        [
+          'event-radar:events',
+          [['msg-inflight', ['data', JSON.stringify(event)]]],
+        ],
+      ]);
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Handler should NOT have been called
+      expect(received).toHaveLength(0);
+      // Message should NOT have been acked
+      const ackedIds = readClient.xackCalls.map((c) => c[2]);
+      expect(ackedIds).not.toContain('msg-inflight');
+    });
+  });
+
+  describe('per-message handler check within a batch', () => {
+    it('should stop processing remaining messages when handlers are removed mid-batch', async () => {
+      const received: RawEvent[] = [];
+      let unsub!: () => void;
+
+      // Handler that unsubscribes itself after first message
+      unsub = bus.subscribe((e) => {
+        received.push(e);
+        unsub(); // remove all handlers mid-batch
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const readClient = lastMock();
+
+      // Deliver a batch of 3 messages
+      const event1 = makeEvent({ id: 'aaa-1' });
+      const event2 = makeEvent({ id: 'bbb-2' });
+      const event3 = makeEvent({ id: 'ccc-3' });
       readClient.pendingMessages.push([
-        ['event-radar:events', [
-          ['msg-leaked', ['data', JSON.stringify(event)]],
-        ]],
+        [
+          'event-radar:events',
+          [
+            ['batch-1', ['data', JSON.stringify(event1)]],
+            ['batch-2', ['data', JSON.stringify(event2)]],
+            ['batch-3', ['data', JSON.stringify(event3)]],
+          ],
+        ],
       ]);
 
       await new Promise((r) => setTimeout(r, 300));
 
-      // Handler should NOT have been called
-      expect(received).toHaveLength(0);
-      // Message should NOT have been acked — it remains pending for the next subscriber
+      // Only the first message should have been handled
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ id: 'aaa-1' });
+
+      // Only the first message should have been acked
       const ackedIds = readClient.xackCalls.map((c) => c[2]);
-      expect(ackedIds).not.toContain('msg-leaked');
+      expect(ackedIds).toContain('batch-1');
+      expect(ackedIds).not.toContain('batch-2');
+      expect(ackedIds).not.toContain('batch-3');
     });
   });
 
