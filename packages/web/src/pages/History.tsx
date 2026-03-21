@@ -31,8 +31,13 @@ export function History() {
     stats,
   } = useHistory();
 
-  const hasActiveFilters = !!(filters.severity || filters.source || filters.ticker);
-  const activeFilterCount = (filters.severity ? 1 : 0) + (filters.source ? 1 : 0) + (filters.ticker ? 1 : 0);
+  // Compute default date range (same logic as useHistory) to detect user changes
+  const defaultFromDate = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+  const defaultToDate = new Date().toISOString().slice(0, 10);
+  const hasDateFilter = filters.from !== defaultFromDate || filters.to !== defaultToDate;
+
+  const hasActiveFilters = !!(filters.severity || filters.source || filters.ticker || hasDateFilter);
+  const activeFilterCount = (filters.severity ? 1 : 0) + (filters.source ? 1 : 0) + (filters.ticker ? 1 : 0) + (hasDateFilter ? 1 : 0);
   const [showFilters, setShowFilters] = useState(false);
 
   const handleCardClick = useCallback(
@@ -61,6 +66,8 @@ export function History() {
           <button
             type="button"
             onClick={() => setShowFilters((v) => !v)}
+            aria-expanded={showFilters}
+            aria-controls="history-filters-panel"
             className={cn(
               'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
               hasActiveFilters
@@ -82,6 +89,16 @@ export function History() {
       {/* Active filter chips (always visible when collapsed) */}
       {!showFilters && hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2">
+          {hasDateFilter && (
+            <button
+              type="button"
+              onClick={() => { setFilter('from', defaultFromDate); setFilter('to', defaultToDate); }}
+              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+            >
+              {filters.from} → {filters.to}
+              <X className="h-3 w-3" />
+            </button>
+          )}
           {filters.severity && (
             <button
               type="button"
@@ -117,7 +134,7 @@ export function History() {
 
       {/* Expanded filter panel */}
       {showFilters && (
-        <>
+        <div id="history-filters-panel" role="region" aria-label="Event filters">
           {/* Date range */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
@@ -216,7 +233,7 @@ export function History() {
               </button>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* Summary stats */}

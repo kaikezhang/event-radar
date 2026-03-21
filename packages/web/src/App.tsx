@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { HelpCircle, Settings as SettingsIcon, Volume2, Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
+import { cn } from './lib/utils.js';
 import { BottomNav } from './components/BottomNav.js';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
 import { TickerSearch } from './components/TickerSearch.js';
@@ -39,11 +40,25 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
   const { user } = useAuth();
   const connectionStatus = useConnectionStatus();
 
-  const statusIndicator = connectionStatus === 'connected'
-    ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" title="Live — connected" />
+  const statusLabel = connectionStatus === 'connected'
+    ? 'Connected'
     : connectionStatus === 'reconnecting'
-      ? <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" title="Reconnecting…" />
-      : <span className="h-1.5 w-1.5 rounded-full bg-red-500" title="Offline" />;
+      ? 'Reconnecting'
+      : 'Offline';
+
+  const statusIndicator = (
+    <span role="status" aria-label={statusLabel}>
+      <span
+        className={cn(
+          'inline-block h-1.5 w-1.5 rounded-full',
+          connectionStatus === 'connected' && 'bg-emerald-500 animate-pulse',
+          connectionStatus === 'reconnecting' && 'bg-amber-500 animate-pulse',
+          connectionStatus === 'disconnected' && 'bg-red-500',
+        )}
+        aria-hidden="true"
+      />
+    </span>
+  );
 
   return (
     <header className="flex h-12 items-center justify-between">
