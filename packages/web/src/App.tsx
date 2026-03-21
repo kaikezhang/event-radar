@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Volume2, Zap } from 'lucide-react';
+import { HelpCircle, Settings as SettingsIcon, Volume2, Zap } from 'lucide-react';
 import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav.js';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
@@ -35,7 +35,7 @@ function SquawkIndicator() {
   );
 }
 
-function AppHeader() {
+function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
   const { user } = useAuth();
   const connectionStatus = useConnectionStatus();
 
@@ -59,12 +59,22 @@ function AppHeader() {
         <SquawkIndicator />
         {statusIndicator}
 
+        <button
+          type="button"
+          onClick={onShowHelp}
+          className="flex h-7 w-7 items-center justify-center rounded-full text-text-secondary hover:text-text-primary transition"
+          title="Keyboard shortcuts"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </button>
+
         {user ? (
           <Link
             to="/settings"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-elevated text-xs font-semibold text-text-secondary"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-elevated text-text-secondary hover:text-text-primary transition"
+            title="Settings"
           >
-            {user.displayName?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?'}
+            <SettingsIcon className="h-3.5 w-3.5" />
           </Link>
         ) : (
           <Link to="/login" className="text-xs font-medium text-accent-default">
@@ -107,7 +117,7 @@ function GlobalTickerSearch() {
   return <TickerSearch open={open} onClose={handleClose} />;
 }
 
-function GlobalKeyboardShortcuts() {
+function AppShell() {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleShowHelp = useCallback(() => setShowHelp(true), []);
@@ -115,16 +125,12 @@ function GlobalKeyboardShortcuts() {
 
   useKeyboardShortcuts({ onShowHelp: handleShowHelp });
 
-  return <KeyboardShortcutsHelp open={showHelp} onClose={handleCloseHelp} />;
-}
-
-function AppShell() {
   return (
     <AuthProvider>
       <ConnectionProvider>
         <div className="min-h-screen bg-bg-primary text-text-primary">
           <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-20 pt-[calc(env(safe-area-inset-top)+8px)] lg:max-w-7xl">
-            <AppHeader />
+            <AppHeader onShowHelp={handleShowHelp} />
 
             <main className="flex-1">
               <Outlet />
@@ -133,7 +139,7 @@ function AppShell() {
           <BottomNav />
           <ScrollRestoration />
           <GlobalTickerSearch />
-          <GlobalKeyboardShortcuts />
+          <KeyboardShortcutsHelp open={showHelp} onClose={handleCloseHelp} />
         </div>
       </ConnectionProvider>
     </AuthProvider>

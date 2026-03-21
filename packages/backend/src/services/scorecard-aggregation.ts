@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, notInArray } from 'drizzle-orm';
 import type { ConfidenceLevel } from '@event-radar/shared';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
@@ -19,6 +19,9 @@ import {
   selectVerdictWindow,
   toNumber,
 } from './scorecard-semantics.js';
+
+/** Sources excluded from scorecard aggregation (test/internal data). */
+const EXCLUDED_SOURCES = ['dummy', 'test', 'internal'];
 
 /** Canonical label for each emoji-prefix tier. */
 const EMOJI_PREFIX_CANONICAL: Record<string, string> = {
@@ -178,7 +181,8 @@ export class ScorecardAggregationService {
       .leftJoin(
         classificationPredictions,
         eq(classificationPredictions.eventId, events.id),
-      );
+      )
+      .where(notInArray(events.source, EXCLUDED_SOURCES));
   }
 
   private normalizeRow(row: AggregationQueryRow): NormalizedAlertScorecardRow {

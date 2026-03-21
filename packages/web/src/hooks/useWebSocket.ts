@@ -67,7 +67,7 @@ export function useWebSocket<TEvent = unknown>(
           return;
         }
 
-        const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 30_000);
+        const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 60_000);
         reconnectAttemptsRef.current += 1;
         setStatus('reconnecting');
         reconnectTimeoutRef.current = window.setTimeout(connect, delayMs);
