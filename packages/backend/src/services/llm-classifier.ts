@@ -14,6 +14,7 @@ export interface ClassifyInput {
   content?: string;
   source?: string;
   ticker?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ClassifyResponse {
