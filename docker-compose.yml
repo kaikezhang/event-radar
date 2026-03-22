@@ -64,6 +64,9 @@ services:
       - WARN_ENABLED=${WARN_ENABLED:-true}
       - TRUTH_SOCIAL_ENABLED=${TRUTH_SOCIAL_ENABLED:-false}
       - X_SCANNER_ENABLED=${X_SCANNER_ENABLED:-false}
+      - TWITTER_API_KEY=${TWITTER_API_KEY:-}
+      - X_SCANNER_ACCOUNTS=${X_SCANNER_ACCOUNTS:-}
+      - X_SCANNER_INTERVAL_MS=${X_SCANNER_INTERVAL_MS:-}
     depends_on:
       postgres:
         condition: service_healthy

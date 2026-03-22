@@ -7,273 +7,220 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
-import { browserPool } from './scraping/browser-pool.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
-import type { Page } from 'playwright';
 import {
   extractTickers,
   estimateSentiment,
 } from '../utils/keyword-extractor.js';
 
-const X_PROFILE_URL = 'https://x.com/elonmusk';
-const POLL_INTERVAL_MS = 30_000;
-
-/** Keywords that indicate a reply might be market-relevant */
-const MARKET_KEYWORDS = [
-  '$',
-  'stock',
-  'market',
-  'billion',
-  'million',
-  'crypto',
-  'bitcoin',
-  'doge',
-  'tesla',
-  'spacex',
+const DEFAULT_ACCOUNTS = [
+  'realDonaldTrump',
+  'elonmusk',
+  'DeItaone',
+  'unusual_whales',
+  'zaborsky',
+  'FirstSquawk',
 ];
 
-export interface XPost {
-  tweetId: string;
+const DEFAULT_INTERVAL_MS = 600_000; // 10 minutes
+
+const API_BASE = 'https://api.twitterapi.io/twitter/tweet/advanced_search';
+
+export interface TwitterApiTweet {
+  id: string;
   text: string;
-  timestamp: string;
+  createdAt: string;
+  author: {
+    userName: string;
+    name: string;
+  };
   isRetweet: boolean;
   isQuote: boolean;
   isReply: boolean;
-  hasMedia: boolean;
+  likeCount: number;
+  retweetCount: number;
+  replyCount: number;
   url: string;
 }
 
-/**
- * Parse X/Twitter posts from a DOM document.
- * Pure function — works with both real browser DOM and JSDOM for testing.
- */
-export function parseXPosts(doc: Document): XPost[] {
-  const posts: XPost[] = [];
-
-  const tweetElements = doc.querySelectorAll(
-    '[data-testid="tweet"], article[role="article"]',
-  );
-
-  for (const el of tweetElements) {
-    const permalink = el.querySelector<HTMLAnchorElement>(
-      'a[href*="/status/"]',
-    );
-    const href = permalink?.getAttribute('href') ?? '';
-    const tweetIdMatch = href.match(/\/status\/(\d+)/);
-    const tweetId = tweetIdMatch?.[1] ?? '';
-
-    if (!tweetId) continue;
-
-    const contentEl = el.querySelector(
-      '[data-testid="tweetText"], .tweet-text',
-    );
-    const text = contentEl?.textContent?.trim() ?? '';
-
-    const timeEl = el.querySelector('time');
-    const timestamp =
-      timeEl?.getAttribute('datetime') ?? new Date().toISOString();
-
-    const retweetIndicator = el.querySelector(
-      '[data-testid="socialContext"]',
-    );
-    const retweetText =
-      retweetIndicator?.textContent?.toLowerCase() ?? '';
-    const isRetweet = retweetText.includes('reposted');
-
-    const quoteEl = el.querySelector(
-      '[data-testid="quoteTweet"], .quoted-tweet',
-    );
-    const isQuote = quoteEl !== null;
-
-    const replyIndicator = el.querySelector(
-      '[data-testid="reply-indicator"], .reply-to',
-    );
-    const isReply = replyIndicator !== null;
-
-    const mediaEl = el.querySelector(
-      '[data-testid="tweetPhoto"], video, [data-testid="videoPlayer"]',
-    );
-    const hasMedia = mediaEl !== null;
-
-    const url = `https://x.com/elonmusk/status/${tweetId}`;
-
-    posts.push({
-      tweetId,
-      text,
-      timestamp,
-      isRetweet,
-      isQuote,
-      isReply,
-      hasMedia,
-      url,
-    });
-  }
-
-  return posts;
+interface TwitterApiResponse {
+  tweets: Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    author: {
+      userName: string;
+      name: string;
+    };
+    isRetweet: boolean;
+    isQuote: boolean;
+    isReply: boolean;
+    likeCount: number;
+    retweetCount: number;
+    replyCount: number;
+    url: string;
+  }>;
+  has_next_page: boolean;
+  next_cursor: string;
 }
 
 /**
- * Extract tweets from a Playwright page using browser-context evaluation.
+ * Check if current time is within US market hours (4 AM – 8 PM ET, weekdays only).
  */
-export async function extractXPosts(page: Page): Promise<XPost[]> {
-  return page.evaluate(() => {
-    const posts: Array<{
-      tweetId: string;
-      text: string;
-      timestamp: string;
-      isRetweet: boolean;
-      isQuote: boolean;
-      isReply: boolean;
-      hasMedia: boolean;
-      url: string;
-    }> = [];
-
-    const tweetElements = document.querySelectorAll(
-      '[data-testid="tweet"], article[role="article"]',
-    );
-
-    for (const el of tweetElements) {
-      const permalink = el.querySelector<HTMLAnchorElement>(
-        'a[href*="/status/"]',
-      );
-      const href = permalink?.getAttribute('href') ?? '';
-      const tweetIdMatch = href.match(/\/status\/(\d+)/);
-      const tweetId = tweetIdMatch?.[1] ?? '';
-
-      if (!tweetId) continue;
-
-      const contentEl = el.querySelector(
-        '[data-testid="tweetText"], .tweet-text',
-      );
-      const text = contentEl?.textContent?.trim() ?? '';
-
-      const timeEl = el.querySelector('time');
-      const timestamp =
-        timeEl?.getAttribute('datetime') ?? new Date().toISOString();
-
-      const retweetIndicator = el.querySelector(
-        '[data-testid="socialContext"]',
-      );
-      const retweetText =
-        retweetIndicator?.textContent?.toLowerCase() ?? '';
-      const isRetweet = retweetText.includes('reposted');
-
-      const quoteEl = el.querySelector(
-        '[data-testid="quoteTweet"], .quoted-tweet',
-      );
-      const isQuote = quoteEl !== null;
-
-      const replyIndicator = el.querySelector(
-        '[data-testid="reply-indicator"], .reply-to',
-      );
-      const isReply = replyIndicator !== null;
-
-      const mediaEl = el.querySelector(
-        '[data-testid="tweetPhoto"], video, [data-testid="videoPlayer"]',
-      );
-      const hasMedia = mediaEl !== null;
-
-      const url = `https://x.com/elonmusk/status/${tweetId}`;
-
-      posts.push({
-        tweetId,
-        text,
-        timestamp,
-        isRetweet,
-        isQuote,
-        isReply,
-        hasMedia,
-        url,
-      });
-    }
-
-    return posts;
-  });
-}
-
-/**
- * Check if a reply text contains market-relevant keywords.
- */
-export function isMarketRelevantReply(text: string): boolean {
-  const lower = text.toLowerCase();
-  return MARKET_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+export function isMarketHours(now: Date = new Date()): boolean {
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+  const hour = et.getHours();
+  return hour >= 4 && hour < 20;
 }
 
 export class XScanner extends BaseScanner {
-  private readonly seenIds = new SeenIdBuffer(500, 'x');
+  private readonly seenIds = new SeenIdBuffer(1000, 'x');
+  private readonly apiKey: string;
+  private readonly accounts: string[];
+  private lastCheckTime: Date;
 
   constructor(eventBus: EventBus) {
+    const intervalMs = process.env.X_SCANNER_INTERVAL_MS
+      ? parseInt(process.env.X_SCANNER_INTERVAL_MS, 10)
+      : DEFAULT_INTERVAL_MS;
+
     super({
-      name: 'x-elonmusk',
-      source: 'x',
-      pollIntervalMs: POLL_INTERVAL_MS,
+      name: 'x-scanner',
+      source: 'x-scanner',
+      pollIntervalMs: intervalMs,
       eventBus,
     });
+
+    this.apiKey = process.env.TWITTER_API_KEY ?? '';
+    this.accounts = process.env.X_SCANNER_ACCOUNTS
+      ? process.env.X_SCANNER_ACCOUNTS.split(',').map((a) => a.trim()).filter(Boolean)
+      : DEFAULT_ACCOUNTS;
+    // Start checking from 30 minutes ago to catch recent tweets on startup
+    this.lastCheckTime = new Date(Date.now() - 30 * 60 * 1000);
   }
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
+    if (!this.apiKey) {
+      return err(new Error('TWITTER_API_KEY not configured'));
+    }
+
+    if (!isMarketHours()) {
+      console.log('[x-scanner] Outside market hours, skipping poll');
+      return ok([]);
+    }
+
     try {
-      const posts = await browserPool.scrape(
-        X_PROFILE_URL,
-        async ({ page }) => {
-          await page.waitForSelector(
-            '[data-testid="tweet"], article[role="article"]',
-            { timeout: 15_000 },
-          );
-          return extractXPosts(page);
-        },
-      );
+      const allEvents: RawEvent[] = [];
+      const sinceTime = this.formatSearchTime(this.lastCheckTime);
+      const checkStart = new Date();
 
-      const newEvents: RawEvent[] = [];
-
-      for (const post of posts) {
-        if (this.seenIds.has(post.tweetId)) continue;
-
-        // Filter: skip replies unless they contain market keywords
-        if (post.isReply && !post.isQuote && !isMarketRelevantReply(post.text)) {
-          continue;
-        }
-
-        this.seenIds.add(post.tweetId);
-
-        const title =
-          post.text.length > 200
-            ? post.text.slice(0, 200) + '…'
-            : post.text;
-
-        const tickers = extractTickers(post.text);
-        const sentiment = estimateSentiment(post.text);
-        const lower = post.text.toLowerCase();
-        const isCryptoRelated = ['crypto', 'bitcoin', 'doge', 'dogecoin', 'btc', 'eth'].some(
-          (kw) => lower.includes(kw),
-        );
-
-        newEvents.push({
-          id: randomUUID(),
-          source: 'x',
-          type: 'political-post',
-          title: title || 'X post',
-          body: post.text,
-          url: post.url,
-          timestamp: new Date(post.timestamp),
-          metadata: {
-            author: 'elonmusk',
-            tweetId: post.tweetId,
-            isRetweet: post.isRetweet,
-            isQuote: post.isQuote,
-            hasMedia: post.hasMedia,
-            ticker: tickers[0],
-            tickers,
-            sentiment,
-            cryptoRelated: isCryptoRelated,
-          },
-        });
+      for (const account of this.accounts) {
+        const tweets = await this.fetchTweets(account, sinceTime);
+        const events = this.processTweets(tweets, account);
+        allEvents.push(...events);
       }
 
-      return ok(newEvents);
+      this.lastCheckTime = checkStart;
+
+      console.log(
+        `[x-scanner] Checked ${this.accounts.length} accounts, found ${allEvents.length} new tweets`,
+      );
+
+      return ok(allEvents);
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
       return err(error);
     }
+  }
+
+  private async fetchTweets(
+    username: string,
+    sinceTime: string,
+  ): Promise<TwitterApiTweet[]> {
+    const query = `from:${username} since:${sinceTime}`;
+    const url = `${API_BASE}?query=${encodeURIComponent(query)}&queryType=Latest`;
+
+    const response = await fetch(url, {
+      headers: {
+        'X-API-Key': this.apiKey,
+      },
+    });
+
+    if (response.status === 429) {
+      console.warn(`[x-scanner] Rate limited querying @${username}, will retry next cycle`);
+      return [];
+    }
+
+    if (response.status === 401) {
+      throw new Error('TwitterAPI.io authentication failed — check TWITTER_API_KEY');
+    }
+
+    if (!response.ok) {
+      console.warn(
+        `[x-scanner] API error for @${username}: ${response.status} ${response.statusText}`,
+      );
+      return [];
+    }
+
+    const data = (await response.json()) as TwitterApiResponse;
+    return data.tweets ?? [];
+  }
+
+  private processTweets(tweets: TwitterApiTweet[], account: string): RawEvent[] {
+    const events: RawEvent[] = [];
+
+    for (const tweet of tweets) {
+      if (this.seenIds.has(tweet.id)) continue;
+      this.seenIds.add(tweet.id);
+
+      const title =
+        tweet.text.length > 200
+          ? tweet.text.slice(0, 200) + '…'
+          : tweet.text;
+
+      const tickers = extractTickers(tweet.text);
+      const sentiment = estimateSentiment(tweet.text);
+
+      events.push({
+        id: randomUUID(),
+        source: 'x-scanner',
+        type: 'social-post',
+        title: title || 'X post',
+        body: tweet.text,
+        url: tweet.url || `https://x.com/${account}/status/${tweet.id}`,
+        timestamp: new Date(tweet.createdAt),
+        metadata: {
+          author: tweet.author?.userName ?? account,
+          tweetId: tweet.id,
+          isRetweet: tweet.isRetweet ?? false,
+          isQuote: tweet.isQuote ?? false,
+          tickers,
+          keywords: tickers,
+          sentiment,
+          engagement: {
+            likes: tweet.likeCount ?? 0,
+            retweets: tweet.retweetCount ?? 0,
+            replies: tweet.replyCount ?? 0,
+          },
+        },
+      });
+    }
+
+    return events;
+  }
+
+  /**
+   * Format a Date into the search query format: YYYY-MM-DD_HH:mm:ss_UTC
+   */
+  private formatSearchTime(date: Date): string {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    const hh = String(date.getUTCHours()).padStart(2, '0');
+    const mm = String(date.getUTCMinutes()).padStart(2, '0');
+    const ss = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d}_${hh}:${mm}:${ss}_UTC`;
   }
 }
