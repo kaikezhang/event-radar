@@ -186,6 +186,7 @@ export async function getFeed(limit = 50, options?: { watchlist?: boolean; befor
 export interface WatchlistTickerSummary {
   ticker: string;
   eventCount24h: number;
+  eventCount7d: number;
   latestEvent: {
     title: string;
     severity: string;

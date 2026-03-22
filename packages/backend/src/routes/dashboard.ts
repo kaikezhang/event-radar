@@ -871,10 +871,11 @@ export function registerDashboardRoutes(
 
       const tickers = watchlistRows.map((w) => w.ticker);
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       const { sql: sqlTag } = await import('drizzle-orm');
 
-      // Query per-ticker stats from delivered events in last 24h
+      // Query per-ticker stats from delivered events in last 7 days
       const tickerConditions = tickers.map(
         (t) => sqlTag`(
           UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) = ${t}
@@ -892,6 +893,7 @@ export function registerDashboardRoutes(
         SELECT
           UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', '')) AS ticker,
           COUNT(*)::int AS event_count,
+          COUNT(*) FILTER (WHERE pa.created_at >= ${since24h})::int AS event_count_24h,
           MAX(pa.created_at) AS latest_at,
           (array_agg(e.title ORDER BY pa.created_at DESC))[1] AS latest_title,
           (array_agg(e.severity ORDER BY pa.created_at DESC))[1] AS latest_severity,
@@ -907,12 +909,13 @@ export function registerDashboardRoutes(
         FROM pipeline_audit pa
         INNER JOIN events e ON e.source_event_id = pa.event_id
         WHERE pa.outcome = 'delivered'
-          AND pa.created_at >= ${since24h}
+          AND pa.created_at >= ${since7d}
           AND (${tickerWhere})
         GROUP BY UPPER(COALESCE(pa.ticker, e.metadata->>'ticker', ''))
       `)) as unknown as { rows: Array<{
         ticker: string;
         event_count: number;
+        event_count_24h: number;
         latest_at: string | Date;
         latest_title: string;
         latest_severity: string;
@@ -933,7 +936,8 @@ export function registerDashboardRoutes(
         const row = tickerMap.get(ticker);
         return {
           ticker,
-          eventCount24h: row?.event_count ?? 0,
+          eventCount24h: row?.event_count_24h ?? 0,
+          eventCount7d: row?.event_count ?? 0,
           latestEvent: row
             ? {
                 title: row.latest_title,
