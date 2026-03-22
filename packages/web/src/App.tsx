@@ -20,6 +20,11 @@ import { TickerProfile } from './pages/TickerProfile.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { History } from './pages/History.js';
 import { Watchlist } from './pages/Watchlist.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { Footer } from './components/Footer.js';
+import { About } from './pages/About.js';
+import { Privacy } from './pages/Privacy.js';
+import { Terms } from './pages/Terms.js';
 
 function SquawkIndicator() {
   const { preferences, isSpeaking } = useAudioSquawk();
@@ -147,8 +152,11 @@ function AppShell() {
             <AppHeader onShowHelp={handleShowHelp} />
 
             <main className="flex-1">
-              <Outlet />
+              <ErrorBoundary>
+                <Outlet />
+              </ErrorBoundary>
             </main>
+            <Footer />
           </div>
           <BottomNav />
           <ScrollRestoration />
@@ -176,6 +184,9 @@ const router = createBrowserRouter([
       { path: 'settings', element: <Settings /> },
       { path: 'login', element: <Login /> },
       { path: 'auth/verify', element: <AuthVerify /> },
+      { path: 'about', element: <About /> },
+      { path: 'privacy', element: <Privacy /> },
+      { path: 'terms', element: <Terms /> },
     ],
   },
 ]);

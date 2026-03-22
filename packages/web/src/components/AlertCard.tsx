@@ -59,7 +59,8 @@ export function AlertCard({
   isOnWatchlist,
   onToggleWatchlist,
 }: AlertCardProps) {
-  const primaryTicker = alert.tickers[0];
+  const tickers = Array.isArray(alert.tickers) ? alert.tickers : [];
+  const primaryTicker = tickers[0];
   const isCritical = alert.severity === 'CRITICAL';
   const isLow = alert.severity === 'LOW';
   const showPushBadge = alert.pushed === true;
@@ -133,7 +134,7 @@ export function AlertCard({
 
         {/* Single-line footer */}
         <div className="mt-1.5 flex items-center gap-1 text-[11px]">
-          {alert.tickers.slice(0, 3).map((t) => (
+          {Array.isArray(alert.tickers) && alert.tickers.slice(0, 3).map((t) => (
             <Link
               key={t}
               to={`/ticker/${t}`}
@@ -142,7 +143,7 @@ export function AlertCard({
               {t}
             </Link>
           ))}
-          {alert.tickers.length > 3 && (
+          {Array.isArray(alert.tickers) && alert.tickers.length > 3 && (
             <span className="rounded-md bg-bg-elevated px-1.5 py-0.5 text-text-tertiary">
               +{alert.tickers.length - 3}
             </span>
@@ -271,7 +272,7 @@ export function AlertCard({
       {/* Row 4: Footer */}
       <div className="mt-3 flex items-center gap-1.5 text-[11px]">
         {/* Ticker chips */}
-        {alert.tickers.slice(0, 3).map((t) => (
+        {Array.isArray(alert.tickers) && alert.tickers.slice(0, 3).map((t) => (
           <Link
             key={t}
             to={`/ticker/${t}`}
@@ -280,7 +281,7 @@ export function AlertCard({
             {t}
           </Link>
         ))}
-        {alert.tickers.length > 3 && (
+        {Array.isArray(alert.tickers) && alert.tickers.length > 3 && (
           <span className="rounded-md bg-bg-elevated px-1.5 py-0.5 text-text-tertiary">
             +{alert.tickers.length - 3}
           </span>
@@ -357,7 +358,8 @@ function SourceDetailStrip({
 
     case 'sec-edgar': {
       const formType = metadata.formType as string | undefined;
-      const items = metadata.itemDescriptions as string[] | undefined;
+      const raw = metadata.itemDescriptions;
+      const items = Array.isArray(raw) ? raw as string[] : undefined;
       const link = metadata.filingLink as string | undefined;
       if (!formType && !items?.length) return null;
       return (
