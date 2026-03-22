@@ -617,10 +617,33 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
 
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
-    const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20`);
-    const events = data.data ?? data.events ?? data ?? [];
+    // Use the feed API (pipeline-delivered events only) instead of raw events API.
+    // This filters out noise like repeated StockTwits trending, routine filings, etc.
+    // Only events that passed the full pipeline (classify → dedup → filter → deliver) are shown.
+    const data = await apiFetch(`/feed?ticker=${symbol.toUpperCase()}&limit=20`);
+    const events = data.events ?? data.data ?? [];
 
-    if (events.length === 0) return null;
+    if (events.length === 0) {
+      // Fallback to raw events if no delivered events found
+      const rawData = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`);
+      const rawEvents = rawData.data ?? rawData.events ?? [];
+      if (rawEvents.length === 0) return null;
+
+      const alerts = rawEvents.map(mapAlertSummary);
+      const firstMeta = ((rawEvents[0] as Record<string, unknown> | undefined)?.metadata ?? {}) as Record<string, unknown>;
+      const companyName =
+        (firstMeta.companyName as string | undefined)
+        ?? (firstMeta.company_name as string | undefined)
+        ?? (firstMeta.issuer_name as string | undefined)
+        ?? symbol.toUpperCase();
+
+      return {
+        symbol: symbol.toUpperCase(),
+        name: companyName,
+        eventCount: alerts.length,
+        recentAlerts: alerts,
+      };
+    }
 
     const alerts = events.map(mapAlertSummary);
 
