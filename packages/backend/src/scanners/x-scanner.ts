@@ -3,6 +3,7 @@ import {
   BaseScanner,
   ok,
   err,
+  scannerFetch,
   type EventBus,
   type RawEvent,
   type Result,
@@ -25,6 +26,8 @@ const DEFAULT_ACCOUNTS = [
 const DEFAULT_INTERVAL_MS = 600_000; // 10 minutes
 
 const API_BASE = 'https://api.twitterapi.io/twitter/tweet/advanced_search';
+const MAX_PAGES = 5;
+const FETCH_TIMEOUT_MS = 15_000;
 
 export interface TwitterApiTweet {
   id: string;
@@ -88,7 +91,7 @@ export class XScanner extends BaseScanner {
 
     super({
       name: 'x-scanner',
-      source: 'x-scanner',
+      source: 'x',
       pollIntervalMs: intervalMs,
       eventBus,
     });
@@ -117,9 +120,20 @@ export class XScanner extends BaseScanner {
       const checkStart = new Date();
 
       for (const account of this.accounts) {
-        const tweets = await this.fetchTweets(account, sinceTime);
-        const events = this.processTweets(tweets, account);
-        allEvents.push(...events);
+        try {
+          const tweets = await this.fetchTweets(account, sinceTime);
+          const events = this.processTweets(tweets, account);
+          allEvents.push(...events);
+        } catch (e) {
+          // Auth errors are fatal — re-throw so the scanner reports down
+          if (e instanceof Error && e.message.includes('authentication')) {
+            throw e;
+          }
+          console.warn(
+            `[x-scanner] Error fetching @${account}, continuing with remaining accounts:`,
+            e instanceof Error ? e.message : String(e),
+          );
+        }
       }
 
       this.lastCheckTime = checkStart;
@@ -140,32 +154,49 @@ export class XScanner extends BaseScanner {
     sinceTime: string,
   ): Promise<TwitterApiTweet[]> {
     const query = `from:${username} since:${sinceTime}`;
-    const url = `${API_BASE}?query=${encodeURIComponent(query)}&queryType=Latest`;
+    const allTweets: TwitterApiTweet[] = [];
+    let cursor: string | undefined;
 
-    const response = await fetch(url, {
-      headers: {
-        'X-API-Key': this.apiKey,
-      },
-    });
+    for (let page = 0; page < MAX_PAGES; page++) {
+      let url = `${API_BASE}?query=${encodeURIComponent(query)}&queryType=Latest`;
+      if (cursor) {
+        url += `&cursor=${encodeURIComponent(cursor)}`;
+      }
 
-    if (response.status === 429) {
-      console.warn(`[x-scanner] Rate limited querying @${username}, will retry next cycle`);
-      return [];
+      const response = await scannerFetch(url, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+        headers: {
+          'X-API-Key': this.apiKey,
+        },
+      });
+
+      if (response.status === 429) {
+        console.warn(`[x-scanner] Rate limited querying @${username}, will retry next cycle`);
+        break;
+      }
+
+      if (response.status === 401) {
+        throw new Error('TwitterAPI.io authentication failed — check TWITTER_API_KEY');
+      }
+
+      if (!response.ok) {
+        console.warn(
+          `[x-scanner] API error for @${username}: ${response.status} ${response.statusText}`,
+        );
+        break;
+      }
+
+      const data = (await response.json()) as TwitterApiResponse;
+      const tweets = data.tweets ?? [];
+      allTweets.push(...tweets);
+
+      if (!data.has_next_page || !data.next_cursor) {
+        break;
+      }
+      cursor = data.next_cursor;
     }
 
-    if (response.status === 401) {
-      throw new Error('TwitterAPI.io authentication failed — check TWITTER_API_KEY');
-    }
-
-    if (!response.ok) {
-      console.warn(
-        `[x-scanner] API error for @${username}: ${response.status} ${response.statusText}`,
-      );
-      return [];
-    }
-
-    const data = (await response.json()) as TwitterApiResponse;
-    return data.tweets ?? [];
+    return allTweets;
   }
 
   private processTweets(tweets: TwitterApiTweet[], account: string): RawEvent[] {
@@ -185,8 +216,8 @@ export class XScanner extends BaseScanner {
 
       events.push({
         id: randomUUID(),
-        source: 'x-scanner',
-        type: 'social-post',
+        source: 'x',
+        type: 'political-post',
         title: title || 'X post',
         body: tweet.text,
         url: tweet.url || `https://x.com/${account}/status/${tweet.id}`,

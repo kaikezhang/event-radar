@@ -2,14 +2,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InMemoryEventBus } from '@event-radar/shared';
 import { XScanner, isMarketHours } from '../scanners/x-scanner.js';
 
-// Mock fetch globally
+// Mock scannerFetch from shared
+vi.mock('@event-radar/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@event-radar/shared')>();
+  return {
+    ...actual,
+    scannerFetch: (...args: unknown[]) => mockFetch(...args),
+  };
+});
+
 const mockFetch = vi.fn();
 
-function makeTweetResponse(tweets: Array<Record<string, unknown>> = []) {
+function makeTweetResponse(
+  tweets: Array<Record<string, unknown>> = [],
+  hasNextPage = false,
+  nextCursor = '',
+) {
   return {
     ok: true,
     status: 200,
-    json: async () => ({ tweets, has_next_page: false, next_cursor: '' }),
+    json: async () => ({ tweets, has_next_page: hasNextPage, next_cursor: nextCursor }),
   };
 }
 
@@ -35,8 +47,6 @@ describe('XScanner', () => {
     // Use fake timers set to a Wednesday during market hours (11 AM ET)
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-25T15:00:00Z'));
-    // Stub globals after fake timers to avoid interference
-    vi.stubGlobal('fetch', mockFetch);
     vi.stubEnv('TWITTER_API_KEY', 'test-api-key');
     vi.stubEnv('X_SCANNER_ACCOUNTS', 'DeItaone,elonmusk');
     mockFetch.mockReset();
@@ -46,7 +56,6 @@ describe('XScanner', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
   });
 
   describe('isMarketHours', () => {
@@ -144,8 +153,8 @@ describe('XScanner', () => {
       if (result.ok) {
         expect(result.value.length).toBeGreaterThanOrEqual(1);
         const event = result.value[0]!;
-        expect(event.source).toBe('x-scanner');
-        expect(event.type).toBe('social-post');
+        expect(event.source).toBe('x');
+        expect(event.type).toBe('political-post');
         expect(event.metadata?.['author']).toBe('elonmusk');
         expect(event.metadata?.['tweetId']).toBe('tweet-123');
         expect(event.metadata?.['engagement']).toEqual({
@@ -158,7 +167,7 @@ describe('XScanner', () => {
       }
     });
 
-    it('should send X-API-Key header', async () => {
+    it('should send X-API-Key header with timeout', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new XScanner(eventBus);
       await scanner.scan();
@@ -166,6 +175,7 @@ describe('XScanner', () => {
       expect(mockFetch).toHaveBeenCalled();
       const call = mockFetch.mock.calls[0]!;
       expect(call[1]?.headers?.['X-API-Key']).toBe('test-api-key');
+      expect(call[1]?.timeoutMs).toBe(15_000);
     });
   });
 
@@ -220,8 +230,12 @@ describe('XScanner', () => {
       }
     });
 
-    it('should report down after 3 consecutive failures', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
+    it('should report down after 3 consecutive auth failures', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
 
       const eventBus = new InMemoryEventBus();
       const scanner = new XScanner(eventBus);
@@ -232,6 +246,140 @@ describe('XScanner', () => {
 
       expect(scanner.health().status).toBe('down');
       expect(scanner.health().errorCount).toBe(3);
+    });
+
+    it('should return ok with empty events when all accounts have network errors', async () => {
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toHaveLength(0);
+    });
+  });
+
+  describe('pagination', () => {
+    it('should follow cursor pagination across multiple pages', async () => {
+      const page1Tweets = [makeTweet({ id: 'p1-1' }), makeTweet({ id: 'p1-2' })];
+      const page2Tweets = [makeTweet({ id: 'p2-1' })];
+
+      mockFetch
+        .mockResolvedValueOnce(makeTweetResponse(page1Tweets, true, 'cursor-page2'))
+        .mockResolvedValueOnce(makeTweetResponse(page2Tweets, false, ''))
+        // Second account returns empty
+        .mockResolvedValue(makeTweetResponse([]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(3);
+      }
+
+      // First call: page 1 (no cursor), second call: page 2 (with cursor)
+      const firstCall = mockFetch.mock.calls[0]![0] as string;
+      expect(firstCall).not.toContain('cursor=');
+      const secondCall = mockFetch.mock.calls[1]![0] as string;
+      expect(secondCall).toContain('cursor=cursor-page2');
+    });
+
+    it('should stop after MAX_PAGES even if more pages exist', async () => {
+      // Always return has_next_page: true
+      mockFetch.mockImplementation(() =>
+        Promise.resolve(makeTweetResponse(
+          [makeTweet({ id: `tweet-${Math.random()}` })],
+          true,
+          `cursor-${Math.random()}`,
+        )),
+      );
+
+      vi.stubEnv('X_SCANNER_ACCOUNTS', 'DeItaone');
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      // MAX_PAGES is 5, so at most 5 calls for 1 account
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+  });
+
+  describe('per-account error isolation', () => {
+    it('should continue scanning other accounts when one fails', async () => {
+      const tweet = makeTweet({ id: 'survivor-tweet' });
+
+      // First account (DeItaone) throws, second account (elonmusk) succeeds
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error for DeItaone'))
+        .mockResolvedValueOnce(makeTweetResponse([tweet]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]!.metadata?.['tweetId']).toBe('survivor-tweet');
+      }
+    });
+
+    it('should handle timeout errors without killing other accounts', async () => {
+      const timeoutError = new Error('request timed out after 15000ms');
+      timeoutError.name = 'AbortError';
+
+      const tweet = makeTweet({ id: 'after-timeout' });
+
+      mockFetch
+        .mockRejectedValueOnce(timeoutError)
+        .mockResolvedValueOnce(makeTweetResponse([tweet]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+      }
+    });
+  });
+
+  describe('source/type matching with political rules', () => {
+    it('should emit source "x" to match political rules', async () => {
+      const tweet = makeTweet({ id: 'source-check', text: 'DOGE is cutting waste' });
+      mockFetch.mockResolvedValue(makeTweetResponse([tweet]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+        // Must match political-rules.ts sourceEquals: 'x'
+        expect(result.value[0]!.source).toBe('x');
+      }
+    });
+
+    it('should emit type "political-post" to match political rules', async () => {
+      const tweet = makeTweet({ id: 'type-check', text: 'Government efficiency update' });
+      mockFetch.mockResolvedValue(makeTweetResponse([tweet]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+        // Must match political-rules.ts type expectations
+        expect(result.value[0]!.type).toBe('political-post');
+      }
     });
   });
 
