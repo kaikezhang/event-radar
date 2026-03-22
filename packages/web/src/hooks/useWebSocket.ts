@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
-export type WebSocketStatus = 'connected' | 'reconnecting' | 'disconnected';
+export type WebSocketStatus = 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
 interface UseWebSocketOptions<TEvent = unknown> {
   onEvent?: (event: TEvent) => void;
   url?: string;
 }
+
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 function buildWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -14,13 +16,14 @@ function buildWebSocketUrl(): string {
 
 export function useWebSocket<TEvent = unknown>(
   options?: UseWebSocketOptions<TEvent>,
-): { status: WebSocketStatus } {
+): { status: WebSocketStatus; retry: () => void } {
   const [status, setStatus] = useState<WebSocketStatus>('disconnected');
   const onEventRef = useRef(options?.onEvent);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const stoppedRef = useRef(false);
+  const connectRef = useRef<() => void>(undefined);
 
   onEventRef.current = options?.onEvent;
 
@@ -33,6 +36,12 @@ export function useWebSocket<TEvent = unknown>(
     stoppedRef.current = false;
 
     const connect = () => {
+      // If we've exceeded max retries, stop and signal failure
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        setStatus('failed');
+        return;
+      }
+
       const socket = new WebSocket(options?.url ?? buildWebSocketUrl());
       socketRef.current = socket;
 
@@ -67,6 +76,11 @@ export function useWebSocket<TEvent = unknown>(
           return;
         }
 
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          setStatus('failed');
+          return;
+        }
+
         const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 60_000);
         reconnectAttemptsRef.current += 1;
         setStatus('reconnecting');
@@ -74,10 +88,31 @@ export function useWebSocket<TEvent = unknown>(
       });
     };
 
+    connectRef.current = connect;
     connect();
+
+    // Reconnect immediately when the tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      const ws = socketRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        // Clear any pending reconnect timer and reconnect now
+        if (reconnectTimeoutRef.current != null) {
+          window.clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+        reconnectAttemptsRef.current = 0;
+        connect();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       stoppedRef.current = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (reconnectTimeoutRef.current != null) {
         window.clearTimeout(reconnectTimeoutRef.current);
       }
@@ -86,5 +121,16 @@ export function useWebSocket<TEvent = unknown>(
     };
   }, [options?.url]);
 
-  return { status };
+  const retry = () => {
+    reconnectAttemptsRef.current = 0;
+    if (reconnectTimeoutRef.current != null) {
+      window.clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    socketRef.current?.close();
+    socketRef.current = null;
+    connectRef.current?.();
+  };
+
+  return { status, retry };
 }

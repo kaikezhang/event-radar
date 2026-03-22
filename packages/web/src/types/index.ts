@@ -18,6 +18,8 @@ export interface AlertSummary {
   sourceMetadata?: Record<string, unknown>;
   pushed?: boolean;
   deliveryChannels?: string[];
+  /** Number of similar events deduplicated into this one (frontend-only) */
+  dedupCount?: number;
   // Outcome/price data (from feed JOIN)
   eventPrice?: number | null;
   change1d?: number | null;
