@@ -20,6 +20,8 @@ export function History() {
     filters,
     setFilter,
     resetFilters,
+    clearFilters,
+    isDefaultSeverity,
     alerts,
     total,
     isLoading,
@@ -36,8 +38,9 @@ export function History() {
   const defaultToDate = new Date().toISOString().slice(0, 10);
   const hasDateFilter = filters.from !== defaultFromDate || filters.to !== defaultToDate;
 
-  const hasActiveFilters = !!(filters.severity || filters.source || filters.ticker || hasDateFilter);
-  const activeFilterCount = (filters.severity ? 1 : 0) + (filters.source ? 1 : 0) + (filters.ticker ? 1 : 0) + (hasDateFilter ? 1 : 0);
+  const hasNonDefaultSeverity = filters.severity && !isDefaultSeverity;
+  const hasActiveFilters = !!(hasNonDefaultSeverity || filters.source || filters.ticker || hasDateFilter);
+  const activeFilterCount = (hasNonDefaultSeverity ? 1 : 0) + (filters.source ? 1 : 0) + (filters.ticker ? 1 : 0) + (hasDateFilter ? 1 : 0);
   const [showFilters, setShowFilters] = useState(false);
 
   const handleCardClick = useCallback(
@@ -99,13 +102,13 @@ export function History() {
               <X className="h-3 w-3" />
             </button>
           )}
-          {filters.severity && (
+          {filters.severity && !isDefaultSeverity && (
             <button
               type="button"
               onClick={() => setFilter('severity', '')}
               className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
             >
-              {filters.severity}
+              {filters.severity.includes(',') ? 'HIGH & CRITICAL' : filters.severity}
               <X className="h-3 w-3" />
             </button>
           )}
@@ -168,6 +171,7 @@ export function History() {
                 className="appearance-none rounded-lg border border-border-default bg-bg-surface py-1.5 pl-2.5 pr-7 text-xs text-text-primary focus:border-interactive-default focus:outline-none"
               >
                 <option value="">All severities</option>
+                <option value="HIGH,CRITICAL">HIGH & CRITICAL</option>
                 {severities.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -212,13 +216,13 @@ export function History() {
             </div>
 
             {/* Active filter pills */}
-            {filters.severity && (
+            {filters.severity && !isDefaultSeverity && (
               <button
                 type="button"
                 onClick={() => setFilter('severity', '')}
                 className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
               >
-                {filters.severity}
+                {filters.severity.includes(',') ? 'HIGH & CRITICAL' : filters.severity}
                 <X className="h-3 w-3" />
               </button>
             )}
@@ -233,6 +237,20 @@ export function History() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Default severity note */}
+      {isDefaultSeverity && (
+        <div className="flex items-center gap-2 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-xs text-text-secondary">
+          <span>Showing HIGH and CRITICAL events.</span>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="font-medium text-interactive-default hover:underline"
+          >
+            Clear filters to see all.
+          </button>
         </div>
       )}
 

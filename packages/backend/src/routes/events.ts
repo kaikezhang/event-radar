@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, sql, and, count, gte, lte, asc } from 'drizzle-orm';
+import { eq, ne, sql, and, count, gte, lte, asc, inArray } from 'drizzle-orm';
 import { events, pipelineAudit, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
@@ -26,8 +26,7 @@ const ListEventsQuerySchema = {
     },
     severity: {
       type: 'string',
-      enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
-      description: 'Filter by severity level',
+      description: 'Filter by severity level (comma-separated for multiple, e.g. "HIGH,CRITICAL")',
     },
     source: {
       type: 'string',
@@ -159,7 +158,7 @@ export function registerEventRoutes(
     schema: {
       querystring: ListEventsQuerySchema,
     },
-  }, async (request) => {
+  }, async (request, reply) => {
     const query = request.query as ListEventsQuery;
     const trimmedQ = query.q?.trim();
     const q = trimmedQ && trimmedQ.length > 0 ? trimmedQ : undefined;
@@ -181,14 +180,28 @@ export function registerEventRoutes(
       conditions.push(eq(events.eventType, query.type));
     }
 
-    // Filter by severity
+    // Filter by severity (supports comma-separated values)
     if (query.severity) {
-      conditions.push(eq(events.severity, query.severity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'));
+      const validSeverities = new Set(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+      const sevValues = query.severity.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const invalid = sevValues.find((s) => !validSeverities.has(s));
+      if (invalid) {
+        return reply.status(400).send({ error: `Invalid severity: ${invalid}` });
+      }
+      const typed = sevValues as Array<'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'>;
+      if (typed.length === 1) {
+        conditions.push(eq(events.severity, typed[0]));
+      } else if (typed.length > 1) {
+        conditions.push(inArray(events.severity, typed));
+      }
     }
 
     // Filter by source
     if (query.source) {
       conditions.push(eq(events.source, query.source));
+    } else {
+      // Exclude dummy/test sources by default
+      conditions.push(ne(events.source, 'dummy'));
     }
 
     // Filter by dateFrom (receivedAt >= dateFrom)
@@ -369,6 +382,7 @@ export function registerEventRoutes(
     const rows = await db
       .selectDistinct({ source: events.source })
       .from(events)
+      .where(ne(events.source, 'dummy'))
       .orderBy(events.source);
 
     return { sources: rows.map((r) => r.source) };

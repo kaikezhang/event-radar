@@ -29,6 +29,8 @@ export interface HistoryState {
   filters: HistoryFilters;
   setFilter: <K extends keyof HistoryFilters>(key: K, value: HistoryFilters[K]) => void;
   resetFilters: () => void;
+  clearFilters: () => void;
+  isDefaultSeverity: boolean;
   alerts: AlertSummary[];
   total: number;
   isLoading: boolean;
@@ -45,6 +47,14 @@ export interface HistoryState {
 }
 
 const INITIAL_FILTERS: HistoryFilters = {
+  from: defaultFrom(),
+  to: defaultTo(),
+  severity: 'HIGH,CRITICAL',
+  source: '',
+  ticker: '',
+};
+
+const CLEARED_FILTERS: HistoryFilters = {
   from: defaultFrom(),
   to: defaultTo(),
   severity: '',
@@ -102,6 +112,14 @@ export function useHistory(): HistoryState {
     setAccumulated([]);
   }, []);
 
+  const clearFilters = useCallback(() => {
+    setFilters(CLEARED_FILTERS);
+    setOffset(0);
+    setAccumulated([]);
+  }, []);
+
+  const isDefaultSeverity = filters.severity === INITIAL_FILTERS.severity;
+
   const loadMore = useCallback(() => {
     setAccumulated(alerts);
     setOffset((prev) => prev + PAGE_SIZE);
@@ -130,6 +148,8 @@ export function useHistory(): HistoryState {
     filters,
     setFilter,
     resetFilters,
+    clearFilters,
+    isDefaultSeverity,
     alerts,
     total,
     isLoading,
