@@ -82,7 +82,7 @@ export class XScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(1000, 'x');
   private readonly apiKey: string;
   private readonly accounts: string[];
-  private lastCheckTime: Date;
+  private readonly accountCursors: Map<string, Date>;
 
   constructor(eventBus: EventBus) {
     const intervalMs = process.env.X_SCANNER_INTERVAL_MS
@@ -101,7 +101,8 @@ export class XScanner extends BaseScanner {
       ? process.env.X_SCANNER_ACCOUNTS.split(',').map((a) => a.trim()).filter(Boolean)
       : DEFAULT_ACCOUNTS;
     // Start checking from 30 minutes ago to catch recent tweets on startup
-    this.lastCheckTime = new Date(Date.now() - 30 * 60 * 1000);
+    const initialCursor = new Date(Date.now() - 30 * 60 * 1000);
+    this.accountCursors = new Map(this.accounts.map((a) => [a, initialCursor]));
   }
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
@@ -116,14 +117,17 @@ export class XScanner extends BaseScanner {
 
     try {
       const allEvents: RawEvent[] = [];
-      const sinceTime = this.formatSearchTime(this.lastCheckTime);
       const checkStart = new Date();
 
       for (const account of this.accounts) {
+        const cursor = this.accountCursors.get(account) ?? checkStart;
+        const sinceTime = this.formatSearchTime(cursor);
         try {
           const tweets = await this.fetchTweets(account, sinceTime);
           const events = this.processTweets(tweets, account);
           allEvents.push(...events);
+          // Only advance this account's cursor on success
+          this.accountCursors.set(account, checkStart);
         } catch (e) {
           // Auth errors are fatal — re-throw so the scanner reports down
           if (e instanceof Error && e.message.includes('authentication')) {
@@ -133,10 +137,9 @@ export class XScanner extends BaseScanner {
             `[x-scanner] Error fetching @${account}, continuing with remaining accounts:`,
             e instanceof Error ? e.message : String(e),
           );
+          // Cursor stays at its old value — next poll retries from there
         }
       }
-
-      this.lastCheckTime = checkStart;
 
       console.log(
         `[x-scanner] Checked ${this.accounts.length} accounts, found ${allEvents.length} new tweets`,

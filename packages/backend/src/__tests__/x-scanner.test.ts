@@ -328,6 +328,58 @@ describe('XScanner', () => {
       }
     });
 
+    it('should retry failed account from its old cursor while successful accounts advance', async () => {
+      vi.stubEnv('X_SCANNER_ACCOUNTS', 'failAccount,okAccount');
+
+      const tweet1 = makeTweet({ id: 'ok-1', author: { userName: 'okAccount', name: 'OK' } });
+
+      // Poll 1: failAccount throws, okAccount succeeds
+      mockFetch
+        .mockRejectedValueOnce(new Error('timeout'))
+        .mockResolvedValueOnce(makeTweetResponse([tweet1]));
+
+      const eventBus = new InMemoryEventBus();
+      const scanner = new XScanner(eventBus);
+
+      const r1 = await scanner.scan();
+      expect(r1.ok).toBe(true);
+
+      // Capture the since-time queries from poll 1
+      const poll1FailQuery = decodeURIComponent(mockFetch.mock.calls[0]![0] as string);
+      const poll1OkQuery = decodeURIComponent(mockFetch.mock.calls[1]![0] as string);
+
+      // Both should have the same initial since-time (30 min ago)
+      const sincePatt = /since:(\S+)/;
+      const poll1FailSince = poll1FailQuery.match(sincePatt)![1]!;
+      const poll1OkSince = poll1OkQuery.match(sincePatt)![1]!;
+      expect(poll1FailSince).toBe(poll1OkSince);
+
+      // Advance time by 5 minutes for poll 2
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      mockFetch.mockReset();
+
+      const tweet2 = makeTweet({ id: 'ok-2', author: { userName: 'okAccount', name: 'OK' } });
+      const tweet3 = makeTweet({ id: 'fail-retry', author: { userName: 'failAccount', name: 'Fail' } });
+
+      // Poll 2: both succeed
+      mockFetch
+        .mockResolvedValueOnce(makeTweetResponse([tweet3]))
+        .mockResolvedValueOnce(makeTweetResponse([tweet2]));
+
+      const r2 = await scanner.scan();
+      expect(r2.ok).toBe(true);
+
+      const poll2FailQuery = decodeURIComponent(mockFetch.mock.calls[0]![0] as string);
+      const poll2OkQuery = decodeURIComponent(mockFetch.mock.calls[1]![0] as string);
+      const poll2FailSince = poll2FailQuery.match(sincePatt)![1]!;
+      const poll2OkSince = poll2OkQuery.match(sincePatt)![1]!;
+
+      // Failed account should retry from the SAME old cursor (not advanced)
+      expect(poll2FailSince).toBe(poll1FailSince);
+      // Successful account should have advanced its cursor
+      expect(poll2OkSince).not.toBe(poll1OkSince);
+    });
+
     it('should handle timeout errors without killing other accounts', async () => {
       const timeoutError = new Error('request timed out after 15000ms');
       timeoutError.name = 'AbortError';
