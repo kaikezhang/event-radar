@@ -177,7 +177,7 @@ export class ScorecardAggregationService {
         predictionConfidence: classificationPredictions.confidence,
       })
       .from(events)
-      .leftJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
+      .innerJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
       .leftJoin(
         classificationPredictions,
         eq(classificationPredictions.eventId, events.id),

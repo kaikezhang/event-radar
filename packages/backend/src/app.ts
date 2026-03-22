@@ -210,32 +210,30 @@ export function buildApp(options?: {
   // Register API key auth plugin
   const apiKey = options?.apiKey ?? process.env.API_KEY ?? generateApiKey();
   server.decorate('websocketClientCount', () => websocketClientState.count);
-  server.register(async () => {
-    await registerAuthPlugin(server, {
-      apiKey,
-      publicRoutes: [
-        '/api/auth/magic-link',
-        '/api/auth/verify',
-        '/api/auth/refresh',
-        '/api/auth/logout',
-        '/api/auth/me',
-        '/api/v1/feed',
-        '/api/v1/feed/watchlist-summary',
-        '/api/v1/scorecards/summary',
-        '/api/events',
-        '/api/events/:id',
-        '/api/events/:id/similar',
-        '/api/tickers/search',
-        '/api/tickers/trending',
-        '/api/v1/scorecard/summary',
-        '/api/v1/story-groups',
-        '/api/v1/story-groups/:id',
-        '/api/v1/sources',
-        '/api/health/ping',
-        '/api/health/delivery-stats',
-        '/ws/events',
-      ],
-    });
+  void registerAuthPlugin(server, {
+    apiKey,
+    publicRoutes: [
+      '/api/auth/magic-link',
+      '/api/auth/verify',
+      '/api/auth/refresh',
+      '/api/auth/logout',
+      '/api/auth/me',
+      '/api/v1/feed',
+      '/api/v1/feed/watchlist-summary',
+      '/api/v1/scorecards/summary',
+      '/api/events',
+      '/api/events/:id',
+      '/api/events/:id/similar',
+      '/api/tickers/search',
+      '/api/tickers/trending',
+      '/api/v1/scorecard/summary',
+      '/api/v1/story-groups',
+      '/api/v1/story-groups/:id',
+      '/api/v1/sources',
+      '/api/health/ping',
+      '/api/health/delivery-stats',
+      '/ws/events',
+    ],
   });
 
   if (process.env.AUTH_REQUIRED !== 'true') {
