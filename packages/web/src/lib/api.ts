@@ -617,37 +617,43 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
 
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
-    // Use the feed API (pipeline-delivered events only) instead of raw events API.
-    // This filters out noise like repeated StockTwits trending, routine filings, etc.
-    // Only events that passed the full pipeline (classify → dedup → filter → deliver) are shown.
-    const data = await apiFetch(`/feed?ticker=${symbol.toUpperCase()}&limit=20`);
-    const events = data.events ?? data.data ?? [];
+    // Query events filtered to HIGH + CRITICAL severity only.
+    // This shows important events (earnings, M&A, major news) regardless of whether
+    // they went through the live pipeline (delivered) or were backfilled historically.
+    // Filters out noise like StockTwits trending, routine filings, etc.
+    const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`);
+    const highEvents = data.data ?? data.events ?? [];
 
-    if (events.length === 0) {
-      // Fallback to raw events if no delivered events found
-      const rawData = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`);
-      const rawEvents = rawData.data ?? rawData.events ?? [];
-      if (rawEvents.length === 0) return null;
+    // Also get CRITICAL events separately (severity filter is exact match, not >=)
+    const critData = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=CRITICAL`);
+    const critEvents = critData.data ?? critData.events ?? [];
 
-      const alerts = rawEvents.map(mapAlertSummary);
-      const firstMeta = ((rawEvents[0] as Record<string, unknown> | undefined)?.metadata ?? {}) as Record<string, unknown>;
-      const companyName =
-        (firstMeta.companyName as string | undefined)
-        ?? (firstMeta.company_name as string | undefined)
-        ?? (firstMeta.issuer_name as string | undefined)
-        ?? symbol.toUpperCase();
-
-      return {
-        symbol: symbol.toUpperCase(),
-        name: companyName,
-        eventCount: alerts.length,
-        recentAlerts: alerts,
-      };
+    // Merge and deduplicate by id, sort by date descending
+    const seen = new Set<string>();
+    const allEvents: Record<string, unknown>[] = [];
+    for (const e of [...critEvents, ...highEvents]) {
+      const ev = e as Record<string, unknown>;
+      const id = ev.id as string;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        allEvents.push(ev);
+      }
     }
+
+    // Sort newest first
+    allEvents.sort((a, b) => {
+      const ta = new Date(a.received_at as string ?? a.receivedAt as string ?? 0).getTime();
+      const tb = new Date(b.received_at as string ?? b.receivedAt as string ?? 0).getTime();
+      return tb - ta;
+    });
+
+    const events = allEvents.slice(0, 20);
+
+    if (events.length === 0) return null;
 
     const alerts = events.map(mapAlertSummary);
 
-    const firstMeta = ((events[0] as Record<string, unknown> | undefined)?.metadata ?? {}) as Record<string, unknown>;
+    const firstMeta = (events[0].metadata ?? {}) as Record<string, unknown>;
     const companyName =
       (firstMeta.companyName as string | undefined)
       ?? (firstMeta.company_name as string | undefined)
