@@ -1,6 +1,6 @@
 import { SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
-import { useConnectionStatus } from '../../contexts/ConnectionContext.js';
+import { useConnectionStatus, useConnectionRetry } from '../../contexts/ConnectionContext.js';
 import { FeedTabs } from './FeedTabs.js';
 import type { FeedTab, SortMode } from './useFeedState.js';
 
@@ -28,6 +28,7 @@ export function FeedHeader({
   sortMode,
 }: FeedHeaderProps) {
   const connectionStatus = useConnectionStatus();
+  const connectionRetry = useConnectionRetry();
 
   return (
     <div className="flex flex-wrap items-center gap-2 py-1">
@@ -40,22 +41,34 @@ export function FeedHeader({
 
       <div className="flex-1" />
 
-      <span
-        className="inline-flex items-center gap-1.5 text-xs text-text-secondary"
-        title="Real-time event updates via WebSocket"
-      >
+      {connectionStatus === 'failed' ? (
+        <button
+          type="button"
+          onClick={connectionRetry}
+          className="inline-flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+          title="Click to retry WebSocket connection"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+          Connection lost — click to retry
+        </button>
+      ) : (
         <span
-          className={cn(
-            'h-1.5 w-1.5 rounded-full',
-            connectionStatus === 'connected' && 'bg-emerald-500 animate-pulse',
-            connectionStatus === 'reconnecting' && 'bg-amber-500 animate-pulse',
-            connectionStatus === 'disconnected' && 'bg-red-500',
-          )}
-        />
-        {connectionStatus === 'connected' && 'Live'}
-        {connectionStatus === 'reconnecting' && 'Reconnecting\u2026'}
-        {connectionStatus === 'disconnected' && 'Offline'}
-      </span>
+          className="inline-flex items-center gap-1.5 text-xs text-text-secondary"
+          title="Real-time event updates via WebSocket"
+        >
+          <span
+            className={cn(
+              'h-1.5 w-1.5 rounded-full',
+              connectionStatus === 'connected' && 'bg-emerald-500 animate-pulse',
+              connectionStatus === 'reconnecting' && 'bg-amber-500 animate-pulse',
+              connectionStatus === 'disconnected' && 'bg-red-500',
+            )}
+          />
+          {connectionStatus === 'connected' && 'Live'}
+          {connectionStatus === 'reconnecting' && 'Reconnecting\u2026'}
+          {connectionStatus === 'disconnected' && 'Offline'}
+        </span>
+      )}
 
       <select
         value={sortMode}

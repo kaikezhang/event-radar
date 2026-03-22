@@ -285,7 +285,9 @@ export async function registerWebsocketPlugin(
       });
 
       const heartbeat = setInterval(() => {
-        sendJson(socket, { type: 'ping' });
+        if (socket.readyState === socket.OPEN) {
+          socket.ping();
+        }
       }, 30_000);
       heartbeats.set(socket, heartbeat);
 

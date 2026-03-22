@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
-import { requireAuth } from './auth-middleware.js';
+import { requireApiKey } from './auth-middleware.js';
 import { ensureUserExists, resolveRequestUserId } from './user-context.js';
 import { createNotificationSettingsStore } from '../services/notification-settings-store.js';
 
@@ -34,9 +34,9 @@ export function registerNotificationSettingsRoutes(
 ): void {
   const store = createNotificationSettingsStore(db);
   const withAuth = async (
-    request: Parameters<typeof requireAuth>[0],
-    reply: Parameters<typeof requireAuth>[1],
-  ) => requireAuth(request, reply, options?.apiKey);
+    request: Parameters<typeof requireApiKey>[0],
+    reply: Parameters<typeof requireApiKey>[1],
+  ) => requireApiKey(request, reply, options?.apiKey);
 
   server.get('/api/v1/settings/notifications', {
     preHandler: withAuth,

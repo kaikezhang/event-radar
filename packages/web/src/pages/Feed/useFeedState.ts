@@ -73,6 +73,65 @@ export function getTrustCue(
   };
 }
 
+const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
+  // Group by source + primary ticker; within each group, keep only the most
+  // recent event when events fall within a 24-hour window.
+  const groups = new Map<string, AlertSummary[]>();
+
+  for (const alert of alerts) {
+    const primaryTicker = alert.tickers[0] ?? '';
+    const key = `${alert.source}\0${primaryTicker}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(alert);
+    } else {
+      groups.set(key, [alert]);
+    }
+  }
+
+  const output: AlertSummary[] = [];
+
+  for (const group of groups.values()) {
+    if (group.length <= 1) {
+      output.push(...group);
+      continue;
+    }
+
+    // Sort by time descending within the group
+    const sorted = [...group].sort(
+      (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+    );
+
+    // Walk through sorted events and cluster within 24h windows
+    const used = new Set<number>();
+    for (let i = 0; i < sorted.length; i++) {
+      if (used.has(i)) continue;
+
+      const anchor = sorted[i];
+      const anchorTime = new Date(anchor.time).getTime();
+      let similar = 0;
+
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (used.has(j)) continue;
+        const diff = anchorTime - new Date(sorted[j].time).getTime();
+        if (diff <= DEDUP_WINDOW_MS) {
+          similar++;
+          used.add(j);
+        }
+      }
+
+      output.push(similar > 0 ? { ...anchor, dedupCount: similar } : anchor);
+    }
+  }
+
+  // Re-sort by original order (time descending)
+  output.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  return output;
+}
+
 export function groupAlertsByDate(alerts: AlertSummary[]): DateGroup[] {
   const groups = new Map<string, AlertSummary[]>();
 
@@ -378,6 +437,10 @@ export function useFeedState({
         return new Date(b.time).getTime() - new Date(a.time).getTime();
       });
     }
+
+    // Deduplicate: same source + same primary ticker + within 24 hours — keep most recent
+    result = deduplicateAlerts(result);
+
     return result;
   }, [activeSeverities, activeSources, alerts, dismissedIds, pushOnly, sortMode]);
 

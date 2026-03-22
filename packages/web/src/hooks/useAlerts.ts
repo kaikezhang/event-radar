@@ -5,7 +5,7 @@ import type { AlertSummary } from '../types/index.js';
 import { useAlertSound } from './useAlertSound.js';
 import { useAudioSquawk } from './useAudioSquawk.js';
 import { useWebSocket, type WebSocketStatus } from './useWebSocket.js';
-import { useSetConnectionStatus } from '../contexts/ConnectionContext.js';
+import { useSetConnectionStatus, useSetConnectionRetry } from '../contexts/ConnectionContext.js';
 
 interface UseAlertsResult {
   alerts: AlertSummary[];
@@ -91,8 +91,9 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
   watchlistRef.current = watchlist;
 
   const setGlobalConnectionStatus = useSetConnectionStatus();
+  const setGlobalConnectionRetry = useSetConnectionRetry();
 
-  const { status: connectionStatus } = useWebSocket<AlertSummary>({
+  const { status: connectionStatus, retry } = useWebSocket<AlertSummary>({
     onEvent: (alert) => {
       if (seenAlertIdsRef.current.has(alert.id)) {
         return;
@@ -118,10 +119,14 @@ export function useAlerts(limit = 10, options?: { watchlist?: boolean; watchlist
     },
   });
 
-  // Sync connection status to shared context so header can display it
+  // Sync connection status and retry to shared context so header can display it
   useEffect(() => {
     setGlobalConnectionStatus(connectionStatus);
   }, [connectionStatus, setGlobalConnectionStatus]);
+
+  useEffect(() => {
+    setGlobalConnectionRetry(retry);
+  }, [retry, setGlobalConnectionRetry]);
 
   useEffect(() => {
     const syncScrollState = () => {
