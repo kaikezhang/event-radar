@@ -94,6 +94,12 @@ export class LLMClassifierService {
       return true;
     }
 
+    // High-impact sources always go through LLM for accurate severity classification
+    const highImpactSources = ['truth-social', 'whitehouse'];
+    if (highImpactSources.includes(event.source)) {
+      return true;
+    }
+
     return false;
   }
 
