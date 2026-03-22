@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type WebSocketStatus = 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
@@ -121,7 +121,7 @@ export function useWebSocket<TEvent = unknown>(
     };
   }, [options?.url]);
 
-  const retry = () => {
+  const retry = useCallback(() => {
     reconnectAttemptsRef.current = 0;
     if (reconnectTimeoutRef.current != null) {
       window.clearTimeout(reconnectTimeoutRef.current);
@@ -130,7 +130,7 @@ export function useWebSocket<TEvent = unknown>(
     socketRef.current?.close();
     socketRef.current = null;
     connectRef.current?.();
-  };
+  }, []);
 
   return { status, retry };
 }
