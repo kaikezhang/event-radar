@@ -259,34 +259,34 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
 
       <InlineNote ticker={item.ticker} notes={item.notes} onSave={onSaveNote} />
 
-      {tickerSummary && tickerSummary.eventCount24h > 0 && (
-        <div className="mt-3 ml-6 rounded-2xl border border-overlay-medium bg-white/[0.02] px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-text-secondary">
-              {tickerSummary.eventCount24h} event{tickerSummary.eventCount24h !== 1 ? 's' : ''} (24h)
+      <div className="mt-3 ml-6 rounded-2xl border border-overlay-medium bg-white/[0.02] px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-text-secondary">
+            {tickerSummary && tickerSummary.eventCount7d > 0
+              ? `${tickerSummary.eventCount7d} event${tickerSummary.eventCount7d !== 1 ? 's' : ''} this week`
+              : <span className="text-text-secondary/50">Quiet week</span>}
+          </span>
+          {tickerSummary?.latestEvent && (
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
+              }`}
+            >
+              {tickerSummary.latestEvent.severity}
             </span>
-            {tickerSummary.latestEvent && (
-              <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                  SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
-                }`}
-              >
-                {tickerSummary.latestEvent.severity}
-              </span>
-            )}
-          </div>
-          {tickerSummary.latestEvent && (
-            <p className="mt-1.5 text-sm leading-5 text-text-primary line-clamp-2">
-              {tickerSummary.latestEvent.title}
-            </p>
-          )}
-          {tickerSummary.latestEvent && (
-            <p className="mt-1 text-xs text-text-secondary">
-              {timeAgo(tickerSummary.latestEvent.timestamp)}
-            </p>
           )}
         </div>
-      )}
+        {tickerSummary?.latestEvent && (
+          <p className="mt-1.5 text-sm leading-5 text-text-primary line-clamp-2">
+            {tickerSummary.latestEvent.title}
+          </p>
+        )}
+        {tickerSummary?.latestEvent && (
+          <p className="mt-1 text-xs text-text-secondary">
+            {timeAgo(tickerSummary.latestEvent.timestamp)}
+          </p>
+        )}
+      </div>
     </div>
   );
 
