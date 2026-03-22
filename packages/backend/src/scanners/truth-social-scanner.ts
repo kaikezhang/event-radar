@@ -7,9 +7,7 @@ import {
   type RawEvent,
   type Result,
 } from '@event-radar/shared';
-import { browserPool } from './scraping/browser-pool.js';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
-import type { Page } from 'playwright';
 import {
   extractTickers,
   extractKeywords,
@@ -17,8 +15,15 @@ import {
   POLITICAL_KEYWORDS,
 } from '../utils/keyword-extractor.js';
 
-const TRUTH_SOCIAL_URL = 'https://truthsocial.com/@realDonaldTrump';
-const POLL_INTERVAL_MS = 15_000;
+/**
+ * CNN maintains a publicly accessible archive of Trump's Truth Social posts,
+ * updated every ~5 minutes. This is far more reliable than browser scraping
+ * and requires no API key, proxy, or authentication.
+ *
+ * Format: JSON array of { id, created_at, content, url, media, replies_count, ... }
+ */
+const CNN_ARCHIVE_URL = 'https://ix.cnn.io/data/truth-social/truth_archive.json';
+const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
 export interface TruthSocialPost {
   postId: string;
@@ -29,116 +34,52 @@ export interface TruthSocialPost {
   url: string;
 }
 
-/**
- * Parse Truth Social posts from a DOM document.
- * Pure function — works with both real browser DOM and JSDOM for testing.
- */
-export function parseTruthSocialPosts(doc: Document): TruthSocialPost[] {
-  const posts: TruthSocialPost[] = [];
-
-  const statusElements = doc.querySelectorAll(
-    '[data-testid="status"], article.status',
-  );
-
-  for (const el of statusElements) {
-    const permalink =
-      el.querySelector<HTMLAnchorElement>('a[href*="/posts/"]') ??
-      el.querySelector<HTMLAnchorElement>('a.status__relative-time');
-    const href = permalink?.getAttribute('href') ?? '';
-    const postIdMatch = href.match(/\/posts\/(\d+)/);
-    const postId = postIdMatch?.[1] ?? el.getAttribute('data-id') ?? '';
-
-    if (!postId) continue;
-
-    const contentEl = el.querySelector(
-      '[data-testid="status-content"], .status__content, .e-content',
-    );
-    const text = contentEl?.textContent?.trim() ?? '';
-
-    const timeEl = el.querySelector('time');
-    const timestamp =
-      timeEl?.getAttribute('datetime') ?? new Date().toISOString();
-
-    const repostIndicator = el.querySelector(
-      '.status__prepend, [data-testid="reblog-indicator"]',
-    );
-    const isRepost = repostIndicator !== null;
-
-    const mediaEl = el.querySelector(
-      '.media-gallery, video, [data-testid="media"]',
-    );
-    const hasMedia = mediaEl !== null;
-
-    const url = `https://truthsocial.com/@realDonaldTrump/posts/${postId}`;
-
-    posts.push({ postId, text, timestamp, isRepost, hasMedia, url });
-  }
-
-  return posts;
+interface CnnArchivePost {
+  id: string;
+  created_at: string;
+  content: string;
+  url: string;
+  media: string[];
+  replies_count: number;
+  reblogs_count: number;
+  favourites_count: number;
 }
 
 /**
- * Extract posts from a Playwright page using browser-context evaluation.
+ * Strip HTML tags from Truth Social post content.
+ * Posts may contain <span>, <a>, <p>, <br> tags from Mastodon formatting.
  */
-export async function extractTruthSocialPosts(
-  page: Page,
-): Promise<TruthSocialPost[]> {
-  return page.evaluate(() => {
-    // This function body is serialized and run in the browser context.
-    // We inline the parsing logic because page.evaluate cannot reference external closures.
-    const posts: Array<{
-      postId: string;
-      text: string;
-      timestamp: string;
-      isRepost: boolean;
-      hasMedia: boolean;
-      url: string;
-    }> = [];
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .trim();
+}
 
-    const statusElements = document.querySelectorAll(
-      '[data-testid="status"], article.status',
-    );
-
-    for (const el of statusElements) {
-      const permalink =
-        el.querySelector<HTMLAnchorElement>('a[href*="/posts/"]') ??
-        el.querySelector<HTMLAnchorElement>('a.status__relative-time');
-      const href = permalink?.getAttribute('href') ?? '';
-      const postIdMatch = href.match(/\/posts\/(\d+)/);
-      const postId = postIdMatch?.[1] ?? el.getAttribute('data-id') ?? '';
-
-      if (!postId) continue;
-
-      const contentEl = el.querySelector(
-        '[data-testid="status-content"], .status__content, .e-content',
-      );
-      const text = contentEl?.textContent?.trim() ?? '';
-
-      const timeEl = el.querySelector('time');
-      const timestamp =
-        timeEl?.getAttribute('datetime') ?? new Date().toISOString();
-
-      const repostIndicator = el.querySelector(
-        '.status__prepend, [data-testid="reblog-indicator"]',
-      );
-      const isRepost = repostIndicator !== null;
-
-      const mediaEl = el.querySelector(
-        '.media-gallery, video, [data-testid="media"]',
-      );
-      const hasMedia = mediaEl !== null;
-
-      const url = `https://truthsocial.com/@realDonaldTrump/posts/${postId}`;
-
-      posts.push({ postId, text, timestamp, isRepost, hasMedia, url });
-    }
-
-    return posts;
-  });
+/**
+ * Parse CNN archive posts into our standard TruthSocialPost format.
+ */
+export function parseCnnArchivePosts(posts: CnnArchivePost[]): TruthSocialPost[] {
+  return posts.map((post) => ({
+    postId: post.id,
+    text: stripHtml(post.content),
+    timestamp: post.created_at,
+    isRepost: false, // CNN archive doesn't distinguish reposts, treat all as original
+    hasMedia: Array.isArray(post.media) && post.media.length > 0,
+    url: post.url || `https://truthsocial.com/@realDonaldTrump/posts/${post.id}`,
+  }));
 }
 
 export class TruthSocialScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'truth-social');
+  private lastFetchedPostId: string | null = null;
 
   constructor(eventBus: EventBus) {
     super({
@@ -151,22 +92,37 @@ export class TruthSocialScanner extends BaseScanner {
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
     try {
-      const posts = await browserPool.scrape(
-        TRUTH_SOCIAL_URL,
-        async ({ page }) => {
-          await page.waitForSelector(
-            '[data-testid="status"], article.status',
-            { timeout: 15_000 },
-          );
-          return extractTruthSocialPosts(page);
+      const response = await fetch(CNN_ARCHIVE_URL, {
+        headers: {
+          'User-Agent': 'EventRadar/1.0 (market event detection)',
+          'Accept': 'application/json',
         },
-      );
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!response.ok) {
+        return err(new Error(`CNN archive returned HTTP ${response.status}`));
+      }
+
+      const archivePosts: CnnArchivePost[] = await response.json() as CnnArchivePost[];
+
+      if (!Array.isArray(archivePosts) || archivePosts.length === 0) {
+        return ok([]);
+      }
+
+      // Archive is sorted newest-first. Only check the most recent posts
+      // to avoid processing the entire 30k+ archive on every poll.
+      const recentPosts = archivePosts.slice(0, 20);
+      const posts = parseCnnArchivePosts(recentPosts);
 
       const newEvents: RawEvent[] = [];
 
       for (const post of posts) {
         if (this.seenIds.has(post.postId)) continue;
         this.seenIds.add(post.postId);
+
+        // Skip empty posts (media-only with no text)
+        if (!post.text.trim()) continue;
 
         const title =
           post.text.length > 200
