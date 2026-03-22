@@ -20,7 +20,23 @@ Output: {"eventType":"fed_announcement","severity":"HIGH","direction":"bullish",
 Example 3:
 Event: "Senator purchases $500K in defense stocks ahead of committee vote"
 Output: {"eventType":"insider_large_trade","severity":"MEDIUM","direction":"bullish","confidence":0.7,"reasoning":"A large politically connected trade can signal upcoming policy relevance."}
+
+Example 4:
+Source: truth-social
+Event: "If Iran doesn't FULLY OPEN the Strait of Hormuz within 48 HOURS, the United States will hit their POWER PLANTS"
+Output: {"eventType":"geopolitical_event","severity":"CRITICAL","direction":"bearish","confidence":0.95,"reasoning":"Direct military threat from the US President against Iran is an extreme geopolitical escalation affecting oil, defense, airlines, and broad market risk."}
 `.trim();
+
+const SOURCE_SEVERITY_GUIDELINES = `
+IMPORTANT severity guidelines by source:
+- truth-social (Trump posts): The US President's direct statements carry enormous market impact.
+  - Military threats, sanctions, trade war escalation, tariff announcements → CRITICAL
+  - Policy statements, executive orders, regulatory threats → HIGH
+  - Political commentary, personal attacks, endorsements → MEDIUM
+  - Reposts of news articles, congratulatory messages → LOW
+- whitehouse: Official White House statements → at least HIGH if policy-related
+- sec-edgar: SEC filings → severity based on filing type (8-K material events = HIGH/CRITICAL)
+`;
 
 export function buildClassifyPrompt(input: {
   headline: string;
@@ -37,6 +53,8 @@ export function buildClassifyPrompt(input: {
     '- direction: bullish|bearish|neutral',
     '- confidence: 0.0-1.0',
     '- reasoning: one sentence explanation',
+    '',
+    SOURCE_SEVERITY_GUIDELINES,
     '',
     FEW_SHOT_EXAMPLES,
     '',
