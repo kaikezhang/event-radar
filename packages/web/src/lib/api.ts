@@ -863,6 +863,10 @@ export async function bulkAddToWatchlist(tickers: string[]): Promise<{ added: nu
   return apiFetch('/v1/onboarding/bulk-add', { method: 'POST', body: { tickers } });
 }
 
+export async function initializeWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
+  return apiFetch('/v1/watchlist/initialize', { method: 'POST', body: { tickers } });
+}
+
 // ── History / Browse API ─────────────────────────────────────────────────────
 
 export interface HistoryParams {
@@ -1019,6 +1023,20 @@ function extractSourceMetadataClient(
       if (meta.upvotes != null) r.upvotes = meta.upvotes;
       if (meta.comments != null) r.comments = meta.comments;
       if (meta.high_engagement != null) r.highEngagement = meta.high_engagement;
+      return Object.keys(r).length ? r : undefined;
+    }
+    case 'earnings': {
+      const r: Record<string, unknown> = {};
+      if (meta.fiscal_quarter != null) r.fiscalQuarter = meta.fiscal_quarter;
+      if (meta.report_date != null) r.reportDate = meta.report_date;
+      if (meta.report_time != null) r.reportTime = meta.report_time;
+      if (meta.eps_actual != null) r.epsActual = meta.eps_actual;
+      if (meta.eps_estimate != null) r.epsEstimate = meta.eps_estimate;
+      if (meta.revenue_actual != null) r.revenueActual = meta.revenue_actual;
+      if (meta.revenue_estimate != null) r.revenueEstimate = meta.revenue_estimate;
+      if (meta.surprise_pct != null) r.surprisePct = meta.surprise_pct;
+      if (meta.surprise_type != null) r.surpriseType = meta.surprise_type;
+      if (meta.guidance != null) r.guidance = meta.guidance;
       return Object.keys(r).length ? r : undefined;
     }
     default:

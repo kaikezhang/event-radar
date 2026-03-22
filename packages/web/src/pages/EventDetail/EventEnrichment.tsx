@@ -35,14 +35,19 @@ export function EventEvidenceContent({
   enrichment,
   source,
   sourceMetadata,
+  summary,
 }: {
   enrichment: LlmEnrichment | null;
   source: string;
   sourceMetadata?: Record<string, unknown>;
+  summary?: string;
 }) {
   const whyNowBullets = [enrichment?.impact, enrichment?.whyNow, enrichment?.currentSetup].filter(
     (value): value is string => Boolean(value),
   );
+
+  const hasSourceCard = sourceMetadata && Object.keys(sourceMetadata).length > 0;
+  const hasContent = whyNowBullets.length > 0 || hasSourceCard || enrichment?.risks || enrichment?.filingItems?.length;
 
   return (
     <>
@@ -59,7 +64,7 @@ export function EventEvidenceContent({
         </section>
       )}
 
-      {sourceMetadata && Object.keys(sourceMetadata).length > 0 && (
+      {hasSourceCard && (
         <EventSourceCard source={source} metadata={sourceMetadata} />
       )}
 
@@ -76,6 +81,13 @@ export function EventEvidenceContent({
         <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <SectionHeading eyebrow="SEC filing" title="Filing Items" />
           <p className="font-mono text-[15px] leading-7 text-text-primary">{enrichment.filingItems.join(', ')}</p>
+        </section>
+      )}
+
+      {!hasContent && summary && (
+        <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+          <SectionHeading eyebrow="Event details" title="Summary" />
+          <p className="text-[15px] leading-7 text-text-secondary">{summary}</p>
         </section>
       )}
     </>
