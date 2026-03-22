@@ -233,6 +233,8 @@ export function registerEventRoutes(
       conditions.push(sql`(
         ${events.title} ILIKE ${containsPattern} ESCAPE '\\'
         OR coalesce(${events.summary}, '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.eventType}, '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.source}, '') ILIKE ${containsPattern} ESCAPE '\\'
       )`);
     }
 
@@ -302,6 +304,8 @@ export function registerEventRoutes(
       coalesce(${events.title}, '')
       || ' ' || coalesce(${events.summary}, '')
       || ' ' || coalesce(${events.ticker}, '')
+      || ' ' || coalesce(${events.eventType}, '')
+      || ' ' || coalesce(${events.source}, '')
       || ' ' || coalesce(${events.metadata}->>'ticker', '')
       || ' ' || coalesce(${events.metadata}->>'companyName', '')
       || ' ' || coalesce(${events.metadata}->>'company_name', '')

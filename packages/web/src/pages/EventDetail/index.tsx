@@ -197,6 +197,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 enrichment={data.enrichment}
                 source={data.sourceKey ?? data.source}
                 sourceMetadata={data.sourceMetadata}
+                summary={data.aiAnalysis?.summary}
               />
               <EventHistory
                 historicalPattern={data.historicalPattern}

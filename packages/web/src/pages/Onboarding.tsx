@@ -13,8 +13,7 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
-import { getSuggestedTickers, bulkAddToWatchlist } from '../lib/api.js';
-import { useWatchlist } from '../hooks/useWatchlist.js';
+import { getSuggestedTickers, initializeWatchlist } from '../lib/api.js';
 
 const ONBOARDING_KEY = 'onboardingComplete';
 const TOTAL_STEPS = 4;
@@ -137,9 +136,6 @@ function WatchlistStep({
 }: WatchlistStepProps) {
   const [manualInput, setManualInput] = useState('');
 
-  const { items: watchlistItems } = useWatchlist();
-  const alreadyOnWatchlist = new Set(watchlistItems.map((w) => w.ticker));
-
   const { data } = useQuery({
     queryKey: ['onboarding', 'suggested-tickers'],
     queryFn: getSuggestedTickers,
@@ -180,19 +176,17 @@ function WatchlistStep({
         <div className="mt-3 flex flex-wrap gap-2">
           {POPULAR_TICKERS.map((ticker) => {
             const isSelected = selectedTickers.has(ticker);
-            const onWL = alreadyOnWatchlist.has(ticker);
             return (
               <button
                 key={ticker}
                 type="button"
                 onClick={() => onToggleTicker(ticker)}
-                disabled={onWL}
                 aria-label={`Quick add ${ticker}`}
                 className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
-                  isSelected || onWL
+                  isSelected
                     ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
                     : 'border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-overlay-medium hover:text-text-primary'
-                } ${onWL ? 'opacity-60' : ''}`}
+                }`}
               >
                 {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                 {ticker}
@@ -244,19 +238,17 @@ function WatchlistStep({
           <div className="mt-4 flex flex-wrap gap-2">
             {trendingTickers.map((t) => {
               const isSelected = selectedTickers.has(t.symbol);
-              const onWL = alreadyOnWatchlist.has(t.symbol);
               return (
                 <button
                   key={t.symbol}
                   type="button"
                   onClick={() => onToggleTicker(t.symbol)}
-                  disabled={onWL}
                   aria-label={`Quick add ${t.symbol}`}
                   className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
-                    isSelected || onWL
+                    isSelected
                       ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
                       : 'border-overlay-medium bg-overlay-subtle text-text-secondary hover:bg-overlay-medium hover:text-text-primary'
-                  } ${onWL ? 'opacity-60' : ''}`}
+                  }`}
                 >
                   {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                   {t.symbol}
@@ -464,8 +456,8 @@ export function Onboarding() {
   const [step, setStep] = useState<Step>(1);
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
 
-  const bulkAddMutation = useMutation({
-    mutationFn: (tickers: string[]) => bulkAddToWatchlist(tickers),
+  const initMutation = useMutation({
+    mutationFn: (tickers: string[]) => initializeWatchlist(tickers),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
     },
@@ -506,7 +498,7 @@ export function Onboarding() {
 
   const handleWatchlistContinue = async () => {
     if (selectedTickers.size < 3) return;
-    await bulkAddMutation.mutateAsync([...selectedTickers]);
+    await initMutation.mutateAsync([...selectedTickers]);
     setStep(3);
   };
 
@@ -554,7 +546,7 @@ export function Onboarding() {
           onManualAdd={handleManualAdd}
           onNext={() => void handleWatchlistContinue()}
           onSkip={skipToFeed}
-          isPending={bulkAddMutation.isPending}
+          isPending={initMutation.isPending}
         />
       )}
 

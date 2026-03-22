@@ -127,4 +127,45 @@ export function registerOnboardingRoutes(
 
     return { added: toAdd.length, total: countRow?.count ?? toAdd.length };
   });
+
+  /**
+   * POST /api/v1/watchlist/initialize
+   * Atomic watchlist reset: DELETE all existing tickers, INSERT the new set.
+   * Used by onboarding to replace ghost tickers from previous sessions.
+   */
+  server.post('/api/v1/watchlist/initialize', {
+    preHandler: withAuth,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['tickers'],
+        properties: {
+          tickers: {
+            type: 'array',
+            items: { type: 'string', pattern: '^[A-Z]{1,5}$' },
+            maxItems: 30,
+          },
+        },
+      },
+    },
+  }, async (request) => {
+    const { tickers: rawTickers } = request.body as { tickers: string[] };
+    const tickers = [...new Set(rawTickers)];
+    const userId = resolveRequestUserId(request);
+
+    await ensureUserExists(db, userId);
+
+    // Single transaction: delete all, then insert new
+    await db.transaction(async (tx) => {
+      await tx.delete(watchlist).where(eq(watchlist.userId, userId));
+
+      if (tickers.length > 0) {
+        await tx
+          .insert(watchlist)
+          .values(tickers.map((ticker) => ({ userId, ticker })));
+      }
+    });
+
+    return { added: tickers.length, total: tickers.length };
+  });
 }

@@ -34,6 +34,8 @@ function sourceDetailTitle(source: string): string {
       return 'StockTwits Activity';
     case 'reddit':
       return 'Reddit Activity';
+    case 'earnings':
+      return 'Earnings Details';
     default:
       return 'Source Details';
   }
@@ -206,6 +208,52 @@ function renderSourceDetails(source: string, metadata: Record<string, unknown>):
             </p>
           )}
           {highEngagement && <p className="font-medium text-amber-400">🔥 High engagement post</p>}
+        </div>
+      );
+    }
+
+    case 'earnings': {
+      const quarter = metadata.fiscalQuarter as string | undefined;
+      const reportDate = metadata.reportDate as string | undefined;
+      const reportTime = metadata.reportTime as string | undefined;
+      const epsActual = metadata.epsActual as number | undefined;
+      const epsEstimate = metadata.epsEstimate as number | undefined;
+      const revenueActual = metadata.revenueActual as number | undefined;
+      const revenueEstimate = metadata.revenueEstimate as number | undefined;
+      const surprisePct = metadata.surprisePct as number | undefined;
+      const surpriseType = metadata.surpriseType as string | undefined;
+      const guidance = metadata.guidance as string | undefined;
+
+      return (
+        <div className="space-y-2 text-[15px] leading-7 text-text-secondary">
+          {quarter && (
+            <p>
+              📅 Quarter: <span className="font-medium text-text-primary">{quarter}</span>
+              {reportDate ? ` (${reportDate}${reportTime ? ` ${reportTime}` : ''})` : ''}
+            </p>
+          )}
+          {epsActual != null && (
+            <p>
+              💰 EPS: <span className="font-semibold text-text-primary">${epsActual}</span>
+              {epsEstimate != null ? ` vs est. $${epsEstimate}` : ''}
+              {surprisePct != null && (
+                <span className={surprisePct >= 0 ? 'ml-2 text-emerald-400' : 'ml-2 text-red-400'}>
+                  ({surprisePct > 0 ? '+' : ''}{surprisePct.toFixed(1)}% {surpriseType ?? 'surprise'})
+                </span>
+              )}
+            </p>
+          )}
+          {revenueActual != null && (
+            <p>
+              📊 Revenue: <span className="font-medium text-text-primary">${(revenueActual / 1e6).toFixed(1)}M</span>
+              {revenueEstimate != null ? ` vs est. $${(revenueEstimate / 1e6).toFixed(1)}M` : ''}
+            </p>
+          )}
+          {guidance && (
+            <p>
+              🔮 Guidance: <span className="font-medium text-text-primary">{guidance}</span>
+            </p>
+          )}
         </div>
       );
     }
