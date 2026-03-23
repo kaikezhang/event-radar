@@ -1,35 +1,17 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import type { AlertSummary } from '../types/index.js';
 
-export type SquawkThreshold = 'critical' | 'critical+high' | 'all';
-
 export interface AudioSquawkPreferences {
   enabled: boolean;
-  threshold: SquawkThreshold;
+  speakWhenHidden: boolean;
 }
 
 const STORAGE_KEY = 'audioSquawk';
 const DEFAULT_PREFERENCES: AudioSquawkPreferences = {
   enabled: false,
-  threshold: 'critical+high',
+  speakWhenHidden: false,
 };
-
-const RATE_LIMIT_MS = 10_000;
-
-const SEVERITY_RANK: Record<string, number> = {
-  CRITICAL: 3,
-  HIGH: 2,
-  MEDIUM: 1,
-  LOW: 0,
-};
-
-const THRESHOLD_MIN_RANK: Record<SquawkThreshold, number> = {
-  critical: 3,
-  'critical+high': 2,
-  all: 0,
-};
-
-// --- External store for preferences (same pattern as useAlertSound) ---
+const BEEP_DURATION_MS = 220;
 
 const prefListeners = new Set<() => void>();
 let cachedPreferences: AudioSquawkPreferences | null = null;
@@ -57,7 +39,7 @@ function readPreferences(): AudioSquawkPreferences {
     const parsed = JSON.parse(stored) as Partial<AudioSquawkPreferences>;
     cachedPreferences = {
       enabled: parsed.enabled ?? DEFAULT_PREFERENCES.enabled,
-      threshold: isValidThreshold(parsed.threshold) ? parsed.threshold : DEFAULT_PREFERENCES.threshold,
+      speakWhenHidden: parsed.speakWhenHidden ?? DEFAULT_PREFERENCES.speakWhenHidden,
     };
     cachedSerialized = stored;
     return cachedPreferences;
@@ -66,10 +48,6 @@ function readPreferences(): AudioSquawkPreferences {
     cachedSerialized = null;
     return cachedPreferences;
   }
-}
-
-function isValidThreshold(value: unknown): value is SquawkThreshold {
-  return value === 'critical' || value === 'critical+high' || value === 'all';
 }
 
 function writePreferences(next: AudioSquawkPreferences): void {
@@ -90,8 +68,6 @@ function subscribePref(listener: () => void): () => void {
   return () => prefListeners.delete(listener);
 }
 
-// --- External store for speaking state ---
-
 const speakingListeners = new Set<() => void>();
 let speakingSnapshot = false;
 
@@ -105,15 +81,56 @@ function getSpeakingSnapshot(): boolean {
 }
 
 function setSpeaking(value: boolean): void {
-  if (speakingSnapshot !== value) {
-    speakingSnapshot = value;
-    for (const listener of speakingListeners) {
-      listener();
-    }
+  if (speakingSnapshot === value) {
+    return;
+  }
+
+  speakingSnapshot = value;
+  for (const listener of speakingListeners) {
+    listener();
   }
 }
 
-// --- Speak helper ---
+function playCriticalTone(): number {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  const AudioContextCtor = window.AudioContext ?? (window as typeof window & {
+    webkitAudioContext?: typeof AudioContext;
+  }).webkitAudioContext;
+
+  if (!AudioContextCtor) {
+    return 0;
+  }
+
+  try {
+    const context = new AudioContextCtor();
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(880, context.currentTime);
+
+    gainNode.gain.setValueAtTime(0.0001, context.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.05, context.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.18);
+
+    window.setTimeout(() => {
+      void context.close?.();
+    }, BEEP_DURATION_MS);
+
+    return BEEP_DURATION_MS;
+  } catch {
+    return 0;
+  }
+}
 
 function speakText(text: string): SpeechSynthesisUtterance | null {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
@@ -124,9 +141,8 @@ function speakText(text: string): SpeechSynthesisUtterance | null {
   utterance.rate = 1.1;
   utterance.pitch = 1.0;
 
-  // Prefer en-US voice if available
   const voices = window.speechSynthesis.getVoices();
-  const enUS = voices.find((v) => v.lang === 'en-US');
+  const enUS = voices.find((voice) => voice.lang === 'en-US');
   if (enUS) {
     utterance.voice = enUS;
   }
@@ -135,14 +151,11 @@ function speakText(text: string): SpeechSynthesisUtterance | null {
   return utterance;
 }
 
-// --- Hook ---
-
 export function useAudioSquawk() {
   const preferences = useSyncExternalStore(subscribePref, readPreferences, () => DEFAULT_PREFERENCES);
-  const lastSpokenRef = useRef(0);
   const isSpeaking = useSyncExternalStore(subscribeSpeaking, getSpeakingSnapshot, () => false);
+  const announcedIdsRef = useRef<Set<string>>(new Set());
 
-  // Cancel speech when squawk is toggled off
   useEffect(() => {
     if (!preferences.enabled && typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -150,33 +163,33 @@ export function useAudioSquawk() {
     }
   }, [preferences.enabled]);
 
-  const announceEvent = useCallback(
-    (alert: AlertSummary) => {
-      if (!preferences.enabled) return;
-      if (document.hidden) return;
-      if (!window.speechSynthesis) return;
+  const announceEvent = useCallback((alert: AlertSummary) => {
+    if (!preferences.enabled) return;
+    if (alert.severity !== 'CRITICAL') return;
+    if (!preferences.speakWhenHidden && document.hidden) return;
+    if (announcedIdsRef.current.has(alert.id)) return;
 
-      const rank = SEVERITY_RANK[alert.severity] ?? 0;
-      const minRank = THRESHOLD_MIN_RANK[preferences.threshold];
-      if (rank < minRank) return;
+    announcedIdsRef.current.add(alert.id);
 
-      // Rate limit: max 1 announcement per 10 seconds
-      const now = Date.now();
-      if (now - lastSpokenRef.current < RATE_LIMIT_MS) return;
-      lastSpokenRef.current = now;
-
-      const ticker = alert.tickers.length > 0 ? ` — ${alert.tickers[0]}` : '';
-      const text = `${alert.severity}: ${alert.title}${ticker}`;
-
-      const utterance = speakText(text);
-      if (utterance) {
-        setSpeaking(true);
-        utterance.onend = () => setSpeaking(false);
-        utterance.onerror = () => setSpeaking(false);
+    const speak = () => {
+      const utterance = speakText(`Critical alert: ${alert.title}`);
+      if (!utterance) {
+        return;
       }
-    },
-    [preferences.enabled, preferences.threshold],
-  );
+
+      setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+    };
+
+    const delay = playCriticalTone();
+    if (delay > 0) {
+      window.setTimeout(speak, delay);
+      return;
+    }
+
+    speak();
+  }, [preferences.enabled, preferences.speakWhenHidden]);
 
   return {
     preferences,
@@ -185,8 +198,8 @@ export function useAudioSquawk() {
     setEnabled(enabled: boolean) {
       writePreferences({ ...readPreferences(), enabled });
     },
-    setThreshold(threshold: SquawkThreshold) {
-      writePreferences({ ...readPreferences(), threshold });
+    setSpeakWhenHidden(speakWhenHidden: boolean) {
+      writePreferences({ ...readPreferences(), speakWhenHidden });
     },
   };
 }

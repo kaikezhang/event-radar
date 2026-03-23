@@ -42,6 +42,25 @@ export interface SimilarEvent {
   title: string;
   date: string;
   move: string;
+  eventId?: string;
+  ticker?: string | null;
+  changeT5?: number | null;
+}
+
+export interface SimilarEventOutcomeStats {
+  totalWithOutcomes: number;
+  avgMoveT5: number | null;
+  setupWorkedPct: number | null;
+  bestOutcome: {
+    ticker: string;
+    changeT5: number;
+    date: string | null;
+  } | null;
+  worstOutcome: {
+    ticker: string;
+    changeT5: number;
+    date: string | null;
+  } | null;
 }
 
 export interface EventMarketData {
@@ -123,6 +142,7 @@ export interface EventDetailData {
     patternSummary?: string;
     bestCase: { ticker: string; move: number } | null;
     worstCase: { ticker: string; move: number } | null;
+    outcomeStats: SimilarEventOutcomeStats | null;
   };
   audit?: {
     outcome: string;

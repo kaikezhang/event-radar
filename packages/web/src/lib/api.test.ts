@@ -411,6 +411,103 @@ describe('getEventDetail historical pattern mapping', () => {
       patternSummary: undefined,
       bestCase: null,
       worstCase: null,
+      outcomeStats: null,
+    });
+  });
+
+  it('maps the enhanced similar-events API response with outcomes and stats', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events/evt-historical-4') {
+        return jsonResponse({
+          data: {
+            id: 'evt-historical-4',
+            severity: 'CRITICAL',
+            source: 'sec-edgar',
+            title: 'Critical filing headline',
+            summary: 'Enhanced similar events response.',
+            metadata: {
+              ticker: 'NVDA',
+              tickers: ['NVDA'],
+            },
+          },
+        });
+      }
+
+      if (url.pathname === '/api/events/evt-historical-4/similar') {
+        return jsonResponse({
+          events: [
+            {
+              eventId: 'sim-1',
+              title: 'Prior NVDA export disclosure',
+              ticker: 'NVDA',
+              receivedAt: '2026-02-15T14:30:00.000Z',
+              changeT5: 12.4,
+            },
+            {
+              eventId: 'sim-2',
+              title: 'Semiconductor risk reset',
+              ticker: 'AMD',
+              receivedAt: '2026-03-05T14:30:00.000Z',
+              changeT5: null,
+            },
+          ],
+          outcomeStats: {
+            totalWithOutcomes: 1,
+            avgMoveT5: 12.4,
+            setupWorkedPct: 100,
+            bestOutcome: {
+              ticker: 'NVDA',
+              changeT5: 12.4,
+              date: '2026-02-15',
+            },
+            worstOutcome: {
+              ticker: 'NVDA',
+              changeT5: 12.4,
+              date: '2026-02-15',
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url.pathname}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detail = await getEventDetail('evt-historical-4');
+
+    expect(detail?.historicalPattern.similarEvents).toEqual([
+      expect.objectContaining({
+        title: 'Prior NVDA export disclosure',
+        date: '2026-02-15T14:30:00.000Z',
+        move: '+12.4%',
+        ticker: 'NVDA',
+        changeT5: 12.4,
+      }),
+      expect.objectContaining({
+        title: 'Semiconductor risk reset',
+        date: '2026-03-05T14:30:00.000Z',
+        move: '',
+        ticker: 'AMD',
+        changeT5: null,
+      }),
+    ]);
+    expect(detail?.historicalPattern.outcomeStats).toEqual({
+      totalWithOutcomes: 1,
+      avgMoveT5: 12.4,
+      setupWorkedPct: 100,
+      bestOutcome: {
+        ticker: 'NVDA',
+        changeT5: 12.4,
+        date: '2026-02-15',
+      },
+      worstOutcome: {
+        ticker: 'NVDA',
+        changeT5: 12.4,
+        date: '2026-02-15',
+      },
     });
   });
 

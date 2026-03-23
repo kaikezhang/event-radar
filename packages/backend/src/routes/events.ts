@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, ne, sql, and, count, gte, lte, asc, inArray } from 'drizzle-orm';
-import { events, pipelineAudit, watchlist } from '../db/schema.js';
+import { eventOutcomes, events, pipelineAudit, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
 import { resolveRequestUserId } from './user-context.js';
@@ -138,6 +138,53 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 
 function escapeLikePattern(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toIsoTimestamp(value: unknown): string | null {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+  return null;
+}
+
+function toIsoDate(value: unknown): string | null {
+  const timestamp = toIsoTimestamp(value);
+  return timestamp ? timestamp.slice(0, 10) : null;
+}
+
+function roundToOneDecimal(value: number): number {
+  return Number(value.toFixed(1));
+}
+
+function extractSimilarTicker(record: Record<string, unknown>): string | null {
+  const directTicker = typeof record.ticker === 'string' ? record.ticker : null;
+  if (directTicker) {
+    return directTicker;
+  }
+
+  const metadata = record.metadata;
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  const metaTicker = typeof (metadata as Record<string, unknown>).ticker === 'string'
+    ? (metadata as Record<string, unknown>).ticker as string
+    : null;
+  return metaTicker;
 }
 
 export function registerEventRoutes(
@@ -568,7 +615,91 @@ export function registerEventRoutes(
       sameTickerOnly: query.sameTickerOnly,
     });
 
-    return { data: similar };
+    const similarEventIds = similar.map((item) => item.eventId);
+    const outcomeRows = similarEventIds.length > 0
+      ? await db
+        .select({
+          eventId: eventOutcomes.eventId,
+          ticker: eventOutcomes.ticker,
+          eventTime: eventOutcomes.eventTime,
+          changeT5: eventOutcomes.changeT5,
+        })
+        .from(eventOutcomes)
+        .where(inArray(eventOutcomes.eventId, similarEventIds))
+      : [];
+
+    const outcomeByEventId = new Map(
+      outcomeRows.map((row) => [
+        row.eventId,
+        {
+          ticker: row.ticker,
+          eventTime: row.eventTime,
+          changeT5: toNumberOrNull(row.changeT5),
+        },
+      ]),
+    );
+
+    const enrichedEvents = similar.map((item) => {
+      const eventRecord = item.event as Record<string, unknown>;
+      const outcome = outcomeByEventId.get(item.eventId);
+
+      return {
+        eventId: item.eventId,
+        title: typeof eventRecord.title === 'string' ? eventRecord.title : '',
+        source: typeof eventRecord.source === 'string' ? eventRecord.source : null,
+        severity: typeof eventRecord.severity === 'string' ? eventRecord.severity : null,
+        ticker: outcome?.ticker ?? extractSimilarTicker(eventRecord),
+        receivedAt: toIsoTimestamp(eventRecord.receivedAt) ?? toIsoTimestamp(eventRecord.createdAt),
+        score: roundToOneDecimal(item.score * 100) / 100,
+        tickerScore: roundToOneDecimal(item.tickerScore * 100) / 100,
+        timeScore: roundToOneDecimal(item.timeScore * 100) / 100,
+        contentScore: roundToOneDecimal(item.contentScore * 100) / 100,
+        changeT5: outcome?.changeT5 ?? null,
+      };
+    });
+
+    const eventsWithOutcomes = enrichedEvents.filter((item) => typeof item.changeT5 === 'number');
+    const totalWithOutcomes = eventsWithOutcomes.length;
+    const avgMoveT5 = totalWithOutcomes > 0
+      ? roundToOneDecimal(
+        eventsWithOutcomes.reduce((sum, item) => sum + (item.changeT5 ?? 0), 0) / totalWithOutcomes,
+      )
+      : null;
+    const setupWorkedPct = totalWithOutcomes > 0
+      ? Math.round((eventsWithOutcomes.filter((item) => (item.changeT5 ?? 0) >= 5).length / totalWithOutcomes) * 100)
+      : null;
+
+    const bestOutcomeEvent = eventsWithOutcomes.reduce<typeof eventsWithOutcomes[number] | null>(
+      (best, current) => (best == null || (current.changeT5 ?? -Infinity) > (best.changeT5 ?? -Infinity) ? current : best),
+      null,
+    );
+    const worstOutcomeEvent = eventsWithOutcomes.reduce<typeof eventsWithOutcomes[number] | null>(
+      (worst, current) => (worst == null || (current.changeT5 ?? Infinity) < (worst.changeT5 ?? Infinity) ? current : worst),
+      null,
+    );
+
+    return {
+      events: enrichedEvents,
+      outcomeStats: {
+        totalWithOutcomes,
+        avgMoveT5,
+        setupWorkedPct,
+        bestOutcome: bestOutcomeEvent
+          ? {
+              ticker: bestOutcomeEvent.ticker ?? '',
+              changeT5: bestOutcomeEvent.changeT5,
+              date: toIsoDate(bestOutcomeEvent.receivedAt),
+            }
+          : null,
+        worstOutcome: worstOutcomeEvent
+          ? {
+              ticker: worstOutcomeEvent.ticker ?? '',
+              changeT5: worstOutcomeEvent.changeT5,
+              date: toIsoDate(worstOutcomeEvent.receivedAt),
+            }
+          : null,
+      },
+    };
   });
 
   /**
