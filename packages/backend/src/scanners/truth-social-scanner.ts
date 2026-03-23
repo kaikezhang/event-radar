@@ -16,7 +16,7 @@ import {
   extractTickers,
 } from '../utils/keyword-extractor.js';
 
-const TRUMP_TRUTH_URL = 'https://trumpstruth.org';
+const TRUMP_TRUTH_FEED_URL = 'https://trumpstruth.org/feed';
 const POLL_INTERVAL_MS = 3 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -71,6 +71,10 @@ function normalizeWhitespace(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
@@ -96,6 +100,27 @@ function stripHtml(html: string): string {
         .replace(/<[^>]+>/g, ''),
     ),
   );
+}
+
+function extractXmlTagValue(xml: string, tag: string): string {
+  const escapedTag = escapeRegex(tag);
+  const cdataPattern = new RegExp(
+    `<${escapedTag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${escapedTag}>`,
+    'i',
+  );
+  const plainPattern = new RegExp(`<${escapedTag}>([\\s\\S]*?)<\\/${escapedTag}>`, 'i');
+
+  const cdataMatch = cdataPattern.exec(xml);
+  if (cdataMatch) {
+    return normalizeWhitespace(decodeHtmlEntities(cdataMatch[1] ?? ''));
+  }
+
+  const plainMatch = plainPattern.exec(xml);
+  if (plainMatch) {
+    return normalizeWhitespace(decodeHtmlEntities(plainMatch[1] ?? ''));
+  }
+
+  return '';
 }
 
 function getHtmlSource(source: string | ParentNode): string {
@@ -206,6 +231,42 @@ export function parseTruthSocialPosts(source: string | ParentNode): TruthSocialP
     .filter((post): post is TruthSocialPost => post !== null);
 }
 
+export function parseTruthSocialRssFeed(xml: string): TruthSocialPost[] {
+  const items = xml.match(/<item>([\s\S]*?)<\/item>/gi) ?? [];
+
+  return items
+    .map<TruthSocialPost | null>((item) => {
+      const title = extractXmlTagValue(item, 'title');
+      const link = extractXmlTagValue(item, 'link');
+      const guid = extractXmlTagValue(item, 'guid');
+      const pubDate = extractXmlTagValue(item, 'pubDate');
+      const originalUrl = extractXmlTagValue(item, 'truth:originalUrl');
+      const originalId = extractXmlTagValue(item, 'truth:originalId');
+      const statusId = STATUS_URL_PATTERN.exec(link)?.[1] ?? '';
+      const timestampMs = Date.parse(pubDate);
+
+      if (!title || Number.isNaN(timestampMs)) {
+        return null;
+      }
+
+      const postId = guid || statusId || originalId;
+      const url = originalUrl || link;
+      if (!postId || !url) {
+        return null;
+      }
+
+      return {
+        postId,
+        text: title,
+        timestamp: new Date(timestampMs).toISOString(),
+        isRepost: false,
+        hasMedia: false,
+        url,
+      };
+    })
+    .filter((post): post is TruthSocialPost => post !== null);
+}
+
 export class TruthSocialScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'truth-social');
   public fetchFn: typeof scannerFetch = (url, options) =>
@@ -222,10 +283,10 @@ export class TruthSocialScanner extends BaseScanner {
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
     try {
-      const response = await this.fetchFn(TRUMP_TRUTH_URL, {
+      const response = await this.fetchFn(TRUMP_TRUTH_FEED_URL, {
         timeoutMs: FETCH_TIMEOUT_MS,
         headers: {
-          Accept: 'text/html,application/xhtml+xml',
+          Accept: 'application/rss+xml,application/xml,text/xml;q=0.9',
           'User-Agent': 'event-radar/1.0',
         },
       });
@@ -238,11 +299,11 @@ export class TruthSocialScanner extends BaseScanner {
         );
       }
 
-      const html = await response.text();
-      const posts = parseTruthSocialPosts(html);
+      const xml = await response.text();
+      const posts = parseTruthSocialRssFeed(xml);
 
       if (posts.length === 0) {
-        console.warn('[truth-social] No posts found on trumpstruth.org homepage');
+        console.warn('[truth-social] No posts found in trumpstruth.org RSS feed');
         return ok([]);
       }
 

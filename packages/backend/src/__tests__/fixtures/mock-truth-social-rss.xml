@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:truth="https://trumpstruth.org/ns">
+  <channel>
+    <title>Trump's Truth Feed</title>
+    <item>
+      <title><![CDATA[TARIFFS on China are going UP and an executive order is coming.]]></title>
+      <link>https://trumpstruth.org/statuses/37409</link>
+      <description><![CDATA[<p>TARIFFS on China are going UP and an executive order is coming.</p>]]></description>
+      <guid>https://trumpstruth.org/statuses/37409</guid>
+      <pubDate>Mon, 23 Mar 2026 11:23:40 +0000</pubDate>
+      <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116278232362967212</truth:originalUrl>
+      <truth:originalId>116278232362967212</truth:originalId>
+    </item>
+    <item>
+      <title><![CDATA[Iran strike talks are over. Peace now or sanctions and trade halt.]]></title>
+      <link>https://trumpstruth.org/statuses/37408</link>
+      <description><![CDATA[<p>Iran strike talks are over. Peace now or sanctions and trade halt.</p>]]></description>
+      <guid>truth-social-guid-37408</guid>
+      <pubDate>Mon, 23 Mar 2026 10:05:00 +0000</pubDate>
+      <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116278232362967111</truth:originalUrl>
+      <truth:originalId>116278232362967111</truth:originalId>
+    </item>
+    <item>
+      <title><![CDATA[]]></title>
+      <link>https://trumpstruth.org/statuses/00000</link>
+      <guid>skip-empty-title</guid>
+      <pubDate>Mon, 23 Mar 2026 09:00:00 +0000</pubDate>
+      <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/00000</truth:originalUrl>
+      <truth:originalId>00000</truth:originalId>
+    </item>
+  </channel>
+</rss>

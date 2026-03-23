@@ -78,6 +78,39 @@ describe('Political Classification Rules', () => {
       expect(result.severity).toBe('HIGH');
       expect(result.tags).toContain('company-mention');
     });
+
+    it('should boost Iran posts to at least HIGH severity', () => {
+      const event = makePoliticalEvent({
+        title: 'Iran must choose peace now.',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.matchedRules).toContain('trump-geopolitical-iran');
+    });
+
+    it('should boost executive order posts to at least HIGH severity', () => {
+      const event = makePoliticalEvent({
+        title: 'An executive order is coming soon.',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('HIGH');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.matchedRules).toContain('trump-policy-executive-order');
+    });
+
+    it('should keep tariff posts at CRITICAL when boost and critical rules both match', () => {
+      const event = makePoliticalEvent({
+        title: 'Tariff and China policy updates are coming today.',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('CRITICAL');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.matchedRules).toContain('trump-tariff');
+    });
   });
 
   describe('Elon — X rules', () => {
