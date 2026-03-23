@@ -1,96 +1,58 @@
-# TASK.md — DQ-3: Fix Classification Pipeline
+# TASK.md — DQ-4: Outcome Tracking + Scorecard Improvement
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-The LLM classifier is a rubber stamp — always says MEDIUM + high confidence + agrees with rule engine.
-Fix the prompt to produce calibrated, useful classifications.
+We have 12,016 outcome records with 6,346 having T+5 price data, but Scorecard shows only ~91 "usable verdicts". Fix the verdict calculation and reframe the Scorecard to build trust.
 
-## 1. Improve classification prompt with severity calibration
-- File: `packages/backend/src/pipeline/classification-prompt.ts`
-- Add few-shot examples to the SYSTEM_PROMPT showing what each severity level means:
+## 1. Investigate and fix low verdict count
+- File: `packages/backend/src/services/scorecard-aggregation.ts`
+- We have 6,346 events with T+5 price changes but only ~91 "usable verdicts"
+- The direction verdict requires `predictedDirection` which is now always NEUTRAL (we just removed direction prediction in DQ-3)
+- Fix: Change the "usable verdict" definition:
+  - A verdict is usable when `changeT5 IS NOT NULL` (we have a price outcome)
+  - Don't require direction correctness for the top-level count
+  - "Setup worked" = abs(changeT5) >= 5% (significant move happened regardless of direction)
+  - Show "X events with price outcomes" instead of "X verdicts"
 
-```
-SEVERITY CALIBRATION:
-- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%. These events move prices 5%+ immediately.
-- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions. These events move prices 2-5%.
-- MEDIUM: Routine SEC filings (10-Q, 10-K), earnings in-line with estimates, industry reports, moderate news. Prices may move 0.5-2%.
-- LOW: Social media trending without news catalyst, routine corporate updates, conference presentations, minor regulatory filings. Minimal price impact expected.
+## 2. Reframe Scorecard to lead with strengths
+- File: `packages/web/src/pages/Scorecard.tsx`
+- Current: leads with "36% directional hit rate" which sounds terrible
+- New framing:
+  - **Top section**: "Events Tracked: 23,769 | Sources Monitored: 13 | Events with Price Data: 6,346"
+  - **Second section**: Source accuracy — which sources lead to biggest price moves? (already partially built)
+  - **Third section**: "Setup Worked Rate" — what % of events led to 5%+ moves
+  - **Remove or de-emphasize**: directional hit rate (since we removed direction prediction)
+  - Keep the existing bucket breakdowns (source, event type, confidence)
 
-CONFIDENCE CALIBRATION:
-- Use the FULL range 0.3 to 0.95
-- 0.9+ = unambiguous event with clear market impact (e.g., trading halt, FDA decision)
-- 0.7-0.9 = likely classification but some ambiguity
-- 0.5-0.7 = uncertain, could go either way
-- 0.3-0.5 = best guess, limited information
-- NEVER output 1.0 or 0.0
-```
+## 3. Add "Calibration disclaimer" at top of Scorecard
+- File: `packages/web/src/pages/Scorecard.tsx`
+- Add a banner at the top:
+  - "📊 Scorecard tracks how market events correlate with price movements. This is a calibration tool, not a prediction score."
+  - "Price data from T+5 (5 trading days after event). Coverage: X% of events."
+  - Style: subtle info banner, not alarming
 
-## 2. Remove direction prediction from classifier
-- File: `packages/backend/src/pipeline/classification-prompt.ts`
-- The direction prediction (BULLISH/BEARISH) has 1.85% accuracy — worse than random
-- Change: keep the direction field in the schema but set it to "NEUTRAL" by default
-- In the prompt, remove the direction classification instruction entirely
-- Replace with: "Set direction to NEUTRAL. Direction prediction is not used in the current version."
-- This way the schema doesn't break but we stop making wrong predictions
+## 4. Fix Scorecard API to use new verdict definition
+- File: `packages/backend/src/services/scorecard-aggregation.ts`
+- Update the aggregate query to:
+  - Count all events with changeT5 as "trackable"
+  - "Setup worked" = abs(changeT5) >= 5.0 (significant price move)
+  - Remove or set to 0 the "directional correct" count (direction is now always NEUTRAL)
+  - Ensure the API returns meaningful numbers with the new calculation
 
-## 3. Stop sending rule engine result to LLM
-- File: `packages/backend/src/pipeline/classification-prompt.ts`
-- The LLM gets the rule engine result "for context" and then just agrees with it
-- Remove the `if (ruleResult)` block that adds rule engine results to the prompt
-- Let the LLM classify independently — this is the whole point of having an LLM
-- Keep the `ruleResult` parameter in the function signature for backward compatibility but don't use it in the prompt
-
-## 4. Downgrade SEC 8-K Item 8.01 to LOW in default rules
-- File: `packages/backend/src/pipeline/default-rules.ts`
-- 8-K Item 8.01 ("Other Events") is a catch-all category — press releases, investor presentations, non-material items
-- Find the rule that sets 8-K 8.01 to MEDIUM and change it to LOW
-- Keep 8-K Item 1.01 (Material Agreements), 2.01 (Asset Acquisition), 5.02 (Officer Changes) as MEDIUM or higher
-
-## 5. Add ticker extraction for common company names
-- File: `packages/backend/src/pipeline/` or a new file `packages/backend/src/pipeline/company-ticker-map.ts`
-- Create a mapping of top 100 company names to tickers:
-  ```typescript
-  export const COMPANY_TICKER_MAP: Record<string, string> = {
-    'apple': 'AAPL', 'nvidia': 'NVDA', 'tesla': 'TSLA',
-    'microsoft': 'MSFT', 'amazon': 'AMZN', 'google': 'GOOGL',
-    'alphabet': 'GOOGL', 'meta': 'META', 'facebook': 'META',
-    'netflix': 'NFLX', 'boeing': 'BA', 'disney': 'DIS',
-    'jpmorgan': 'JPM', 'goldman sachs': 'GS', 'walmart': 'WMT',
-    'costco': 'COST', 'target': 'TGT', 'home depot': 'HD',
-    'coca-cola': 'KO', 'pepsi': 'PEP', 'pepsico': 'PEP',
-    'intel': 'INTC', 'amd': 'AMD', 'qualcomm': 'QCOM',
-    'broadcom': 'AVGO', 'cisco': 'CSCO', 'oracle': 'ORCL',
-    'salesforce': 'CRM', 'adobe': 'ADBE', 'paypal': 'PYPL',
-    'mastercard': 'MA', 'visa': 'V', 'berkshire': 'BRK.B',
-    'johnson & johnson': 'JNJ', 'pfizer': 'PFE', 'moderna': 'MRNA',
-    'unitedhealth': 'UNH', 'exxon': 'XOM', 'chevron': 'CVX',
-    'shell': 'SHEL', 'bp': 'BP', 'palantir': 'PLTR',
-    'snowflake': 'SNOW', 'uber': 'UBER', 'airbnb': 'ABNB',
-    'coinbase': 'COIN', 'robinhood': 'HOOD', 'gamestop': 'GME',
-    'amc': 'AMC', 'nio': 'NIO', 'rivian': 'RIVN',
-    'lucid': 'LCID', 'ford': 'F', 'general motors': 'GM',
-    'lockheed': 'LMT', 'raytheon': 'RTX', 'northrop': 'NOC',
-    'caterpillar': 'CAT', 'deere': 'DE', '3m': 'MMM',
-    'micron': 'MU', 'applied materials': 'AMAT', 'lam research': 'LRCX',
-    'crowdstrike': 'CRWD', 'palo alto': 'PANW', 'datadog': 'DDOG',
-    'servicenow': 'NOW', 'workday': 'WDAY', 'spotify': 'SPOT',
-    'roku': 'ROKU', 'pinterest': 'PINS', 'snap': 'SNAP',
-    'twitter': 'TWTR', 'baidu': 'BIDU', 'alibaba': 'BABA',
-    'tencent': 'TCEHY', 'samsung': 'SSNLF',
-    'openai': 'MSFT', 'chatgpt': 'MSFT',
-    'anthropic': 'AMZN', 'claude': 'AMZN',
-  };
-  ```
-- Use this in the ticker extraction step (before or during pipeline processing)
-- Match case-insensitively against event title + body
-- If multiple companies match, pick the first one mentioned
+## 5. Show outcome coverage percentage
+- File: `packages/web/src/pages/Scorecard.tsx`  
+- Instead of "91 verdicts / 23,769 alerts (0.4%)" show:
+  - "6,346 events with price outcomes / 12,028 events with tickers (52.8%)"
+  - This is a much more honest and better-looking number
+  - Add note: "Events without tickers (macro events, government actions) don't have individual price tracking"
 
 ## Testing
 - `pnpm --filter @event-radar/backend test` — all tests must pass
+- `pnpm --filter @event-radar/web test` — all tests must pass
 - `pnpm --filter @event-radar/web build` — must succeed
 
 ## PR
-- Branch: `feat/dq3-classification-pipeline`
-- Title: `feat: DQ-3 classification pipeline — prompt calibration, direction removal, ticker extraction`
+- Branch: `feat/dq4-outcome-scorecard`
+- Title: `feat: DQ-4 outcome tracking + scorecard reframe`
 - **DO NOT MERGE. Create PR and stop.**
