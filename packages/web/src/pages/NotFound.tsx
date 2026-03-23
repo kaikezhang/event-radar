@@ -4,7 +4,7 @@ export function NotFound() {
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center justify-center py-8">
       <section className="w-full rounded-3xl border border-border-default bg-bg-surface/96 p-8 text-center shadow-[0_18px_40px_var(--shadow-color)]">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-secondary">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">
           Navigation error
         </p>
         <h1 className="mt-3 text-3xl font-semibold text-text-primary">Page not found</h1>

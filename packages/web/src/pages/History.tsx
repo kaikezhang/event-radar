@@ -81,7 +81,7 @@ export function History() {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filters
             {activeFilterCount > 0 && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-interactive-default text-[10px] text-white">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-interactive-default text-xs text-white">
                 {activeFilterCount}
               </span>
             )}
@@ -96,7 +96,7 @@ export function History() {
             <button
               type="button"
               onClick={() => { setFilter('from', defaultFromDate); setFilter('to', defaultToDate); }}
-              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             >
               {filters.from} → {filters.to}
               <X className="h-3 w-3" />
@@ -106,7 +106,7 @@ export function History() {
             <button
               type="button"
               onClick={() => setFilter('severity', '')}
-              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             >
               {filters.severity.includes(',') ? 'HIGH & CRITICAL' : filters.severity}
               <X className="h-3 w-3" />
@@ -116,7 +116,7 @@ export function History() {
             <button
               type="button"
               onClick={() => setFilter('source', '')}
-              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             >
               {filters.source}
               <X className="h-3 w-3" />
@@ -126,7 +126,7 @@ export function History() {
             <button
               type="button"
               onClick={() => setFilter('ticker', '')}
-              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+              className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             >
               {filters.ticker}
               <X className="h-3 w-3" />
@@ -220,7 +220,7 @@ export function History() {
               <button
                 type="button"
                 onClick={() => setFilter('severity', '')}
-                className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+                className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
               >
                 {filters.severity.includes(',') ? 'HIGH & CRITICAL' : filters.severity}
                 <X className="h-3 w-3" />
@@ -230,7 +230,7 @@ export function History() {
               <button
                 type="button"
                 onClick={() => setFilter('source', '')}
-                className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+                className="inline-flex items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
               >
                 {filters.source}
                 <X className="h-3 w-3" />
@@ -259,19 +259,19 @@ export function History() {
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {/* Total */}
           <div className="rounded-xl border border-border-default bg-bg-surface p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Total</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">Total</div>
             <div className="mt-1 text-lg font-bold text-text-primary">{formatNumber(total)}</div>
           </div>
 
           {/* Severity breakdown */}
           <div className="rounded-xl border border-border-default bg-bg-surface p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">By Severity</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">By Severity</div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {severities.map((s) => {
                 const count = stats.bySeverity[s];
                 if (!count) return null;
                 return (
-                  <span key={s} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
+                  <span key={s} className="inline-flex items-center gap-1 text-xs text-text-secondary">
                     <span className={cn('inline-block h-1.5 w-1.5 rounded-full', severityColor[s])} />
                     {count}
                   </span>
@@ -282,21 +282,21 @@ export function History() {
 
           {/* Top tickers */}
           <div className="col-span-2 rounded-xl border border-border-default bg-bg-surface p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Top Tickers</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">Top Tickers</div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {stats.topTickers.map(({ ticker, count }) => (
                 <button
                   key={ticker}
                   type="button"
                   onClick={() => setFilter('ticker', ticker)}
-                  className="inline-flex items-center gap-1 rounded-md bg-bg-elevated px-1.5 py-0.5 text-[11px] font-semibold text-text-primary transition hover:bg-bg-elevated/80"
+                  className="inline-flex items-center gap-1 rounded-md bg-bg-elevated px-1.5 py-0.5 text-xs font-semibold text-text-primary transition hover:bg-bg-elevated/80"
                 >
                   {ticker}
                   <span className="text-text-tertiary">{count}</span>
                 </button>
               ))}
               {stats.topTickers.length === 0 && (
-                <span className="text-[11px] text-text-tertiary">—</span>
+                <span className="text-xs text-text-tertiary">—</span>
               )}
             </div>
           </div>

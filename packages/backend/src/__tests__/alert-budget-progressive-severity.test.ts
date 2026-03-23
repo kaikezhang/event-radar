@@ -34,8 +34,9 @@ function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
 async function createStoredEvent(
   db: Database,
   overrides: Partial<RawEvent> = {},
+  severity?: Priority,
 ): Promise<string> {
-  return storeEvent(db, { event: makeRawEvent(overrides) });
+  return storeEvent(db, { event: makeRawEvent(overrides), severity });
 }
 
 describe('AlertBudgetService', () => {
@@ -240,6 +241,19 @@ describe('ProgressiveSeverityService', () => {
     expect(result.severity).toBe('MEDIUM');
     expect(result.locked).toBe(false);
     expect(result.sourceCount).toBe(1);
+  });
+
+  it('keeps LOW events at LOW until a second source confirms them', async () => {
+    const service = createService();
+    const eventId = await createStoredEvent(db, {}, 'LOW');
+
+    const initial = await service.getEffectiveSeverity(eventId);
+    expect(initial.severity).toBe('LOW');
+    expect(initial.sourceCount).toBe(1);
+
+    const upgraded = await service.recordConfirmation(eventId, 'reddit');
+    expect(upgraded.severity).toBe('HIGH');
+    expect(upgraded.sourceCount).toBe(2);
   });
 
   it('upgrades to HIGH after two distinct source confirmations', async () => {

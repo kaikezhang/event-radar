@@ -91,7 +91,7 @@ export function About() {
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-6">
           <h2 className="text-xl font-semibold text-text-primary">Contact</h2>
           <p className="mt-3 text-sm leading-7 text-text-secondary">
-            Questions? Reach us at [placeholder email]
+            Questions? Reach us at hello@eventradar.app
           </p>
         </section>
       </div>

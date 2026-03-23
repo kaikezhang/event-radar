@@ -21,6 +21,7 @@ import {
 
 interface FeedListProps {
   activeFilterCount: number;
+  highSignalCount: number;
   activeSeverities: string[];
   activeSources: string[];
   activeTab: FeedTab;
@@ -81,6 +82,7 @@ interface FeedListProps {
 
 export function FeedList({
   activeFilterCount,
+  highSignalCount,
   activeSeverities,
   activeSources,
   activeTab,
@@ -165,6 +167,7 @@ export function FeedList({
       <FeedHeader
         activeFilterCount={activeFilterCount}
         activeTab={activeTab}
+        highSignalCount={highSignalCount}
         hasActiveFilters={hasActiveFilters}
         onSortModeChange={toggleSortMode}
         onTabChange={handleTabChange}
@@ -172,6 +175,7 @@ export function FeedList({
         onToggleModeDropdown={onToggleModeDropdown}
         showModeDropdown={showModeDropdown}
         sortMode={sortMode}
+        totalCount={filteredAlerts.length}
       />
 
       <FeedFilters
@@ -333,7 +337,7 @@ export function FeedList({
                         {group.label}
                       </span>
                       <div className="h-px flex-1 bg-border-default" />
-                      <span className="text-[10px] text-text-tertiary">
+                      <span className="text-xs text-text-tertiary">
                         {group.alerts.length} {group.alerts.length === 1 ? 'event' : 'events'}
                       </span>
                     </div>

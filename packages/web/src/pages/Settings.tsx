@@ -96,7 +96,7 @@ function PushDeniedRecoverySteps() {
   const platform = getPlatformHint();
 
   const stepBadge = (n: number) => (
-    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-[11px] font-semibold text-amber-200">
+    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-xs font-semibold text-amber-200">
       {n}
     </span>
   );
@@ -522,7 +522,7 @@ export function Settings() {
                   {pushDetails.description}
                 </p>
               </div>
-              <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-current/80">
+              <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-current/80">
                 {pushDetails.state.replaceAll('-', ' ')}
               </div>
             </div>
@@ -556,24 +556,24 @@ export function Settings() {
             </div>
           ) : (
             <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                 Enable push in under a minute
               </p>
               <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
                 <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
                     1
                   </span>
                   <span>Tap {pushDetails.enableLabel}.</span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
                     2
                   </span>
                   <span>Allow browser notifications in the prompt.</span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-[11px] font-semibold text-text-primary">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
                     3
                   </span>
                   <span>Return to your watchlist to keep alerts focused.</span>
@@ -775,7 +775,7 @@ export function Settings() {
                 Control when Event Radar can ping you and how much push volume you allow each day.
               </p>
             </div>
-            <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
               {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
             </div>
           </div>
@@ -808,13 +808,13 @@ export function Settings() {
                     >
                       <div className="flex items-start gap-3">
                         <span
-                          className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${row.severityClassName}`}
+                          className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${row.severityClassName}`}
                         >
                           {row.severity}
                         </span>
                         <p className="text-sm leading-6 text-text-secondary">{row.detail}</p>
                       </div>
-                      <div className="inline-flex items-center rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-primary">
+                      <div className="inline-flex items-center rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-primary">
                         {row.delivery}
                       </div>
                     </div>

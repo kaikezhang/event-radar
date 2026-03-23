@@ -45,7 +45,7 @@ export function CollapsiblePanel({
       >
         <div className="flex-1">
           {eyebrow ? (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
               {eyebrow}
             </p>
           ) : null}

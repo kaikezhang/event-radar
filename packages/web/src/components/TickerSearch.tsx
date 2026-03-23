@@ -239,7 +239,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
             spellCheck={false}
           />
           {isCurrentSearching && <Loader2 className="h-4 w-4 animate-spin text-text-secondary" />}
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-xs font-medium text-text-secondary">
             ESC
           </kbd>
         </div>
@@ -419,7 +419,7 @@ export function TickerSearch({ open, onClose, onTickerAdded }: TickerSearchProps
                         )}
                       >
                         <div className="flex items-start gap-2">
-                          <span className={cn('mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', severityClass)}>
+                          <span className={cn('mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase', severityClass)}>
                             {event.severity}
                           </span>
                           <div className="min-w-0 flex-1">

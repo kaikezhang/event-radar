@@ -13,5 +13,6 @@ describe('About page', () => {
     expect(screen.getByRole('heading', { name: /contact/i })).toBeInTheDocument();
     expect(screen.getByText(/sec edgar/i)).toBeInTheDocument();
     expect(screen.getByText(/always verify with primary sources/i)).toBeInTheDocument();
+    expect(screen.getByText(/hello@eventradar\.app/i)).toBeInTheDocument();
   });
 });

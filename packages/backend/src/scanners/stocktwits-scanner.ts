@@ -7,11 +7,22 @@ import {
   type EventBus,
   type RawEvent,
   type Result,
+  type Severity,
 } from '@event-radar/shared';
 import { TrendingStateTracker } from './trending-state.js';
 
 const POLL_INTERVAL_MS = 60_000;
 const VOLUME_SPIKE_MULTIPLIER = 2;
+const VALID_SEVERITIES = new Set<Severity>(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+
+export function getStockTwitsTrendingDefaultSeverity(): Severity {
+  const configured = process.env.STOCKTWITS_TRENDING_DEFAULT_SEVERITY?.trim().toUpperCase();
+  if (configured && VALID_SEVERITIES.has(configured as Severity)) {
+    return configured as Severity;
+  }
+
+  return 'LOW';
+}
 
 export interface StockTwitsTrendingResponse {
   response: { status: number };
@@ -96,6 +107,7 @@ export class StockTwitsScanner extends BaseScanner {
     name: 'stocktwits-trending',
     cooldownMs: 24 * 60 * 60 * 1000, // 24h
   });
+  private readonly trendingDefaultSeverity = getStockTwitsTrendingDefaultSeverity();
   private previousVolumes: Map<string, number> = new Map();
   private previousSentiments: Map<string, number> = new Map();
   /** Symbols to track stream for (populated from trending) */
@@ -172,6 +184,7 @@ export class StockTwitsScanner extends BaseScanner {
             tickers: [sym.symbol],
             watchlist_count: sym.watchlistCount,
             event_subtype: 'new-trending',
+            default_severity: this.trendingDefaultSeverity,
           },
         });
       }
