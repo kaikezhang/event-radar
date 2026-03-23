@@ -1,5 +1,116 @@
 import type { Rule } from '@event-radar/shared';
 
+const TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS = [
+  {
+    id: 'trump-geopolitical-iran',
+    name: 'Trump — Iran Keywords',
+    keyword: 'iran',
+    tags: ['geopolitics', 'iran'],
+  },
+  {
+    id: 'trump-geopolitical-china',
+    name: 'Trump — China Keywords',
+    keyword: 'china',
+    tags: ['geopolitics', 'china'],
+  },
+  {
+    id: 'trump-policy-tariff',
+    name: 'Trump — Tariff Boost',
+    keyword: 'tariff',
+    tags: ['trade-policy', 'tariff'],
+  },
+  {
+    id: 'trump-geopolitical-military',
+    name: 'Trump — Military Keywords',
+    keyword: 'military',
+    tags: ['geopolitics', 'military'],
+  },
+  {
+    id: 'trump-policy-sanctions',
+    name: 'Trump — Sanctions Keywords',
+    keyword: 'sanctions',
+    tags: ['policy', 'sanctions'],
+  },
+  {
+    id: 'trump-geopolitical-strike',
+    name: 'Trump — Strike Keywords',
+    keyword: 'strike',
+    tags: ['geopolitics', 'strike'],
+  },
+  {
+    id: 'trump-geopolitical-war',
+    name: 'Trump — War Keywords',
+    keyword: 'war',
+    tags: ['geopolitics', 'war'],
+  },
+  {
+    id: 'trump-geopolitical-peace',
+    name: 'Trump — Peace Keywords',
+    keyword: 'peace',
+    tags: ['geopolitics', 'peace'],
+  },
+  {
+    id: 'trump-trade-deal',
+    name: 'Trump — Trade Deal Keywords',
+    keyword: 'trade deal',
+    tags: ['trade-policy', 'trade-deal'],
+  },
+  {
+    id: 'trump-policy-executive-order',
+    name: 'Trump — Executive Order Keywords',
+    keyword: 'executive order',
+    tags: ['policy', 'executive-order'],
+  },
+  {
+    id: 'trump-fed',
+    name: 'Trump — Fed Keywords',
+    keyword: 'fed',
+    tags: ['macro', 'fed'],
+  },
+  {
+    id: 'trump-interest-rate',
+    name: 'Trump — Interest Rate Keywords',
+    keyword: 'interest rate',
+    tags: ['macro', 'rates'],
+  },
+  {
+    id: 'trump-policy-ban',
+    name: 'Trump — Ban Keywords',
+    keyword: 'ban',
+    tags: ['policy', 'ban'],
+  },
+  {
+    id: 'trump-policy-postpone',
+    name: 'Trump — Postpone Keywords',
+    keyword: 'postpone',
+    tags: ['policy', 'postpone'],
+  },
+  {
+    id: 'trump-policy-halt',
+    name: 'Trump — Halt Keywords',
+    keyword: 'halt',
+    tags: ['policy', 'halt'],
+  },
+] as const;
+
+function createTruthSocialBoostRules(): Rule[] {
+  return TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS.map((rule) => ({
+    id: rule.id,
+    name: rule.name,
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: rule.keyword },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'addTags', values: ['trump', 'political-market-impact', ...rule.tags] },
+      { type: 'setPriority', value: 12 },
+    ],
+    priority: 12,
+    enabled: true,
+  }));
+}
+
 /**
  * Classification rules for political posts (Truth Social + X).
  * Used alongside the existing SEC rules in default-rules.ts.
@@ -36,6 +147,7 @@ export const POLITICAL_RULES: Rule[] = [
     priority: 10,
     enabled: true,
   },
+  ...createTruthSocialBoostRules(),
 
   // ── HIGH ─────────────────────────────────────────────────────────────
   {

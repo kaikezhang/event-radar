@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { InMemoryEventBus } from '@event-radar/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  parseTruthSocialRssFeed,
   parseTruthSocialPosts,
   TruthSocialScanner,
 } from '../scanners/truth-social-scanner.js';
@@ -11,6 +12,10 @@ import { SeenIdBuffer } from '../scanners/scraping/scrape-utils.js';
 
 const fixtureHtml = readFileSync(
   join(__dirname, 'fixtures', 'truth-social-post.html'),
+  'utf-8',
+);
+const fixtureRss = readFileSync(
+  join(__dirname, 'fixtures', 'mock-truth-social-rss.xml'),
   'utf-8',
 );
 
@@ -40,6 +45,43 @@ function setFetchFn(
 }
 
 describe('TruthSocialScanner', () => {
+  describe('parseTruthSocialRssFeed', () => {
+    it('extracts rss items into Truth Social posts', () => {
+      const posts = parseTruthSocialRssFeed(fixtureRss);
+
+      expect(posts).toHaveLength(2);
+      expect(posts[0]!.postId).toBe('https://trumpstruth.org/statuses/37409');
+      expect(posts[1]!.postId).toBe('truth-social-guid-37408');
+    });
+
+    it('uses the rss title text as the post body without html tags', () => {
+      const posts = parseTruthSocialRssFeed(fixtureRss);
+
+      expect(posts[0]!.text).toBe('TARIFFS on China are going UP and an executive order is coming.');
+      expect(posts[1]!.text).not.toContain('<p>');
+    });
+
+    it('parses RFC 2822 pubDate values into ISO timestamps', () => {
+      const posts = parseTruthSocialRssFeed(fixtureRss);
+
+      expect(posts[0]!.timestamp).toBe('2026-03-23T11:23:40.000Z');
+      expect(posts[1]!.timestamp).toBe('2026-03-23T10:05:00.000Z');
+    });
+
+    it('uses truthsocial originalUrl when present', () => {
+      const posts = parseTruthSocialRssFeed(fixtureRss);
+
+      expect(posts[0]!.url).toBe('https://truthsocial.com/@realDonaldTrump/116278232362967212');
+      expect(posts[1]!.url).toBe('https://truthsocial.com/@realDonaldTrump/116278232362967111');
+    });
+
+    it('skips rss items missing required title content', () => {
+      const posts = parseTruthSocialRssFeed(fixtureRss);
+
+      expect(posts.map((post) => post.postId)).not.toContain('skip-empty-title');
+    });
+  });
+
   describe('parseTruthSocialPosts', () => {
     it('extracts all trumpstruth.org posts from fixture HTML', () => {
       const doc = getFixtureDocument(fixtureHtml);
@@ -167,27 +209,49 @@ describe('TruthSocialScanner', () => {
   });
 
   describe('scanner fetch + enrichment', () => {
-    it('fetches trumpstruth.org HTML and emits parsed events', async () => {
+    it('fetches the trumpstruth rss feed and emits parsed events', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
-      const fetchFn = vi.fn().mockResolvedValue(createHtmlResponse(fixtureHtml));
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response(fixtureRss, {
+          status: 200,
+          headers: {
+            'content-type': 'application/rss+xml; charset=utf-8',
+          },
+        }),
+      );
 
       setFetchFn(scanner, fetchFn);
 
       const result = await scanner.scan();
 
       expect(fetchFn).toHaveBeenCalledOnce();
+      expect(fetchFn).toHaveBeenCalledWith(
+        'https://trumpstruth.org/feed',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Accept: expect.stringContaining('application/rss+xml'),
+          }),
+        }),
+      );
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toHaveLength(4);
-        expect(result.value[0]!.url).toBe('https://trumpstruth.org/statuses/37408');
+        expect(result.value).toHaveLength(2);
+        expect(result.value[0]!.url).toBe('https://truthsocial.com/@realDonaldTrump/116278232362967212');
       }
     });
 
     it('keeps ticker, keyword, and sentiment metadata from parsed post text', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
-      const fetchFn = vi.fn().mockResolvedValue(createHtmlResponse(fixtureHtml));
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response(fixtureRss, {
+          status: 200,
+          headers: {
+            'content-type': 'application/rss+xml; charset=utf-8',
+          },
+        }),
+      );
 
       setFetchFn(scanner, fetchFn);
 
@@ -195,17 +259,24 @@ describe('TruthSocialScanner', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value[1]!.metadata?.['ticker']).toBe('TSLA');
-        expect(result.value[1]!.metadata?.['tickers']).toContain('TSLA');
+        expect(result.value[0]!.metadata?.['ticker']).toBeUndefined();
+        expect(result.value[0]!.metadata?.['tickers']).toEqual([]);
         expect(result.value[0]!.metadata?.['keywords']).toContain('tariffs');
-        expect(result.value[1]!.metadata?.['sentiment']).toBe('bullish');
+        expect(result.value[0]!.metadata?.['keywords']).toContain('china');
+        expect(result.value[1]!.metadata?.['sentiment']).toBe('bearish');
+        expect(result.value[1]!.metadata?.['postId']).toBe('truth-social-guid-37408');
       }
     });
 
     it('does not emit events for already-seen post IDs', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
-      const fetchFn = vi.fn().mockImplementation(async () => createHtmlResponse(fixtureHtml));
+      const fetchFn = vi.fn().mockImplementation(async () => new Response(fixtureRss, {
+        status: 200,
+        headers: {
+          'content-type': 'application/rss+xml; charset=utf-8',
+        },
+      }));
 
       setFetchFn(scanner, fetchFn);
 
@@ -214,7 +285,7 @@ describe('TruthSocialScanner', () => {
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
-      if (result1.ok) expect(result1.value).toHaveLength(4);
+      if (result1.ok) expect(result1.value).toHaveLength(2);
       if (result2.ok) expect(result2.value).toHaveLength(0);
     });
 
@@ -239,7 +310,12 @@ describe('TruthSocialScanner', () => {
       const scanner = new TruthSocialScanner(eventBus);
       const fetchFn = vi
         .fn()
-        .mockResolvedValue(createHtmlResponse('<html><body><div>empty</div></body></html>'));
+        .mockResolvedValue(new Response('<rss><channel></channel></rss>', {
+          status: 200,
+          headers: {
+            'content-type': 'application/rss+xml; charset=utf-8',
+          },
+        }));
 
       setFetchFn(scanner, fetchFn);
 
