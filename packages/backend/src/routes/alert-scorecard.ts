@@ -40,6 +40,15 @@ export function registerAlertScorecardRoutes(
     return aggregationService.getSummary({ days });
   });
 
+  server.get('/api/v1/scorecards/severity-breakdown', {
+    schema: { querystring: ScorecardSummaryQuerySchema },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async (request) => {
+    const { days } = request.query as { days?: number };
+    return aggregationService.getSeverityBreakdown({ days });
+  });
+
   server.get('/api/v1/scorecards/:eventId', {
     schema: { params: EventIdParamsSchema },
     preHandler: async (request, reply) =>

@@ -909,4 +909,62 @@ describe('scorecard summary route', () => {
     expect(response.statusCode).toBe(400);
     await safeCloseServer(server);
   });
+
+  it('returns the real severity breakdown ordered from critical to low', async () => {
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-03-14T10:00:00.000Z'),
+      },
+      severity: 'HIGH',
+    });
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-03-13T10:00:00.000Z'),
+      },
+      severity: 'CRITICAL',
+    });
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-03-12T10:00:00.000Z'),
+      },
+      severity: 'LOW',
+    });
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-03-10T10:00:00.000Z'),
+      },
+      severity: 'HIGH',
+    });
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-01-10T10:00:00.000Z'),
+      },
+      severity: 'MEDIUM',
+    });
+    await seedAggregatedEvent({
+      event: {
+        timestamp: new Date('2026-03-11T10:00:00.000Z'),
+      },
+      severity: undefined,
+    });
+
+    const server = Fastify({ logger: false });
+    registerAlertScorecardRoutes(server, sharedDb, { apiKey: TEST_API_KEY });
+    await server.ready();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/scorecards/severity-breakdown?days=30',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      { severity: 'CRITICAL', count: 1 },
+      { severity: 'HIGH', count: 3 },
+      { severity: 'LOW', count: 1 },
+    ]);
+
+    await safeCloseServer(server);
+  });
 });

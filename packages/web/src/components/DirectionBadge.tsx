@@ -44,6 +44,7 @@ function getConfidenceLabel(
 export function DirectionBadge({ direction, confidence, confidenceBucket, size = 'sm' }: DirectionBadgeProps) {
   const config = directionConfig[direction.toLowerCase()] ?? directionConfig.neutral;
   const conf = getConfidenceLabel(confidence, confidenceBucket);
+  const tooltip = 'Bullish = Expected to push price UP, Bearish = Expected to push price DOWN';
 
   return (
     <div
@@ -53,6 +54,7 @@ export function DirectionBadge({ direction, confidence, confidenceBucket, size =
         conf?.low && 'border-dashed opacity-70',
         size === 'sm' ? 'w-[100px] px-2 py-1.5' : 'w-[120px] px-3 py-2',
       )}
+      title={tooltip}
     >
       <span className={cn('font-semibold tracking-wide', size === 'sm' ? 'text-[11px]' : 'text-xs')}>
         {config.icon} {config.label}

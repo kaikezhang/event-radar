@@ -47,6 +47,13 @@ describe('EventDetail page', () => {
     expect(screen.getByText(/nvidia corporation flagged heightened export exposure/i)).toBeInTheDocument();
   });
 
+  it('shows AI-generated analysis disclosures in the summary and bull-bear sections', async () => {
+    renderDetail();
+
+    expect(await screen.findAllByText(/ai-generated analysis/i)).toHaveLength(2);
+    expect(screen.getAllByText(/verify with primary sources/i)).toHaveLength(2);
+  });
+
   it('displays Why It Matters Now with bullet points from enrichment', async () => {
     renderDetail();
     await openEvidenceTab();

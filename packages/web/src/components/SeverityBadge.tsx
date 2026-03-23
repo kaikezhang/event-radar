@@ -47,6 +47,7 @@ export function SeverityBadge({
   className?: string;
 }) {
   const config = severityConfig[severity];
+  const tooltip = 'CRITICAL = Major market-moving event, HIGH = Significant event, MEDIUM = Notable event, LOW = Minor event';
 
   return (
     <span
@@ -56,6 +57,7 @@ export function SeverityBadge({
         className,
       )}
       aria-label={`${config.label} severity alert`}
+      title={tooltip}
     >
       <span
         className={cn('h-5 shrink-0 rounded-full', config.barClassName)}

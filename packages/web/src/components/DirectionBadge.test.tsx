@@ -6,6 +6,10 @@ describe('DirectionBadge', () => {
   it('renders bullish direction with correct label', () => {
     render(<DirectionBadge direction="bullish" />);
     expect(screen.getByText(/BULLISH/)).toBeInTheDocument();
+    expect(screen.getByText(/BULLISH/).closest('div')).toHaveAttribute(
+      'title',
+      'Bullish = Expected to push price UP, Bearish = Expected to push price DOWN',
+    );
   });
 
   it('renders bearish direction with correct label', () => {
