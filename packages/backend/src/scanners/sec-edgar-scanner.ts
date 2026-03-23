@@ -34,7 +34,6 @@ const HIGH_PRIORITY_8K_ITEMS = new Set([
 
 const MEDIUM_PRIORITY_8K_ITEMS = new Set([
   '7.01',
-  '8.01',
 ]);
 
 const FORM_4_PURCHASE_PATTERN = /\b(acquir|purchase|buy|bought)\b/i;

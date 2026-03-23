@@ -1,4 +1,5 @@
 import type { LlmClassificationResult, RawEvent, Severity } from '@event-radar/shared';
+import { COMPANY_TICKER_MAP } from './company-ticker-map.js';
 
 const HIGH_PRIORITY_SEVERITIES = new Set<Severity>(['HIGH', 'CRITICAL']);
 const FALSE_POSITIVES = new Set([
@@ -39,7 +40,7 @@ const SECTOR_FALLBACKS: SectorFallback[] = [
 export interface InferredTickerResult {
   ticker: string;
   tickerInferred: true;
-  strategy: 'regex' | 'fallback';
+  strategy: 'regex' | 'company-map' | 'fallback';
 }
 
 function normalizeTickerCandidate(value: string): string | null {
@@ -69,6 +70,53 @@ export function extractTickerCandidateFromText(text: string): string | null {
   return null;
 }
 
+function isCompanyMatchBoundary(text: string, start: number, length: number): boolean {
+  const before = start === 0 ? '' : text[start - 1]!;
+  const afterIndex = start + length;
+  const after = afterIndex >= text.length ? '' : text[afterIndex]!;
+
+  const isBoundary = (value: string): boolean => value === '' || /[^a-z0-9]/.test(value);
+
+  return isBoundary(before) && isBoundary(after);
+}
+
+function findCompanyMentionIndex(text: string, company: string): number {
+  let fromIndex = 0;
+
+  while (fromIndex < text.length) {
+    const foundIndex = text.indexOf(company, fromIndex);
+    if (foundIndex === -1) {
+      return -1;
+    }
+
+    if (isCompanyMatchBoundary(text, foundIndex, company.length)) {
+      return foundIndex;
+    }
+
+    fromIndex = foundIndex + 1;
+  }
+
+  return -1;
+}
+
+export function extractCompanyTickerFromText(text: string): string | null {
+  const normalizedText = text.toLowerCase();
+  let firstMatch: { index: number; ticker: string } | null = null;
+
+  for (const [company, ticker] of Object.entries(COMPANY_TICKER_MAP)) {
+    const matchIndex = findCompanyMentionIndex(normalizedText, company);
+    if (matchIndex === -1) {
+      continue;
+    }
+
+    if (!firstMatch || matchIndex < firstMatch.index) {
+      firstMatch = { index: matchIndex, ticker };
+    }
+  }
+
+  return firstMatch?.ticker ?? null;
+}
+
 export function inferMarketContextEtf(event: RawEvent): string {
   const haystack = `${event.title} ${event.body} ${event.source} ${event.type}`.toLowerCase();
 
@@ -82,12 +130,22 @@ export function inferMarketContextEtf(event: RawEvent): string {
 }
 
 export function inferHighPriorityTicker(event: RawEvent): InferredTickerResult {
-  const fromText = extractTickerCandidateFromText(`${event.title} ${event.body}`);
-  if (fromText) {
+  const combinedText = `${event.title} ${event.body}`;
+  const tickerFromText = extractTickerCandidateFromText(combinedText);
+  if (tickerFromText) {
     return {
-      ticker: fromText,
+      ticker: tickerFromText,
       tickerInferred: true,
       strategy: 'regex',
+    };
+  }
+
+  const tickerFromCompanyName = extractCompanyTickerFromText(combinedText);
+  if (tickerFromCompanyName) {
+    return {
+      ticker: tickerFromCompanyName,
+      tickerInferred: true,
+      strategy: 'company-map',
     };
   }
 
