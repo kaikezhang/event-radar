@@ -115,6 +115,10 @@ export function FeedHeader({
             </span>
           )}
         </button>
+
+        <span className="text-xs text-text-tertiary">
+          Press ? for keyboard shortcuts
+        </span>
       </div>
 
       {totalCount > 0 ? (

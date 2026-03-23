@@ -237,4 +237,58 @@ describe('Feed page', () => {
     expect(screen.getByRole('article', { name: /low-priority meme chatter/i })).toBeInTheDocument();
     expect(screen.getByText(/2 events · 1 high\+ · 1 low/i)).toBeInTheDocument();
   });
+
+  it('collapses same-ticker duplicate reports into one card with related-source context', async () => {
+    const fetchMock = vi.mocked(fetch);
+    const originalImplementation = fetchMock.getMockImplementation();
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/v1/feed') {
+        return jsonResponse({
+          events: [
+            {
+              id: 'evt-breaking-news',
+              severity: 'HIGH',
+              source: 'breaking-news',
+              title: 'Breaking desk flags NVDA supply update',
+              summary: 'Fresh breaking-news headline.',
+              tickers: ['NVDA'],
+              receivedAt: '2026-03-12T20:05:00.000Z',
+            },
+            {
+              id: 'evt-sec',
+              severity: 'HIGH',
+              source: 'sec-edgar',
+              title: 'SEC filing flags NVDA supply update',
+              summary: 'EDGAR confirms the same headline.',
+              tickers: ['NVDA'],
+              receivedAt: '2026-03-12T19:25:00.000Z',
+            },
+            {
+              id: 'evt-reuters',
+              severity: 'HIGH',
+              source: 'reuters',
+              title: 'Reuters confirms NVDA supply update',
+              summary: 'Newswire confirms the same headline.',
+              tickers: ['NVDA'],
+              receivedAt: '2026-03-12T18:45:00.000Z',
+            },
+          ],
+          cursor: null,
+          total: 3,
+        });
+      }
+
+      return originalImplementation?.(input, init) as Promise<Response>;
+    });
+
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+
+    expect(await screen.findByRole('article', { name: /breaking desk flags nvda supply update/i })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /sec filing flags nvda supply update/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/nvda · 3 related events/i)).toBeInTheDocument();
+    expect(screen.getByText(/also reported by: sec edgar, reuters/i)).toBeInTheDocument();
+  });
 });

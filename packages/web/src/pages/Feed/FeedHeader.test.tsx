@@ -154,4 +154,28 @@ describe('FeedHeader', () => {
 
     expect(onRevealLowSeverity).toHaveBeenCalledTimes(1);
   });
+
+  it('shows a visible keyboard shortcuts hint near the primary feed controls', () => {
+    render(
+      <FeedHeader
+        activeTab="all"
+        activeFilterCount={0}
+        highSignalCount={1}
+        hiddenLowCount={0}
+        hasActiveFilters={false}
+        lowSignalCount={0}
+        mediumSignalCount={0}
+        onRevealLowSeverity={vi.fn()}
+        onSortModeChange={vi.fn()}
+        onTabChange={vi.fn()}
+        onToggleFilters={vi.fn()}
+        onToggleModeDropdown={vi.fn()}
+        showModeDropdown={false}
+        sortMode="latest"
+        totalCount={1}
+      />,
+    );
+
+    expect(screen.getByText(/press \? for keyboard shortcuts/i)).toBeInTheDocument();
+  });
 });

@@ -20,6 +20,8 @@ export interface AlertSummary {
   deliveryChannels?: string[];
   /** Number of similar events deduplicated into this one (frontend-only) */
   dedupCount?: number;
+  /** Additional source labels folded into this alert (frontend-only) */
+  relatedSources?: string[];
   // Outcome/price data (from feed JOIN)
   eventPrice?: number | null;
   change1d?: number | null;

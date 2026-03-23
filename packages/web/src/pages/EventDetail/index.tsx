@@ -103,6 +103,14 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
     return navigate(-1);
   }, [navigate, onBack, shouldFallbackToWatchlist]);
 
+  const handleMobileBack = useCallback(() => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    handleBack();
+  }, [handleBack, navigate]);
+
   const handleShare = useCallback(() => {
     if (!data) return;
     if (navigator.share) return void navigator.share({ title: data.title, url: window.location.href });
@@ -117,6 +125,13 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   if (isLoading) {
     return (
       <div className="space-y-4">
+        <button
+          type="button"
+          onClick={handleMobileBack}
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-3 py-2 text-sm font-medium text-text-primary lg:hidden"
+        >
+          ← Back
+        </button>
         <DetailToolbar backLabel={backLabel} onBack={handleBack} />
         <SkeletonCard />
         <SkeletonCard />
@@ -141,6 +156,13 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
 
   return (
     <div className="space-y-4">
+      <button
+        type="button"
+        onClick={handleMobileBack}
+        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-3 py-2 text-sm font-medium text-text-primary lg:hidden"
+      >
+        ← Back
+      </button>
       <DetailToolbar backLabel={backLabel} onBack={handleBack} onShare={handleShare} />
       <TabNav activeSection={activeSection} onTabChange={setActiveSection} />
       <div className="lg:flex lg:gap-6">
