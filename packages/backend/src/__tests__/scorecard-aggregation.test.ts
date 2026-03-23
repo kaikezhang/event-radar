@@ -233,13 +233,19 @@ describe('scorecard aggregation service', () => {
 
     const summary = await createService().getSummary();
 
+    expect(summary.overview).toEqual({
+      totalEvents: 3,
+      sourcesMonitored: 1,
+      eventsWithTickers: 3,
+      eventsWithPriceOutcomes: 3,
+    });
     expect(summary.actionBuckets).toEqual([
       {
         bucket: '🔴 High-Quality Setup',
         totalAlerts: 2,
         alertsWithUsableVerdicts: 2,
-        directionalCorrectCount: 1,
-        directionalHitRate: 0.5,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
         setupWorkedCount: 1,
         setupWorkedRate: 0.5,
         avgT5Move: 4.5,
@@ -250,10 +256,10 @@ describe('scorecard aggregation service', () => {
         bucket: '🟡 Monitor',
         totalAlerts: 1,
         alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
+        setupWorkedCount: 0,
+        setupWorkedRate: 0,
         avgT5Move: -3,
         avgT20Move: null,
         medianT20Move: null,
@@ -290,11 +296,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'low',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
+        alertsWithUsableVerdicts: 0,
         directionalCorrectCount: 0,
-        directionalHitRate: 0,
+        directionalHitRate: null,
         setupWorkedCount: 0,
-        setupWorkedRate: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 0,
         medianT20Move: 0,
@@ -303,8 +309,8 @@ describe('scorecard aggregation service', () => {
         bucket: 'medium',
         totalAlerts: 1,
         alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
         setupWorkedCount: 1,
         setupWorkedRate: 1,
         avgT5Move: -8,
@@ -314,11 +320,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'high',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: null,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 10,
         medianT20Move: 10,
@@ -409,11 +415,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'sec-edgar',
         totalAlerts: 2,
-        alertsWithUsableVerdicts: 2,
-        directionalCorrectCount: 2,
-        directionalHitRate: 1,
-        setupWorkedCount: 2,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 1,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
+        setupWorkedCount: 0,
+        setupWorkedRate: 0,
         avgT5Move: -4,
         avgT20Move: 10,
         medianT20Move: 10,
@@ -421,11 +427,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'breaking-news',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
+        alertsWithUsableVerdicts: 0,
         directionalCorrectCount: 0,
-        directionalHitRate: 0,
+        directionalHitRate: null,
         setupWorkedCount: 0,
-        setupWorkedRate: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: -6,
         medianT20Move: -6,
@@ -515,11 +521,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'earnings_beat',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: null,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 7,
         medianT20Move: 7,
@@ -528,8 +534,8 @@ describe('scorecard aggregation service', () => {
         bucket: 'news_breaking',
         totalAlerts: 1,
         alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
         setupWorkedCount: 1,
         setupWorkedRate: 1,
         avgT5Move: -5,
@@ -539,11 +545,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'sec_form_8k',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: null,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 11,
         medianT20Move: 11,
@@ -603,6 +609,12 @@ describe('scorecard aggregation service', () => {
 
     const summary = await createService().getSummary();
 
+    expect(summary.overview).toEqual({
+      totalEvents: 2,
+      sourcesMonitored: 1,
+      eventsWithTickers: 2,
+      eventsWithPriceOutcomes: 0,
+    });
     expect(summary.totals).toMatchObject({
       totalAlerts: 2,
       alertsWithUsableVerdicts: 0,
@@ -696,11 +708,11 @@ describe('scorecard aggregation service', () => {
       {
         bucket: 'news_breaking',
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: null,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 9,
         medianT20Move: 9,
@@ -713,6 +725,12 @@ describe('scorecard aggregation service', () => {
 
     expect(summary).toEqual({
       days: null,
+      overview: {
+        totalEvents: 0,
+        sourcesMonitored: 0,
+        eventsWithTickers: 0,
+        eventsWithPriceOutcomes: 0,
+      },
       totals: {
         totalAlerts: 0,
         alertsWithUsableVerdicts: 0,
@@ -728,6 +746,54 @@ describe('scorecard aggregation service', () => {
       confidenceBuckets: [],
       sourceBuckets: [],
       eventTypeBuckets: [],
+    });
+  });
+
+  it('counts price outcomes from T+5 and setup worked from absolute T+5 move', async () => {
+    await seedAggregatedEvent({
+      prediction: { direction: 'neutral', confidence: 0.82 },
+      outcome: {
+        changeT5: 5.1,
+        evaluatedT5At: '2026-03-12T14:30:00.000Z',
+        changeT20: null,
+      },
+    });
+    await seedAggregatedEvent({
+      prediction: { direction: 'neutral', confidence: 0.62 },
+      outcome: {
+        changeT5: -6.4,
+        evaluatedT5At: '2026-03-13T14:30:00.000Z',
+        changeT20: null,
+      },
+    });
+    await seedAggregatedEvent({
+      prediction: { direction: 'neutral', confidence: 0.44 },
+      outcome: {
+        changeT5: 4.9,
+        evaluatedT5At: '2026-03-14T14:30:00.000Z',
+        changeT20: 18,
+        evaluatedT20At: '2026-03-30T14:30:00.000Z',
+      },
+    });
+
+    const summary = await createService().getSummary();
+
+    expect(summary.overview).toEqual({
+      totalEvents: 3,
+      sourcesMonitored: 1,
+      eventsWithTickers: 3,
+      eventsWithPriceOutcomes: 3,
+    });
+    expect(summary.totals).toMatchObject({
+      totalAlerts: 3,
+      alertsWithUsableVerdicts: 3,
+      directionalCorrectCount: 0,
+      directionalHitRate: 0,
+      setupWorkedCount: 2,
+      setupWorkedRate: 0.6667,
+      avgT5Move: 1.2,
+      avgT20Move: 18,
+      medianT20Move: 18,
     });
   });
 });
@@ -778,13 +844,19 @@ describe('scorecard summary route', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       days: null,
+      overview: {
+        totalEvents: 1,
+        sourcesMonitored: 1,
+        eventsWithTickers: 1,
+        eventsWithPriceOutcomes: 0,
+      },
       totals: {
         totalAlerts: 1,
-        alertsWithUsableVerdicts: 1,
-        directionalCorrectCount: 1,
-        directionalHitRate: 1,
-        setupWorkedCount: 1,
-        setupWorkedRate: 1,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: null,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
         avgT5Move: null,
         avgT20Move: 8,
         medianT20Move: 8,
@@ -793,11 +865,11 @@ describe('scorecard summary route', () => {
         {
           bucket: '🔴 High-Quality Setup',
           totalAlerts: 1,
-          alertsWithUsableVerdicts: 1,
-          directionalCorrectCount: 1,
-          directionalHitRate: 1,
-          setupWorkedCount: 1,
-          setupWorkedRate: 1,
+          alertsWithUsableVerdicts: 0,
+          directionalCorrectCount: 0,
+          directionalHitRate: null,
+          setupWorkedCount: 0,
+          setupWorkedRate: null,
           avgT5Move: null,
           avgT20Move: 8,
           medianT20Move: 8,
@@ -807,11 +879,11 @@ describe('scorecard summary route', () => {
         {
           bucket: 'high',
           totalAlerts: 1,
-          alertsWithUsableVerdicts: 1,
-          directionalCorrectCount: 1,
-          directionalHitRate: 1,
-          setupWorkedCount: 1,
-          setupWorkedRate: 1,
+          alertsWithUsableVerdicts: 0,
+          directionalCorrectCount: 0,
+          directionalHitRate: null,
+          setupWorkedCount: 0,
+          setupWorkedRate: null,
           avgT5Move: null,
           avgT20Move: 8,
           medianT20Move: 8,
@@ -821,11 +893,11 @@ describe('scorecard summary route', () => {
         {
           bucket: 'sec-edgar',
           totalAlerts: 1,
-          alertsWithUsableVerdicts: 1,
-          directionalCorrectCount: 1,
-          directionalHitRate: 1,
-          setupWorkedCount: 1,
-          setupWorkedRate: 1,
+          alertsWithUsableVerdicts: 0,
+          directionalCorrectCount: 0,
+          directionalHitRate: null,
+          setupWorkedCount: 0,
+          setupWorkedRate: null,
           avgT5Move: null,
           avgT20Move: 8,
           medianT20Move: 8,
@@ -835,11 +907,11 @@ describe('scorecard summary route', () => {
         {
           bucket: 'sec_form_8k',
           totalAlerts: 1,
-          alertsWithUsableVerdicts: 1,
-          directionalCorrectCount: 1,
-          directionalHitRate: 1,
-          setupWorkedCount: 1,
-          setupWorkedRate: 1,
+          alertsWithUsableVerdicts: 0,
+          directionalCorrectCount: 0,
+          directionalHitRate: null,
+          setupWorkedCount: 0,
+          setupWorkedRate: null,
           avgT5Move: null,
           avgT20Move: 8,
           medianT20Move: 8,

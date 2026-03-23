@@ -252,8 +252,16 @@ export interface ScorecardBucketSummary {
   medianT20Move: number | null;
 }
 
+export interface ScorecardOverview {
+  totalEvents: number;
+  sourcesMonitored: number;
+  eventsWithTickers: number;
+  eventsWithPriceOutcomes: number;
+}
+
 export interface ScorecardSummary {
   days: number | null;
+  overview: ScorecardOverview;
   totals: Omit<ScorecardBucketSummary, 'bucket'>;
   actionBuckets: ScorecardBucketSummary[];
   confidenceBuckets: ScorecardBucketSummary[];

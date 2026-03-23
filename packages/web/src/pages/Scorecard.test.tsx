@@ -22,11 +22,14 @@ describe('Scorecard page', () => {
       expect.objectContaining({ credentials: 'include' }),
     );
 
-    expect(screen.getByText('Topline calibration')).toBeInTheDocument();
-    expect(screen.getByText('124')).toBeInTheDocument();
-    expect(screen.getByText('67.7%')).toBeInTheDocument();
-    expect(screen.getByText('58.9%')).toBeInTheDocument();
+    expect(screen.getByText(/scorecard tracks how market events correlate with price movements/i)).toBeInTheDocument();
+    expect(screen.getByText('23,769')).toBeInTheDocument();
+    expect(screen.getByText('13')).toBeInTheDocument();
+    expect(screen.getByText('6,346')).toBeInTheDocument();
+    expect(screen.getByText(/6,346 events with price outcomes \/ 12,028 events with tickers \(52\.8%\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Setup Worked Rate')).toBeInTheDocument();
     expect(screen.getByText('+4.3%')).toBeInTheDocument();
+    expect(screen.getByText(/events without tickers/i)).toBeInTheDocument();
     expect(screen.getByText(/rolling accuracy trend/i)).toBeInTheDocument();
     expect(screen.getByText(/we're collecting enough data to show meaningful trends/i)).toBeInTheDocument();
   });
@@ -97,7 +100,7 @@ describe('Scorecard page', () => {
     expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
   });
 
-  it('adds tap-friendly tooltip help for scorecard jargon and renders real severity labels', async () => {
+  it('leads with setup and coverage context instead of directional hit rate', async () => {
     const user = userEvent.setup();
 
     renderWithRouter(
@@ -109,11 +112,6 @@ describe('Scorecard page', () => {
       expect(screen.getByText('Critical')).toBeInTheDocument();
     });
 
-    const directionHelp = screen.getByRole('button', { name: /directional hit rate explanation/i });
-    expect(directionHelp).toHaveAttribute('title', expect.stringMatching(/predicted direction/));
-    await user.click(directionHelp);
-    expect(screen.getByText(/how often the predicted direction \(up\/down\) matched actual price movement/i)).toBeInTheDocument();
-
     const moveHelps = screen.getAllByRole('button', { name: /t\+20 move explanation/i });
     expect(moveHelps).toHaveLength(2);
     await user.click(moveHelps[0]!);
@@ -122,6 +120,8 @@ describe('Scorecard page', () => {
     const setupHelp = screen.getByRole('button', { name: /setup worked rate explanation/i });
     await user.click(setupHelp);
     expect(screen.getByText(/how often the event led to a tradeable move of 5%\+/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /directional hit rate explanation/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/coverage:/i)).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
   });
 
@@ -134,13 +134,19 @@ describe('Scorecard page', () => {
       if (url.pathname === '/api/v1/scorecards/summary') {
         return new Response(JSON.stringify({
           days: 90,
+          overview: {
+            totalEvents: 23769,
+            sourcesMonitored: 13,
+            eventsWithTickers: 12028,
+            eventsWithPriceOutcomes: 6346,
+          },
           totals: {
-            totalAlerts: 124,
-            alertsWithUsableVerdicts: 96,
-            directionalCorrectCount: 65,
-            directionalHitRate: 0.677,
-            setupWorkedCount: 57,
-            setupWorkedRate: 0.589,
+            totalAlerts: 12028,
+            alertsWithUsableVerdicts: 6346,
+            directionalCorrectCount: 0,
+            directionalHitRate: 0,
+            setupWorkedCount: 2870,
+            setupWorkedRate: 0.4523,
             avgT5Move: 1.8,
             avgT20Move: 4.3,
             medianT20Move: 3.2,

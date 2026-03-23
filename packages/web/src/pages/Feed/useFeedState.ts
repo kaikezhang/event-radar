@@ -88,14 +88,14 @@ export function getTrustCue(
   }
 
   const bucket = summary.sourceBuckets.find((item) => item.bucket === sourceKey);
-  if (!bucket || bucket.directionalHitRate == null || bucket.alertsWithUsableVerdicts === 0) {
+  if (!bucket || bucket.setupWorkedRate == null || bucket.alertsWithUsableVerdicts === 0) {
     return undefined;
   }
 
-  const hitRate = Math.round(bucket.directionalHitRate * 100);
+  const workedRate = Math.round(bucket.setupWorkedRate * 100);
   return {
-    label: `Source hit rate ${hitRate}%`,
-    tone: hitRate >= 65 ? 'positive' : hitRate >= 45 ? 'mixed' : 'caution',
+    label: `Setup worked ${workedRate}%`,
+    tone: workedRate >= 60 ? 'positive' : workedRate >= 40 ? 'mixed' : 'caution',
   };
 }
 

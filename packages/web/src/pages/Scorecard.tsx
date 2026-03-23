@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, BarChart3, CalendarRange, ChevronDown, HelpCircle, Target } from 'lucide-react';
+import { BarChart3, CalendarRange, ChevronDown, HelpCircle, Info, Target } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Bar,
@@ -39,8 +39,8 @@ const WINDOWS = [
 type ScorecardWindow = (typeof WINDOWS)[number]['value'];
 
 const BUCKET_COLUMNS = [
-  { key: 'totalAlerts', label: 'Alerts' },
-  { key: 'directionalHitRate', label: 'Hit rate' },
+  { key: 'totalAlerts', label: 'Tracked' },
+  { key: 'alertsWithUsableVerdicts', label: 'T+5 data' },
   { key: 'setupWorkedRate', label: 'Worked rate' },
   { key: 'avgT20Move', label: 'Avg T+20' },
 ] as const;
@@ -64,10 +64,10 @@ function useIsDarkMode(): boolean {
   return isDark;
 }
 
-function hitRateColor(rate: number): string {
-  if (rate > 60) return '#22c55e';
-  if (rate >= 40) return '#eab308';
-  return '#ef4444';
+function moveMagnitudeColor(move: number): string {
+  if (move >= 8) return '#f97316';
+  if (move >= 5) return '#eab308';
+  return '#22c55e';
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -96,6 +96,29 @@ function usePanelState(panelKey: string, defaultOpen: boolean): [boolean, () => 
   }, [panelKey, defaultOpen, isOpen, setSearchParams]);
 
   return [isOpen, toggle];
+}
+
+function InfoBanner({ data }: { data: ScorecardSummary }) {
+  return (
+    <section className="rounded-2xl border border-sky-500/20 bg-sky-500/8 p-4 shadow-[0_12px_28px_var(--shadow-color)]">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sky-500/12 text-sky-300">
+          <Info className="h-4 w-4" />
+        </span>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-text-primary">
+            Scorecard tracks how market events correlate with price movements. This is a calibration tool, not a prediction score.
+          </p>
+          <p className="text-sm leading-6 text-text-secondary">
+            Price data from T+5 (5 trading days after event). Coverage: {formatCoverageRateValue(
+              data.overview.eventsWithPriceOutcomes,
+              data.overview.eventsWithTickers,
+            )} of events.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function Scorecard() {
@@ -156,6 +179,7 @@ export function Scorecard() {
   if (data.totals.alertsWithUsableVerdicts === 0) {
     return (
       <div className="space-y-4">
+        <InfoBanner data={data} />
         <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
           <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
             <Target className="h-3.5 w-3.5" />
@@ -176,7 +200,7 @@ export function Scorecard() {
               Once enough time has passed, accuracy data will appear here automatically.
             </p>
             <p className="mt-2 text-sm text-text-secondary">
-              {data.totals.totalAlerts} alert{data.totals.totalAlerts !== 1 ? 's' : ''} being tracked — check back in a few days.
+              {data.overview.totalEvents.toLocaleString()} events tracked, with {data.overview.eventsWithTickers.toLocaleString()} tied to individual tickers so far.
             </p>
             <Link
               to="/"
@@ -192,6 +216,8 @@ export function Scorecard() {
 
   return (
     <div className="space-y-4">
+      <InfoBanner data={data} />
+
       <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -203,13 +229,13 @@ export function Scorecard() {
               Scorecard
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              Topline calibration
+              Outcome tracking across the full event stream
             </p>
             <p className="mt-2 max-w-xl text-sm leading-6 text-text-primary">
               {windowMeta.description}
             </p>
             <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              Directional hit rate and setup worked rate reflect alerts with usable verdicts only.
+              Use this to see where alerts consistently lead to meaningful price movement, not to grade directional calls.
             </p>
           </div>
 
@@ -240,68 +266,73 @@ export function Scorecard() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-6 text-center shadow-[0_18px_40px_var(--shadow-color)]">
-        <p className="font-mono text-5xl font-bold text-text-primary sm:text-6xl">
-          {data.totals.totalAlerts.toLocaleString()}
-        </p>
-        <p className="mt-2 text-lg font-semibold text-text-primary">Events Detected</p>
-        <p className="mt-1 text-sm text-text-secondary">
-          from {data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase())).length} sources, 24/7 monitoring
-        </p>
-      </section>
-
-      <section className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
-            {data.totals.alertsWithUsableVerdicts.toLocaleString()}
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Events Tracked</div>
+          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
+            {data.overview.totalEvents.toLocaleString()}
           </div>
-          <div className="mt-1 text-sm text-text-secondary">Outcomes Tracked</div>
         </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
-            {data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase())).length}
+        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Sources Monitored</div>
+          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
+            {data.overview.sourcesMonitored.toLocaleString()}
           </div>
-          <div className="mt-1 text-sm text-text-secondary">Active Sources</div>
+        </div>
+        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Events with Price Data</div>
+          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
+            {data.overview.eventsWithPriceOutcomes.toLocaleString()}
+          </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
-            {formatRate(data.totals.directionalHitRate)}
-          </div>
-          <MetricLabel
-            label="Directional hit rate"
-            tooltip="How often the predicted direction (up/down) matched actual price movement"
-          />
-        </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
+      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.95fr]">
+        <article className="rounded-3xl border border-border-default bg-bg-surface/96 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Coverage</p>
+          <p className="mt-3 text-2xl font-semibold leading-8 text-text-primary sm:text-3xl">
+            {data.overview.eventsWithPriceOutcomes.toLocaleString()} events with price outcomes / {data.overview.eventsWithTickers.toLocaleString()} events with tickers ({formatCoverageRateValue(
+              data.overview.eventsWithPriceOutcomes,
+              data.overview.eventsWithTickers,
+            )})
+          </p>
+          <p className="mt-3 text-sm leading-6 text-text-secondary">
+            Events without tickers (macro events, government actions) don&apos;t have individual price tracking.
+          </p>
+        </article>
+
+        <article className="rounded-3xl border border-border-default bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.18),rgba(17,18,23,0.96)_62%)] p-6 shadow-[0_18px_40px_var(--shadow-color)]">
+          <div className="font-mono text-4xl font-semibold text-text-primary">
             {formatRate(data.totals.setupWorkedRate)}
           </div>
           <MetricLabel
-            label="Setup worked rate"
+            label="Setup Worked Rate"
             tooltip="How often the event led to a tradeable move of 5%+"
           />
-        </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
-            {formatMove(data.totals.avgT20Move)}
+          <p className="mt-4 text-sm leading-6 text-text-secondary">
+            {data.totals.setupWorkedCount.toLocaleString()} of {data.totals.alertsWithUsableVerdicts.toLocaleString()} events with T+5 price data produced 5%+ moves.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-overlay-medium bg-black/10 px-3 py-3">
+              <div className="font-mono text-lg font-semibold text-text-primary">
+                {formatMove(data.totals.avgT20Move)}
+              </div>
+              <MetricLabel
+                label="Avg T+20 move"
+                tooltip="Price change 20 trading days (~1 month) after the event"
+              />
+            </div>
+            <div className="rounded-2xl border border-overlay-medium bg-black/10 px-3 py-3">
+              <div className="font-mono text-lg font-semibold text-text-primary">
+                {formatMove(data.totals.medianT20Move)}
+              </div>
+              <MetricLabel
+                label="Median T+20 move"
+                tooltip="Price change 20 trading days (~1 month) after the event"
+              />
+            </div>
           </div>
-          <MetricLabel
-            label="Avg T+20 move"
-            tooltip="Price change 20 trading days (~1 month) after the event"
-          />
-        </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
-          <div className="font-mono text-2xl font-semibold text-text-primary">
-            {formatMove(data.totals.medianT20Move)}
-          </div>
-          <MetricLabel
-            label="Median T+20 move"
-            tooltip="Price change 20 trading days (~1 month) after the event"
-          />
-        </div>
+        </article>
       </section>
 
       <AdvancedAnalytics data={data} />
@@ -312,20 +343,6 @@ export function Scorecard() {
       </div>
 
       <RollingAccuracyTrend />
-
-      <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-accent-default/10 text-accent-default">
-            <AlertTriangle className="h-4 w-4" />
-          </span>
-          <div>
-            <h2 className="text-[15px] font-semibold text-text-primary">How to read this</h2>
-            <p className="mt-1 text-sm leading-6 text-text-secondary">
-              This page is a calibration layer, not a victory lap. Buckets show where the product is reliably right, where setups merely move, and which sources or event classes need tighter thresholds.
-            </p>
-          </div>
-        </div>
-      </section>
 
       <BucketSection
         title="Signal buckets"
@@ -359,20 +376,18 @@ export function Scorecard() {
   );
 }
 
-/* ── Source Accuracy Horizontal Bar Chart ── */
-
 function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark: boolean }) {
   const chartData = useMemo(
     () =>
       data.sourceBuckets
-        .filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase()))
-        .filter((b) => b.directionalHitRate != null)
-        .map((b) => ({
-          name: formatScorecardBucketLabel('source', b.bucket),
-          hitRate: Math.round((b.directionalHitRate ?? 0) * 100),
-          count: b.totalAlerts,
+        .filter((bucket) => !EXCLUDED_SOURCE_NAMES.has(bucket.bucket.toLowerCase()))
+        .filter((bucket) => bucket.alertsWithUsableVerdicts > 0)
+        .map((bucket) => ({
+          name: formatScorecardBucketLabel('source', bucket.bucket),
+          moveMagnitude: Math.abs(bucket.avgT20Move ?? bucket.avgT5Move ?? 0),
+          count: bucket.alertsWithUsableVerdicts,
         }))
-        .sort((a, b) => b.hitRate - a.hitRate),
+        .sort((left, right) => right.moveMagnitude - left.moveMagnitude),
     [data.sourceBuckets],
   );
 
@@ -407,10 +422,13 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
       <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
         Source accuracy
       </h2>
+      <p className="mb-4 text-sm leading-6 text-text-secondary">
+        Which sources most often lead to the biggest post-event moves.
+      </p>
       <ResponsiveContainer width="100%" height={chartHeight} minWidth={0}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-          <XAxis type="number" domain={[0, 100]} tick={{ fill: axisColor, fontSize: 12 }} tickFormatter={(v: number) => `${v}%`} />
+          <XAxis type="number" tick={{ fill: axisColor, fontSize: 12 }} tickFormatter={(value: number) => `${value}%`} />
           <YAxis type="category" dataKey="name" width={70} tick={{ fill: axisColor, fontSize: 12 }} />
           <Tooltip
             contentStyle={{
@@ -420,11 +438,11 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
               color: isDark ? '#fafaf9' : '#111827',
               fontSize: 13,
             }}
-            formatter={(value: number) => [`${value}%`, 'Hit rate']}
+            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Move magnitude']}
           />
-          <Bar dataKey="hitRate" radius={[0, 6, 6, 0]} label={renderCustomLabel}>
+          <Bar dataKey="moveMagnitude" radius={[0, 6, 6, 0]} label={renderCustomLabel}>
             {chartData.map((entry) => (
-              <Cell key={entry.name} fill={hitRateColor(entry.hitRate)} />
+              <Cell key={entry.name} fill={moveMagnitudeColor(entry.moveMagnitude)} />
             ))}
           </Bar>
         </BarChart>
@@ -432,8 +450,6 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
     </section>
   );
 }
-
-/* ── Severity Breakdown Donut Chart ── */
 
 function SeverityBreakdownChart({
   data,
@@ -453,7 +469,7 @@ function SeverityBreakdownChart({
     [data],
   );
 
-  const total = severityData.reduce((acc, d) => acc + d.value, 0);
+  const total = severityData.reduce((accumulator, entry) => accumulator + entry.value, 0);
 
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -514,8 +530,6 @@ function SeverityBreakdownChart({
   );
 }
 
-/* ── Rolling Accuracy Placeholder ── */
-
 function RollingAccuracyTrend() {
   return (
     <section className="rounded-2xl border border-dashed border-overlay-medium bg-bg-surface/96 p-5">
@@ -537,8 +551,6 @@ function RollingAccuracyTrend() {
   );
 }
 
-/* ── Advanced Analytics (collapsible) ── */
-
 function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
   const [isOpen, toggle] = usePanelState('analytics', false);
 
@@ -556,7 +568,7 @@ function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
             🔬 Advanced Analytics
           </span>
           <span className="mt-1 block text-sm leading-6 text-text-secondary">
-            Directional accuracy, setup worked rate, and average moves
+            Coverage context, setup quality, and move statistics
           </span>
         </div>
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
@@ -572,9 +584,12 @@ function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
               <div className="font-mono text-2xl font-semibold text-text-primary">
-                {formatRate(data.totals.directionalHitRate)}
+                {formatCoverageRateValue(
+                  data.overview.eventsWithPriceOutcomes,
+                  data.overview.eventsWithTickers,
+                )}
               </div>
-              <div className="mt-1 text-sm text-text-secondary">Directional hit rate</div>
+              <div className="mt-1 text-sm text-text-secondary">Coverage</div>
             </div>
             <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
               <div className="font-mono text-2xl font-semibold text-text-primary">
@@ -590,15 +605,13 @@ function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
             </div>
           </div>
           <p className="text-xs leading-5 text-text-secondary">
-            Directional analysis is supplementary context for your own research. Event Radar's core value is comprehensive event detection and speed, not directional trading signals.
+            Coverage reflects only ticker-linked events. Macro prints and policy headlines stay in the event stream but do not receive single-name price tracking.
           </p>
         </div>
       )}
     </section>
   );
 }
-
-/* ── Helpers ── */
 
 function MetricLabel({ label, tooltip }: { label: string; tooltip: string }) {
   return (
@@ -673,11 +686,11 @@ function BucketSection({
                     {formatScorecardBucketLabel(group, bucket.bucket)}
                   </h3>
                   <p className="mt-1 text-xs text-text-secondary">
-                    {bucket.alertsWithUsableVerdicts} usable verdicts
+                    {bucket.alertsWithUsableVerdicts} events with T+5 price data
                   </p>
                 </div>
                 <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
-                  {bucket.totalAlerts} alerts
+                  {bucket.totalAlerts} tracked events
                 </span>
               </div>
 
@@ -711,14 +724,22 @@ function formatBucketValue(
   if (key === 'totalAlerts') {
     return String(bucket.totalAlerts);
   }
-  if (key === 'directionalHitRate') {
-    return formatRate(bucket.directionalHitRate);
+  if (key === 'alertsWithUsableVerdicts') {
+    return String(bucket.alertsWithUsableVerdicts);
   }
   if (key === 'setupWorkedRate') {
     return formatRate(bucket.setupWorkedRate);
   }
 
   return formatMove(bucket.avgT20Move);
+}
+
+function formatCoverageRateValue(numerator: number, denominator: number): string {
+  if (denominator === 0) {
+    return '0.0%';
+  }
+
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
 }
 
 function formatRate(value: number | null): string {

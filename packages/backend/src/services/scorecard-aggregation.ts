@@ -9,14 +9,10 @@ import {
 } from '../db/schema.js';
 import {
   asRecord,
-  buildDirectionVerdict,
-  buildSetupVerdict,
   getEnrichment,
   getString,
   resolveConfidenceBucket,
   resolveProductEventType,
-  resolveScorecardDirection,
-  selectVerdictWindow,
   toNumber,
 } from './scorecard-semantics.js';
 
@@ -56,8 +52,16 @@ const BucketSummarySchema = ScorecardAggregateMetricsSchema.extend({
   bucket: z.string(),
 });
 
+const ScorecardOverviewSchema = z.object({
+  totalEvents: z.number().int().nonnegative(),
+  sourcesMonitored: z.number().int().nonnegative(),
+  eventsWithTickers: z.number().int().nonnegative(),
+  eventsWithPriceOutcomes: z.number().int().nonnegative(),
+});
+
 export const ScorecardSummarySchema = z.object({
   days: z.number().int().positive().nullable(),
+  overview: ScorecardOverviewSchema,
   totals: ScorecardAggregateMetricsSchema,
   actionBuckets: z.array(BucketSummarySchema),
   confidenceBuckets: z.array(BucketSummarySchema),
@@ -103,8 +107,6 @@ interface NormalizedAlertScorecardRow {
   eventType: string | null;
   actionLabel: string | null;
   confidenceBucket: ConfidenceLevel | null;
-  directionVerdict: 'correct' | 'incorrect' | 'unclear';
-  setupVerdict: 'worked' | 'failed' | 'insufficient-data';
   changeT5: number | null;
   changeT20: number | null;
 }
@@ -139,9 +141,11 @@ export class ScorecardAggregationService {
     const normalizedRows = rows
       .map((row) => this.normalizeRow(row))
       .filter((row) => this.isInWindow(row, options?.days));
+    const overview = await this.getOverview(options);
 
     return ScorecardSummarySchema.parse({
       days: options?.days ?? null,
+      overview,
       totals: this.finalizeAggregate(this.aggregateRows(normalizedRows)),
       actionBuckets: this.buildBuckets(
         normalizedRows,
@@ -172,15 +176,7 @@ export class ScorecardAggregationService {
   }
 
   async getSeverityBreakdown(options?: SummaryOptions): Promise<ScorecardSeverityBreakdownItem[]> {
-    const conditions = [
-      notInArray(events.source, EXCLUDED_SOURCES),
-      isNotNull(events.severity),
-    ];
-
-    if (options?.days != null) {
-      const cutoff = new Date(this.now().getTime() - options.days * 24 * 60 * 60 * 1000);
-      conditions.push(gt(events.createdAt, cutoff));
-    }
+    const conditions = this.buildEventConditions(options, true);
 
     const rows = await this.db
       .select({
@@ -199,6 +195,31 @@ export class ScorecardAggregationService {
       END`);
 
     return ScorecardSeverityBreakdownSchema.parse(rows);
+  }
+
+  private async getOverview(options?: SummaryOptions): Promise<z.infer<typeof ScorecardOverviewSchema>> {
+    const eventRows = await this.db
+      .select({
+        source: events.source,
+      })
+      .from(events)
+      .where(and(...this.buildEventConditions(options)));
+
+    const outcomeRows = await this.db
+      .select({
+        eventId: events.id,
+        hasPriceOutcome: eventOutcomes.changeT5,
+      })
+      .from(events)
+      .innerJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
+      .where(and(...this.buildEventConditions(options)));
+
+    return ScorecardOverviewSchema.parse({
+      totalEvents: eventRows.length,
+      sourcesMonitored: new Set(eventRows.map((row) => row.source)).size,
+      eventsWithTickers: outcomeRows.length,
+      eventsWithPriceOutcomes: outcomeRows.filter((row) => row.hasPriceOutcome != null).length,
+    });
   }
 
   private async getRows(): Promise<AggregationQueryRow[]> {
@@ -227,15 +248,6 @@ export class ScorecardAggregationService {
   private normalizeRow(row: AggregationQueryRow): NormalizedAlertScorecardRow {
     const metadata = asRecord(row.metadata);
     const enrichment = getEnrichment(metadata?.['llm_enrichment']);
-    const direction = resolveScorecardDirection({
-      predictedDirection: row.predictedDirection,
-      metadata,
-      enrichment,
-    });
-    const selectedWindow = selectVerdictWindow(
-      toNumber(row.changeT5),
-      toNumber(row.changeT20),
-    );
 
     return {
       timestamp: row.eventTime ?? row.receivedAt,
@@ -246,17 +258,24 @@ export class ScorecardAggregationService {
       }),
       actionLabel: enrichment?.action ?? null,
       confidenceBucket: resolveConfidenceBucket(row.predictionConfidence),
-      directionVerdict: buildDirectionVerdict(
-        direction,
-        selectedWindow?.movePercent ?? null,
-      ),
-      setupVerdict: buildSetupVerdict(
-        direction,
-        selectedWindow?.movePercent ?? null,
-      ),
       changeT5: toNumber(row.changeT5),
       changeT20: toNumber(row.changeT20),
     };
+  }
+
+  private buildEventConditions(options?: SummaryOptions, requireSeverity = false) {
+    const conditions = [notInArray(events.source, EXCLUDED_SOURCES)];
+
+    if (requireSeverity) {
+      conditions.push(isNotNull(events.severity));
+    }
+
+    if (options?.days != null) {
+      const cutoff = new Date(this.now().getTime() - options.days * 24 * 60 * 60 * 1000);
+      conditions.push(gt(events.createdAt, cutoff));
+    }
+
+    return conditions;
   }
 
   private isInWindow(row: NormalizedAlertScorecardRow, days?: number): boolean {
@@ -301,15 +320,9 @@ export class ScorecardAggregationService {
     return rows.reduce<AggregateAccumulator>((accumulator, row) => {
       accumulator.totalAlerts += 1;
 
-      if (
-        row.directionVerdict !== 'unclear'
-        && row.setupVerdict !== 'insufficient-data'
-      ) {
+      if (row.changeT5 != null) {
         accumulator.alertsWithUsableVerdicts += 1;
-        if (row.directionVerdict === 'correct') {
-          accumulator.directionalCorrectCount += 1;
-        }
-        if (row.setupVerdict === 'worked') {
+        if (Math.abs(row.changeT5) >= 5) {
           accumulator.setupWorkedCount += 1;
         }
       }
