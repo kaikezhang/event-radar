@@ -1,4 +1,4 @@
-import { BarChart3, Clock, Eye, House, Settings2 } from 'lucide-react';
+import { BarChart3, Eye, House, Search, Settings2 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
 
@@ -6,7 +6,7 @@ const navItems = [
   { to: '/', label: 'Feed', icon: House, end: true, badge: null },
   { to: '/watchlist', label: 'Watchlist', icon: Eye, end: false, badge: null },
   { to: '/scorecard', label: 'Scorecard', icon: BarChart3, end: false, badge: null },
-  { to: '/history', label: 'History', icon: Clock, end: false, badge: null },
+  { to: '/search', label: 'Search', icon: Search, end: false, badge: null },
   { to: '/settings', label: 'Settings', icon: Settings2, end: false, badge: null },
 ] as const;
 
