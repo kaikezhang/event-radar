@@ -1,76 +1,69 @@
-# TASK.md — Rewrite Truth Social Scanner to use trumpstruth.org
+# TASK.md — Upgrade Truth Social Scanner to RSS Feed
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-The current Truth Social scanner uses Playwright to scrape truthsocial.com directly, which is unreliable (currently DOWN with 5 consecutive errors). Rewrite to use trumpstruth.org — a reliable, searchable archive of Trump's Truth Social posts that can be scraped with simple HTTP GET (no browser needed).
+Upgrade the Truth Social scanner from HTML scraping to RSS feed parsing.
+RSS feed URL: `https://trumpstruth.org/feed` — standard RSS 2.0 format.
 
-## Source Analysis
-- **URL**: `https://trumpstruth.org` (homepage lists latest posts)
-- **Individual posts**: `https://trumpstruth.org/statuses/{id}` (incrementing IDs)
-- **No JS rendering needed** — pure HTML, curl works
-- **HTML structure**:
-  - Post ID: extracted from `href` attribute like `href="https://trumpstruth.org/statuses/37408"`
-  - Timestamp: `<a href="..." class="status-info__meta-item">March 23, 2026, 7:05 AM</a>` (ET timezone)
-  - Content: `<div class="status__content"><p>POST TEXT HERE</p></div>`
-  - Author: always `@realDonaldTrump`
-- **Delay**: ~5-15 minutes behind Truth Social (acceptable for our use case)
-- **Reliability**: Static HTML, no Cloudflare protection, no anti-bot
+## RSS Feed Structure
+```xml
+<item>
+  <title><![CDATA[POST TEXT]]></title>
+  <link>https://trumpstruth.org/statuses/37409</link>
+  <description><![CDATA[<p>POST TEXT WITH HTML</p>]]></description>
+  <guid>https://trumpstruth.org/statuses/37409</guid>
+  <pubDate>Mon, 23 Mar 2026 11:23:40 +0000</pubDate>
+  <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116278232362967212</truth:originalUrl>
+  <truth:originalId>116278232362967212</truth:originalId>
+</item>
+```
 
 ## Implementation
 
-### 1. Rewrite Truth Social Scanner
+### 1. Rewrite poll() method to use RSS
 - File: `packages/backend/src/scanners/truth-social-scanner.ts`
-- **Remove ALL Playwright/browser dependencies** — use simple HTTP fetch (`scannerFetch`)
-- Poll `https://trumpstruth.org` every 3 minutes (existing interval)
-- Parse HTML to extract posts:
+- Fetch `https://trumpstruth.org/feed` with scannerFetch
+- Parse the XML response — use a simple regex or built-in DOMParser approach:
+  - Extract `<item>` blocks
+  - For each item: get `<title>`, `<link>`, `<pubDate>`, `<guid>`, `<truth:originalUrl>`, `<truth:originalId>`
+- The `<title>` contains clean text (no HTML tags) — use this for the post text
+- Parse `<pubDate>` (RFC 2822 format: "Mon, 23 Mar 2026 11:23:40 +0000") to Date
+- Use `<guid>` or the status number from `<link>` as the post ID for dedup
+- Use `<truth:originalUrl>` as the event URL (links to actual Truth Social post)
+
+### 2. Keep it simple — no XML parser library needed
+- The RSS structure is very regular and can be parsed with regex:
   ```typescript
-  // Extract posts from HTML
-  // Pattern: <a href="https://trumpstruth.org/statuses/XXXXX" class="status-info__meta-item">DATE</a>
-  // Content: <div class="status__content"><p>TEXT</p></div>
+  const items = xml.match(/<item>([\s\S]*?)<\/item>/g) ?? [];
+  for (const item of items) {
+    const title = item.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ?? '';
+    const link = item.match(/<link>(.*?)<\/link>/)?.[1] ?? '';
+    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? '';
+    const originalUrl = item.match(/<truth:originalUrl>(.*?)<\/truth:originalUrl>/)?.[1] ?? '';
+    const originalId = item.match(/<truth:originalId>(.*?)<\/truth:originalId>/)?.[1] ?? '';
+  }
   ```
-- For each post:
-  - ID = status number from URL (e.g., "37408")
-  - Text = inner text of `<div class="status__content">`
-  - Timestamp = parse "March 23, 2026, 7:05 AM" (ET timezone → UTC)
-  - URL = `https://trumpstruth.org/statuses/{id}`
-- Use SeenIdBuffer to dedup (already exists)
-- Keep existing keyword extraction, ticker extraction, sentiment analysis
 
-### 2. HTML Parsing
-- Use a simple regex-based approach or a lightweight HTML parser
-- DO NOT add cheerio or jsdom as dependencies — keep it lightweight
-- The HTML structure is simple enough for regex:
-  ```typescript
-  // Extract all post blocks
-  const postPattern = /href="https:\/\/trumpstruth\.org\/statuses\/(\d+)"[^>]*class="status-info__meta-item">([^<]+)<\/a>/g;
-  const contentPattern = /<div class="status__content"><p>([\s\S]*?)<\/p><\/div>/g;
-  ```
-- Strip HTML tags from content text
-- Parse date: "March 23, 2026, 7:05 AM" → Date object (assume ET timezone)
+### 3. Remove the old HTML parsing code
+- Remove `parseHomepageHtml()` and related HTML regex patterns
+- The `parseTruthSocialPosts()` function (DOM-based) can stay for backward compatibility but shouldn't be used
 
-### 3. Remove browserPool dependency
-- The scanner should NOT import or use `browserPool`
-- Use the existing `scannerFetch` utility for HTTP requests
-- This makes the scanner much more reliable and lightweight
+### 4. Add political impact severity boost
+- When a Truth Social post mentions keywords that indicate market-moving content:
+  - Keywords: iran, china, tariff, military, sanctions, strike, war, peace, trade deal, executive order, fed, interest rate, ban, postpone, halt
+  - Boost severity to HIGH (at minimum) for these posts
+  - This ensures Trump's Iran ceasefire announcement gets classified as HIGH/CRITICAL, not MEDIUM
 
-### 4. Keep existing features
-- Keep the `POLITICAL_KEYWORDS` matching
-- Keep the `estimateSentiment`, `extractKeywords`, `extractTickers` calls
-- Keep the severity classification logic (political keywords → MEDIUM or higher)
-- Keep the `isRepost` detection if possible (check if the HTML has repost indicators)
-
-### 5. Error handling
-- If fetch fails, return err() with descriptive message
-- If HTML parsing finds 0 posts, log a warning but don't error (page might be temporarily empty)
-- Add null guards everywhere — no more "posts is not iterable" crashes
+### 5. Update tests
+- Update truth-social scanner tests to test RSS parsing
+- Add test with sample RSS XML
+- Test the political impact severity boost
 
 ## Testing
-- Update existing truth-social scanner tests
-- Add test for HTML parsing with sample HTML
 - `pnpm --filter @event-radar/backend test` — all tests must pass
 
 ## PR
-- Branch: `feat/truth-social-rewrite`
-- Title: `feat: rewrite Truth Social scanner to use trumpstruth.org (no Playwright)`
+- Branch: `feat/truth-social-rss`
+- Title: `feat: upgrade Truth Social scanner to RSS feed + political severity boost`
 - **DO NOT MERGE. Create PR and stop.**
