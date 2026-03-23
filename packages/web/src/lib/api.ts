@@ -446,6 +446,22 @@ function mapMarketData(raw: Record<string, unknown> | undefined): EventMarketDat
   };
 }
 
+function getRawExcerpt(event: Record<string, unknown>, meta: Record<string, unknown>): string | null {
+  const rawPayload = (event.rawPayload ?? event.raw_payload) as Record<string, unknown> | undefined;
+
+  return cleanHtml(
+    ((rawPayload?.rawContent as string | undefined)
+      ?? (rawPayload?.raw_content as string | undefined)
+      ?? (rawPayload?.description as string | undefined)
+      ?? (rawPayload?.body as string | undefined)
+      ?? (meta.rawContent as string | undefined)
+      ?? (meta.raw_content as string | undefined)
+      ?? (meta.description as string | undefined)
+      ?? '')
+      .trim(),
+  ) || null;
+}
+
 export async function getEventDetail(id: string): Promise<EventDetailData | null> {
   try {
     const data = await apiFetch(`/events/${id}`);
@@ -526,6 +542,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
       url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
+      rawExcerpt: getRawExcerpt(e as Record<string, unknown>, meta),
       sourceMetadata: extractSourceMetadataClient(source, meta, (e.eventType as string) ?? null),
       confirmationCount:
         typeof e.confirmationCount === 'number'
@@ -991,6 +1008,8 @@ function extractSourceMetadataClient(
       if (companyName != null) r.companyName = companyName;
       if (meta.filing_link != null) r.filingLink = meta.filing_link;
       if (meta.item_descriptions != null) r.itemDescriptions = meta.item_descriptions;
+      if (meta.accessionNumber != null) r.accessionNumber = meta.accessionNumber;
+      if (meta.accession_number != null) r.accessionNumber = meta.accession_number;
       return Object.keys(r).length ? r : undefined;
     }
     case 'trading-halt': {

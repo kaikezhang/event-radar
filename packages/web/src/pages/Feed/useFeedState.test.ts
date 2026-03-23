@@ -4,6 +4,7 @@ import {
   groupAlertsByDate,
   loadCustomPresets,
   loadFeedTab,
+  loadFeedSort,
 } from './useFeedState.js';
 
 describe('useFeedState helpers', () => {
@@ -29,6 +30,14 @@ describe('useFeedState helpers', () => {
 
     localStorage.setItem('event-radar-feed-tab', 'invalid');
     expect(loadFeedTab()).toBeNull();
+  });
+
+  it('only restores a valid saved feed sort mode', () => {
+    localStorage.setItem('er-feed-sort', 'severity');
+    expect(loadFeedSort()).toBe('severity');
+
+    localStorage.setItem('er-feed-sort', 'oldest');
+    expect(loadFeedSort()).toBeNull();
   });
 
   it('builds a positive trust cue when the source hit rate is strong', () => {

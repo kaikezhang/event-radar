@@ -89,4 +89,30 @@ describe('Feed page', () => {
       expect(screen.queryByRole('article', { name: /feed-only tsla alert/i })).not.toBeInTheDocument();
     });
   });
+
+  it('restores the saved feed sort preference on load', async () => {
+    localStorage.setItem('onboardingComplete', 'true');
+    localStorage.setItem('er-feed-sort', 'severity');
+
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toHaveValue('severity');
+    });
+  });
+
+  it('persists feed sort changes to localStorage immediately', async () => {
+    localStorage.setItem('onboardingComplete', 'true');
+    const user = userEvent.setup();
+
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toHaveValue('latest');
+    });
+
+    await user.selectOptions(screen.getByRole('combobox'), 'severity');
+
+    expect(localStorage.getItem('er-feed-sort')).toBe('severity');
+  });
 });

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { Settings } from './Settings.js';
@@ -7,6 +7,9 @@ import { renderWithRouter } from '../test/render.js';
 const {
   getPreferences,
   updatePreferences,
+  getChannelSettings,
+  saveChannelSettings,
+  testWebhook,
 } = vi.hoisted(() => ({
   getPreferences: vi.fn(async () => ({
     quietStart: null,
@@ -16,6 +19,19 @@ const {
     pushNonWatchlist: false,
   })),
   updatePreferences: vi.fn(async (payload: unknown) => payload),
+  getChannelSettings: vi.fn(async () => ({
+    discordWebhookUrl: null,
+    emailAddress: null,
+    minSeverity: 'HIGH',
+    enabled: false,
+  })),
+  saveChannelSettings: vi.fn(async (payload: Record<string, unknown>) => ({
+    discordWebhookUrl: (payload.discordWebhookUrl as string | null) ?? null,
+    emailAddress: (payload.emailAddress as string | null) ?? null,
+    minSeverity: (payload.minSeverity as string) ?? 'HIGH',
+    enabled: true,
+  })),
+  testWebhook: vi.fn(async () => undefined),
 }));
 
 vi.mock('../lib/web-push.js', () => ({
@@ -49,12 +65,18 @@ vi.mock('../lib/web-push.js', () => ({
 vi.mock('../lib/api.js', () => ({
   getNotificationPreferences: getPreferences,
   updateNotificationPreferences: updatePreferences,
+  getNotificationChannelSettings: getChannelSettings,
+  saveNotificationChannelSettings: saveChannelSettings,
+  testDiscordWebhook: testWebhook,
 }));
 
 describe('Settings page', () => {
   beforeEach(() => {
     getPreferences.mockClear();
     updatePreferences.mockClear();
+    getChannelSettings.mockClear();
+    saveChannelSettings.mockClear();
+    testWebhook.mockClear();
   });
 
   afterEach(() => {
@@ -161,5 +183,64 @@ describe('Settings page', () => {
 
     expect(screen.getByText(/^High$/)).toBeInTheDocument();
     expect(screen.getByText(/if enabled/i)).toBeInTheDocument();
+  });
+
+  it('shows saved feedback on the notification channels save button for two seconds', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSettings();
+
+    const urlInput = await screen.findByLabelText(/discord webhook url/i);
+    await user.type(urlInput, 'https://discord.com/api/webhooks/test');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => {
+      expect(saveChannelSettings).toHaveBeenCalledWith({
+        discordWebhookUrl: 'https://discord.com/api/webhooks/test',
+        emailAddress: null,
+        minSeverity: 'HIGH',
+      });
+    });
+
+    const savedButton = await screen.findByRole('button', { name: /saved ✓/i });
+    expect(savedButton.className).toMatch(/emerald|green/);
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+  });
+
+  it('shows a failure toast when saving notification channels fails', async () => {
+    saveChannelSettings.mockRejectedValueOnce(new Error('save failed'));
+
+    const user = userEvent.setup();
+    renderSettings();
+
+    const urlInput = await screen.findByLabelText(/discord webhook url/i);
+    await user.type(urlInput, 'https://discord.com/api/webhooks/test');
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(await screen.findByText(/failed to save\. please try again\./i)).toBeInTheDocument();
+  });
+
+  it('shows transient success feedback on the Discord test button', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderSettings();
+
+    const urlInput = await screen.findByLabelText(/discord webhook url/i);
+    await user.type(urlInput, 'https://discord.com/api/webhooks/test');
+    await user.click(screen.getByRole('button', { name: /^test$/i }));
+
+    expect(await screen.findByRole('button', { name: /sent ✓/i })).toBeInTheDocument();
+    expect(testWebhook).toHaveBeenCalledWith('https://discord.com/api/webhooks/test');
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+
+    expect(screen.getByRole('button', { name: /^test$/i })).toBeInTheDocument();
   });
 });

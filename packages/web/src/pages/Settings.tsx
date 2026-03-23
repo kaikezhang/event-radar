@@ -153,6 +153,8 @@ function PushDeniedRecoverySteps() {
   );
 }
 
+type ToastTone = 'success' | 'error';
+
 export function Settings() {
   const location = useLocation();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
@@ -172,15 +174,21 @@ export function Settings() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<ToastTone>('success');
   const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
   const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
   const [channelLoaded, setChannelLoaded] = useState(false);
   const [discordUrlDraft, setDiscordUrlDraft] = useState('');
   const [emailDraft, setEmailDraft] = useState('');
   const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
-  const [channelSaving, setChannelSaving] = useState(false);
-  const [discordTesting, setDiscordTesting] = useState(false);
+  const [channelSaveState, setChannelSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [discordTestState, setDiscordTestState] = useState<'idle' | 'testing' | 'sent'>('idle');
   const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
+
+  function showToast(message: string, tone: ToastTone) {
+    setToastTone(tone);
+    setToastMessage(message);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -282,6 +290,34 @@ export function Settings() {
     };
   }, [toastMessage]);
 
+  useEffect(() => {
+    if (channelSaveState !== 'saved') {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setChannelSaveState('idle');
+    }, 2_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [channelSaveState]);
+
+  useEffect(() => {
+    if (discordTestState !== 'sent') {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDiscordTestState('idle');
+    }, 2_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [discordTestState]);
+
   const notificationKey = notificationPreferences
     ? serializeNotificationPreferences(notificationPreferences)
     : null;
@@ -303,12 +339,12 @@ export function Settings() {
           setNotificationPreferences(saved);
           setNotificationError(null);
           setSaveState('saved');
-          setToastMessage('Preferences saved');
+          showToast('Preferences saved', 'success');
         })
         .catch(() => {
           setSaveState('error');
           setNotificationError('Could not save notification preferences.');
-          setToastMessage('Could not save preferences');
+          showToast('Failed to save. Please try again.', 'error');
         });
     }, 500);
 
@@ -346,31 +382,39 @@ export function Settings() {
 
   async function saveChannelSettings(): Promise<void> {
     try {
-      setChannelSaving(true);
+      setChannelSaveState('saving');
       const saved = await saveNotificationChannelSettings({
         discordWebhookUrl: discordUrlDraft.trim() || null,
         emailAddress: emailDraft.trim() || null,
         minSeverity: channelMinSeverity,
       });
       setChannelSettings(saved);
-      setToastMessage('Notification settings saved');
+      setChannelSaveState('saved');
+      showToast('Notification settings saved', 'success');
     } catch {
-      setToastMessage('Could not save notification settings');
+      setChannelSaveState('idle');
+      showToast('Failed to save. Please try again.', 'error');
     } finally {
-      setChannelSaving(false);
+      if (channelSaveState === 'saving') {
+        setChannelSaveState('idle');
+      }
     }
   }
 
   async function handleTestDiscord(): Promise<void> {
     if (!discordUrlDraft.trim()) return;
     try {
-      setDiscordTesting(true);
+      setDiscordTestState('testing');
       await testDiscordWebhook(discordUrlDraft.trim());
-      setToastMessage('Test notification sent to Discord');
+      setDiscordTestState('sent');
+      showToast('Test notification sent to Discord', 'success');
     } catch {
-      setToastMessage('Discord webhook test failed');
+      setDiscordTestState('idle');
+      showToast('Discord webhook test failed', 'error');
     } finally {
-      setDiscordTesting(false);
+      if (discordTestState === 'testing') {
+        setDiscordTestState('idle');
+      }
     }
   }
 

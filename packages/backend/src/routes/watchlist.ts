@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { watchlist, watchlistSections, tickerReference } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
@@ -18,6 +18,15 @@ export function registerWatchlistRoutes(
     request: Parameters<typeof requireApiKey>[0],
     reply: Parameters<typeof requireApiKey>[1],
   ) => requireApiKey(request, reply, options?.apiKey);
+
+  async function getNextSortOrder(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ maxSortOrder: sql<number>`COALESCE(MAX(${watchlist.sortOrder}), -1)` })
+      .from(watchlist)
+      .where(eq(watchlist.userId, userId));
+
+    return Number(row?.maxSortOrder ?? -1) + 1;
+  }
 
   /**
    * GET /api/watchlist
@@ -93,7 +102,7 @@ export function registerWatchlistRoutes(
 
     const [inserted] = await db
       .insert(watchlist)
-      .values({ userId, ticker, notes: notes ?? null })
+      .values({ userId, ticker, notes: notes ?? null, sortOrder: await getNextSortOrder(userId) })
       .returning();
 
     const response: Record<string, unknown> = { ...inserted };
@@ -257,6 +266,7 @@ export function registerWatchlistRoutes(
 
     let added = 0;
     let skipped = 0;
+    let nextSortOrder = await getNextSortOrder(userId);
 
     for (const item of tickers) {
       const upperTicker = item.ticker.toUpperCase();
@@ -276,8 +286,10 @@ export function registerWatchlistRoutes(
         ticker: upperTicker,
         notes: item.notes ?? null,
         sectionId: item.sectionId ?? null,
+        sortOrder: nextSortOrder,
       });
       added++;
+      nextSortOrder++;
     }
 
     return reply.status(201).send({ added, skipped });

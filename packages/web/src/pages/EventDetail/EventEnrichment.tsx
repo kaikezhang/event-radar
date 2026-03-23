@@ -9,10 +9,12 @@ export function EventSummaryContent({
   summary,
   enrichment,
   direction,
+  severity,
 }: {
   summary: string;
   enrichment: LlmEnrichment | null;
   direction: string;
+  severity: string;
 }) {
   const { bullPoints, bearPoints } = deriveBullBear(enrichment, direction);
 
@@ -24,7 +26,7 @@ export function EventSummaryContent({
       </section>
 
       <div className="mt-4">
-        <BullBearColumns bullPoints={bullPoints} bearPoints={bearPoints} />
+        <BullBearColumns bullPoints={bullPoints} bearPoints={bearPoints} severity={severity} />
       </div>
     </>
   );
@@ -33,24 +35,84 @@ export function EventSummaryContent({
 /** Evidence tab content: Market Context + Source Details + Risk Factors */
 export function EventEvidenceContent({
   enrichment,
+  eventUrl,
+  rawExcerpt,
   source,
   sourceMetadata,
-  summary,
 }: {
   enrichment: LlmEnrichment | null;
+  eventUrl: string | null;
+  rawExcerpt: string | null;
   source: string;
   sourceMetadata?: Record<string, unknown>;
-  summary?: string;
 }) {
   const whyNowBullets = [enrichment?.impact, enrichment?.whyNow, enrichment?.currentSetup].filter(
     (value): value is string => Boolean(value),
   );
+  const accessionNumber = typeof sourceMetadata?.accessionNumber === 'string'
+    ? sourceMetadata.accessionNumber
+    : null;
+  const edgarUrl = accessionNumber
+    ? `https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(accessionNumber)}`
+    : null;
+  const sourceTypeLabel = getSourceTypeLabel(source);
+  const hasEvidence = Boolean(eventUrl || rawExcerpt || edgarUrl);
 
   const hasSourceCard = sourceMetadata && Object.keys(sourceMetadata).length > 0;
-  const hasContent = whyNowBullets.length > 0 || hasSourceCard || enrichment?.risks || enrichment?.filingItems?.length;
+  const hasContent = whyNowBullets.length > 0 || hasSourceCard || enrichment?.risks || enrichment?.filingItems?.length || hasEvidence;
 
   return (
     <>
+      <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
+        <SectionHeading eyebrow="Original source evidence" title="Source Evidence" />
+        <div className="space-y-4 text-sm leading-6 text-text-secondary">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source type</p>
+            <p className="mt-1 text-text-primary">{sourceTypeLabel}</p>
+          </div>
+
+          {eventUrl ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source URL</p>
+              <a
+                href={eventUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center break-all text-accent-default hover:underline"
+                aria-label="Source URL"
+              >
+                {eventUrl}
+              </a>
+            </div>
+          ) : null}
+
+          {rawExcerpt ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Original filing excerpt:</p>
+              <p className="mt-1 whitespace-pre-wrap rounded-xl border border-overlay-medium bg-bg-elevated/50 px-4 py-3 text-text-primary">
+                {rawExcerpt}
+              </p>
+            </div>
+          ) : null}
+
+          {edgarUrl ? (
+            <a
+              href={edgarUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center text-accent-default hover:underline"
+              aria-label="View on EDGAR"
+            >
+              View on EDGAR
+            </a>
+          ) : null}
+
+          {!hasEvidence ? (
+            <p>Source data not available for this event. Classification was based on the original alert text.</p>
+          ) : null}
+        </div>
+      </section>
+
       {whyNowBullets.length > 0 && (
         <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <SectionHeading eyebrow="Market context" title="Why It Matters Now" />
@@ -83,13 +145,6 @@ export function EventEvidenceContent({
           <p className="font-mono text-[15px] leading-7 text-text-primary">{enrichment.filingItems.join(', ')}</p>
         </section>
       )}
-
-      {!hasContent && summary && (
-        <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-          <SectionHeading eyebrow="Event details" title="Summary" />
-          <p className="text-[15px] leading-7 text-text-secondary">{summary}</p>
-        </section>
-      )}
     </>
   );
 }
@@ -114,11 +169,14 @@ export function RegimeContextCard({
 function BullBearColumns({
   bullPoints,
   bearPoints,
+  severity,
 }: {
   bullPoints: string[];
   bearPoints: string[];
+  severity: string;
 }) {
-  if (bullPoints.length === 0 && bearPoints.length === 0) return null;
+  const shouldForceLayout = severity === 'HIGH' || severity === 'CRITICAL';
+  if (!shouldForceLayout && bullPoints.length === 0 && bearPoints.length === 0) return null;
 
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
@@ -135,7 +193,7 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm italic text-text-secondary/60">No upside thesis identified</p>
+            <p className="text-sm text-text-tertiary">Analysis not available</p>
           )}
         </div>
 
@@ -150,10 +208,31 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm italic text-text-secondary/60">No downside thesis identified</p>
+            <p className="text-sm text-text-tertiary">Analysis not available</p>
           )}
         </div>
       </div>
     </section>
   );
+}
+
+function getSourceTypeLabel(source: string): string {
+  switch (source) {
+    case 'sec-edgar':
+      return 'SEC Filing';
+    case 'breaking-news':
+    case 'businesswire':
+    case 'pr-newswire':
+    case 'reuters':
+      return 'Breaking News';
+    case 'reddit':
+    case 'stocktwits':
+    case 'truth-social':
+      return 'Social Media';
+    case 'fed':
+    case 'econ-calendar':
+      return 'Macro Data';
+    default:
+      return source;
+  }
 }

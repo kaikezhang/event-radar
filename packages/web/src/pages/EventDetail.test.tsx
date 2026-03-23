@@ -239,6 +239,50 @@ describe('EventDetail page', () => {
     expect(await screen.findByText(/direction: risk-off tape is amplifying macro headlines/i)).toBeInTheDocument();
   });
 
+  it('shows real source evidence in the Evidence tab', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: /evidence/i }));
+
+    expect(await screen.findByText(/source type/i)).toBeInTheDocument();
+    expect(screen.getByText(/sec filing/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /source url/i })).toHaveAttribute(
+      'href',
+      'https://example.com/sec/nvda-export-filing',
+    );
+    expect(screen.getByText(/original filing excerpt:/i)).toBeInTheDocument();
+    expect(screen.getByText(/nvidia disclosed that new export licensing requirements may constrain shipments to china/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /view on edgar/i })).toHaveAttribute(
+      'href',
+      expect.stringContaining('0001045810-26-000042'),
+    );
+  });
+
+  it('shows evidence fallback copy when source data is unavailable', async () => {
+    const user = userEvent.setup();
+    renderDetail('evt-high-missing-analysis');
+
+    await user.click(await screen.findByRole('button', { name: /evidence/i }));
+
+    expect(
+      await screen.findByText(
+        /source data not available for this event\. classification was based on the original alert text\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps bull and bear sections visible with placeholders when analysis is missing', async () => {
+    renderDetail('evt-high-missing-analysis');
+
+    const heading = await screen.findByRole('heading', { name: /bull case vs bear case/i });
+    const section = heading.closest('section') as HTMLElement;
+
+    expect(within(section).getByText(/▲ bull/i)).toBeInTheDocument();
+    expect(within(section).getByText(/▼ bear/i)).toBeInTheDocument();
+    expect(within(section).getAllByText(/analysis not available/i)).toHaveLength(2);
+  });
+
   it('falls back to awaiting market reaction when direction is mixed', async () => {
     renderDetail('evt-awaiting-reaction-1');
 

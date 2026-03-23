@@ -157,6 +157,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 summary={data.aiAnalysis.summary}
                 enrichment={data.enrichment}
                 direction={direction}
+                severity={data.severity}
               />
               {data.outcome && (
                 <WhatHappenedNext outcome={data.outcome} direction={direction} />
@@ -195,9 +196,10 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               <RegimeContextCard regimeContext={data.enrichment?.regimeContext} className="mt-4" />
               <EventEvidenceContent
                 enrichment={data.enrichment}
+                eventUrl={data.url}
+                rawExcerpt={data.rawExcerpt}
                 source={data.sourceKey ?? data.source}
                 sourceMetadata={data.sourceMetadata}
-                summary={data.aiAnalysis?.summary}
               />
               <EventHistory
                 historicalPattern={data.historicalPattern}

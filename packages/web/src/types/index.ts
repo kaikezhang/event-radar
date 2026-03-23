@@ -92,6 +92,7 @@ export interface EventDetailData {
   tickers: string[];
   time: string;
   url: string | null;
+  rawExcerpt: string | null;
   sourceMetadata?: Record<string, unknown>;
   confirmationCount: number;
   confirmedSources: string[];

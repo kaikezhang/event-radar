@@ -174,4 +174,35 @@ describe('FeedFilters', () => {
 
     expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
   });
+
+  it('filters dummy out of the source filter options', () => {
+    render(
+      <FeedFilters
+        activeSeverities={[]}
+        activeSources={[]}
+        addFilterRef={createRef<HTMLDivElement>()}
+        allPresets={presets}
+        builtinPresetNames={['Full Firehose', 'High Conviction']}
+        hasActiveFilters={false}
+        pushOnly={false}
+        onApplyPreset={vi.fn()}
+        onClearFilters={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onPresetNameChange={vi.fn()}
+        onSavePreset={vi.fn()}
+        onToggleSeverity={vi.fn()}
+        onToggleSource={vi.fn()}
+        onTogglePushOnly={vi.fn()}
+        onToggleAddFilterDropdown={vi.fn()}
+        presetName=""
+        severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
+        showAddFilterDropdown
+        showFilters={false}
+        sources={['dummy', 'sec-edgar', 'fed']}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /^dummy$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sec-edgar$/i })).toBeInTheDocument();
+  });
 });

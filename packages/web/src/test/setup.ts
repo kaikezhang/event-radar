@@ -177,6 +177,36 @@ const AWAITING_REACTION_EVENT = {
   },
 };
 
+const MISSING_ANALYSIS_EVENT = {
+  ...FEED_EVENT,
+  id: 'evt-high-missing-analysis',
+  severity: 'HIGH',
+  title: 'Brief filing update arrives without usable analysis context',
+  summary: 'The filing is real, but the model did not produce enough structured reasoning.',
+  metadata: {
+    ...FEED_EVENT.metadata,
+    ticker: 'AMD',
+    tickers: ['AMD'],
+    direction: 'neutral',
+    url: undefined,
+    accessionNumber: undefined,
+    llm_enrichment: {
+      summary: 'The filing is real, but the model did not produce enough structured reasoning.',
+      impact: null,
+      whyNow: null,
+      currentSetup: null,
+      historicalContext: null,
+      risks: null,
+      action: null,
+      tickers: [
+        { symbol: 'AMD', direction: 'neutral', context: '' },
+      ],
+      regimeContext: null,
+    },
+    historical_context: undefined,
+  },
+};
+
 const PRICE_CANDLES = [
   {
     time: '2026-03-10',
@@ -390,6 +420,10 @@ beforeEach(() => {
       return jsonResponse({
         data: {
           ...FEED_EVENT,
+          rawPayload: {
+            rawContent: 'NVIDIA disclosed that new export licensing requirements may constrain shipments to China and pressure demand visibility.',
+            description: 'NVIDIA disclosed that new export licensing requirements may constrain shipments to China and pressure demand visibility.',
+          },
           marketData: {
             price: 178.42,
             change1d: 2.3,
@@ -398,6 +432,10 @@ beforeEach(() => {
             volumeRatio: 1.8,
           },
           sourceUrls: ['https://example.com/sec/nvda-export-filing'],
+          metadata: {
+            ...FEED_EVENT.metadata,
+            accessionNumber: '0001045810-26-000042',
+          },
           audit: {
             outcome: 'delivered',
             stoppedAt: 'delivery',
@@ -489,6 +527,25 @@ beforeEach(() => {
       });
     }
 
+    if (url.pathname === '/api/events/evt-high-missing-analysis') {
+      return jsonResponse({
+        data: {
+          ...MISSING_ANALYSIS_EVENT,
+          rawPayload: {},
+          sourceUrls: [],
+          provenance: [
+            {
+              id: 'evt-high-missing-analysis',
+              source: 'sec-edgar',
+              title: 'Brief filing update arrives without usable analysis context',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              url: null,
+            },
+          ],
+        },
+      });
+    }
+
     if (url.pathname === '/api/events/evt-critical-nvda-1/similar') {
       return jsonResponse({
         data: [
@@ -524,6 +581,10 @@ beforeEach(() => {
     }
 
     if (url.pathname === '/api/events/evt-awaiting-reaction-1/similar') {
+      return jsonResponse({ data: [] });
+    }
+
+    if (url.pathname === '/api/events/evt-high-missing-analysis/similar') {
       return jsonResponse({ data: [] });
     }
 

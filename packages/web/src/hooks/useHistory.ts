@@ -6,6 +6,8 @@ import type { AlertSummary } from '../types/index.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 const PAGE_SIZE = 50;
+const HISTORY_SEVERITY_KEY = 'er-history-severity';
+const DEFAULT_SEVERITY_FILTER = 'HIGH,CRITICAL';
 
 function defaultFrom(): string {
   const d = new Date();
@@ -46,24 +48,44 @@ export interface HistoryState {
   };
 }
 
-const INITIAL_FILTERS: HistoryFilters = {
-  from: defaultFrom(),
-  to: defaultTo(),
-  severity: 'HIGH,CRITICAL',
-  source: '',
-  ticker: '',
-};
+function loadHistorySeverityPreference(): string | null {
+  try {
+    return localStorage.getItem(HISTORY_SEVERITY_KEY);
+  } catch {
+    return null;
+  }
+}
 
-const CLEARED_FILTERS: HistoryFilters = {
-  from: defaultFrom(),
-  to: defaultTo(),
-  severity: '',
-  source: '',
-  ticker: '',
-};
+function saveHistorySeverityPreference(value: string): void {
+  try {
+    localStorage.setItem(HISTORY_SEVERITY_KEY, value);
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function createInitialFilters(): HistoryFilters {
+  return {
+    from: defaultFrom(),
+    to: defaultTo(),
+    severity: loadHistorySeverityPreference() ?? DEFAULT_SEVERITY_FILTER,
+    source: '',
+    ticker: '',
+  };
+}
+
+function createClearedFilters(): HistoryFilters {
+  return {
+    from: defaultFrom(),
+    to: defaultTo(),
+    severity: '',
+    source: '',
+    ticker: '',
+  };
+}
 
 export function useHistory(): HistoryState {
-  const [filters, setFilters] = useState<HistoryFilters>(INITIAL_FILTERS);
+  const [filters, setFilters] = useState<HistoryFilters>(createInitialFilters);
   const [offset, setOffset] = useState(0);
   const [accumulated, setAccumulated] = useState<AlertSummary[]>([]);
 
@@ -101,24 +123,31 @@ export function useHistory(): HistoryState {
   const hasMore = alerts.length < total;
 
   const setFilter = useCallback(<K extends keyof HistoryFilters>(key: K, value: HistoryFilters[K]) => {
+    if (key === 'severity') {
+      saveHistorySeverityPreference(value);
+    }
     setFilters((prev) => ({ ...prev, [key]: value }));
     setOffset(0);
     setAccumulated([]);
   }, []);
 
   const resetFilters = useCallback(() => {
-    setFilters(INITIAL_FILTERS);
+    const nextFilters = createInitialFilters();
+    saveHistorySeverityPreference(nextFilters.severity);
+    setFilters(nextFilters);
     setOffset(0);
     setAccumulated([]);
   }, []);
 
   const clearFilters = useCallback(() => {
-    setFilters(CLEARED_FILTERS);
+    const nextFilters = createClearedFilters();
+    saveHistorySeverityPreference(nextFilters.severity);
+    setFilters(nextFilters);
     setOffset(0);
     setAccumulated([]);
   }, []);
 
-  const isDefaultSeverity = filters.severity === INITIAL_FILTERS.severity;
+  const isDefaultSeverity = filters.severity === DEFAULT_SEVERITY_FILTER;
 
   const loadMore = useCallback(() => {
     setAccumulated(alerts);
