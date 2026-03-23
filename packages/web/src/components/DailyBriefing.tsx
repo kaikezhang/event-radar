@@ -15,9 +15,18 @@ const SOURCE_LABELS: Record<string, string> = {
   'trading-halt': 'Trading halts',
 };
 
-function formatCriticalSummary(criticalCount: number): string {
-  const noun = criticalCount === 1 ? 'event' : 'events';
-  return `Daily Briefing · ${criticalCount} critical ${noun}`;
+function formatCriticalSummary(bySeverity: { CRITICAL: number; HIGH: number; MEDIUM: number; LOW: number }): string {
+  if (bySeverity.CRITICAL > 0) {
+    const noun = bySeverity.CRITICAL === 1 ? 'event' : 'events';
+    return `Daily Briefing · ${bySeverity.CRITICAL} critical ${noun}`;
+  }
+  if (bySeverity.HIGH > 0) {
+    const noun = bySeverity.HIGH === 1 ? 'event' : 'events';
+    return `Daily Briefing · ${bySeverity.HIGH} high ${noun}`;
+  }
+  const total = bySeverity.CRITICAL + bySeverity.HIGH + bySeverity.MEDIUM + bySeverity.LOW;
+  const noun = total === 1 ? 'event' : 'events';
+  return `Daily Briefing · ${total} ${noun}`;
 }
 
 function formatSeveritySummary(bySeverity: {
@@ -71,7 +80,7 @@ export function DailyBriefing() {
             Morning briefing
           </p>
           <h2 className="mt-1 text-sm font-semibold text-text-primary">
-            {formatCriticalSummary(data.bySeverity.CRITICAL)}
+            {formatCriticalSummary(data.bySeverity)}
           </h2>
         </div>
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-900/10 bg-white/45 text-amber-950/70">

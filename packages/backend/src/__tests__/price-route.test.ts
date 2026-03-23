@@ -338,12 +338,12 @@ describe('GET /api/price/batch', () => {
     expect(response.json()).toEqual({
       NVDA: {
         price: 178.5,
-        change: 2.3,
+        change: 178.5 * 2.3 / 100,
         changePercent: 2.3,
       },
       TSLA: {
         price: 212.75,
-        change: -3.4,
+        change: 212.75 * -3.4 / 100,
         changePercent: -3.4,
       },
     });
@@ -385,7 +385,7 @@ describe('GET /api/price/batch', () => {
     expect(response.json()).toEqual({
       NVDA: {
         price: 178.5,
-        change: 2.3,
+        change: 178.5 * 2.3 / 100,
         changePercent: 2.3,
       },
     });
@@ -430,7 +430,7 @@ describe('GET /api/price/batch', () => {
     expect(response.json()).toEqual({
       TSLA: {
         price: 212.75,
-        change: -3.4,
+        change: 212.75 * -3.4 / 100,
         changePercent: -3.4,
       },
     });

@@ -276,7 +276,7 @@ export function registerPriceRoutes(
 
       payload[item.ticker] = {
         price: item.quote.price,
-        change: item.quote.change1d,
+        change: item.quote.price * item.quote.change1d / 100,
         changePercent: item.quote.change1d,
       };
     }
