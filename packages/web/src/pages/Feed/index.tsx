@@ -5,7 +5,7 @@ import { Toast } from '../../components/Toast.js';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { useWatchlist } from '../../hooks/useWatchlist.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
-import { getEventSources, getScorecardSummary } from '../../lib/api.js';
+import { getEventSources } from '../../lib/api.js';
 import { EventDetail } from '../EventDetail.js';
 import { FeedList } from './FeedList.js';
 import { useFeedState } from './useFeedState.js';
@@ -25,12 +25,6 @@ export function Feed() {
     queryFn: getEventSources,
     staleTime: 60_000,
   });
-  const { data: scorecardSummary = null } = useQuery({
-    queryKey: ['scorecard-summary'],
-    queryFn: () => getScorecardSummary(),
-    staleTime: 300_000,
-  });
-
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const {
     items: watchlistItems,
@@ -53,13 +47,13 @@ export function Feed() {
   });
 
   const feedList = (
-      <FeedList
-        activeFilterCount={state.activeFilterCount}
-        highSignalCount={state.highSignalCount}
-        hiddenLowCount={state.hiddenLowCount}
-        lowSignalCount={state.lowSignalCount}
-        mediumSignalCount={state.mediumSignalCount}
-        activeSeverities={state.activeSeverities}
+    <FeedList
+      activeFilterCount={state.activeFilterCount}
+      highSignalCount={state.highSignalCount}
+      hiddenLowCount={state.hiddenLowCount}
+      lowSignalCount={state.lowSignalCount}
+      mediumSignalCount={state.mediumSignalCount}
+      activeSeverities={state.activeSeverities}
       activeSources={state.activeSources}
       activeTab={state.activeTab}
       addFilterRef={state.addFilterRef}
@@ -95,7 +89,6 @@ export function Feed() {
       revealLowSeverity={state.revealLowSeverity}
       savePreset={state.savePreset}
       scopedAlertCount={state.scopedAlertCount}
-      scorecardSummary={scorecardSummary}
       selectedEventId={state.selectedEventId}
       sentinelRef={state.sentinelRef}
       showAddFilterDropdown={state.showAddFilterDropdown}

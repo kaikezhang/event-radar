@@ -6,7 +6,7 @@ import { PillBanner } from '../../components/PillBanner.js';
 import { useTickerBatchPrices } from '../../hooks/useTickerBatchPrices.js';
 import { cn } from '../../lib/utils.js';
 import { DailyBriefing } from '../../components/DailyBriefing.js';
-import type { AlertSummary, FilterPreset, ScorecardSummary } from '../../types/index.js';
+import type { AlertSummary, FilterPreset } from '../../types/index.js';
 import { FeedCard } from './FeedCard.js';
 import { FeedFilters } from './FeedFilters.js';
 import { FeedHeader } from './FeedHeader.js';
@@ -62,7 +62,6 @@ interface FeedListProps {
   revealLowSeverity: () => void;
   savePreset: () => void;
   scopedAlertCount: number;
-  scorecardSummary: ScorecardSummary | null;
   selectedEventId: string | null;
   sentinelRef: RefObject<HTMLDivElement | null>;
   showAddFilterDropdown: boolean;
@@ -128,7 +127,6 @@ export function FeedList({
   revealLowSeverity,
   savePreset,
   scopedAlertCount,
-  scorecardSummary,
   selectedEventId,
   sentinelRef,
   showAddFilterDropdown,
@@ -375,7 +373,6 @@ export function FeedList({
                         onQuickWatchlist={handleQuickWatchlist}
                         onToggleWatchlist={onToggleWatchlist}
                         priceQuote={alert.tickers[0] ? priceQuotes[alert.tickers[0].toUpperCase()] : undefined}
-                        scorecardSummary={scorecardSummary}
                       />
                     ))}
                   </div>

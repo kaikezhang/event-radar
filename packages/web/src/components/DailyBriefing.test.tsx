@@ -72,12 +72,14 @@ describe('DailyBriefing', () => {
 
     const toggle = await screen.findByRole('button', { name: /daily briefing/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText(/daily briefing · 1 critical event/i)).toBeInTheDocument();
+    expect(screen.getByText(/daily briefing · 1 critical event today/i)).toBeInTheDocument();
 
     await user.click(toggle);
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByText(/1 critical, 2 high, 1 medium in the last 24h/i)).toBeInTheDocument();
+    expect(await screen.findByText(/severity breakdown/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 critical, 2 high, 1 medium in the last 24h/i)).toBeInTheDocument();
+    expect(screen.getByText(/source breakdown/i)).toBeInTheDocument();
     expect(screen.getByText(/events affecting your watchlist: 2/i)).toBeInTheDocument();
     expect(screen.getByText(/sec filings: 2, breaking news: 1, trading halts: 1/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /view all/i })).toHaveAttribute('href', '/history');

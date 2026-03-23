@@ -18,15 +18,15 @@ const SOURCE_LABELS: Record<string, string> = {
 function formatCriticalSummary(bySeverity: { CRITICAL: number; HIGH: number; MEDIUM: number; LOW: number }): string {
   if (bySeverity.CRITICAL > 0) {
     const noun = bySeverity.CRITICAL === 1 ? 'event' : 'events';
-    return `Daily Briefing · ${bySeverity.CRITICAL} critical ${noun}`;
+    return `Daily Briefing · ${bySeverity.CRITICAL} critical ${noun} today`;
   }
   if (bySeverity.HIGH > 0) {
     const noun = bySeverity.HIGH === 1 ? 'event' : 'events';
-    return `Daily Briefing · ${bySeverity.HIGH} high ${noun}`;
+    return `Daily Briefing · ${bySeverity.HIGH} high ${noun} today`;
   }
   const total = bySeverity.CRITICAL + bySeverity.HIGH + bySeverity.MEDIUM + bySeverity.LOW;
   const noun = total === 1 ? 'event' : 'events';
-  return `Daily Briefing · ${total} ${noun}`;
+  return `Daily Briefing · ${total} ${noun} today`;
 }
 
 function formatSeveritySummary(bySeverity: {
@@ -57,6 +57,7 @@ function formatSourceBreakdown(bySource: Record<string, number>): string {
 export function DailyBriefing() {
   const [dismissed, setDismissed] = useState(isDailyBriefingDismissedToday);
   const [expanded, setExpanded] = useState(false);
+  const panelId = 'daily-briefing-panel';
   const { data } = useQuery({
     queryKey: ['daily-briefing'],
     queryFn: getDailyBriefing,
@@ -74,6 +75,7 @@ export function DailyBriefing() {
         onClick={() => setExpanded((current) => !current)}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
         aria-expanded={expanded}
+        aria-controls={panelId}
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-900/70">
@@ -89,7 +91,7 @@ export function DailyBriefing() {
       </button>
 
       {expanded && (
-        <div className="border-t border-amber-900/10 bg-white/35 px-5 py-4">
+        <div id={panelId} className="border-t border-amber-900/10 bg-white/35 px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-amber-950/60">
               {data.date}
@@ -103,17 +105,22 @@ export function DailyBriefing() {
           </div>
 
           <div className="mt-3 space-y-3 text-sm text-amber-950/80">
-            <p className="font-medium text-text-primary">
-              {formatSeveritySummary(data.bySeverity)}
-            </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-950/60">
+                Severity breakdown
+              </p>
+              <p className="mt-2 font-medium text-text-primary">
+                {formatSeveritySummary(data.bySeverity)}
+              </p>
+            </div>
 
             {data.topEvents.length > 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-950/60">
-                  Top events
+                  Top 3 events
                 </p>
                 <ul className="mt-2 space-y-1.5">
-                  {data.topEvents.map((event) => (
+                  {data.topEvents.slice(0, 3).map((event) => (
                     <li key={`${event.title}-${event.ticker ?? 'none'}`} className="text-sm">
                       <span className="font-semibold text-text-primary">{event.title}</span>
                       {event.ticker ? ` · ${event.ticker}` : ''}
@@ -125,7 +132,12 @@ export function DailyBriefing() {
             )}
 
             {Object.keys(data.bySource).length > 0 && (
-              <p>{formatSourceBreakdown(data.bySource)}</p>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-950/60">
+                  Source breakdown
+                </p>
+                <p className="mt-2">{formatSourceBreakdown(data.bySource)}</p>
+              </div>
             )}
 
             {data.watchlistEvents > 0 && (

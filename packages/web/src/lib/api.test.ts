@@ -189,6 +189,43 @@ describe('getFeed push delivery mapping', () => {
 });
 
 describe('getEventDetail historical pattern mapping', () => {
+  it('maps body/description text and metadata sourceUrl into detail evidence fields', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events/evt-evidence-1') {
+        return jsonResponse({
+          data: {
+            id: 'evt-evidence-1',
+            severity: 'HIGH',
+            source: 'truth-social',
+            title: 'Original social post title',
+            summary: 'Mapped evidence fields.',
+            body: 'Original source body from the event payload.',
+            metadata: {
+              ticker: 'DJT',
+              tickers: ['DJT'],
+              sourceUrl: 'https://truthsocial.com/@user/posts/123',
+            },
+          },
+        });
+      }
+
+      if (url.pathname === '/api/events/evt-evidence-1/similar') {
+        return jsonResponse({ data: [] });
+      }
+
+      throw new Error(`Unexpected URL: ${url.pathname}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detail = await getEventDetail('evt-evidence-1');
+
+    expect(detail?.rawExcerpt).toBe('Original source body from the event payload.');
+    expect(detail?.url).toBe('https://truthsocial.com/@user/posts/123');
+  });
+
   it('maps delivery-style historical_context data into web detail fields', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
