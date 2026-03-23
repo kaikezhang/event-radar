@@ -22,24 +22,24 @@ export interface NewswireFeedConfig {
 
 const DEFAULT_FEEDS: NewswireFeedConfig[] = [
   {
-    name: 'PR Newswire Financial',
-    url:
-      process.env.PRNEWSWIRE_RSS_URL ??
-      'https://www.prnewswire.com/rss/financial-services-news.xml',
-    source: 'pr-newswire',
-  },
-  {
-    name: 'BusinessWire',
-    url:
-      process.env.BUSINESSWIRE_RSS_URL ??
-      'https://www.businesswire.com/feed/home/20200101005000/en',
-    source: 'businesswire',
-  },
-  {
-    name: 'GlobeNewswire',
+    name: 'GlobeNewswire Earnings',
     url:
       process.env.GLOBENEWSWIRE_RSS_URL ??
       'https://www.globenewswire.com/RssFeed/subjectcode/25-Earnings%20Releases%20and%20Operating%20Results/feedTitle/GlobeNewswire%20-%20Earnings%20Releases%20and%20Operating%20Results',
+    source: 'globenewswire',
+  },
+  {
+    name: 'GlobeNewswire M&A',
+    url:
+      process.env.GLOBENEWSWIRE_MA_RSS_URL ??
+      'https://www.globenewswire.com/RssFeed/subjectcode/14-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions',
+    source: 'globenewswire',
+  },
+  {
+    name: 'GlobeNewswire Announcements',
+    url:
+      process.env.GLOBENEWSWIRE_ANN_RSS_URL ??
+      'https://www.globenewswire.com/RssFeed/subjectcode/18-Company%20Announcement/feedTitle/GlobeNewswire',
     source: 'globenewswire',
   },
 ];

@@ -18,22 +18,6 @@ RUN pnpm --filter @event-radar/backend build
 
 FROM base AS runner
 WORKDIR /app
-
-# Chromium + deps for Playwright/Crawlee (truth-social scanner etc.)
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    font-noto-cjk \
-  && rm -rf /var/cache/apk/*
-
-# Tell Playwright to use the system Chromium instead of downloading its own
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/packages/shared/package.json packages/shared/package.json
 COPY --from=build /app/packages/shared/dist/ packages/shared/dist/

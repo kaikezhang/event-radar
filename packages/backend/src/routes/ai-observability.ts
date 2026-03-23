@@ -659,6 +659,22 @@ export function registerAiObservabilityRoutes(
       const silentMs = now.getTime() - new Date(s.lastSeenAt).getTime();
       const silentHours = silentMs / 3_600_000;
 
+      // DB-only sources (not in runtime registry) → always info severity
+      // These appear because historical events exist in DB but the scanner
+      // is disabled or was removed. Don't raise critical/warning for them.
+      if (s.runtimeStatus === 'unknown') {
+        if (silentHours > 6) {
+          anomalies.push({
+            type: 'scanner_silent',
+            severity: 'info',
+            scanner: s.name,
+            detail: `Scanner ${s.name} silent for ${Math.round(silentHours)}h (not in runtime — DB-only source)`,
+            detectedAt: now.toISOString(),
+          });
+        }
+        continue;
+      }
+
       // Outside schedule → downgrade to info
       if (!s.withinSchedule) {
         if (silentHours > 6) {
