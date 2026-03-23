@@ -1,69 +1,61 @@
-# TASK.md — Upgrade Truth Social Scanner to RSS Feed
+# TASK.md — Political Severity: LLM-based instead of keyword-based
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-Upgrade the Truth Social scanner from HTML scraping to RSS feed parsing.
-RSS feed URL: `https://trumpstruth.org/feed` — standard RSS 2.0 format.
+The current political severity boost uses keyword matching (e.g., "iran" → AUTO HIGH).
+This is too blunt — Trump mentions Iran in a sarcastic rant and it gets HIGH.
+Fix: let the LLM classify political posts with market-aware context.
 
-## RSS Feed Structure
-```xml
-<item>
-  <title><![CDATA[POST TEXT]]></title>
-  <link>https://trumpstruth.org/statuses/37409</link>
-  <description><![CDATA[<p>POST TEXT WITH HTML</p>]]></description>
-  <guid>https://trumpstruth.org/statuses/37409</guid>
-  <pubDate>Mon, 23 Mar 2026 11:23:40 +0000</pubDate>
-  <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116278232362967212</truth:originalUrl>
-  <truth:originalId>116278232362967212</truth:originalId>
-</item>
-```
+## 1. Change political rules from severity-setting to tagging-only
+- File: `packages/backend/src/pipeline/political-rules.ts`
+- Current: `{ type: 'setSeverity', value: 'HIGH' }` for keyword matches
+- Change to: 
+  - Remove `setSeverity` actions from ALL political keyword rules
+  - Keep only `addTags` actions (e.g., `['trump', 'political-market-impact', 'iran']`)
+  - Add a new action type or tag: `force-llm-classification` to ensure LLM always classifies these
+  - The rule engine should TAG the event, NOT classify it
 
-## Implementation
+## 2. Force LLM classification for political posts
+- File: `packages/backend/src/event-pipeline.ts` or wherever LLM classification is triggered
+- When an event has tag `political-market-impact`:
+  - ALWAYS run LLM classification, even if rule engine confidence is high
+  - Do NOT skip LLM for these events (overrides the DQ-3 optimization)
 
-### 1. Rewrite poll() method to use RSS
-- File: `packages/backend/src/scanners/truth-social-scanner.ts`
-- Fetch `https://trumpstruth.org/feed` with scannerFetch
-- Parse the XML response — use a simple regex or built-in DOMParser approach:
-  - Extract `<item>` blocks
-  - For each item: get `<title>`, `<link>`, `<pubDate>`, `<guid>`, `<truth:originalUrl>`, `<truth:originalId>`
-- The `<title>` contains clean text (no HTML tags) — use this for the post text
-- Parse `<pubDate>` (RFC 2822 format: "Mon, 23 Mar 2026 11:23:40 +0000") to Date
-- Use `<guid>` or the status number from `<link>` as the post ID for dedup
-- Use `<truth:originalUrl>` as the event URL (links to actual Truth Social post)
-
-### 2. Keep it simple — no XML parser library needed
-- The RSS structure is very regular and can be parsed with regex:
-  ```typescript
-  const items = xml.match(/<item>([\s\S]*?)<\/item>/g) ?? [];
-  for (const item of items) {
-    const title = item.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ?? '';
-    const link = item.match(/<link>(.*?)<\/link>/)?.[1] ?? '';
-    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? '';
-    const originalUrl = item.match(/<truth:originalUrl>(.*?)<\/truth:originalUrl>/)?.[1] ?? '';
-    const originalId = item.match(/<truth:originalId>(.*?)<\/truth:originalId>/)?.[1] ?? '';
-  }
+## 3. Add political context to LLM classification prompt
+- File: `packages/backend/src/pipeline/classification-prompt.ts`
+- When source is `truth-social` or `x`, add special instructions to the prompt:
+  ```
+  POLITICAL POST CLASSIFICATION:
+  This is a post from a political figure. Classify based on ACTUAL MARKET IMPACT:
+  
+  CRITICAL: Announces specific policy action (military strikes, trade deal, sanctions, executive order, tariff changes) that directly affects markets or specific sectors. Must be a concrete ACTION, not an opinion.
+  Example: "I have instructed the Department of War to postpone military strikes" = CRITICAL
+  
+  HIGH: Announces intent or threat of policy action that could affect markets. Concrete but not yet enacted.
+  Example: "We are looking very seriously at tariffs on China" = HIGH
+  
+  MEDIUM: Comments on economic/market topics without announcing specific action.
+  Example: "The Fed should lower rates" = MEDIUM
+  
+  LOW: Political commentary, insults, campaign rhetoric, slogans with no specific market impact.
+  Example: "PEACE THROUGH STRENGTH!!!" = LOW
+  Example: "The Democrats are destroying this country" = LOW
   ```
 
-### 3. Remove the old HTML parsing code
-- Remove `parseHomepageHtml()` and related HTML regex patterns
-- The `parseTruthSocialPosts()` function (DOM-based) can stay for backward compatibility but shouldn't be used
-
-### 4. Add political impact severity boost
-- When a Truth Social post mentions keywords that indicate market-moving content:
-  - Keywords: iran, china, tariff, military, sanctions, strike, war, peace, trade deal, executive order, fed, interest rate, ban, postpone, halt
-  - Boost severity to HIGH (at minimum) for these posts
-  - This ensures Trump's Iran ceasefire announcement gets classified as HIGH/CRITICAL, not MEDIUM
-
-### 5. Update tests
-- Update truth-social scanner tests to test RSS parsing
-- Add test with sample RSS XML
-- Test the political impact severity boost
+## 4. Keep tariff as CRITICAL in rules (exception)
+- Tariff mentions from Trump are almost always market-moving
+- Keep the `trump-tariff` and `trump-trade` rules with CRITICAL severity
+- But ALSO force LLM classification to validate
 
 ## Testing
 - `pnpm --filter @event-radar/backend test` — all tests must pass
+- Add tests: 
+  - "POSTPONE MILITARY STRIKES" → CRITICAL (via LLM)
+  - "PEACE THROUGH STRENGTH" → LOW (via LLM)
+  - "tariffs on China" → CRITICAL (via rule + LLM validation)
 
 ## PR
-- Branch: `feat/truth-social-rss`
-- Title: `feat: upgrade Truth Social scanner to RSS feed + political severity boost`
+- Branch: `feat/political-llm-classification`
+- Title: `feat: political severity via LLM classification, not keyword matching`
 - **DO NOT MERGE. Create PR and stop.**
