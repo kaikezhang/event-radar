@@ -175,7 +175,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                       rel="noreferrer"
                       className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                     >
-                      <ExternalLink className="h-4 w-4" /> View original
+                      <ExternalLink className="h-4 w-4" /> View original source
                     </a>
                   )}
                   <button
@@ -234,7 +234,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                   rel="noreferrer"
                   className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                 >
-                  <ExternalLink className="h-4 w-4" /> View original
+                  <ExternalLink className="h-4 w-4" /> View original source
                 </a>
               )}
               <button

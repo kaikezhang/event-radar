@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { History } from './History.js';
 import { renderWithRouter } from '../test/render.js';
 
-const useHistoryMock = vi.fn();
+const { useHistoryMock } = vi.hoisted(() => ({
+  useHistoryMock: vi.fn(),
+}));
 
 vi.mock('../hooks/useHistory.js', () => ({
   useHistory: useHistoryMock,

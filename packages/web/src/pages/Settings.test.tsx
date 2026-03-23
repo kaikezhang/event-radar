@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { Settings } from './Settings.js';
@@ -170,9 +170,12 @@ describe('Settings page', () => {
 
     await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
 
-    expect(screen.getByText(/critical/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/push notification \+ feed/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/feed only/i).length).toBeGreaterThan(0);
+    const notificationTiming = screen.getByRole('heading', { name: /notification timing/i });
+    const section = notificationTiming.closest('section') as HTMLElement;
+
+    expect(within(section).getByText(/^Critical$/)).toBeInTheDocument();
+    expect(within(section).getAllByText(/push notification \+ feed/i).length).toBeGreaterThan(0);
+    expect(within(section).getAllByText(/feed only/i).length).toBeGreaterThan(0);
   });
 
   it('marks the high tier delivery row as conditional', async () => {
@@ -181,13 +184,15 @@ describe('Settings page', () => {
 
     await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
 
-    expect(screen.getByText(/^High$/)).toBeInTheDocument();
-    expect(screen.getByText(/if enabled/i)).toBeInTheDocument();
+    const notificationTiming = screen.getByRole('heading', { name: /notification timing/i });
+    const section = notificationTiming.closest('section') as HTMLElement;
+
+    expect(within(section).getByText(/^High$/)).toBeInTheDocument();
+    expect(within(section).getByText(/if enabled/i)).toBeInTheDocument();
   });
 
   it('shows saved feedback on the notification channels save button for two seconds', async () => {
-    vi.useFakeTimers();
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
     renderSettings();
 
     const urlInput = await screen.findByLabelText(/discord webhook url/i);
@@ -205,11 +210,9 @@ describe('Settings page', () => {
     const savedButton = await screen.findByRole('button', { name: /saved ✓/i });
     expect(savedButton.className).toMatch(/emerald|green/);
 
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
-
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+    }, { timeout: 2_500 });
   });
 
   it('shows a failure toast when saving notification channels fails', async () => {
@@ -226,8 +229,7 @@ describe('Settings page', () => {
   });
 
   it('shows transient success feedback on the Discord test button', async () => {
-    vi.useFakeTimers();
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
     renderSettings();
 
     const urlInput = await screen.findByLabelText(/discord webhook url/i);
@@ -237,10 +239,8 @@ describe('Settings page', () => {
     expect(await screen.findByRole('button', { name: /sent ✓/i })).toBeInTheDocument();
     expect(testWebhook).toHaveBeenCalledWith('https://discord.com/api/webhooks/test');
 
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
-
-    expect(screen.getByRole('button', { name: /^test$/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^test$/i })).toBeInTheDocument();
+    }, { timeout: 2_500 });
   });
 });

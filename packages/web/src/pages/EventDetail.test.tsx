@@ -11,6 +11,16 @@ describe('EventDetail page', () => {
     );
   }
 
+  async function openEvidenceTab() {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /evidence/i }));
+  }
+
+  async function openTrustTab() {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /trust/i }));
+  }
+
   // ── Zone 1: Verdict ──────────────────────────────────────────────────────
 
   it('renders the alert title and severity in the hero section', async () => {
@@ -39,6 +49,7 @@ describe('EventDetail page', () => {
 
   it('displays Why It Matters Now with bullet points from enrichment', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     const heading = await screen.findByRole('heading', { name: /why it matters now/i });
     const section = heading.closest('section') as HTMLElement;
@@ -61,6 +72,7 @@ describe('EventDetail page', () => {
 
   it('displays key risks with warning style', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     const heading = await screen.findByRole('heading', { name: /key risks/i });
     const section = heading.closest('section') as HTMLElement;
@@ -69,6 +81,7 @@ describe('EventDetail page', () => {
 
   it('displays filing items for SEC events', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     await waitFor(() => {
       expect(screen.getByText(/filing items/i)).toBeInTheDocument();
@@ -80,6 +93,7 @@ describe('EventDetail page', () => {
 
   it('renders stock context with price and change data', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     // Stock context renders in both mobile and sidebar; check at least one exists
     await waitFor(() => {
@@ -91,6 +105,7 @@ describe('EventDetail page', () => {
 
   it('displays regime context', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     await waitFor(() => {
       expect(screen.getAllByText(/regime context/i).length).toBeGreaterThan(0);
@@ -100,6 +115,7 @@ describe('EventDetail page', () => {
 
   it('renders historical pattern with plain-language stats', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     await waitFor(() => {
       expect(screen.getByText(/historical similar events/i)).toBeInTheDocument();
@@ -117,6 +133,7 @@ describe('EventDetail page', () => {
 
   it('renders confidence bar for historical pattern', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     // n=251 → High confidence
     await waitFor(() => {
@@ -126,6 +143,7 @@ describe('EventDetail page', () => {
 
   it('renders best and worst cases from historical context', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     await waitFor(() => {
       expect(screen.getByText(/smci/i)).toBeInTheDocument();
@@ -137,6 +155,7 @@ describe('EventDetail page', () => {
 
   it('renders similar events within historical section', async () => {
     renderDetail();
+    await openEvidenceTab();
 
     expect(await screen.findByText(/prior nvda export disclosure/i)).toBeInTheDocument();
     expect(screen.getByText(/semiconductor filing highlights china demand risk/i)).toBeInTheDocument();
@@ -144,8 +163,9 @@ describe('EventDetail page', () => {
 
   it('hides historical pattern when no historical context exists', async () => {
     renderDetail('evt-low-sample-pattern');
+    await openEvidenceTab();
 
-    await screen.findByRole('heading', { name: /what happened/i });
+    await screen.findByRole('heading', { name: /source evidence/i });
 
     expect(screen.queryByText(/historical similar events/i)).not.toBeInTheDocument();
   });
@@ -154,6 +174,7 @@ describe('EventDetail page', () => {
 
   it('renders the provenance timeline with pipeline steps', async () => {
     renderDetail();
+    await openTrustTab();
 
     await waitFor(() => {
       expect(screen.getByText(/source journey/i)).toBeInTheDocument();
@@ -168,6 +189,7 @@ describe('EventDetail page', () => {
 
   it('renders the trust block when scorecard data is available', async () => {
     renderDetail();
+    await openTrustTab();
 
     await waitFor(() => {
       expect(screen.getAllByText(/verification/i).length).toBeGreaterThan(0);
@@ -182,6 +204,7 @@ describe('EventDetail page', () => {
 
   it('renders confirmation badges when multiple sources confirmed', async () => {
     renderDetail();
+    await openTrustTab();
 
     await waitFor(() => {
       expect(screen.getAllByText(/confirmed/i).length).toBeGreaterThan(0);
@@ -200,6 +223,7 @@ describe('EventDetail page', () => {
 
   it('renders inline feedback buttons with three options', async () => {
     renderDetail();
+    await openTrustTab();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^useful$/i })).toBeInTheDocument();
@@ -210,6 +234,7 @@ describe('EventDetail page', () => {
 
   it('feedback bar is not sticky/floating', async () => {
     renderDetail();
+    await openTrustTab();
 
     const feedbackText = await screen.findByText(/was this alert useful/i);
     const feedbackSection = feedbackText.closest('section');
@@ -240,30 +265,29 @@ describe('EventDetail page', () => {
   });
 
   it('shows real source evidence in the Evidence tab', async () => {
-    const user = userEvent.setup();
     renderDetail();
+    await openEvidenceTab();
 
-    await user.click(await screen.findByRole('button', { name: /evidence/i }));
+    const sourceEvidenceHeading = await screen.findByRole('heading', { name: /source evidence/i });
+    const sourceEvidenceSection = sourceEvidenceHeading.closest('section') as HTMLElement;
 
-    expect(await screen.findByText(/source type/i)).toBeInTheDocument();
-    expect(screen.getByText(/sec filing/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /source url/i })).toHaveAttribute(
+    expect(within(sourceEvidenceSection).getByText(/source type/i)).toBeInTheDocument();
+    expect(within(sourceEvidenceSection).getByText(/^SEC Filing$/i)).toBeInTheDocument();
+    expect(within(sourceEvidenceSection).getByRole('link', { name: /source url/i })).toHaveAttribute(
       'href',
       'https://example.com/sec/nvda-export-filing',
     );
-    expect(screen.getByText(/original filing excerpt:/i)).toBeInTheDocument();
-    expect(screen.getByText(/nvidia disclosed that new export licensing requirements may constrain shipments to china/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /view on edgar/i })).toHaveAttribute(
+    expect(within(sourceEvidenceSection).getByText(/original filing excerpt:/i)).toBeInTheDocument();
+    expect(within(sourceEvidenceSection).getByText(/nvidia disclosed that new export licensing requirements may constrain shipments to china/i)).toBeInTheDocument();
+    expect(within(sourceEvidenceSection).getByRole('link', { name: /view on edgar/i })).toHaveAttribute(
       'href',
       expect.stringContaining('0001045810-26-000042'),
     );
   });
 
   it('shows evidence fallback copy when source data is unavailable', async () => {
-    const user = userEvent.setup();
     renderDetail('evt-high-missing-analysis');
-
-    await user.click(await screen.findByRole('button', { name: /evidence/i }));
+    await openEvidenceTab();
 
     expect(
       await screen.findByText(
@@ -294,6 +318,7 @@ describe('EventDetail page', () => {
   it('keeps the disclaimer collapsed by default', async () => {
     const user = userEvent.setup();
     renderDetail();
+    await user.click(await screen.findByRole('button', { name: /trust/i }));
 
     const disclaimerToggle = await screen.findByRole('button', { name: /disclaimer/i });
     expect(disclaimerToggle).toHaveAttribute('aria-expanded', 'false');

@@ -40,6 +40,16 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
+// Polyfill ResizeObserver for tests (used by recharts ResponsiveContainer)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    constructor(_cb: ResizeObserverCallback) {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // Polyfill IntersectionObserver for tests (used by Feed infinite scroll)
 if (typeof globalThis.IntersectionObserver === 'undefined') {
   globalThis.IntersectionObserver = class IntersectionObserver {

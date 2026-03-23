@@ -20,6 +20,7 @@ export function History() {
     filters,
     setFilter,
     resetFilters,
+    clearFilters,
     isDefaultSeverity,
     alerts,
     total,
@@ -245,7 +246,7 @@ export function History() {
           <span>Showing important events only</span>
           <button
             type="button"
-            onClick={() => setFilter('severity', '')}
+            onClick={() => clearFilters()}
             className="font-medium text-interactive-default hover:underline"
           >
             Show all &rarr;

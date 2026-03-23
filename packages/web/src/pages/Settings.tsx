@@ -184,6 +184,10 @@ export function Settings() {
   const [channelSaveState, setChannelSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [discordTestState, setDiscordTestState] = useState<'idle' | 'testing' | 'sent'>('idle');
   const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
+  const isChannelSaving = channelSaveState === 'saving';
+  const isChannelSaved = channelSaveState === 'saved';
+  const isDiscordTesting = discordTestState === 'testing';
+  const isDiscordSent = discordTestState === 'sent';
 
   function showToast(message: string, tone: ToastTone) {
     setToastTone(tone);
@@ -394,10 +398,6 @@ export function Settings() {
     } catch {
       setChannelSaveState('idle');
       showToast('Failed to save. Please try again.', 'error');
-    } finally {
-      if (channelSaveState === 'saving') {
-        setChannelSaveState('idle');
-      }
     }
   }
 
@@ -411,10 +411,6 @@ export function Settings() {
     } catch {
       setDiscordTestState('idle');
       showToast('Discord webhook test failed', 'error');
-    } finally {
-      if (discordTestState === 'testing') {
-        setDiscordTestState('idle');
-      }
     }
   }
 
@@ -695,10 +691,14 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => { void handleTestDiscord(); }}
-                disabled={!discordUrlDraft.trim() || discordTesting}
-                className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!discordUrlDraft.trim() || isDiscordTesting}
+                className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isDiscordSent
+                    ? 'border-emerald-400/30 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/20'
+                    : 'border-overlay-medium bg-transparent text-text-secondary hover:bg-overlay-light'
+                }`}
               >
-                {discordTesting ? 'Testing...' : 'Test'}
+                {isDiscordTesting ? 'Testing...' : isDiscordSent ? 'Sent ✓' : 'Test'}
               </button>
             </div>
           </div>
@@ -747,10 +747,14 @@ export function Settings() {
           <button
             type="button"
             onClick={() => { void saveChannelSettings(); }}
-            disabled={channelSaving || (!channelLoaded && !channelSettings)}
-            className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isChannelSaving || (!channelLoaded && !channelSettings)}
+            className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50 ${
+              isChannelSaved
+                ? 'border-emerald-400/30 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/20'
+                : 'border-overlay-medium bg-overlay-light text-text-primary hover:bg-overlay-medium'
+            }`}
           >
-            {channelSaving ? 'Saving...' : 'Save'}
+            {isChannelSaving ? 'Saving...' : isChannelSaved ? 'Saved ✓' : 'Save'}
           </button>
         </div>
       </CollapsiblePanel>
@@ -1073,7 +1077,11 @@ export function Settings() {
       </CollapsiblePanel>
 
       {toastMessage ? (
-        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_var(--shadow-color)] ${saveState === 'error' ? 'border-rose-400/20 bg-rose-50 text-rose-800 dark:bg-[#240d0d] dark:text-rose-100' : 'border-emerald-400/20 bg-emerald-50 text-emerald-800 dark:bg-[#0d241d] dark:text-emerald-100'}`}>
+        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_var(--shadow-color)] ${
+          toastTone === 'error'
+            ? 'border-rose-400/20 bg-rose-50 text-rose-800 dark:bg-[#240d0d] dark:text-rose-100'
+            : 'border-emerald-400/20 bg-emerald-50 text-emerald-800 dark:bg-[#0d241d] dark:text-emerald-100'
+        }`}>
           {toastMessage}
         </div>
       ) : null}

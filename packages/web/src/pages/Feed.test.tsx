@@ -1,5 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach } from 'vitest';
 import { vi } from 'vitest';
 import { Feed } from './Feed.js';
 import { renderWithRouter } from '../test/render.js';
@@ -12,13 +13,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('Feed page', () => {
-  it('shows skeleton cards while loading', () => {
-    const { getAllByTestId } = renderWithRouter(
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('onboardingComplete', 'true');
+  });
+
+  it('shows the loading state while the feed query resolves', () => {
+    renderWithRouter(
       [{ path: '/', element: <Feed /> }],
       ['/'],
     );
 
-    expect(getAllByTestId('skeleton-card')).toHaveLength(5);
+    expect(screen.getByText(/scanning 15 sources for your watchlist/i)).toBeInTheDocument();
   });
 
   it('renders alert cards after the feed query resolves', async () => {
@@ -91,7 +97,6 @@ describe('Feed page', () => {
   });
 
   it('restores the saved feed sort preference on load', async () => {
-    localStorage.setItem('onboardingComplete', 'true');
     localStorage.setItem('er-feed-sort', 'severity');
 
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
@@ -102,7 +107,6 @@ describe('Feed page', () => {
   });
 
   it('persists feed sort changes to localStorage immediately', async () => {
-    localStorage.setItem('onboardingComplete', 'true');
     const user = userEvent.setup();
 
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
