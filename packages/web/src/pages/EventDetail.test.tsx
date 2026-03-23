@@ -284,7 +284,7 @@ describe('EventDetail page', () => {
       'href',
       'https://example.com/sec/nvda-export-filing',
     );
-    expect(within(sourceEvidenceSection).getByText(/original filing excerpt:/i)).toBeInTheDocument();
+    expect(within(sourceEvidenceSection).getByText(/original source text/i)).toBeInTheDocument();
     expect(within(sourceEvidenceSection).getByText(/nvidia disclosed that new export licensing requirements may constrain shipments to china/i)).toBeInTheDocument();
     expect(within(sourceEvidenceSection).getByRole('link', { name: /view on edgar/i })).toHaveAttribute(
       'href',
@@ -303,7 +303,7 @@ describe('EventDetail page', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps bull and bear sections visible with placeholders when analysis is missing', async () => {
+  it('keeps bull and bear sections visible with fallback analysis when enrichment is missing', async () => {
     renderDetail('evt-high-missing-analysis');
 
     const heading = await screen.findByRole('heading', { name: /bull case vs bear case/i });
@@ -311,7 +311,8 @@ describe('EventDetail page', () => {
 
     expect(within(section).getByText(/▲ bull/i)).toBeInTheDocument();
     expect(within(section).getByText(/▼ bear/i)).toBeInTheDocument();
-    expect(within(section).getAllByText(/analysis not available/i)).toHaveLength(2);
+    expect(within(section).getByText(/if the event lands better than feared/i)).toBeInTheDocument();
+    expect(within(section).getByText(/if the event points to a deeper problem/i)).toBeInTheDocument();
   });
 
   it('falls back to awaiting market reaction when direction is mixed', async () => {

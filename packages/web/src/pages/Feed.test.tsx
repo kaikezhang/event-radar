@@ -35,12 +35,14 @@ describe('Feed page', () => {
     });
   });
 
-  it('renders a lightweight setup-worked cue on feed cards when summary data is available', async () => {
+  it('does not render source-level setup-worked stats on feed cards', async () => {
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/setup worked 60%/i).length).toBeGreaterThan(0);
+      expect(screen.getByRole('article', { name: /nvda export filing flags china exposure risk/i })).toBeInTheDocument();
     });
+
+    expect(screen.queryByText(/setup worked/i)).not.toBeInTheDocument();
   });
 
   it('filters the feed down to pushed alerts when the push-only toggle is enabled', async () => {

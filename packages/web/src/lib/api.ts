@@ -457,8 +457,13 @@ function getRawExcerpt(event: Record<string, unknown>, meta: Record<string, unkn
       ?? (rawPayload?.raw_content as string | undefined)
       ?? (rawPayload?.description as string | undefined)
       ?? (rawPayload?.body as string | undefined)
+      ?? (event.rawContent as string | undefined)
+      ?? (event.raw_content as string | undefined)
+      ?? (event.description as string | undefined)
+      ?? (event.body as string | undefined)
       ?? (meta.rawContent as string | undefined)
       ?? (meta.raw_content as string | undefined)
+      ?? (meta.body as string | undefined)
       ?? (meta.description as string | undefined)
       ?? '')
       .trim(),
@@ -544,7 +549,11 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       title: cleanHtml((e.title as string) ?? ''),
       tickers,
       time: (e.receivedAt as string) ?? (e.createdAt as string) ?? new Date().toISOString(),
-      url: (e.sourceUrls as string[])?.[0] ?? (meta.url as string) ?? null,
+      url: (e.sourceUrls as string[])?.[0]
+        ?? (meta.url as string)
+        ?? (meta.sourceUrl as string)
+        ?? (meta.source_url as string)
+        ?? null,
       rawExcerpt: getRawExcerpt(e as Record<string, unknown>, meta),
       sourceMetadata: extractSourceMetadataClient(source, meta, (e.eventType as string) ?? null),
       confirmationCount:

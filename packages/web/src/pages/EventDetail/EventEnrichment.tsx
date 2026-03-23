@@ -2,7 +2,7 @@ import { cn } from '../../lib/utils.js';
 import type { LlmEnrichment } from '../../types/index.js';
 import { EventSourceCard } from './EventSourceCard.js';
 import { SectionHeading } from './shared.js';
-import { deriveBullBear } from './utils.js';
+import { deriveBullBear, deriveFallbackBullBear } from './utils.js';
 
 function AiDisclosureLabel() {
   return (
@@ -24,7 +24,10 @@ export function EventSummaryContent({
   direction: string;
   severity: string;
 }) {
-  const { bullPoints, bearPoints } = deriveBullBear(enrichment, direction);
+  const derivedPoints = deriveBullBear(enrichment, direction);
+  const fallbackPoints = deriveFallbackBullBear(summary, severity);
+  const bullPoints = derivedPoints.bullPoints.length > 0 ? derivedPoints.bullPoints : fallbackPoints.bullPoints;
+  const bearPoints = derivedPoints.bearPoints.length > 0 ? derivedPoints.bearPoints : fallbackPoints.bearPoints;
 
   return (
     <>
@@ -65,7 +68,9 @@ export function EventEvidenceContent({
     ? `https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(accessionNumber)}`
     : null;
   const sourceTypeLabel = getSourceTypeLabel(source);
-  const hasEvidence = Boolean(eventUrl || rawExcerpt || edgarUrl);
+  const sourceUrl = resolveSourceUrl(eventUrl, sourceMetadata);
+  const sourceText = resolveSourceText(rawExcerpt, source, sourceMetadata);
+  const hasEvidence = Boolean(sourceUrl || sourceText || edgarUrl);
 
   const hasSourceCard = sourceMetadata && Object.keys(sourceMetadata).length > 0;
 
@@ -79,26 +84,26 @@ export function EventEvidenceContent({
             <p className="mt-1 text-text-primary">{sourceTypeLabel}</p>
           </div>
 
-          {eventUrl ? (
+          {sourceUrl ? (
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source URL</p>
               <a
-                href={eventUrl}
+                href={sourceUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-1 inline-flex items-center break-all text-accent-default hover:underline"
                 aria-label="Source URL"
               >
-                {eventUrl}
+                {sourceUrl}
               </a>
             </div>
           ) : null}
 
-          {rawExcerpt ? (
+          {sourceText ? (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Original filing excerpt:</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Original source text</p>
               <p className="mt-1 whitespace-pre-wrap rounded-xl border border-overlay-medium bg-bg-elevated/50 px-4 py-3 text-text-primary">
-                {rawExcerpt}
+                {sourceText}
               </p>
             </div>
           ) : null}
@@ -202,7 +207,7 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-text-tertiary">Analysis not available</p>
+            <p className="text-sm text-text-tertiary">Analysis pending</p>
           )}
         </div>
 
@@ -217,7 +222,7 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-text-tertiary">Analysis not available</p>
+            <p className="text-sm text-text-tertiary">Analysis pending</p>
           )}
         </div>
       </div>
@@ -244,4 +249,29 @@ function getSourceTypeLabel(source: string): string {
     default:
       return source;
   }
+}
+
+function resolveSourceUrl(
+  eventUrl: string | null,
+  sourceMetadata?: Record<string, unknown>,
+): string | null {
+  if (eventUrl) return eventUrl;
+
+  const metadataUrl = sourceMetadata?.sourceUrl ?? sourceMetadata?.source_url ?? sourceMetadata?.url;
+  return typeof metadataUrl === 'string' && metadataUrl.length > 0 ? metadataUrl : null;
+}
+
+function resolveSourceText(
+  rawExcerpt: string | null,
+  source: string,
+  sourceMetadata?: Record<string, unknown>,
+): string | null {
+  if (rawExcerpt) return rawExcerpt;
+
+  if (source === 'breaking-news' || source === 'businesswire' || source === 'pr-newswire' || source === 'reuters') {
+    const headline = sourceMetadata?.headline;
+    return typeof headline === 'string' && headline.trim().length > 0 ? headline.trim() : null;
+  }
+
+  return null;
 }

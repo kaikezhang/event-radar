@@ -27,6 +27,8 @@ import { NotFound } from './pages/NotFound.js';
 import { Privacy } from './pages/Privacy.js';
 import { Terms } from './pages/Terms.js';
 
+export const APP_SHELL_BOTTOM_PADDING_CLASS = 'pb-[calc(7rem+env(safe-area-inset-bottom))]';
+
 function SquawkIndicator() {
   const { preferences, isSpeaking } = useAudioSquawk();
 
@@ -137,7 +139,7 @@ function GlobalTickerSearch() {
   return <TickerSearch open={open} onClose={handleClose} />;
 }
 
-function AppShell() {
+export function AppShell() {
   const [showHelp, setShowHelp] = useState(false);
 
   const handleShowHelp = useCallback(() => setShowHelp(true), []);
@@ -149,7 +151,13 @@ function AppShell() {
     <AuthProvider>
       <ConnectionProvider>
         <div className="min-h-screen bg-bg-primary text-text-primary">
-          <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pb-24 pt-[calc(env(safe-area-inset-top)+8px)] lg:max-w-7xl">
+          <div
+            data-testid="app-shell-content"
+            className={cn(
+              'mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pt-[calc(env(safe-area-inset-top)+8px)] lg:max-w-7xl',
+              APP_SHELL_BOTTOM_PADDING_CLASS,
+            )}
+          >
             <AppHeader onShowHelp={handleShowHelp} />
 
             <main className="flex-1">

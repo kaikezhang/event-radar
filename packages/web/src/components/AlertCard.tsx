@@ -7,10 +7,6 @@ import { cn } from '../lib/utils.js';
 
 interface AlertCardProps {
   alert: AlertSummary;
-  trustCue?: {
-    label: string;
-    tone: 'positive' | 'mixed' | 'caution';
-  };
   showWatchlistButton?: boolean;
   isOnWatchlist?: boolean;
   onToggleWatchlist?: (ticker: string) => void;
@@ -55,7 +51,6 @@ function displaySource(source: string, sourceKey?: string): string {
 
 export function AlertCard({
   alert,
-  trustCue,
   showWatchlistButton,
   isOnWatchlist,
   onToggleWatchlist,
@@ -199,20 +194,6 @@ export function AlertCard({
             Confirmed
           </span>
         )}
-        {trustCue && (
-          <span
-            className={cn(
-              'font-medium',
-              trustCue.tone === 'positive'
-                ? 'text-emerald-300'
-                : trustCue.tone === 'mixed'
-                  ? 'text-amber-200'
-                  : 'text-text-tertiary',
-            )}
-          >
-            {trustCue.label}
-          </span>
-        )}
         {showPushBadge && <PushDeliveryBadge />}
       </div>
 
@@ -296,13 +277,6 @@ export function AlertCard({
         )}
 
         <div className="flex-1" />
-
-        {/* Source accuracy */}
-        {trustCue && (
-          <span className="text-text-tertiary">
-            {trustCue.label}
-          </span>
-        )}
 
         {/* Watchlist toggle star */}
         {showWatchlistButton && primaryTicker && onToggleWatchlist && (
