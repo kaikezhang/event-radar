@@ -1,5 +1,6 @@
 import type { ScorecardSummary } from '../../types/index.js';
 import {
+  deduplicateAlerts,
   getDefaultSeverities,
   getTrustCue,
   groupAlertsByDate,
@@ -119,6 +120,53 @@ describe('useFeedState helpers', () => {
     ]);
 
     expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday', 'Mar 1']);
+  });
+
+  it('groups same-ticker alerts across sources within a 2-hour window and preserves related sources', () => {
+    const deduplicated = deduplicateAlerts([
+      {
+        id: 'evt-breaking-news',
+        severity: 'HIGH',
+        source: 'breaking-news',
+        title: 'Breaking headline hits NVDA',
+        summary: 'Breaking desk headline.',
+        tickers: ['NVDA'],
+        time: '2026-03-20T12:00:00.000Z',
+      },
+      {
+        id: 'evt-sec',
+        severity: 'HIGH',
+        source: 'sec-edgar',
+        title: 'SEC filing lands for NVDA',
+        summary: 'EDGAR filing copy.',
+        tickers: ['NVDA'],
+        time: '2026-03-20T11:30:00.000Z',
+      },
+      {
+        id: 'evt-reuters',
+        severity: 'HIGH',
+        source: 'reuters',
+        title: 'Reuters confirms NVDA update',
+        summary: 'Newswire confirmation.',
+        tickers: ['NVDA'],
+        time: '2026-03-20T10:15:00.000Z',
+      },
+      {
+        id: 'evt-tsla',
+        severity: 'MEDIUM',
+        source: 'stocktwits',
+        title: 'TSLA chatter',
+        summary: 'Separate ticker event.',
+        tickers: ['TSLA'],
+        time: '2026-03-20T11:45:00.000Z',
+      },
+    ]);
+
+    expect(deduplicated).toHaveLength(2);
+    expect(deduplicated.find((alert) => alert.id === 'evt-breaking-news')).toMatchObject({
+      dedupCount: 2,
+      relatedSources: ['SEC EDGAR', 'Reuters'],
+    });
   });
 
   it('defaults smart feed to hide LOW while all-events still includes it', () => {

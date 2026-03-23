@@ -371,4 +371,21 @@ describe('EventDetail page', () => {
       expect(router.state.location.pathname).toBe('/');
     });
   });
+
+  it('shows a dedicated mobile back button that returns to the previous page', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWithRouter(
+      [
+        { path: '/', element: <div>Feed route</div> },
+        { path: '/event/:id', element: <EventDetail /> },
+      ],
+      ['/', '/event/evt-critical-nvda-1'],
+    );
+
+    await user.click(await screen.findByRole('button', { name: /← back/i }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/');
+    });
+  });
 });

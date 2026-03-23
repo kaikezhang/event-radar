@@ -7,7 +7,7 @@ interface UseWebSocketOptions<TEvent = unknown> {
   url?: string;
 }
 
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 function buildWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -36,12 +36,6 @@ export function useWebSocket<TEvent = unknown>(
     stoppedRef.current = false;
 
     const connect = () => {
-      // If we've exceeded max retries, stop and signal failure
-      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-        setStatus('failed');
-        return;
-      }
-
       const socket = new WebSocket(options?.url ?? buildWebSocketUrl());
       socketRef.current = socket;
 
@@ -76,12 +70,7 @@ export function useWebSocket<TEvent = unknown>(
           return;
         }
 
-        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-          setStatus('failed');
-          return;
-        }
-
-        const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, 60_000);
+        const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, MAX_RECONNECT_DELAY_MS);
         reconnectAttemptsRef.current += 1;
         setStatus('reconnecting');
         reconnectTimeoutRef.current = window.setTimeout(connect, delayMs);

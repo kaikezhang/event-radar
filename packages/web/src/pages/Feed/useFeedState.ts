@@ -5,6 +5,17 @@ import { useAlerts } from '../../hooks/useAlerts.js';
 
 export const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+const SOURCE_DISPLAY: Record<string, string> = {
+  'sec-edgar': 'SEC EDGAR',
+  'breaking-news': 'Breaking News',
+  'trading-halt': 'Trading Halt',
+  'stocktwits': 'StockTwits',
+  'reddit': 'Reddit',
+  'econ-calendar': 'Econ Calendar',
+  'federal-register': 'Federal Register',
+  'pr-newswire': 'PR Newswire',
+  reuters: 'Reuters',
+};
 
 const PRESETS_KEY = 'event-radar-filter-presets';
 const FEED_TAB_KEY = 'event-radar-feed-tab';
@@ -99,16 +110,20 @@ export function getTrustCue(
   };
 }
 
-const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
-  // Group by source + primary ticker; within each group, keep only the most
-  // recent event when events fall within a 24-hour window.
+function displaySource(source: string): string {
+  return SOURCE_DISPLAY[source] ?? source;
+}
+
+export function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
+  // Group by primary ticker; within each group, keep the most recent event and
+  // surface other source reports from the same 2-hour window.
   const groups = new Map<string, AlertSummary[]>();
 
   for (const alert of alerts) {
-    const primaryTicker = alert.tickers[0] ?? '';
-    const key = `${alert.source}\0${primaryTicker}`;
+    const primaryTicker = alert.tickers[0]?.toUpperCase();
+    const key = primaryTicker ? primaryTicker : `__solo__${alert.id}`;
     const existing = groups.get(key);
     if (existing) {
       existing.push(alert);
@@ -130,25 +145,34 @@ function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
       (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
     );
 
-    // Walk through sorted events and cluster within 24h windows
+    // Walk through sorted events and cluster within 2-hour windows.
     const used = new Set<number>();
     for (let i = 0; i < sorted.length; i++) {
       if (used.has(i)) continue;
 
       const anchor = sorted[i];
       const anchorTime = new Date(anchor.time).getTime();
-      let similar = 0;
+      const cluster = [anchor];
+      const relatedSources = new Set<string>();
 
       for (let j = i + 1; j < sorted.length; j++) {
         if (used.has(j)) continue;
         const diff = anchorTime - new Date(sorted[j].time).getTime();
         if (diff <= DEDUP_WINDOW_MS) {
-          similar++;
           used.add(j);
+          cluster.push(sorted[j]);
+          relatedSources.add(displaySource(sorted[j]?.sourceKey ?? sorted[j]?.source));
         }
       }
 
-      output.push(similar > 0 ? { ...anchor, dedupCount: similar } : anchor);
+      output.push(cluster.length > 1
+        ? {
+            ...anchor,
+            dedupCount: cluster.length - 1,
+            relatedSources: Array.from(relatedSources),
+          }
+        : anchor,
+      );
     }
   }
 

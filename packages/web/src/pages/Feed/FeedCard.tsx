@@ -32,6 +32,9 @@ export function FeedCard({
   priceQuote,
   scorecardSummary,
 }: FeedCardProps) {
+  const relatedEventCount = (alert.dedupCount ?? 0) + 1;
+  const relatedTicker = alert.tickers[0]?.toUpperCase() ?? 'Event';
+
   const card = (
     <div
       className={cn(
@@ -55,9 +58,16 @@ export function FeedCard({
         priceQuote={priceQuote}
       />
       {alert.dedupCount != null && alert.dedupCount > 0 && (
-        <p className="mt-1 px-3 pb-1 text-xs text-text-tertiary">
-          and {alert.dedupCount} similar
-        </p>
+        <div className="mt-1 space-y-0.5 px-3 pb-1">
+          <p className="text-xs font-medium text-text-secondary">
+            {relatedTicker} · {relatedEventCount} related events
+          </p>
+          {alert.relatedSources && alert.relatedSources.length > 0 ? (
+            <p className="text-xs text-text-tertiary">
+              Also reported by: {alert.relatedSources.join(', ')}
+            </p>
+          ) : null}
+        </div>
       )}
     </div>
   );
