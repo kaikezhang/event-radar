@@ -35,11 +35,11 @@ describe('Feed page', () => {
     });
   });
 
-  it('renders a lightweight trust cue on feed cards when summary data is available', async () => {
+  it('renders a lightweight setup-worked cue on feed cards when summary data is available', async () => {
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/source hit rate 67%/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/setup worked 60%/i).length).toBeGreaterThan(0);
     });
   });
 

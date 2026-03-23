@@ -184,8 +184,13 @@ const SCANNER_SCHEDULE: Record<string, ScheduleCategory> = {
   'stocktwits': 'always',
   'breaking-news': 'always',
   'reddit': 'always',
+  'truth-social': 'always',
   'manual': 'manual',
   'dummy': 'manual',
+  // Legacy / sub-sources that appear in DB but have no standalone scanner runtime.
+  // Mark as manual so pulse doesn't raise false-positive critical alerts.
+  'yahoo-finance': 'manual',
+  'cfpb': 'manual',
 };
 
 function getScannerSchedule(scannerName: string): ScheduleCategory {

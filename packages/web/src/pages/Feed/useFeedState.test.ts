@@ -42,16 +42,22 @@ describe('useFeedState helpers', () => {
     expect(loadFeedSort()).toBeNull();
   });
 
-  it('builds a positive trust cue when the source hit rate is strong', () => {
+  it('builds a positive trust cue when the source setup-worked rate is strong', () => {
     const summary: ScorecardSummary = {
       days: 90,
+      overview: {
+        totalEvents: 10,
+        sourcesMonitored: 1,
+        eventsWithTickers: 10,
+        eventsWithPriceOutcomes: 10,
+      },
       totals: {
         totalAlerts: 10,
         alertsWithUsableVerdicts: 10,
-        directionalCorrectCount: 7,
-        directionalHitRate: 0.7,
-        setupWorkedCount: 6,
-        setupWorkedRate: 0.6,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
+        setupWorkedCount: 7,
+        setupWorkedRate: 0.7,
         avgT5Move: 1,
         avgT20Move: 2,
         medianT20Move: 1.5,
@@ -64,10 +70,10 @@ describe('useFeedState helpers', () => {
           bucket: 'sec-edgar',
           totalAlerts: 10,
           alertsWithUsableVerdicts: 10,
-          directionalCorrectCount: 7,
-          directionalHitRate: 0.7,
-          setupWorkedCount: 6,
-          setupWorkedRate: 0.6,
+          directionalCorrectCount: 0,
+          directionalHitRate: 0,
+          setupWorkedCount: 7,
+          setupWorkedRate: 0.7,
           avgT5Move: 1,
           avgT20Move: 2,
           medianT20Move: 1.5,
@@ -76,7 +82,7 @@ describe('useFeedState helpers', () => {
     };
 
     expect(getTrustCue('sec-edgar', summary)).toEqual({
-      label: 'Source hit rate 70%',
+      label: 'Setup worked 70%',
       tone: 'positive',
     });
   });
