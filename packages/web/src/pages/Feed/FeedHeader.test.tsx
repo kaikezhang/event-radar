@@ -9,7 +9,11 @@ describe('FeedHeader', () => {
         activeTab="watchlist"
         activeFilterCount={0}
         highSignalCount={0}
+        hiddenLowCount={0}
         hasActiveFilters={false}
+        lowSignalCount={0}
+        mediumSignalCount={0}
+        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
@@ -29,7 +33,11 @@ describe('FeedHeader', () => {
         activeTab="all"
         activeFilterCount={3}
         highSignalCount={0}
+        hiddenLowCount={0}
         hasActiveFilters
+        lowSignalCount={0}
+        mediumSignalCount={0}
+        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
@@ -52,7 +60,11 @@ describe('FeedHeader', () => {
         activeTab="all"
         activeFilterCount={0}
         highSignalCount={0}
+        hiddenLowCount={0}
         hasActiveFilters={false}
+        lowSignalCount={0}
+        mediumSignalCount={0}
+        onRevealLowSeverity={vi.fn()}
         onSortModeChange={onSortModeChange}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
@@ -76,7 +88,11 @@ describe('FeedHeader', () => {
         activeTab="smart"
         activeFilterCount={0}
         highSignalCount={2}
+        hiddenLowCount={0}
         hasActiveFilters={false}
+        lowSignalCount={0}
+        mediumSignalCount={1}
+        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
@@ -106,23 +122,36 @@ describe('FeedHeader', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows the smart-feed quality ratio when alerts are visible', () => {
+  it('shows feed quality stats and a reveal-low pill in smart mode', async () => {
+    const user = userEvent.setup();
+    const onRevealLowSeverity = vi.fn();
+
     render(
       <FeedHeader
         activeTab="smart"
         activeFilterCount={0}
         highSignalCount={2}
+        hiddenLowCount={3}
         hasActiveFilters={false}
+        lowSignalCount={3}
+        mediumSignalCount={1}
+        onRevealLowSeverity={onRevealLowSeverity}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={4}
+        totalCount={6}
       />,
     );
 
-    expect(screen.getByText(/2 high-signal \/ 4 total/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 important events today/i)).toBeInTheDocument();
+    expect(screen.getByText(/6 events · 2 high\+ · 3 low/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /showing high\+ events · 3 low events hidden/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /showing high\+ events · 3 low events hidden/i }));
+
+    expect(onRevealLowSeverity).toHaveBeenCalledTimes(1);
   });
 });

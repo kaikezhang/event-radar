@@ -170,6 +170,13 @@ export function registerEventRoutes(
 
     const conditions = [];
 
+    conditions.push(sql`EXISTS (
+      SELECT 1
+      FROM ${pipelineAudit}
+      WHERE ${pipelineAudit.eventId} = ${events.sourceEventId}
+        AND ${pipelineAudit.outcome} = 'delivered'
+    )`);
+
     // Filter by ticker (search in metadata->>'ticker')
     if (query.ticker) {
       conditions.push(eq(events.ticker, query.ticker));

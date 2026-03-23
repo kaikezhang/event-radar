@@ -56,6 +56,9 @@ export function Feed() {
       <FeedList
         activeFilterCount={state.activeFilterCount}
         highSignalCount={state.highSignalCount}
+        hiddenLowCount={state.hiddenLowCount}
+        lowSignalCount={state.lowSignalCount}
+        mediumSignalCount={state.mediumSignalCount}
         activeSeverities={state.activeSeverities}
       activeSources={state.activeSources}
       activeTab={state.activeTab}
@@ -89,7 +92,9 @@ export function Feed() {
       presetName={state.presetName}
       pushOnly={state.pushOnly}
       pullDistance={state.pullDistance}
+      revealLowSeverity={state.revealLowSeverity}
       savePreset={state.savePreset}
+      scopedAlertCount={state.scopedAlertCount}
       scorecardSummary={scorecardSummary}
       selectedEventId={state.selectedEventId}
       sentinelRef={state.sentinelRef}
