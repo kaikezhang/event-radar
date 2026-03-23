@@ -220,6 +220,8 @@ export function buildApp(options?: {
       '/api/auth/me',
       '/api/v1/feed',
       '/api/v1/feed/watchlist-summary',
+      '/api/v1/calendar/earnings',
+      '/api/v1/calendar/upcoming',
       '/api/v1/scorecards/summary',
       '/api/events',
       '/api/events/:id',

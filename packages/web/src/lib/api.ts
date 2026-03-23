@@ -8,6 +8,7 @@ import type {
   EventScorecard,
   EventDetailData,
   HistoricalContext,
+  UpcomingCalendarResponse,
   LlmEnrichment,
   PriceBatchQuote,
   PriceChartData,
@@ -201,6 +202,18 @@ export interface WatchlistTickerSummary {
 export async function getWatchlistSummary(): Promise<WatchlistTickerSummary[]> {
   const res = await apiFetch('/v1/feed/watchlist-summary');
   return (res.tickers ?? []) as WatchlistTickerSummary[];
+}
+
+export async function getUpcomingCalendar(window: {
+  from: string;
+  to: string;
+}): Promise<UpcomingCalendarResponse> {
+  const params = new URLSearchParams({
+    from: window.from,
+    to: window.to,
+  });
+
+  return apiFetch(`/v1/calendar/upcoming?${params.toString()}`);
 }
 
 export interface NotificationPreferences {

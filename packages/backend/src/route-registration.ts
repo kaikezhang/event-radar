@@ -37,6 +37,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
 import { registerRegimeRoutes } from './routes/regime.js';
 import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
+import { registerCalendarRoutes } from './routes/calendar.js';
 import { createLLMProvider } from './services/llm-provider.js';
 import type { Rule } from '@event-radar/shared';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -111,6 +112,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerPreferencesRoutes(server, db, { apiKey });
     registerNotificationSettingsRoutes(server, db, { apiKey });
     registerBriefingRoutes(server, db, { apiKey });
+    registerCalendarRoutes(server, db);
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {

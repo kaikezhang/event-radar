@@ -259,6 +259,28 @@ export interface WatchlistSection {
   sortOrder: number;
 }
 
+export interface CalendarEventItem {
+  eventId: string;
+  ticker: string | null;
+  source: string;
+  severity: string | null;
+  title: string;
+  reportDate: string;
+  timeLabel: string | null;
+  outcomeT5: number | null;
+  historicalAvgMove: number | null;
+}
+
+export interface CalendarDateGroup {
+  date: string;
+  events: CalendarEventItem[];
+}
+
+export interface UpcomingCalendarResponse {
+  earningsDataLimited: boolean;
+  dates: CalendarDateGroup[];
+}
+
 export interface FilterPreset {
   name: string;
   severities: string[];
