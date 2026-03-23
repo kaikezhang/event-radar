@@ -243,4 +243,20 @@ describe('Settings page', () => {
       expect(screen.getByRole('button', { name: /^test$/i })).toBeInTheDocument();
     }, { timeout: 2_500 });
   });
+
+  it('restores today\'s briefing when the settings action is used', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('lastBriefingDismissed', new Date().toLocaleDateString('en-CA'));
+
+    renderSettings();
+
+    const budgetToggle = await screen.findByRole('button', { name: /notification budget.*quiet hours/i });
+    if (budgetToggle.getAttribute('aria-expanded') === 'false') {
+      await user.click(budgetToggle);
+    }
+    await user.click(await screen.findByRole('button', { name: /show today's briefing/i }));
+
+    expect(localStorage.getItem('lastBriefingDismissed')).toBeNull();
+    expect(await screen.findByText(/today's briefing will be shown again/i)).toBeInTheDocument();
+  });
 });

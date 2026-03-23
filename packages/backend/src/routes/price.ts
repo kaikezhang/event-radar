@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import YahooFinance from 'yahoo-finance2';
 import { z } from 'zod';
 import { err, ok, type Result } from '@event-radar/shared';
+import type { MarketQuote } from '../services/market-data-provider.js';
 import { requireApiKey } from './auth-middleware.js';
 
 const PriceRangeSchema = z.enum(['1w', '1m', '3m', '6m', '1y']);
@@ -16,6 +17,12 @@ const PriceRouteParamsSchema = z.object({
 });
 const PriceRouteQuerySchema = z.object({
   range: PriceRangeSchema.default('1m'),
+});
+const PriceBatchQuerySchema = z.object({
+  tickers: z
+    .string()
+    .trim()
+    .min(1),
 });
 
 export type PriceRange = z.infer<typeof PriceRangeSchema>;
@@ -38,6 +45,14 @@ export interface PriceChartResponse {
 export interface PriceChartService {
   getCandles(ticker: string, range: PriceRange): Promise<Result<PriceChartResponse, Error>>;
 }
+
+export interface PriceBatchQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+}
+
+export type PriceBatchResponse = Record<string, PriceBatchQuote>;
 
 interface YahooQuote {
   date: Date;
@@ -191,6 +206,24 @@ export class YahooPriceChartService implements PriceChartService {
 export interface PriceRouteOptions {
   apiKey?: string;
   priceChartService?: PriceChartService;
+  marketDataCache?: {
+    getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
+  };
+}
+
+function normalizeBatchTickers(input: string): string[] | null {
+  const unique = new Set<string>();
+
+  for (const rawTicker of input.split(',')) {
+    const parsedTicker = PriceTickerSchema.safeParse(rawTicker);
+    if (!parsedTicker.success) {
+      return null;
+    }
+
+    unique.add(parsedTicker.data.toUpperCase());
+  }
+
+  return Array.from(unique);
 }
 
 export function registerPriceRoutes(
@@ -203,6 +236,53 @@ export function registerPriceRoutes(
   ) => requireApiKey(request, reply, options?.apiKey);
 
   const priceChartService = options?.priceChartService ?? new YahooPriceChartService();
+
+  server.get('/api/price/batch', { preHandler: withAuth }, async (request, reply) => {
+    const query = PriceBatchQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return reply.status(400).send({
+        error: 'Bad Request',
+        message: 'Invalid ticker list',
+      });
+    }
+
+    const tickers = normalizeBatchTickers(query.data.tickers);
+    if (!tickers || tickers.length === 0) {
+      return reply.status(400).send({
+        error: 'Bad Request',
+        message: 'Invalid ticker list',
+      });
+    }
+
+    if (!options?.marketDataCache) {
+      return reply.status(503).send({
+        error: 'Service Unavailable',
+        message: 'Real-time price data is unavailable',
+      });
+    }
+
+    const quotes = await Promise.all(
+      tickers.map(async (ticker) => ({
+        ticker,
+        quote: await options.marketDataCache?.getOrFetch(ticker),
+      })),
+    );
+
+    const payload: PriceBatchResponse = {};
+    for (const item of quotes) {
+      if (!item.quote) {
+        continue;
+      }
+
+      payload[item.ticker] = {
+        price: item.quote.price,
+        change: item.quote.change1d,
+        changePercent: item.quote.change1d,
+      };
+    }
+
+    return reply.send(payload);
+  });
 
   server.get('/api/price/:ticker', { preHandler: withAuth }, async (request, reply) => {
     const params = PriceRouteParamsSchema.safeParse(request.params);

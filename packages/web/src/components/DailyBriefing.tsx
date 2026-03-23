@@ -1,115 +1,143 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
-import type { AlertSummary } from '../types/index.js';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { getDailyBriefing } from '../lib/api.js';
+import {
+  dismissDailyBriefingForToday,
+  isDailyBriefingDismissedToday,
+} from '../lib/daily-briefing.js';
+import { cn } from '../lib/utils.js';
 
-const DISMISSED_KEY = 'lastBriefingDismissed';
-const SEVERITY_ORDER: Record<string, number> = {
-  CRITICAL: 4,
-  HIGH: 3,
-  MEDIUM: 2,
-  LOW: 1,
+const SOURCE_LABELS: Record<string, string> = {
+  'sec-edgar': 'SEC filings',
+  'breaking-news': 'Breaking news',
+  'trading-halt': 'Trading halts',
 };
 
-function getTodayDate(): string {
-  return new Date().toLocaleDateString('en-CA');
+function formatCriticalSummary(criticalCount: number): string {
+  const noun = criticalCount === 1 ? 'event' : 'events';
+  return `Daily Briefing · ${criticalCount} critical ${noun}`;
 }
 
-function isDismissedToday(): boolean {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === getTodayDate();
-  } catch {
-    return false;
+function formatSeveritySummary(bySeverity: {
+  CRITICAL: number;
+  HIGH: number;
+  MEDIUM: number;
+  LOW: number;
+}): string {
+  const items = [
+    `${bySeverity.CRITICAL} critical`,
+    `${bySeverity.HIGH} high`,
+    `${bySeverity.MEDIUM} medium`,
+  ];
+
+  if (bySeverity.LOW > 0) {
+    items.push(`${bySeverity.LOW} low`);
   }
+
+  return `${items.join(', ')} in the last 24h`;
 }
 
-interface DailyBriefingProps {
-  alerts: AlertSummary[];
-  scope?: 'watchlist' | 'all';
+function formatSourceBreakdown(bySource: Record<string, number>): string {
+  return Object.entries(bySource)
+    .map(([source, count]) => `${SOURCE_LABELS[source] ?? source}: ${count}`)
+    .join(', ');
 }
 
-export function DailyBriefing({ alerts, scope = 'watchlist' }: DailyBriefingProps) {
-  const [dismissed, setDismissed] = useState(isDismissedToday);
-
-  if (dismissed) return null;
-
-  const now = Date.now();
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
-  const recentAlerts = alerts.filter((a) => new Date(a.time).getTime() >= oneDayAgo);
-  const count = recentAlerts.length;
-
-  // Find highest severity event
-  const topEvent = recentAlerts.reduce<AlertSummary | null>((best, alert) => {
-    if (!best) return alert;
-    const bestScore = SEVERITY_ORDER[best.severity] ?? 0;
-    const currentScore = SEVERITY_ORDER[alert.severity] ?? 0;
-    return currentScore > bestScore ? alert : best;
-  }, null);
-
-  // Count outcome stats from all alerts (not just last 24h)
-  const withOutcome = alerts.filter(
-    (a) => a.direction && a.direction !== 'neutral' && a.change5d != null,
-  );
-  const correctCount = withOutcome.filter((a) => {
-    const isBearish = a.direction?.toLowerCase() === 'bearish';
-    const priceDown = (a.change5d ?? 0) < 0;
-    return isBearish ? priceDown : !priceDown;
-  }).length;
-
-  const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
+export function DailyBriefing() {
+  const [dismissed, setDismissed] = useState(isDailyBriefingDismissedToday);
+  const [expanded, setExpanded] = useState(false);
+  const { data } = useQuery({
+    queryKey: ['daily-briefing'],
+    queryFn: getDailyBriefing,
+    staleTime: 300_000,
   });
 
-  function handleDismiss() {
-    try {
-      localStorage.setItem(DISMISSED_KEY, getTodayDate());
-    } catch {
-      // ignore
-    }
-    setDismissed(true);
+  if (dismissed || !data) {
+    return null;
   }
 
   return (
-    <div className="rounded-2xl border border-accent-default/20 bg-[linear-gradient(135deg,rgba(249,115,22,0.08),rgba(59,130,246,0.06))] p-4 shadow-[0_8px_24px_var(--shadow-color)]">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg" aria-hidden="true">📰</span>
-          <h2 className="text-sm font-semibold text-text-primary">
-            Daily Briefing — {today}
+    <section className="overflow-hidden rounded-3xl border border-amber-300/25 bg-[linear-gradient(135deg,rgba(251,191,36,0.18),rgba(249,115,22,0.12),rgba(120,53,15,0.06))] shadow-[0_14px_36px_var(--shadow-color)]">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+        aria-expanded={expanded}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-900/70">
+            Morning briefing
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-text-primary">
+            {formatCriticalSummary(data.bySeverity.CRITICAL)}
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          className="rounded-full p-1 text-text-tertiary transition hover:bg-overlay-medium hover:text-text-secondary"
-          aria-label="Dismiss briefing"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-900/10 bg-white/45 text-amber-950/70">
+          <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
+        </span>
+      </button>
 
-      <div className="mt-3 space-y-2 text-sm text-text-secondary">
-        <p>
-          <span className="font-semibold text-text-primary">{count}</span>{' '}
-          {count === 1 ? 'event' : 'events'} detected in the last 24h
-          {count > 0 ? (scope === 'all' ? ' across all events' : ' for your watchlist') : ''}
-        </p>
+      {expanded && (
+        <div className="border-t border-amber-900/10 bg-white/35 px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-amber-950/60">
+              {data.date}
+            </p>
+            <Link
+              to="/history"
+              className="text-sm font-semibold text-amber-950/80 underline-offset-4 hover:underline"
+            >
+              View all
+            </Link>
+          </div>
 
-        {topEvent && (
-          <p>
-            <span className="font-medium text-text-primary">Top event:</span>{' '}
-            {topEvent.title}
-          </p>
-        )}
+          <div className="mt-3 space-y-3 text-sm text-amber-950/80">
+            <p className="font-medium text-text-primary">
+              {formatSeveritySummary(data.bySeverity)}
+            </p>
 
-        {withOutcome.length > 0 && (
-          <p>
-            <span className="font-medium text-text-primary">Prediction accuracy:</span>{' '}
-            {correctCount}/{withOutcome.length} correct
-          </p>
-        )}
-      </div>
-    </div>
+            {data.topEvents.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-950/60">
+                  Top events
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {data.topEvents.map((event) => (
+                    <li key={`${event.title}-${event.ticker ?? 'none'}`} className="text-sm">
+                      <span className="font-semibold text-text-primary">{event.title}</span>
+                      {event.ticker ? ` · ${event.ticker}` : ''}
+                      {` · ${event.severity}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {Object.keys(data.bySource).length > 0 && (
+              <p>{formatSourceBreakdown(data.bySource)}</p>
+            )}
+
+            {data.watchlistEvents > 0 && (
+              <p>Events affecting your watchlist: {data.watchlistEvents}</p>
+            )}
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                dismissDailyBriefingForToday();
+                setDismissed(true);
+              }}
+              className="inline-flex min-h-10 items-center rounded-full border border-amber-900/15 bg-white/55 px-4 py-2 text-sm font-medium text-amber-950/80 transition hover:bg-white/70"
+            >
+              Dismiss for today
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

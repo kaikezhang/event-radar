@@ -12,6 +12,7 @@ import {
   type NotificationPreferences,
   type NotificationChannelSettings,
 } from '../lib/api.js';
+import { restoreDailyBriefing } from '../lib/daily-briefing.js';
 import {
   getWebPushDeviceState,
   getWebPushStatusDetails,
@@ -175,6 +176,7 @@ export function Settings() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<ToastTone>('success');
+  const [briefingRestoreMessage, setBriefingRestoreMessage] = useState<string | null>(null);
   const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
   const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
   const [channelLoaded, setChannelLoaded] = useState(false);
@@ -192,6 +194,11 @@ export function Settings() {
   function showToast(message: string, tone: ToastTone) {
     setToastTone(tone);
     setToastMessage(message);
+  }
+
+  function handleRestoreBriefing(): void {
+    restoreDailyBriefing();
+    setBriefingRestoreMessage("Today's briefing will be shown again.");
   }
 
   useEffect(() => {
@@ -946,6 +953,25 @@ export function Settings() {
                     className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
                   />
                 </label>
+              </div>
+
+              <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+                <p className="text-sm font-medium text-text-primary">Daily Briefing</p>
+                <p className="mt-2 text-sm leading-6 text-text-secondary">
+                  If you dismissed the morning briefing, bring it back without waiting for tomorrow.
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={handleRestoreBriefing}
+                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
+                  >
+                    Show today's briefing
+                  </button>
+                  {briefingRestoreMessage ? (
+                    <p className="text-sm leading-6 text-text-secondary">{briefingRestoreMessage}</p>
+                  ) : null}
+                </div>
               </div>
             </>
           )}
