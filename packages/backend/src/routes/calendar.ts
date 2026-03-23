@@ -81,7 +81,9 @@ function normalizePercent(value: string | number | null | undefined): number | n
     return null;
   }
 
-  const normalized = Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
+  // Outcome tracker stores values as fractional decimals (0.08 = 8%).
+  // Always convert from fractional to percentage.
+  const normalized = parsed * 100;
   return Number(normalized.toFixed(1));
 }
 
