@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { InMemoryEventBus } from '@event-radar/shared';
+import { describe, expect, it, vi } from 'vitest';
 import {
   parseTruthSocialPosts,
   TruthSocialScanner,
@@ -19,233 +19,246 @@ function getFixtureDocument(html: string): Document {
   return dom.window.document;
 }
 
+function createHtmlResponse(html: string, status = 200): Response {
+  return new Response(html, {
+    status,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+    },
+  });
+}
+
+function setFetchFn(
+  scanner: TruthSocialScanner,
+  fetchFn: (url: string | URL, options?: unknown) => Promise<Response>,
+): void {
+  (
+    scanner as unknown as {
+      fetchFn: (url: string | URL, options?: unknown) => Promise<Response>;
+    }
+  ).fetchFn = fetchFn;
+}
+
 describe('TruthSocialScanner', () => {
   describe('parseTruthSocialPosts', () => {
-    it('should extract all posts from fixture HTML', () => {
+    it('extracts all trumpstruth.org posts from fixture HTML', () => {
       const doc = getFixtureDocument(fixtureHtml);
       const posts = parseTruthSocialPosts(doc);
+
       expect(posts).toHaveLength(4);
     });
 
-    it('should extract post text correctly', () => {
+    it('extracts post IDs from trumpstruth status URLs', () => {
       const doc = getFixtureDocument(fixtureHtml);
       const posts = parseTruthSocialPosts(doc);
+
+      expect(posts[0]!.postId).toBe('37408');
+      expect(posts[1]!.postId).toBe('37407');
+      expect(posts[2]!.postId).toBe('37406');
+      expect(posts[3]!.postId).toBe('37405');
+    });
+
+    it('extracts normalized post text', () => {
+      const doc = getFixtureDocument(fixtureHtml);
+      const posts = parseTruthSocialPosts(doc);
+
       expect(posts[0]!.text).toContain('TARIFFS on China are going UP');
+      expect(posts[0]!.text).not.toContain('  ');
     });
 
-    it('should extract post IDs from data-id attributes', () => {
+    it('strips nested HTML and decodes entities in content', () => {
       const doc = getFixtureDocument(fixtureHtml);
       const posts = parseTruthSocialPosts(doc);
-      expect(posts[0]!.postId).toBe('111111111111111111');
-      expect(posts[1]!.postId).toBe('222222222222222222');
-      expect(posts[2]!.postId).toBe('333333333333333333');
+
+      expect(posts[2]!.text).toContain("America's economy");
+      expect(posts[2]!.text).toContain('https://winning.example/now');
+      expect(posts[2]!.text).toContain('winning again!');
     });
 
-    it('should detect reposts', () => {
+    it('converts eastern timestamps to UTC timestamps', () => {
       const doc = getFixtureDocument(fixtureHtml);
       const posts = parseTruthSocialPosts(doc);
+
+      expect(posts[0]!.timestamp).toBe('2026-03-23T11:05:00.000Z');
+      expect(posts[3]!.timestamp).toBe('2026-03-22T14:55:00.000Z');
+    });
+
+    it('constructs canonical trumpstruth.org post URLs', () => {
+      const doc = getFixtureDocument(fixtureHtml);
+      const posts = parseTruthSocialPosts(doc);
+
+      expect(posts[0]!.url).toBe('https://trumpstruth.org/statuses/37408');
+    });
+
+    it('detects repost markers when present', () => {
+      const doc = getFixtureDocument(fixtureHtml);
+      const posts = parseTruthSocialPosts(doc);
+
       expect(posts[0]!.isRepost).toBe(false);
       expect(posts[1]!.isRepost).toBe(true);
     });
 
-    it('should detect media attachments', () => {
+    it('detects media attachments without counting profile avatars', () => {
       const doc = getFixtureDocument(fixtureHtml);
       const posts = parseTruthSocialPosts(doc);
+
       expect(posts[0]!.hasMedia).toBe(false);
       expect(posts[2]!.hasMedia).toBe(true);
     });
 
-    it('should extract timestamps', () => {
-      const doc = getFixtureDocument(fixtureHtml);
+    it('returns empty array for pages with no posts', () => {
+      const doc = getFixtureDocument('<html><body><div>No posts here</div></body></html>');
       const posts = parseTruthSocialPosts(doc);
-      expect(posts[0]!.timestamp).toBe('2025-06-15T14:30:00Z');
-    });
 
-    it('should construct correct post URLs', () => {
-      const doc = getFixtureDocument(fixtureHtml);
-      const posts = parseTruthSocialPosts(doc);
-      expect(posts[0]!.url).toBe(
-        'https://truthsocial.com/@realDonaldTrump/posts/111111111111111111',
-      );
-    });
-
-    it('should return empty array for page with no posts', () => {
-      const doc = getFixtureDocument(
-        '<html><body><div>No posts here</div></body></html>',
-      );
-      const posts = parseTruthSocialPosts(doc);
       expect(posts).toHaveLength(0);
+    });
+
+    it('skips posts with empty content or missing timestamps', () => {
+      const doc = getFixtureDocument(`
+        <html>
+          <body>
+            <div class="status" data-status-url="https://trumpstruth.org/statuses/1">
+              <div class="status__content"><p></p></div>
+              <a href="https://trumpstruth.org/statuses/1" class="status-info__meta-item">
+                March 23, 2026, 7:05 AM
+              </a>
+            </div>
+            <div class="status" data-status-url="https://trumpstruth.org/statuses/2">
+              <div class="status__content"><p>Missing timestamp</p></div>
+            </div>
+          </body>
+        </html>
+      `);
+      const posts = parseTruthSocialPosts(doc);
+
+      expect(posts).toEqual([]);
     });
   });
 
   describe('SeenIdBuffer (dedup)', () => {
-    it('should track seen IDs', () => {
+    it('tracks seen IDs', () => {
       const buffer = new SeenIdBuffer(5);
       buffer.add('a');
       buffer.add('b');
+
       expect(buffer.has('a')).toBe(true);
       expect(buffer.has('c')).toBe(false);
     });
 
-    it('should evict oldest entries when capacity exceeded', () => {
+    it('evicts oldest entries when capacity exceeded', () => {
       const buffer = new SeenIdBuffer(3);
       buffer.add('a');
       buffer.add('b');
       buffer.add('c');
-      buffer.add('d'); // evicts 'a'
+      buffer.add('d');
+
       expect(buffer.has('a')).toBe(false);
       expect(buffer.has('d')).toBe(true);
       expect(buffer.size).toBe(3);
     });
 
-    it('should not add duplicate IDs', () => {
+    it('does not add duplicate IDs', () => {
       const buffer = new SeenIdBuffer(5);
       buffer.add('a');
       buffer.add('a');
+
       expect(buffer.size).toBe(1);
     });
   });
 
-  describe('keyword/ticker extraction in scanner', () => {
-    it('should extract ticker from "Truth about Tesla"', async () => {
+  describe('scanner fetch + enrichment', () => {
+    it('fetches trumpstruth.org HTML and emits parsed events', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi.fn().mockResolvedValue(createHtmlResponse(fixtureHtml));
 
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
-
-      mockScrape.mockResolvedValue([
-        {
-          postId: 'ticker-1',
-          text: 'The Truth about Tesla is that they make great cars!',
-          timestamp: new Date().toISOString(),
-          isRepost: false,
-          hasMedia: false,
-          url: 'https://truthsocial.com/@realDonaldTrump/posts/ticker-1',
-        },
-      ]);
+      setFetchFn(scanner, fetchFn);
 
       const result = await scanner.scan();
+
+      expect(fetchFn).toHaveBeenCalledOnce();
       expect(result.ok).toBe(true);
       if (result.ok) {
-        const event = result.value[0]!;
-        expect(event.metadata?.['ticker']).toBe('TSLA');
-        expect(event.metadata?.['tickers']).toContain('TSLA');
+        expect(result.value).toHaveLength(4);
+        expect(result.value[0]!.url).toBe('https://trumpstruth.org/statuses/37408');
       }
-
-      mockScrape.mockRestore();
     });
 
-    it('should return no ticker from "tariff on China"', async () => {
+    it('keeps ticker, keyword, and sentiment metadata from parsed post text', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi.fn().mockResolvedValue(createHtmlResponse(fixtureHtml));
 
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
-
-      mockScrape.mockResolvedValue([
-        {
-          postId: 'noticker-1',
-          text: 'TARIFFS on China are going UP!',
-          timestamp: new Date().toISOString(),
-          isRepost: false,
-          hasMedia: false,
-          url: 'https://truthsocial.com/@realDonaldTrump/posts/noticker-1',
-        },
-      ]);
+      setFetchFn(scanner, fetchFn);
 
       const result = await scanner.scan();
+
       expect(result.ok).toBe(true);
       if (result.ok) {
-        const event = result.value[0]!;
-        expect(event.metadata?.['ticker']).toBeUndefined();
-        expect(event.metadata?.['tickers']).toHaveLength(0);
-        expect(event.metadata?.['keywords']).toContain('tariffs');
-        expect(event.metadata?.['keywords']).toContain('china');
+        expect(result.value[1]!.metadata?.['ticker']).toBe('TSLA');
+        expect(result.value[1]!.metadata?.['tickers']).toContain('TSLA');
+        expect(result.value[0]!.metadata?.['keywords']).toContain('tariffs');
+        expect(result.value[1]!.metadata?.['sentiment']).toBe('bullish');
       }
-
-      mockScrape.mockRestore();
     });
 
-    it('should include sentiment in metadata', async () => {
+    it('does not emit events for already-seen post IDs', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi.fn().mockImplementation(async () => createHtmlResponse(fixtureHtml));
 
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
-
-      mockScrape.mockResolvedValue([
-        {
-          postId: 'sentiment-1',
-          text: 'Great deal with our partners, tremendous growth!',
-          timestamp: new Date().toISOString(),
-          isRepost: false,
-          hasMedia: false,
-          url: 'https://truthsocial.com/@realDonaldTrump/posts/sentiment-1',
-        },
-      ]);
-
-      const result = await scanner.scan();
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value[0]!.metadata?.['sentiment']).toBe('bullish');
-      }
-
-      mockScrape.mockRestore();
-    });
-  });
-
-  describe('scanner deduplication', () => {
-    it('should not emit events for already-seen post IDs', async () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new TruthSocialScanner(eventBus);
-
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
-
-      const mockPosts = [
-        {
-          postId: 'dedup-1',
-          text: 'First post',
-          timestamp: new Date().toISOString(),
-          isRepost: false,
-          hasMedia: false,
-          url: 'https://truthsocial.com/@realDonaldTrump/posts/dedup-1',
-        },
-      ];
-
-      mockScrape.mockResolvedValue(mockPosts);
+      setFetchFn(scanner, fetchFn);
 
       const result1 = await scanner.scan();
-      expect(result1.ok).toBe(true);
-      if (result1.ok) expect(result1.value).toHaveLength(1);
-
       const result2 = await scanner.scan();
-      expect(result2.ok).toBe(true);
-      if (result2.ok) expect(result2.value).toHaveLength(0);
 
-      mockScrape.mockRestore();
+      expect(result1.ok).toBe(true);
+      expect(result2.ok).toBe(true);
+      if (result1.ok) expect(result1.value).toHaveLength(4);
+      if (result2.ok) expect(result2.value).toHaveLength(0);
+    });
+
+    it('returns an error result when fetch returns a non-ok response', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi.fn().mockResolvedValue(createHtmlResponse('nope', 503));
+
+      setFetchFn(scanner, fetchFn);
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('503');
+        expect(result.error.message).toContain('trumpstruth.org');
+      }
+    });
+
+    it('returns an empty success result when the page contains no posts', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValue(createHtmlResponse('<html><body><div>empty</div></body></html>'));
+
+      setFetchFn(scanner, fetchFn);
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
     });
   });
 
   describe('health degradation', () => {
-    it('should report degraded after first failure, down after 3', async () => {
+    it('reports degraded after first failure and down after 3 failures', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi.fn().mockRejectedValue(new Error('Network error'));
 
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
-      mockScrape.mockRejectedValue(new Error('Network error'));
+      setFetchFn(scanner, fetchFn);
 
       await scanner.scan();
       expect(scanner.health().status).toBe('degraded');
@@ -255,29 +268,25 @@ describe('TruthSocialScanner', () => {
 
       await scanner.scan();
       expect(scanner.health().status).toBe('down');
-
-      mockScrape.mockRestore();
     });
 
-    it('should reset error count on successful scan', async () => {
+    it('resets error count after a successful scan', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new TruthSocialScanner(eventBus);
+      const fetchFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce(createHtmlResponse(fixtureHtml));
 
-      const { browserPool } = await import(
-        '../scanners/scraping/browser-pool.js'
-      );
-      const mockScrape = vi.spyOn(browserPool, 'scrape');
+      setFetchFn(scanner, fetchFn);
 
-      mockScrape.mockRejectedValue(new Error('Network error'));
       await scanner.scan();
       await scanner.scan();
       expect(scanner.health().status).toBe('degraded');
 
-      mockScrape.mockResolvedValue([]);
       await scanner.scan();
       expect(scanner.health().status).toBe('healthy');
-
-      mockScrape.mockRestore();
     });
   });
 });
