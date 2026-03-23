@@ -410,8 +410,8 @@ function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark:
       <ResponsiveContainer width="100%" height={chartHeight} minWidth={0}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-          <XAxis type="number" domain={[0, 100]} tick={{ fill: axisColor, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-          <YAxis type="category" dataKey="name" width={70} tick={{ fill: axisColor, fontSize: 10 }} />
+          <XAxis type="number" domain={[0, 100]} tick={{ fill: axisColor, fontSize: 12 }} tickFormatter={(v: number) => `${v}%`} />
+          <YAxis type="category" dataKey="name" width={70} tick={{ fill: axisColor, fontSize: 12 }} />
           <Tooltip
             contentStyle={{
               backgroundColor: isDark ? '#171923' : '#ffffff',
