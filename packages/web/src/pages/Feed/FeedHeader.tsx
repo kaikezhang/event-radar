@@ -139,9 +139,9 @@ export function FeedHeader({
               type="button"
               onClick={onRevealLowSeverity}
               className="rounded-full border border-severity-low/20 bg-severity-low/10 px-3 py-1 text-xs font-medium text-text-secondary transition hover:border-severity-low/35 hover:text-text-primary"
-              aria-label={`Showing HIGH+ events · ${hiddenLowCount} LOW events hidden`}
+              aria-label={`Showing HIGH+ events · ${hiddenLowCount} LOW ${hiddenLowCount === 1 ? 'event' : 'events'} hidden`}
             >
-              Showing HIGH+ events · {hiddenLowCount} LOW events hidden
+              Showing HIGH+ events · {hiddenLowCount} LOW {hiddenLowCount === 1 ? 'event' : 'events'} hidden
             </button>
           ) : null}
         </div>

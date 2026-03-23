@@ -183,9 +183,9 @@ describe('Feed page', () => {
     await waitFor(() => {
       expect(screen.queryByRole('article', { name: /low-priority tsla chatter/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /showing high\+ events · 1 low events hidden/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /showing high\+ events · 1 low event hidden/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /showing high\+ events · 1 low events hidden/i }));
+    await user.click(screen.getByRole('button', { name: /showing high\+ events · 1 low event hidden/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('article', { name: /low-priority tsla chatter/i })).toBeInTheDocument();

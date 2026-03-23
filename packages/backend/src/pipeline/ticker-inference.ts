@@ -19,8 +19,7 @@ const FALSE_POSITIVES = new Set([
   'USA',
   'USD',
 ]);
-const CASHTAG_PATTERN = /\$([A-Z]{1,5})\b/g;
-const UPPERCASE_TICKER_PATTERN = /\b([A-Z]{2,5})\b/g;
+
 
 interface SectorFallback {
   ticker: string;
@@ -53,16 +52,14 @@ function normalizeTickerCandidate(value: string): string | null {
 }
 
 export function extractTickerCandidateFromText(text: string): string | null {
-  let match: RegExpExecArray | null;
-
-  while ((match = CASHTAG_PATTERN.exec(text)) !== null) {
+  for (const match of text.matchAll(/\$([A-Z]{1,5})\b/g)) {
     const ticker = normalizeTickerCandidate(match[1] ?? '');
     if (ticker) {
       return ticker;
     }
   }
 
-  while ((match = UPPERCASE_TICKER_PATTERN.exec(text)) !== null) {
+  for (const match of text.matchAll(/\b([A-Z]{2,5})\b/g)) {
     const ticker = normalizeTickerCandidate(match[1] ?? '');
     if (ticker) {
       return ticker;
