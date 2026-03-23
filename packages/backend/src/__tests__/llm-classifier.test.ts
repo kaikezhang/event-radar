@@ -71,15 +71,14 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('ticker');
   });
 
-  it('should include rule engine result when provided', () => {
+  it('should keep rule engine results out of the prompt when provided', () => {
     const event = makeEvent();
     const ruleResult = makeRuleResult();
     const prompt = buildClassificationPrompt(event, ruleResult);
 
-    expect(prompt).toContain('RULE ENGINE RESULT');
-    expect(prompt).toContain('Rule Severity: CRITICAL');
-    expect(prompt).toContain('bankruptcy');
-    expect(prompt).toContain('8k-1.03-bankruptcy');
+    expect(prompt).not.toContain('RULE ENGINE RESULT');
+    expect(prompt).not.toContain('Rule Severity: CRITICAL');
+    expect(prompt).not.toContain('Matched Rules:');
   });
 
   it('should constrain eventType to the unified taxonomy', () => {
@@ -109,6 +108,32 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).not.toContain('URL:');
     expect(prompt).not.toContain('Metadata:');
     expect(prompt).toContain('Source: sec-edgar');
+  });
+
+  it('should include severity calibration examples for all severity bands', () => {
+    const prompt = buildClassificationPrompt(makeEvent());
+
+    expect(prompt).toContain('SEVERITY CALIBRATION:');
+    expect(prompt).toContain('CRITICAL: Trading halts, FDA drug approvals/rejections');
+    expect(prompt).toContain('HIGH: SEC insider trading');
+    expect(prompt).toContain('MEDIUM: Routine SEC filings');
+    expect(prompt).toContain('LOW: Social media trending without news catalyst');
+  });
+
+  it('should include confidence calibration guidance with bounded output range', () => {
+    const prompt = buildClassificationPrompt(makeEvent());
+
+    expect(prompt).toContain('CONFIDENCE CALIBRATION:');
+    expect(prompt).toContain('Use the FULL range 0.3 to 0.95');
+    expect(prompt).toContain('0.9+ = unambiguous event with clear market impact');
+    expect(prompt).toContain('NEVER output 1.0 or 0.0');
+  });
+
+  it('should instruct the model to set direction to NEUTRAL', () => {
+    const prompt = buildClassificationPrompt(makeEvent());
+
+    expect(prompt).toContain('Set direction to NEUTRAL. Direction prediction is not used in the current version.');
+    expect(prompt).not.toContain('what is the likely price impact?');
   });
 });
 

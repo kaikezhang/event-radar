@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RawEvent } from '@event-radar/shared';
 import {
+  extractCompanyTickerFromText,
   extractTickerCandidateFromText,
   inferHighPriorityTicker,
   inferMarketContextEtf,
@@ -32,6 +33,15 @@ describe('ticker inference helpers', () => {
     expect(extractTickerCandidateFromText('CPI surprises while CEO comments on demand')).toBeNull();
   });
 
+  it('extracts a mapped ticker from a company name case-insensitively', () => {
+    expect(extractCompanyTickerFromText('Breaking: Apple unveils new devices')).toBe('AAPL');
+    expect(extractCompanyTickerFromText('NVIDIA expands AI chip production')).toBe('NVDA');
+  });
+
+  it('extracts the first mapped company mentioned when multiple companies appear', () => {
+    expect(extractCompanyTickerFromText('Microsoft signs cloud deal with Apple')).toBe('MSFT');
+  });
+
   it('maps tech-heavy headlines to QQQ when no direct ticker is found', () => {
     const event = makeEvent({
       title: 'AI software stocks surge after cloud spending commentary',
@@ -60,6 +70,58 @@ describe('ticker inference helpers', () => {
       ticker: 'NVDA',
       tickerInferred: true,
       strategy: 'regex',
+    });
+  });
+
+  it('maps a company name to a ticker before ETF fallback for high-priority events', () => {
+    const event = makeEvent({
+      title: 'Apple supplier update triggers urgent review',
+      body: 'Traders are watching the company response.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'AAPL',
+      tickerInferred: true,
+      strategy: 'company-map',
+    });
+  });
+
+  it('uses the first company mentioned when multiple mapped companies appear in the text', () => {
+    const event = makeEvent({
+      title: 'Microsoft and Apple face antitrust scrutiny',
+      body: 'Both megacap names trade lower premarket.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'MSFT',
+      tickerInferred: true,
+      strategy: 'company-map',
+    });
+  });
+
+  it('prefers a direct ticker match over a company-name match', () => {
+    const event = makeEvent({
+      title: 'Apple discusses new partnership with $TSLA',
+      body: 'The EV maker was named explicitly in the release.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'TSLA',
+      tickerInferred: true,
+      strategy: 'regex',
+    });
+  });
+
+  it('matches company names from the body when the title is generic', () => {
+    const event = makeEvent({
+      title: 'Urgent market update',
+      body: 'Analysts say Boeing faces new delivery scrutiny.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'BA',
+      tickerInferred: true,
+      strategy: 'company-map',
     });
   });
 

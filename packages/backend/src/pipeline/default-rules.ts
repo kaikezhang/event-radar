@@ -220,7 +220,7 @@ export const DEFAULT_RULES: Rule[] = [
       { type: 'itemTypeContains', value: '8.01' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setSeverity', value: 'LOW' },
       { type: 'addTags', values: ['8-K', 'other-event'] },
     ],
     priority: 30,

@@ -198,7 +198,7 @@ const ITEM_CLASSIFICATIONS: Record<string, ItemClassification> = {
     item: '8.01',
     eventCategory: 'corporate',
     eventType: 'other_material',
-    severity: 'medium',
+    severity: 'low',
     headlineLabel: 'Other Material Event',
   },
   '9.01': {

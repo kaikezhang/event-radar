@@ -450,6 +450,12 @@ describe('RuleEngine', () => {
       expect(result.tags).toContain('earnings');
     });
 
+    it('should classify 8.01 (Other Events) as LOW', () => {
+      const result = engine.classify(makeSecEvent(['8.01']));
+      expect(result.severity).toBe('LOW');
+      expect(result.tags).toContain('other-event');
+    });
+
     it('should pick highest severity for multi-item filing', () => {
       // 9.01=LOW, 1.03=CRITICAL → CRITICAL wins
       const result = engine.classify(makeSecEvent(['9.01', '1.03']));

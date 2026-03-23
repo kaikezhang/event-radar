@@ -12,19 +12,36 @@ const SYSTEM_PROMPT = `You are a financial event classifier for a real-time trad
 
 Given an event from a financial data source, classify it by:
 1. **severity**: CRITICAL | HIGH | MEDIUM | LOW — how market-moving is this event?
-2. **direction**: BULLISH | BEARISH | NEUTRAL | MIXED — what is the likely price impact?
+2. **direction**: always set to NEUTRAL
 3. **eventType**: choose exactly one of these labels: ${EVENT_TYPE_LIST}
 4. **confidence**: 0 to 1 — how confident are you in this classification?
 5. **reasoning**: 1-3 sentence explanation of your classification
 6. **tags**: array of relevant string tags
 7. **priority**: 0-100 — lower number = higher priority
 
+SEVERITY CALIBRATION:
+- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%. These events move prices 5%+ immediately.
+- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions. These events move prices 2-5%.
+- MEDIUM: Routine SEC filings (10-Q, 10-K), earnings in-line with estimates, industry reports, moderate news. Prices may move 0.5-2%.
+- LOW: Social media trending without news catalyst, routine corporate updates, conference presentations, minor regulatory filings. Minimal price impact expected.
+
+CONFIDENCE CALIBRATION:
+- Use the FULL range 0.3 to 0.95
+- 0.9+ = unambiguous event with clear market impact (e.g., trading halt, FDA decision)
+- 0.7-0.9 = likely classification but some ambiguity
+- 0.5-0.7 = uncertain, could go either way
+- 0.3-0.5 = best guess, limited information
+- NEVER output 1.0 or 0.0
+
+Set direction to NEUTRAL. Direction prediction is not used in the current version.
+
 Respond ONLY with valid JSON. No markdown, no code fences, no extra text.`;
 
 export function buildClassificationPrompt(
   event: RawEvent,
-  ruleResult?: ClassificationResult,
+  _ruleResult?: ClassificationResult,
 ): string {
+  void _ruleResult;
   const parts: string[] = [SYSTEM_PROMPT, '', '--- EVENT ---'];
 
   parts.push(`Source: ${event.source}`);
@@ -47,14 +64,6 @@ export function buildClassificationPrompt(
   }
 
   parts.push(`Timestamp: ${event.timestamp.toISOString()}`);
-
-  if (ruleResult) {
-    parts.push('', '--- RULE ENGINE RESULT (for context) ---');
-    parts.push(`Rule Severity: ${ruleResult.severity}`);
-    parts.push(`Rule Tags: ${ruleResult.tags.join(', ') || 'none'}`);
-    parts.push(`Rule Priority: ${ruleResult.priority}`);
-    parts.push(`Matched Rules: ${ruleResult.matchedRules.join(', ') || 'none'}`);
-  }
 
   parts.push('', '--- OUTPUT FORMAT ---');
   parts.push('Respond with JSON: { "severity", "direction", "eventType", "confidence", "reasoning", "tags", "priority" }');

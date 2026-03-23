@@ -136,7 +136,7 @@ describe('SecEdgarScanner', () => {
   describe('severity helpers', () => {
     it('maps 8-K items to scanner severity hints', () => {
       expect(map8KSeverity(['2.05'])).toBe('HIGH');
-      expect(map8KSeverity(['8.01'])).toBe('MEDIUM');
+      expect(map8KSeverity(['8.01'])).toBe('LOW');
       expect(map8KSeverity(['9.01'])).toBe('LOW');
     });
 
