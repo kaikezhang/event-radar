@@ -1,58 +1,96 @@
-# TASK.md — P1 Data Quality: Feed Noise + Severity + BLOCKED cleanup
+# TASK.md — DQ-3: Fix Classification Pipeline
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-Owner evaluation scored data quality 2/10. The #1 problem: feed is 76% StockTwits noise.
-Fix signal-to-noise ratio + severity classification + clean up stale data.
+The LLM classifier is a rubber stamp — always says MEDIUM + high confidence + agrees with rule engine.
+Fix the prompt to produce calibrated, useful classifications.
 
-## 1. Downgrade existing StockTwits events to LOW (SQL migration)
-- Create migration: `packages/backend/src/db/migrations/008-downgrade-stocktwits-severity.sql`
-- SQL: `UPDATE events SET severity = 'LOW' WHERE source = 'stocktwits' AND severity = 'MEDIUM';`
-- This affects ~9123 rows
-- Also update pipeline_audit: `UPDATE pipeline_audit SET severity = 'LOW' WHERE source = 'stocktwits' AND severity = 'MEDIUM';`
+## 1. Improve classification prompt with severity calibration
+- File: `packages/backend/src/pipeline/classification-prompt.ts`
+- Add few-shot examples to the SYSTEM_PROMPT showing what each severity level means:
 
-## 2. Smart Feed: hide LOW by default
-- File: `packages/web/src/pages/Feed/index.tsx` (or wherever feed filtering happens)
-- Smart Feed mode should NOT show LOW severity events at all
-- "All Events" mode should show them but with visual de-emphasis (slightly dimmed/smaller)
-- Add a pill/badge at top of Smart Feed: "Showing HIGH+ events · X LOW events hidden"
-- Clicking the pill reveals LOW events
+```
+SEVERITY CALIBRATION:
+- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%. These events move prices 5%+ immediately.
+- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions. These events move prices 2-5%.
+- MEDIUM: Routine SEC filings (10-Q, 10-K), earnings in-line with estimates, industry reports, moderate news. Prices may move 0.5-2%.
+- LOW: Social media trending without news catalyst, routine corporate updates, conference presentations, minor regulatory filings. Minimal price impact expected.
 
-## 3. Fix trading halt severity — should be HIGH minimum
-- File: `packages/backend/src/scanners/trading-halt-scanner.ts` or the scanner's severity logic
-- Trading halts are currently classified as MEDIUM — they should be HIGH or CRITICAL
-- A stock being halted is ALWAYS a significant event
-- Also run a migration to upgrade existing trading halt events:
-  `UPDATE events SET severity = 'HIGH' WHERE source = 'trading-halt' AND severity IN ('MEDIUM', 'LOW');`
+CONFIDENCE CALIBRATION:
+- Use the FULL range 0.3 to 0.95
+- 0.9+ = unambiguous event with clear market impact (e.g., trading halt, FDA decision)
+- 0.7-0.9 = likely classification but some ambiguity
+- 0.5-0.7 = uncertain, could go either way
+- 0.3-0.5 = best guess, limited information
+- NEVER output 1.0 or 0.0
+```
 
-## 4. Fix null tickers on CRITICAL/HIGH events
-- Many breaking-news and truth-social events have null tickers
-- File: `packages/backend/src/pipeline/` — the classification/enrichment step
-- When LLM classifies an event as HIGH/CRITICAL but ticker is null:
-  - Try to extract ticker from the title/content using a simple regex (e.g., $AAPL, TSLA, etc.)
-  - If no ticker found, set ticker to the most relevant market ETF (SPY for general market, QQQ for tech, etc.)
-  - Add a flag `ticker_inferred: true` in metadata so we know it was auto-assigned
+## 2. Remove direction prediction from classifier
+- File: `packages/backend/src/pipeline/classification-prompt.ts`
+- The direction prediction (BULLISH/BEARISH) has 1.85% accuracy — worse than random
+- Change: keep the direction field in the schema but set it to "NEUTRAL" by default
+- In the prompt, remove the direction classification instruction entirely
+- Replace with: "Set direction to NEUTRAL. Direction prediction is not used in the current version."
+- This way the schema doesn't break but we stop making wrong predictions
 
-## 5. Feed card quality indicator
-- File: `packages/web/src/pages/Feed/FeedHeader.tsx` or feed header area
-- Show feed quality stats in the header:
-  - "23 events · 5 HIGH+ · 18 LOW" with a quality bar
-  - Or simpler: "5 important events today" prominent, then the rest
-- This helps users quickly see if there's anything worth their attention
+## 3. Stop sending rule engine result to LLM
+- File: `packages/backend/src/pipeline/classification-prompt.ts`
+- The LLM gets the rule engine result "for context" and then just agrees with it
+- Remove the `if (ruleResult)` block that adds rule engine results to the prompt
+- Let the LLM classify independently — this is the whole point of having an LLM
+- Keep the `ruleResult` parameter in the function signature for backward compatibility but don't use it in the prompt
 
-## 6. Hide "BLOCKED" outcome events from the feed
-- Check if any events with pipeline_audit outcome='filtered' are showing in the feed
-- They should NOT appear in the web feed — only 'delivered' events should show
-- Verify the API query: `GET /api/events` should only return events that passed the pipeline
-- If BLOCKED events are showing, fix the query filter
+## 4. Downgrade SEC 8-K Item 8.01 to LOW in default rules
+- File: `packages/backend/src/pipeline/default-rules.ts`
+- 8-K Item 8.01 ("Other Events") is a catch-all category — press releases, investor presentations, non-material items
+- Find the rule that sets 8-K 8.01 to MEDIUM and change it to LOW
+- Keep 8-K Item 1.01 (Material Agreements), 2.01 (Asset Acquisition), 5.02 (Officer Changes) as MEDIUM or higher
 
-## Testing Requirements  
-- `pnpm --filter @event-radar/web test` — all tests must pass
+## 5. Add ticker extraction for common company names
+- File: `packages/backend/src/pipeline/` or a new file `packages/backend/src/pipeline/company-ticker-map.ts`
+- Create a mapping of top 100 company names to tickers:
+  ```typescript
+  export const COMPANY_TICKER_MAP: Record<string, string> = {
+    'apple': 'AAPL', 'nvidia': 'NVDA', 'tesla': 'TSLA',
+    'microsoft': 'MSFT', 'amazon': 'AMZN', 'google': 'GOOGL',
+    'alphabet': 'GOOGL', 'meta': 'META', 'facebook': 'META',
+    'netflix': 'NFLX', 'boeing': 'BA', 'disney': 'DIS',
+    'jpmorgan': 'JPM', 'goldman sachs': 'GS', 'walmart': 'WMT',
+    'costco': 'COST', 'target': 'TGT', 'home depot': 'HD',
+    'coca-cola': 'KO', 'pepsi': 'PEP', 'pepsico': 'PEP',
+    'intel': 'INTC', 'amd': 'AMD', 'qualcomm': 'QCOM',
+    'broadcom': 'AVGO', 'cisco': 'CSCO', 'oracle': 'ORCL',
+    'salesforce': 'CRM', 'adobe': 'ADBE', 'paypal': 'PYPL',
+    'mastercard': 'MA', 'visa': 'V', 'berkshire': 'BRK.B',
+    'johnson & johnson': 'JNJ', 'pfizer': 'PFE', 'moderna': 'MRNA',
+    'unitedhealth': 'UNH', 'exxon': 'XOM', 'chevron': 'CVX',
+    'shell': 'SHEL', 'bp': 'BP', 'palantir': 'PLTR',
+    'snowflake': 'SNOW', 'uber': 'UBER', 'airbnb': 'ABNB',
+    'coinbase': 'COIN', 'robinhood': 'HOOD', 'gamestop': 'GME',
+    'amc': 'AMC', 'nio': 'NIO', 'rivian': 'RIVN',
+    'lucid': 'LCID', 'ford': 'F', 'general motors': 'GM',
+    'lockheed': 'LMT', 'raytheon': 'RTX', 'northrop': 'NOC',
+    'caterpillar': 'CAT', 'deere': 'DE', '3m': 'MMM',
+    'micron': 'MU', 'applied materials': 'AMAT', 'lam research': 'LRCX',
+    'crowdstrike': 'CRWD', 'palo alto': 'PANW', 'datadog': 'DDOG',
+    'servicenow': 'NOW', 'workday': 'WDAY', 'spotify': 'SPOT',
+    'roku': 'ROKU', 'pinterest': 'PINS', 'snap': 'SNAP',
+    'twitter': 'TWTR', 'baidu': 'BIDU', 'alibaba': 'BABA',
+    'tencent': 'TCEHY', 'samsung': 'SSNLF',
+    'openai': 'MSFT', 'chatgpt': 'MSFT',
+    'anthropic': 'AMZN', 'claude': 'AMZN',
+  };
+  ```
+- Use this in the ticker extraction step (before or during pipeline processing)
+- Match case-insensitively against event title + body
+- If multiple companies match, pick the first one mentioned
+
+## Testing
 - `pnpm --filter @event-radar/backend test` — all tests must pass
 - `pnpm --filter @event-radar/web build` — must succeed
 
 ## PR
-- Branch: `feat/phase4-data-quality`
-- Title: `feat: P1 data quality — feed noise, severity fixes, BLOCKED cleanup`
+- Branch: `feat/dq3-classification-pipeline`
+- Title: `feat: DQ-3 classification pipeline — prompt calibration, direction removal, ticker extraction`
 - **DO NOT MERGE. Create PR and stop.**
