@@ -33,6 +33,15 @@ describe('ticker inference helpers', () => {
     expect(extractTickerCandidateFromText('CPI surprises while CEO comments on demand')).toBeNull();
   });
 
+  it('ignores all-digit identifiers that resemble CIK values', () => {
+    expect(extractTickerCandidateFromText('CIK 0001234567 was referenced in the filing')).toBeNull();
+  });
+
+  it('ignores blocked company suffixes that look like tickers', () => {
+    expect(extractTickerCandidateFromText('INC announces a restructuring plan')).toBeNull();
+    expect(extractTickerCandidateFromText('CORP sees elevated options volume')).toBeNull();
+  });
+
   it('extracts a mapped ticker from a company name case-insensitively', () => {
     expect(extractCompanyTickerFromText('Breaking: Apple unveils new devices')).toBe('AAPL');
     expect(extractCompanyTickerFromText('NVIDIA expands AI chip production')).toBe('NVDA');
@@ -40,6 +49,10 @@ describe('ticker inference helpers', () => {
 
   it('extracts the first mapped company mentioned when multiple companies appear', () => {
     expect(extractCompanyTickerFromText('Microsoft signs cloud deal with Apple')).toBe('MSFT');
+  });
+
+  it('preserves mapped company tickers that are valid at five characters', () => {
+    expect(extractCompanyTickerFromText('Samsung expands memory output')).toBe('SSNLF');
   });
 
   it('maps tech-heavy headlines to QQQ when no direct ticker is found', () => {

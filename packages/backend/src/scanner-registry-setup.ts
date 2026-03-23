@@ -1,6 +1,5 @@
 import type { EventBus, ScannerRegistry } from '@event-radar/shared';
 import { DummyScanner } from './scanners/dummy-scanner.js';
-import { AnalystScanner } from './scanners/analyst-scanner.js';
 import { EarningsScanner } from './scanners/earnings-scanner.js';
 import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { XScanner } from './scanners/x-scanner.js';
@@ -9,12 +8,8 @@ import { StockTwitsScanner } from './scanners/stocktwits-scanner.js';
 import { EconCalendarScanner } from './scanners/econ-calendar-scanner.js';
 import { FedWatchScanner } from './scanners/fedwatch-scanner.js';
 import { BreakingNewsScanner } from './scanners/breaking-news-scanner.js';
-import { CongressScanner } from './scanners/congress-scanner.js';
-import { UnusualOptionsScanner } from './scanners/options-scanner.js';
-import { ShortInterestScanner } from './scanners/short-interest-scanner.js';
 import { FdaScanner } from './scanners/fda-scanner.js';
 import { WhiteHouseScanner } from './scanners/whitehouse-scanner.js';
-import { DojScanner } from './scanners/doj-scanner.js';
 import { FederalRegisterScanner } from './scanners/federal-register-scanner.js';
 import { NewswireScanner } from './scanners/newswire-scanner.js';
 import { SecEdgarScanner } from './scanners/sec-edgar-scanner.js';
@@ -52,27 +47,32 @@ export function registerScanners(
   if (process.env.BREAKING_NEWS_ENABLED !== 'false') {
     registry.register(new BreakingNewsScanner(eventBus));
   }
-  if (process.env.CONGRESS_ENABLED !== 'false') {
-    registry.register(new CongressScanner(eventBus));
-  }
-  if (process.env.UNUSUAL_OPTIONS_ENABLED !== 'false') {
-    registry.register(new UnusualOptionsScanner(eventBus));
-  }
-  if (process.env.SHORT_INTEREST_ENABLED !== 'false') {
-    registry.register(new ShortInterestScanner(eventBus));
-  }
+  // CapitolTrades API is returning 404s, so keep the congress scanner disabled.
+  // if (process.env.CONGRESS_ENABLED !== 'false') {
+  //   registry.register(new CongressScanner(eventBus));
+  // }
+  // Unusual Whales is returning 404s, so keep the unusual-options scanner disabled.
+  // if (process.env.UNUSUAL_OPTIONS_ENABLED !== 'false') {
+  //   registry.register(new UnusualOptionsScanner(eventBus));
+  // }
+  // Finviz short-interest endpoint is returning 404s, so keep the scanner disabled.
+  // if (process.env.SHORT_INTEREST_ENABLED !== 'false') {
+  //   registry.register(new ShortInterestScanner(eventBus));
+  // }
   if (process.env.FDA_ENABLED !== 'false') {
     registry.register(new FdaScanner(eventBus));
   }
   if (process.env.WHITEHOUSE_ENABLED !== 'false') {
     registry.register(new WhiteHouseScanner(eventBus));
   }
-  if (process.env.DOJ_ENABLED !== 'false') {
-    registry.register(new DojScanner(eventBus));
-  }
-  if (process.env.ANALYST_ENABLED === 'true') {
-    registry.register(new AnalystScanner(eventBus));
-  }
+  // DOJ antitrust RSS is returning 404s, so keep the doj scanner disabled.
+  // if (process.env.DOJ_ENABLED !== 'false') {
+  //   registry.register(new DojScanner(eventBus));
+  // }
+  // Benzinga analyst ratings requires a paid key and returns 404s without it.
+  // if (process.env.ANALYST_ENABLED === 'true') {
+  //   registry.register(new AnalystScanner(eventBus));
+  // }
   if (process.env.EARNINGS_ENABLED === 'true') {
     registry.register(new EarningsScanner(eventBus));
   }

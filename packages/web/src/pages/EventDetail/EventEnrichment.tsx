@@ -16,18 +16,27 @@ function AiDisclosureLabel() {
 export function EventSummaryContent({
   summary,
   enrichment,
+  enrichmentFailed = false,
   direction,
   severity,
 }: {
   summary: string;
   enrichment: LlmEnrichment | null;
+  enrichmentFailed?: boolean;
   direction: string;
   severity: string;
 }) {
   const derivedPoints = deriveBullBear(enrichment, direction);
-  const fallbackPoints = deriveFallbackBullBear(summary, severity);
+  const shouldForceLayout = severity === 'HIGH' || severity === 'CRITICAL';
+  const shouldUseFallback = enrichment !== null;
+  const fallbackPoints = shouldUseFallback ? deriveFallbackBullBear(summary, severity) : { bullPoints: [], bearPoints: [] };
   const bullPoints = derivedPoints.bullPoints.length > 0 ? derivedPoints.bullPoints : fallbackPoints.bullPoints;
   const bearPoints = derivedPoints.bearPoints.length > 0 ? derivedPoints.bearPoints : fallbackPoints.bearPoints;
+  const emptyStateMessage = enrichmentFailed
+    ? 'Analysis is being processed. Check back shortly.'
+    : shouldForceLayout
+      ? 'Analysis pending'
+      : 'Analysis not available';
 
   return (
     <>
@@ -38,7 +47,11 @@ export function EventSummaryContent({
       </section>
 
       <div className="mt-4">
-        <BullBearColumns bullPoints={bullPoints} bearPoints={bearPoints} severity={severity} />
+        <BullBearColumns
+          bullPoints={bullPoints}
+          bearPoints={bearPoints}
+          emptyStateMessage={emptyStateMessage}
+        />
       </div>
     </>
   );
@@ -182,15 +195,12 @@ export function RegimeContextCard({
 function BullBearColumns({
   bullPoints,
   bearPoints,
-  severity,
+  emptyStateMessage,
 }: {
   bullPoints: string[];
   bearPoints: string[];
-  severity: string;
+  emptyStateMessage: string;
 }) {
-  const shouldForceLayout = severity === 'HIGH' || severity === 'CRITICAL';
-  if (!shouldForceLayout && bullPoints.length === 0 && bearPoints.length === 0) return null;
-
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <SectionHeading eyebrow="Directional thesis" title="Bull Case vs Bear Case" />
@@ -207,7 +217,7 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-text-tertiary">Analysis pending</p>
+            <p className="text-sm text-text-tertiary">{emptyStateMessage}</p>
           )}
         </div>
 
@@ -222,7 +232,7 @@ function BullBearColumns({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-text-tertiary">Analysis pending</p>
+            <p className="text-sm text-text-tertiary">{emptyStateMessage}</p>
           )}
         </div>
       </div>
