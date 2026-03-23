@@ -1,58 +1,75 @@
-# TASK.md — DQ-4: Outcome Tracking + Scorecard Improvement
+# TASK.md — DQ-5: Killer Features — Daily Briefing + Price Context
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-We have 12,016 outcome records with 6,346 having T+5 price data, but Scorecard shows only ~91 "usable verdicts". Fix the verdict calculation and reframe the Scorecard to build trust.
+Two features that make users come back every day:
+1. Enhanced Daily Briefing with AI summary
+2. Price context on event cards
 
-## 1. Investigate and fix low verdict count
-- File: `packages/backend/src/services/scorecard-aggregation.ts`
-- We have 6,346 events with T+5 price changes but only ~91 "usable verdicts"
-- The direction verdict requires `predictedDirection` which is now always NEUTRAL (we just removed direction prediction in DQ-3)
-- Fix: Change the "usable verdict" definition:
-  - A verdict is usable when `changeT5 IS NOT NULL` (we have a price outcome)
-  - Don't require direction correctness for the top-level count
-  - "Setup worked" = abs(changeT5) >= 5% (significant move happened regardless of direction)
-  - Show "X events with price outcomes" instead of "X verdicts"
+## 1. Enhanced Daily Market Briefing
+- File: `packages/web/src/components/DailyBriefing.tsx`
+- Current: simple count of events in last 24h + top event
+- Enhance to a proper morning briefing:
 
-## 2. Reframe Scorecard to lead with strengths
-- File: `packages/web/src/pages/Scorecard.tsx`
-- Current: leads with "36% directional hit rate" which sounds terrible
-- New framing:
-  - **Top section**: "Events Tracked: 23,769 | Sources Monitored: 13 | Events with Price Data: 6,346"
-  - **Second section**: Source accuracy — which sources lead to biggest price moves? (already partially built)
-  - **Third section**: "Setup Worked Rate" — what % of events led to 5%+ moves
-  - **Remove or de-emphasize**: directional hit rate (since we removed direction prediction)
-  - Keep the existing bucket breakdowns (source, event type, confidence)
+### Data to show:
+- **Event count by severity**: "3 CRITICAL, 12 HIGH, 45 MEDIUM in the last 24h"
+- **Top 3 events**: Show title + ticker + severity for the 3 highest-severity events
+- **Source breakdown**: "SEC filings: 5, Breaking news: 3, Trading halts: 2"
+- **Watchlist activity**: "Events affecting your watchlist: 8" (if user has watchlist)
 
-## 3. Add "Calibration disclaimer" at top of Scorecard
-- File: `packages/web/src/pages/Scorecard.tsx`
-- Add a banner at the top:
-  - "📊 Scorecard tracks how market events correlate with price movements. This is a calibration tool, not a prediction score."
-  - "Price data from T+5 (5 trading days after event). Coverage: X% of events."
-  - Style: subtle info banner, not alarming
+### UI:
+- Expandable card at top of feed (collapsed by default shows "Daily Briefing · 3 critical events")
+- Click to expand and see full briefing
+- "Dismiss for today" button (already exists)
+- Show a "View all" link to History page
+- Use a warm gradient background to make it visually distinct
 
-## 4. Fix Scorecard API to use new verdict definition
-- File: `packages/backend/src/services/scorecard-aggregation.ts`
-- Update the aggregate query to:
-  - Count all events with changeT5 as "trackable"
-  - "Setup worked" = abs(changeT5) >= 5.0 (significant price move)
-  - Remove or set to 0 the "directional correct" count (direction is now always NEUTRAL)
-  - Ensure the API returns meaningful numbers with the new calculation
+### API:
+- Create `GET /api/v1/briefing/daily` endpoint in backend
+- File: `packages/backend/src/routes/` — new file `briefing.ts`
+- Returns: `{ date, totalEvents, bySeverity: {CRITICAL, HIGH, MEDIUM, LOW}, topEvents: [...], bySource: {...}, watchlistEvents: number }`
+- Query events from last 24h, aggregate by severity and source
+- Top events = ORDER BY severity priority DESC, created_at DESC LIMIT 3
 
-## 5. Show outcome coverage percentage
-- File: `packages/web/src/pages/Scorecard.tsx`  
-- Instead of "91 verdicts / 23,769 alerts (0.4%)" show:
-  - "6,346 events with price outcomes / 12,028 events with tickers (52.8%)"
-  - This is a much more honest and better-looking number
-  - Add note: "Events without tickers (macro events, government actions) don't have individual price tracking"
+## 2. Price Context on Event Cards
+- File: `packages/web/src/components/AlertCard.tsx`
+- For events with a ticker, show current price + daily change
+- Use the existing `/api/price/:ticker` endpoint
+
+### Implementation:
+- Add a small price chip next to the ticker on event cards:
+  - "AAPL $178.50 (+2.3%)" in green for positive, red for negative
+- Don't fetch price for every card on initial load (too many API calls!)
+- Instead: batch-fetch prices for visible tickers when feed loads
+  - Create a new endpoint `GET /api/price/batch?tickers=AAPL,NVDA,TSLA`
+  - File: `packages/backend/src/routes/price.ts` — add batch endpoint
+  - Returns: `{ AAPL: { price: 178.50, change: 2.3, changePercent: 1.3 }, ... }`
+  - Cache prices for 5 minutes (in-memory or simple object cache)
+- Show price only for the unique tickers in the current viewport
+- If price fetch fails, just don't show the price chip (graceful degradation)
+
+### Price chip design:
+- Small, inline with ticker chip
+- Green text + ▲ for positive change
+- Red text + ▼ for negative change
+- Gray if market closed or data unavailable
+- Font size: same as ticker chip (text-xs)
+
+## 3. "Restore briefing" in Settings
+- File: `packages/web/src/pages/Settings.tsx`
+- CrowdTest found: once you dismiss the daily briefing, you can't get it back until tomorrow
+- Add a button in Settings: "Show today's briefing" that clears the dismiss flag
+- Or better: add a "Daily Briefing" toggle in notification settings
 
 ## Testing
 - `pnpm --filter @event-radar/backend test` — all tests must pass
 - `pnpm --filter @event-radar/web test` — all tests must pass
 - `pnpm --filter @event-radar/web build` — must succeed
+- Add tests for the new briefing API endpoint
+- Add tests for the batch price endpoint
 
 ## PR
-- Branch: `feat/dq4-outcome-scorecard`
-- Title: `feat: DQ-4 outcome tracking + scorecard reframe`
+- Branch: `feat/dq5-briefing-price`
+- Title: `feat: DQ-5 daily briefing + price context on event cards`
 - **DO NOT MERGE. Create PR and stop.**
