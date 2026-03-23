@@ -23,6 +23,7 @@ import { Watchlist } from './pages/Watchlist.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { Footer } from './components/Footer.js';
 import { About } from './pages/About.js';
+import { NotFound } from './pages/NotFound.js';
 import { Privacy } from './pages/Privacy.js';
 import { Terms } from './pages/Terms.js';
 
@@ -187,6 +188,7 @@ const router = createBrowserRouter([
       { path: 'about', element: <About /> },
       { path: 'privacy', element: <Privacy /> },
       { path: 'terms', element: <Terms /> },
+      { path: '*', element: <NotFound /> },
     ],
   },
 ]);

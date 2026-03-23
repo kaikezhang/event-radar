@@ -260,3 +260,8 @@ export interface ScorecardSummary {
   sourceBuckets: ScorecardBucketSummary[];
   eventTypeBuckets: ScorecardBucketSummary[];
 }
+
+export interface ScorecardSeverityBreakdownItem {
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  count: number;
+}

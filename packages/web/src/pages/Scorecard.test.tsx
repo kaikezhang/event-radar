@@ -18,12 +18,17 @@ describe('Scorecard page', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=90',
       expect.objectContaining({ credentials: 'include' }),
     );
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/severity-breakdown?days=90',
+      expect.objectContaining({ credentials: 'include' }),
+    );
 
     expect(screen.getByText('Topline calibration')).toBeInTheDocument();
     expect(screen.getByText('124')).toBeInTheDocument();
     expect(screen.getByText('67.7%')).toBeInTheDocument();
     expect(screen.getByText('58.9%')).toBeInTheDocument();
     expect(screen.getByText('+4.3%')).toBeInTheDocument();
+    expect(screen.getByText(/rolling accuracy trend/i)).toBeInTheDocument();
+    expect(screen.getByText(/we're collecting enough data to show meaningful trends/i)).toBeInTheDocument();
   });
 
   it('renders all required bucket sections', async () => {
@@ -90,5 +95,72 @@ describe('Scorecard page', () => {
 
     expect(await screen.findByText(/scorecard data is taking a beat/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
+  });
+
+  it('adds tooltip help for scorecard jargon and renders real severity labels', async () => {
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Critical')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTitle(/how often the predicted direction \(up\/down\) matched actual price movement/i)).toBeInTheDocument();
+    expect(screen.getAllByTitle(/price change 20 trading days/i)).toHaveLength(2);
+    expect(screen.getByTitle(/how often the event led to a tradeable move of 5%\+/i)).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
+  });
+
+  it('shows a clear empty state when no severity data is available yet', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string'
+        ? new URL(input, 'http://localhost')
+        : new URL(input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/v1/scorecards/summary') {
+        return new Response(JSON.stringify({
+          days: 90,
+          totals: {
+            totalAlerts: 124,
+            alertsWithUsableVerdicts: 96,
+            directionalCorrectCount: 65,
+            directionalHitRate: 0.677,
+            setupWorkedCount: 57,
+            setupWorkedRate: 0.589,
+            avgT5Move: 1.8,
+            avgT20Move: 4.3,
+            medianT20Move: 3.2,
+          },
+          actionBuckets: [],
+          confidenceBuckets: [],
+          sourceBuckets: [],
+          eventTypeBuckets: [],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.pathname === '/api/v1/scorecards/severity-breakdown') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: 'not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(await screen.findByText(/no severity data available yet/i)).toBeInTheDocument();
   });
 });

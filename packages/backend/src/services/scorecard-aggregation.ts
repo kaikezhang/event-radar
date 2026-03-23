@@ -1,4 +1,4 @@
-import { eq, notInArray } from 'drizzle-orm';
+import { and, count, eq, gt, isNotNull, notInArray, sql } from 'drizzle-orm';
 import type { ConfidenceLevel } from '@event-radar/shared';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
@@ -66,6 +66,15 @@ export const ScorecardSummarySchema = z.object({
 });
 
 export type ScorecardSummary = z.infer<typeof ScorecardSummarySchema>;
+
+const ScorecardSeverityBreakdownItemSchema = z.object({
+  severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  count: z.number().int().nonnegative(),
+});
+
+export const ScorecardSeverityBreakdownSchema = z.array(ScorecardSeverityBreakdownItemSchema);
+
+export type ScorecardSeverityBreakdownItem = z.infer<typeof ScorecardSeverityBreakdownItemSchema>;
 
 interface ScorecardAggregationServiceOptions {
   now?: () => Date;
@@ -160,6 +169,36 @@ export class ScorecardAggregationService {
           right.totalAlerts - left.totalAlerts || left.bucket.localeCompare(right.bucket),
       ),
     });
+  }
+
+  async getSeverityBreakdown(options?: SummaryOptions): Promise<ScorecardSeverityBreakdownItem[]> {
+    const conditions = [
+      notInArray(events.source, EXCLUDED_SOURCES),
+      isNotNull(events.severity),
+    ];
+
+    if (options?.days != null) {
+      const cutoff = new Date(this.now().getTime() - options.days * 24 * 60 * 60 * 1000);
+      conditions.push(gt(events.createdAt, cutoff));
+    }
+
+    const rows = await this.db
+      .select({
+        severity: events.severity,
+        count: count(),
+      })
+      .from(events)
+      .where(and(...conditions))
+      .groupBy(events.severity)
+      .orderBy(sql`CASE ${events.severity}
+        WHEN 'CRITICAL' THEN 1
+        WHEN 'HIGH' THEN 2
+        WHEN 'MEDIUM' THEN 3
+        WHEN 'LOW' THEN 4
+        ELSE 5
+      END`);
+
+    return ScorecardSeverityBreakdownSchema.parse(rows);
   }
 
   private async getRows(): Promise<AggregationQueryRow[]> {

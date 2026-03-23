@@ -393,6 +393,13 @@ const SCORECARD_SUMMARY_ALL = {
   ],
 };
 
+const SCORECARD_SEVERITY_BREAKDOWN_90D = [
+  { severity: 'CRITICAL', count: 9 },
+  { severity: 'HIGH', count: 31 },
+  { severity: 'MEDIUM', count: 58 },
+  { severity: 'LOW', count: 26 },
+];
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -751,6 +758,20 @@ beforeEach(() => {
       }
 
       return jsonResponse(SCORECARD_SUMMARY_ALL);
+    }
+
+    if (url.pathname === '/api/v1/scorecards/severity-breakdown') {
+      const days = url.searchParams.get('days');
+      if (days === '30') {
+        return jsonResponse([
+          { severity: 'CRITICAL', count: 5 },
+          { severity: 'HIGH', count: 12 },
+          { severity: 'MEDIUM', count: 18 },
+          { severity: 'LOW', count: 6 },
+        ]);
+      }
+
+      return jsonResponse(SCORECARD_SEVERITY_BREAKDOWN_90D);
     }
 
     return jsonResponse({ error: 'Not found' }, 404);

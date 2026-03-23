@@ -93,7 +93,7 @@ export function createNotificationSettingsStore(db: Database) {
       return this.get(userId);
     },
 
-    async getByTicker(ticker: string): Promise<Array<{ userId: string; settings: UserNotificationSettings }>> {
+    async getByTicker(): Promise<Array<{ userId: string; settings: UserNotificationSettings }>> {
       // This will be used by the pipeline to find users watching a ticker
       // who have Discord webhook configured
       const rows = await db

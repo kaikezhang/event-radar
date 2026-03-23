@@ -254,10 +254,11 @@ describe('buildClassifyPrompt', () => {
       headline: 'Test',
       content: longContent,
     });
+    const contentLine = prompt
+      .split('\n')
+      .find((line) => line.startsWith('Content: '));
 
-    expect(prompt).toContain('...');
-    // Content truncated to 1500 chars; prompt includes template boilerplate
-    expect(prompt.length).toBeLessThan(longContent.length + 1000);
+    expect(contentLine).toBe(`Content: ${'x'.repeat(1500)}...`);
   });
 });
 

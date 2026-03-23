@@ -9,6 +9,7 @@ import type {
   HistoricalContext,
   LlmEnrichment,
   PriceChartData,
+  ScorecardSeverityBreakdownItem,
   ScorecardSummary,
   SimilarEvent,
   TickerProfileData,
@@ -596,6 +597,17 @@ export async function getScorecardSummary(days?: number): Promise<ScorecardSumma
   try {
     const query = days == null ? '' : `?days=${days}`;
     return await apiFetch(`/v1/scorecards/summary${query}`) as ScorecardSummary;
+  } catch {
+    return null;
+  }
+}
+
+export async function getScorecardSeverityBreakdown(
+  days?: number,
+): Promise<ScorecardSeverityBreakdownItem[] | null> {
+  try {
+    const query = days == null ? '' : `?days=${days}`;
+    return await apiFetch(`/v1/scorecards/severity-breakdown${query}`) as ScorecardSeverityBreakdownItem[];
   } catch {
     return null;
   }

@@ -4,6 +4,14 @@ import { EventSourceCard } from './EventSourceCard.js';
 import { SectionHeading } from './shared.js';
 import { deriveBullBear } from './utils.js';
 
+function AiDisclosureLabel() {
+  return (
+    <p className="mb-3 text-xs text-text-secondary/80">
+      🤖 AI-generated analysis · Verify with primary sources
+    </p>
+  );
+}
+
 /** Summary tab content: What Happened + Bull/Bear Thesis */
 export function EventSummaryContent({
   summary,
@@ -22,6 +30,7 @@ export function EventSummaryContent({
     <>
       <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <SectionHeading eyebrow="Catalyst / event summary" title="What Happened" />
+        <AiDisclosureLabel />
         <p className="text-[15px] leading-relaxed text-text-primary">{summary}</p>
       </section>
 
@@ -181,6 +190,7 @@ function BullBearColumns({
   return (
     <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <SectionHeading eyebrow="Directional thesis" title="Bull Case vs Bear Case" />
+      <AiDisclosureLabel />
       <div className="flex flex-col gap-4 md:flex-row">
         <div className="flex-1 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
           <h3 className="mb-3 text-sm font-semibold text-emerald-400">▲ Bull</h3>
