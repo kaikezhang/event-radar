@@ -1,75 +1,58 @@
-# TASK.md — DQ-5: Killer Features — Daily Briefing + Price Context
+# TASK.md — Production Polish: Remaining UX + Quality Issues
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-Two features that make users come back every day:
-1. Enhanced Daily Briefing with AI summary
-2. Price context on event cards
+Fix remaining issues from CrowdTest + owner evaluation to get closer to production-ready.
+These are smaller, high-impact improvements.
 
-## 1. Enhanced Daily Market Briefing
-- File: `packages/web/src/components/DailyBriefing.tsx`
-- Current: simple count of events in last 24h + top event
-- Enhance to a proper morning briefing:
+## 1. Production frontend build (not dev mode)
+- The frontend is running in Vite dev mode with HMR scripts exposed
+- Create a production serve setup:
+  - File: `packages/web/package.json` — add a `serve` script: `"serve": "vite preview --port 4173"`
+  - Or better: build first, then serve the dist folder
+  - `vite preview` serves the production build on the specified port
+- This removes HMR scripts, enables code splitting, minification
 
-### Data to show:
-- **Event count by severity**: "3 CRITICAL, 12 HIGH, 45 MEDIUM in the last 24h"
-- **Top 3 events**: Show title + ticker + severity for the 3 highest-severity events
-- **Source breakdown**: "SEC filings: 5, Breaking news: 3, Trading halts: 2"
-- **Watchlist activity**: "Events affecting your watchlist: 8" (if user has watchlist)
+## 2. Fix event deduplication display
+- Some events appear multiple times in the feed from different sources about the same topic
+- File: `packages/web/src/pages/Feed/FeedList.tsx` or feed data layer
+- Group events about the same ticker within a 2-hour window
+- Show as: "NVDA · 3 related events" with expandable detail
+- Or at minimum: add a visual indicator "Also reported by: SEC EDGAR, Breaking News"
 
-### UI:
-- Expandable card at top of feed (collapsed by default shows "Daily Briefing · 3 critical events")
-- Click to expand and see full briefing
-- "Dismiss for today" button (already exists)
-- Show a "View all" link to History page
-- Use a warm gradient background to make it visually distinct
+## 3. Light mode support (or at least don't break)
+- CrowdTest noted: some components assume dark theme
+- File: `packages/web/src/index.css` or theme config
+- At minimum: ensure the app doesn't look broken if someone has light mode OS preference
+- Quick fix: force dark mode via `<html class="dark">` and CSS `color-scheme: dark`
+- Or if time allows: implement a basic light theme toggle in Settings
 
-### API:
-- Create `GET /api/v1/briefing/daily` endpoint in backend
-- File: `packages/backend/src/routes/` — new file `briefing.ts`
-- Returns: `{ date, totalEvents, bySeverity: {CRITICAL, HIGH, MEDIUM, LOW}, topEvents: [...], bySource: {...}, watchlistEvents: number }`
-- Query events from last 24h, aggregate by severity and source
-- Top events = ORDER BY severity priority DESC, created_at DESC LIMIT 3
+## 4. Mobile back button on event detail
+- File: `packages/web/src/pages/EventDetail/index.tsx`
+- No back button on mobile event detail pages
+- Add a "← Back" button at the top of event detail on mobile viewports
+- Use `useNavigate(-1)` from react-router
 
-## 2. Price Context on Event Cards
-- File: `packages/web/src/components/AlertCard.tsx`
-- For events with a ticker, show current price + daily change
-- Use the existing `/api/price/:ticker` endpoint
+## 5. Keyboard shortcut hints in UI
+- File: `packages/web/src/components/BottomNav.tsx` or feed header
+- Only 6 keyboard shortcuts, discoverable only via `?` key
+- Add subtle hint text somewhere visible: "Press ? for keyboard shortcuts"
+- Or show shortcut hints on hover for primary actions
 
-### Implementation:
-- Add a small price chip next to the ticker on event cards:
-  - "AAPL $178.50 (+2.3%)" in green for positive, red for negative
-- Don't fetch price for every card on initial load (too many API calls!)
-- Instead: batch-fetch prices for visible tickers when feed loads
-  - Create a new endpoint `GET /api/price/batch?tickers=AAPL,NVDA,TSLA`
-  - File: `packages/backend/src/routes/price.ts` — add batch endpoint
-  - Returns: `{ AAPL: { price: 178.50, change: 2.3, changePercent: 1.3 }, ... }`
-  - Cache prices for 5 minutes (in-memory or simple object cache)
-- Show price only for the unique tickers in the current viewport
-- If price fetch fails, just don't show the price chip (graceful degradation)
-
-### Price chip design:
-- Small, inline with ticker chip
-- Green text + ▲ for positive change
-- Red text + ▼ for negative change
-- Gray if market closed or data unavailable
-- Font size: same as ticker chip (text-xs)
-
-## 3. "Restore briefing" in Settings
-- File: `packages/web/src/pages/Settings.tsx`
-- CrowdTest found: once you dismiss the daily briefing, you can't get it back until tomorrow
-- Add a button in Settings: "Show today's briefing" that clears the dismiss flag
-- Or better: add a "Daily Briefing" toggle in notification settings
+## 6. Fix WebSocket reconnection — infinite retry
+- File: `packages/web/src/hooks/useWebSocket.ts` or connection context
+- Current: max 5 reconnect attempts before giving up
+- For a trading app, WebSocket should retry indefinitely with exponential backoff
+- Change max attempts to Infinity (or a very large number like 1000)
+- Cap backoff at 30 seconds
 
 ## Testing
-- `pnpm --filter @event-radar/backend test` — all tests must pass
 - `pnpm --filter @event-radar/web test` — all tests must pass
-- `pnpm --filter @event-radar/web build` — must succeed
-- Add tests for the new briefing API endpoint
-- Add tests for the batch price endpoint
+- `pnpm --filter @event-radar/web build` — must succeed (especially important for task 1)
+- Test on mobile viewport (375px) for task 4
 
 ## PR
-- Branch: `feat/dq5-briefing-price`
-- Title: `feat: DQ-5 daily briefing + price context on event cards`
+- Branch: `feat/production-polish`
+- Title: `feat: production polish — mobile nav, WebSocket retry, keyboard hints, light mode guard`
 - **DO NOT MERGE. Create PR and stop.**
