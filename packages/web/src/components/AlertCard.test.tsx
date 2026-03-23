@@ -197,4 +197,30 @@ describe('AlertCard', () => {
 
     expect(screen.queryByLabelText(/sent as a push alert/i)).not.toBeInTheDocument();
   });
+
+  it('renders a positive price chip next to the primary ticker', () => {
+    render(
+      <MemoryRouter>
+        <AlertCard
+          alert={sampleAlert}
+          priceQuote={{ price: 178.5, change: 2.3, changePercent: 2.3 }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/NVDA \$178\.50 \(▲2\.3%\)/i)).toBeInTheDocument();
+  });
+
+  it('renders a negative price chip when the daily move is down', () => {
+    render(
+      <MemoryRouter>
+        <AlertCard
+          alert={sampleAlert}
+          priceQuote={{ price: 178.5, change: -3.4, changePercent: -3.4 }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/NVDA \$178\.50 \(▼3\.4%\)/i)).toBeInTheDocument();
+  });
 });

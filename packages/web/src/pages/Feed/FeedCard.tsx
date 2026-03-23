@@ -2,7 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { AlertCard } from '../../components/AlertCard.js';
 import { SwipeableCard } from '../../components/SwipeableCard.js';
 import { cn } from '../../lib/utils.js';
-import type { AlertSummary, ScorecardSummary } from '../../types/index.js';
+import type { AlertSummary, PriceBatchQuote, ScorecardSummary } from '../../types/index.js';
 import { getTrustCue } from './useFeedState.js';
 
 interface FeedCardProps {
@@ -15,6 +15,7 @@ interface FeedCardProps {
   onDismiss: (alertId: string) => void;
   onQuickWatchlist: (alert: AlertSummary) => void | Promise<void>;
   onToggleWatchlist: (ticker: string) => void;
+  priceQuote?: PriceBatchQuote;
   scorecardSummary: ScorecardSummary | null;
 }
 
@@ -28,6 +29,7 @@ export function FeedCard({
   onDismiss,
   onQuickWatchlist,
   onToggleWatchlist,
+  priceQuote,
   scorecardSummary,
 }: FeedCardProps) {
   const card = (
@@ -50,6 +52,7 @@ export function FeedCard({
         showWatchlistButton
         isOnWatchlist={isOnWatchlist}
         onToggleWatchlist={onToggleWatchlist}
+        priceQuote={priceQuote}
       />
       {alert.dedupCount != null && alert.dedupCount > 0 && (
         <p className="mt-1 px-3 pb-1 text-xs text-text-tertiary">

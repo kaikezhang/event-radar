@@ -215,6 +215,30 @@ export interface PriceChartData {
   candles: PriceCandle[];
 }
 
+export interface PriceBatchQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+}
+
+export interface DailyBriefingData {
+  date: string;
+  totalEvents: number;
+  bySeverity: {
+    CRITICAL: number;
+    HIGH: number;
+    MEDIUM: number;
+    LOW: number;
+  };
+  topEvents: Array<{
+    title: string;
+    ticker: string | null;
+    severity: string;
+  }>;
+  bySource: Record<string, number>;
+  watchlistEvents: number;
+}
+
 export interface WatchlistItem {
   id: string;
   ticker: string;

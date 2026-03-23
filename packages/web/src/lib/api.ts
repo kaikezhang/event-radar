@@ -1,6 +1,7 @@
 import type {
   AlertSummary,
   ChartRange,
+  DailyBriefingData,
   EnrichmentTicker,
   EventMarketData,
   EventOutcome,
@@ -8,6 +9,7 @@ import type {
   EventDetailData,
   HistoricalContext,
   LlmEnrichment,
+  PriceBatchQuote,
   PriceChartData,
   ScorecardSeverityBreakdownItem,
   ScorecardSummary,
@@ -750,6 +752,56 @@ export async function getTickerPrice(symbol: string, range: ChartRange): Promise
       close: Number(candle.close ?? 0),
       volume: Number(candle.volume ?? 0),
     })),
+  };
+}
+
+export async function getTickerPricesBatch(tickers: string[]): Promise<Record<string, PriceBatchQuote>> {
+  if (tickers.length === 0) {
+    return {};
+  }
+
+  const params = new URLSearchParams({
+    tickers: tickers.map((ticker) => ticker.toUpperCase()).join(','),
+  });
+  const data = await apiFetch(`/price/batch?${params.toString()}`);
+  const quotes: Record<string, PriceBatchQuote> = {};
+
+  for (const [ticker, value] of Object.entries(data as Record<string, Record<string, unknown>>)) {
+    quotes[ticker.toUpperCase()] = {
+      price: Number(value.price ?? 0),
+      change: Number(value.change ?? 0),
+      changePercent: Number(value.changePercent ?? value.change_percent ?? 0),
+    };
+  }
+
+  return quotes;
+}
+
+export async function getDailyBriefing(): Promise<DailyBriefingData> {
+  const data = await apiFetch('/v1/briefing/daily');
+  const bySeverity = (data.bySeverity ?? {}) as Record<string, unknown>;
+
+  return {
+    date: (data.date as string) ?? '',
+    totalEvents: Number(data.totalEvents ?? 0),
+    bySeverity: {
+      CRITICAL: Number(bySeverity.CRITICAL ?? 0),
+      HIGH: Number(bySeverity.HIGH ?? 0),
+      MEDIUM: Number(bySeverity.MEDIUM ?? 0),
+      LOW: Number(bySeverity.LOW ?? 0),
+    },
+    topEvents: ((data.topEvents as Record<string, unknown>[] | undefined) ?? []).map((event) => ({
+      title: (event.title as string) ?? '',
+      ticker: (event.ticker as string | null) ?? null,
+      severity: (event.severity as string) ?? 'LOW',
+    })),
+    bySource: Object.fromEntries(
+      Object.entries((data.bySource ?? {}) as Record<string, unknown>).map(([source, count]) => [
+        source,
+        Number(count ?? 0),
+      ]),
+    ),
+    watchlistEvents: Number(data.watchlistEvents ?? 0),
   };
 }
 

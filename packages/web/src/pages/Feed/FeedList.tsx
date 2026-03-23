@@ -3,6 +3,7 @@ import { Plus, RefreshCw, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState.js';
 import { PillBanner } from '../../components/PillBanner.js';
+import { useTickerBatchPrices } from '../../hooks/useTickerBatchPrices.js';
 import { cn } from '../../lib/utils.js';
 import { DailyBriefing } from '../../components/DailyBriefing.js';
 import type { AlertSummary, FilterPreset, ScorecardSummary } from '../../types/index.js';
@@ -147,6 +148,9 @@ export function FeedList({
   touchHandlers,
 }: FeedListProps) {
   const isWatchlistMode = activeTab === 'watchlist';
+  const priceQuotes = useTickerBatchPrices(filteredAlerts, {
+    enabled: !isInitialLoading && !error,
+  });
 
   return (
     <div
@@ -240,7 +244,7 @@ export function FeedList({
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
 
       {!isInitialLoading && !error && filteredAlerts.length > 0 && (
-        <DailyBriefing alerts={filteredAlerts} scope={activeTab === 'smart' ? 'watchlist' : activeTab === 'all' ? 'all' : 'watchlist'} />
+        <DailyBriefing />
       )}
 
       {showSmartFeedEmpty ? (
@@ -370,6 +374,7 @@ export function FeedList({
                         onDismiss={handleDismiss}
                         onQuickWatchlist={handleQuickWatchlist}
                         onToggleWatchlist={onToggleWatchlist}
+                        priceQuote={alert.tickers[0] ? priceQuotes[alert.tickers[0].toUpperCase()] : undefined}
                         scorecardSummary={scorecardSummary}
                       />
                     ))}

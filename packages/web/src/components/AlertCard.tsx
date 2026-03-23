@@ -1,6 +1,6 @@
 import { BellRing, Star, CircleCheckBig } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { AlertSummary } from '../types/index.js';
+import type { AlertSummary, PriceBatchQuote } from '../types/index.js';
 import { DirectionBadge } from './DirectionBadge.js';
 import { formatRelativeTime } from '../lib/format.js';
 import { cn } from '../lib/utils.js';
@@ -14,6 +14,7 @@ interface AlertCardProps {
   showWatchlistButton?: boolean;
   isOnWatchlist?: boolean;
   onToggleWatchlist?: (ticker: string) => void;
+  priceQuote?: PriceBatchQuote;
 }
 
 const SOURCE_DISPLAY: Record<string, string> = {
@@ -58,6 +59,7 @@ export function AlertCard({
   showWatchlistButton,
   isOnWatchlist,
   onToggleWatchlist,
+  priceQuote,
 }: AlertCardProps) {
   const tickers = Array.isArray(alert.tickers) ? alert.tickers : [];
   const primaryTicker = tickers[0];
@@ -143,6 +145,9 @@ export function AlertCard({
               {t}
             </Link>
           ))}
+          {primaryTicker && priceQuote && (
+            <PriceChip ticker={primaryTicker} quote={priceQuote} />
+          )}
           {Array.isArray(alert.tickers) && alert.tickers.length > 3 && (
             <span className="rounded-md bg-bg-elevated px-1.5 py-0.5 text-text-tertiary">
               +{alert.tickers.length - 3}
@@ -281,6 +286,9 @@ export function AlertCard({
             {t}
           </Link>
         ))}
+        {primaryTicker && priceQuote && (
+          <PriceChip ticker={primaryTicker} quote={priceQuote} />
+        )}
         {Array.isArray(alert.tickers) && alert.tickers.length > 3 && (
           <span className="rounded-md bg-bg-elevated px-1.5 py-0.5 text-text-tertiary">
             +{alert.tickers.length - 3}
@@ -312,6 +320,24 @@ export function AlertCard({
         )}
       </div>
     </article>
+  );
+}
+
+function PriceChip({ ticker, quote }: { ticker: string; quote: PriceBatchQuote }) {
+  const isPositive = quote.changePercent > 0;
+  const isNegative = quote.changePercent < 0;
+  const arrow = isPositive ? '▲' : isNegative ? '▼' : '•';
+  const tone = isPositive
+    ? 'text-emerald-400'
+    : isNegative
+      ? 'text-red-400'
+      : 'text-zinc-400';
+
+  return (
+    <span className={cn('rounded-md bg-bg-elevated px-1.5 py-0.5 font-semibold', tone)}>
+      {ticker} ${quote.price.toFixed(2)} ({arrow}
+      {Math.abs(quote.changePercent).toFixed(1)}%)
+    </span>
   );
 }
 

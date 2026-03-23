@@ -32,6 +32,7 @@ import { registerAiObservabilityRoutes } from './routes/ai-observability.js';
 import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes } from './routes/price.js';
+import { registerBriefingRoutes } from './routes/briefing.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
 import { registerRegimeRoutes } from './routes/regime.js';
@@ -78,6 +79,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
   registerPriceRoutes(server, {
     apiKey,
     priceChartService,
+    marketDataCache: tickerMarketDataCache,
   });
   registerRegimeRoutes(server, {
     apiKey,
@@ -108,6 +110,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerPushSubscriptionRoutes(server, db, { apiKey });
     registerPreferencesRoutes(server, db, { apiKey });
     registerNotificationSettingsRoutes(server, db, { apiKey });
+    registerBriefingRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {

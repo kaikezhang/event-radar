@@ -284,3 +284,170 @@ describe('GET /api/price/:ticker', () => {
     await safeCloseServer(ctx.server);
   });
 });
+
+describe('GET /api/price/batch', () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns current quotes for the requested tickers', async () => {
+    const marketDataCache = {
+      getOrFetch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          symbol: 'NVDA',
+          price: 178.5,
+          change1d: 2.3,
+          change5d: 4.1,
+          change20d: 9.4,
+          volumeRatio: 1.1,
+          rsi14: 61,
+          high52w: 181.2,
+          low52w: 88.5,
+          support: 170.1,
+          resistance: 180.4,
+        })
+        .mockResolvedValueOnce({
+          symbol: 'TSLA',
+          price: 212.75,
+          change1d: -3.4,
+          change5d: -1.2,
+          change20d: 5.9,
+          volumeRatio: 1.4,
+          rsi14: 49,
+          high52w: 275.0,
+          low52w: 138.8,
+          support: 205.0,
+          resistance: 218.0,
+        }),
+    };
+    const ctx = buildApp({
+      logger: false,
+      apiKey: TEST_API_KEY,
+      marketDataCache,
+    });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/price/batch?tickers=nvda,TSLA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      NVDA: {
+        price: 178.5,
+        change: 178.5 * 2.3 / 100,
+        changePercent: 2.3,
+      },
+      TSLA: {
+        price: 212.75,
+        change: 212.75 * -3.4 / 100,
+        changePercent: -3.4,
+      },
+    });
+    expect(marketDataCache.getOrFetch).toHaveBeenNthCalledWith(1, 'NVDA');
+    expect(marketDataCache.getOrFetch).toHaveBeenNthCalledWith(2, 'TSLA');
+    await safeCloseServer(ctx.server);
+  });
+
+  it('deduplicates and normalizes requested tickers', async () => {
+    const marketDataCache = {
+      getOrFetch: vi.fn().mockResolvedValue({
+        symbol: 'NVDA',
+        price: 178.5,
+        change1d: 2.3,
+        change5d: 4.1,
+        change20d: 9.4,
+        volumeRatio: 1.1,
+        rsi14: 61,
+        high52w: 181.2,
+        low52w: 88.5,
+        support: 170.1,
+        resistance: 180.4,
+      }),
+    };
+    const ctx = buildApp({
+      logger: false,
+      apiKey: TEST_API_KEY,
+      marketDataCache,
+    });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/price/batch?tickers=NVDA,nvda,NVDA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      NVDA: {
+        price: 178.5,
+        change: 178.5 * 2.3 / 100,
+        changePercent: 2.3,
+      },
+    });
+    expect(marketDataCache.getOrFetch).toHaveBeenCalledTimes(1);
+    expect(marketDataCache.getOrFetch).toHaveBeenCalledWith('NVDA');
+    await safeCloseServer(ctx.server);
+  });
+
+  it('drops tickers whose quote lookup fails', async () => {
+    const marketDataCache = {
+      getOrFetch: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          symbol: 'TSLA',
+          price: 212.75,
+          change1d: -3.4,
+          change5d: -1.2,
+          change20d: 5.9,
+          volumeRatio: 1.4,
+          rsi14: 49,
+          high52w: 275.0,
+          low52w: 138.8,
+          support: 205.0,
+          resistance: 218.0,
+        }),
+    };
+    const ctx = buildApp({
+      logger: false,
+      apiKey: TEST_API_KEY,
+      marketDataCache,
+    });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/price/batch?tickers=NVDA,TSLA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      TSLA: {
+        price: 212.75,
+        change: 212.75 * -3.4 / 100,
+        changePercent: -3.4,
+      },
+    });
+    await safeCloseServer(ctx.server);
+  });
+
+  it('rejects an empty ticker list', async () => {
+    const ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/price/batch?tickers=',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(400);
+    await safeCloseServer(ctx.server);
+  });
+});
