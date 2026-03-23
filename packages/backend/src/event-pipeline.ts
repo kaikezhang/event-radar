@@ -26,6 +26,7 @@ import { createUserWebhookDelivery } from './services/user-webhook-delivery.js';
 import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
 import { buildPredictionPayload } from './prediction-helpers.js';
+import { resolvePoliticalClassificationResult } from './pipeline/political-llm-policy.js';
 import { inferHighPriorityTicker, shouldInferTicker } from './pipeline/ticker-inference.js';
 import { categorizeFilterReason, logTitle, PRIMARY_SOURCES_SET } from './pipeline-helpers.js';
 import {
@@ -104,7 +105,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
   const processPipelineEvent = async (
     event: RawEvent,
-    result: ClassificationResult,
+    ruleResult: ClassificationResult,
   ): Promise<void> => {
     pipelineFunnelTotal.inc({ stage: 'ingested' });
     pipelineFunnelTotal.inc({ stage: 'classified' });
@@ -112,13 +113,13 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
     // Step 2: Track metrics (always, even for duplicates)
     eventsProcessedTotal.inc({ source: event.source, event_type: event.type });
     eventsBySource.inc({ source: event.source });
-    eventsBySeverity.inc({ severity: result.severity });
 
     // Step 3: Dedup check
     const dedupResult = await deduplicator.check(event);
     activeStories.set(deduplicator.activeStoryCount);
 
     if (dedupResult.isDuplicate) {
+      eventsBySeverity.inc({ severity: ruleResult.severity });
       eventsDeduplicatedTotal.inc({ match_type: dedupResult.matchType });
       pipelineFunnelTotal.inc({ stage: 'deduped' });
       auditLog.record({
@@ -144,14 +145,21 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
     // Step 5: LLM classification (once, shared by DB storage and delivery)
     const llmResult = llmClassifier
-      ? await llmClassifier.classify(event, result)
+      ? await llmClassifier.classify(event, ruleResult)
       : undefined;
 
     if (llmClassifier && llmResult) {
       llmClassificationsTotal.inc({ status: llmResult.ok ? 'success' : 'failure' });
     }
 
-    if (shouldInferTicker(event, result.severity, llmResult?.ok ? llmResult.value : undefined)) {
+    const classificationResult = resolvePoliticalClassificationResult(
+      ruleResult,
+      llmResult?.ok ? llmResult.value : undefined,
+    );
+
+    eventsBySeverity.inc({ severity: classificationResult.severity });
+
+    if (shouldInferTicker(event, classificationResult.severity, llmResult?.ok ? llmResult.value : undefined)) {
       const inferredTicker = inferHighPriorityTicker(event);
       const existingTickers = Array.isArray(event.metadata?.['tickers'])
         ? (event.metadata?.['tickers'] as unknown[]).filter(
@@ -193,7 +201,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
       eventId = await storeEvent(db, {
         event,
-        severity: result.severity,
+        severity: classificationResult.severity,
         ticker: typeof ticker === 'string' ? ticker : undefined,
         eventType: typeof classifiedEventType === 'string' ? classifiedEventType : undefined,
       });
@@ -201,7 +209,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       if (accuracyService) {
         const predictionPayload = await buildPredictionPayload(
           event,
-          result,
+          ruleResult,
           llmResult,
           adaptiveService,
         );
@@ -231,7 +239,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         source: event.source,
         title: event.title,
         summary: event.body,
-        severity: result.severity,
+        severity: classificationResult.severity,
         metadata: event.metadata,
         time: event.timestamp,
         llmReason: llmResult?.ok ? llmResult.value.reasoning : undefined,
@@ -250,7 +258,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       gracePeriodSuppressedTotal.inc();
       auditLog.record({
         eventId: event.id, source: event.source, title: event.title,
-        severity: result.severity, outcome: 'grace_period', stoppedAt: 'grace_period',
+        severity: classificationResult.severity, outcome: 'grace_period', stoppedAt: 'grace_period',
         reason: `startup grace period (${Math.round(uptimeMs / 1000)}s / ${DELIVERY_GRACE_MS / 1000}s)`,
       });
       return; // Still in startup grace period — store to DB but don't deliver
@@ -298,7 +306,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         });
         auditLog.record({
           eventId: event.id, source: event.source, title: event.title,
-          severity: result.severity, ticker,
+          severity: classificationResult.severity, ticker,
           outcome: 'filtered', stoppedAt: 'alert_filter',
           reason: filterResult.reason, reasonCategory: reasonCat,
         });
@@ -311,7 +319,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         stage: 'filter',
         source: event.source,
         title: logTitle(event.title),
-        severity: result.severity,
+        severity: classificationResult.severity,
         pass: true,
         reason: filterResult.reason,
         ticker,
@@ -344,7 +352,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
             });
             auditLog.record({
               eventId: event.id, source: event.source, title: event.title,
-              severity: result.severity, ticker,
+              severity: classificationResult.severity, ticker,
               outcome: 'filtered', stoppedAt: 'llm_judge',
               reason: 'circuit breaker open — secondary source blocked',
               reasonCategory: 'llm_circuit_breaker',
@@ -385,7 +393,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
             });
             auditLog.record({
               eventId: event.id, source: event.source, title: event.title,
-              severity: result.severity, ticker,
+              severity: classificationResult.severity, ticker,
               outcome: 'filtered', stoppedAt: 'llm_judge',
               reason: `LLM: ${gateResult.reason} (confidence: ${gateResult.confidence})`,
               reasonCategory: 'llm_judge',
@@ -498,10 +506,10 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       const gateResult = deliveryGate.evaluate({
         event,
         enrichment: enrichment ?? null,
-        classificationConfidence: result.confidence,
-        confidenceBucket: result.confidenceLevel ?? 'unconfirmed',
+        classificationConfidence: classificationResult.confidence,
+        confidenceBucket: classificationResult.confidenceLevel ?? 'unconfirmed',
         classifierDirection: gateClassifierDirection,
-        classifierSeverity: result.severity,
+        classifierSeverity: classificationResult.severity,
       });
 
       const gateMode = process.env.DELIVERY_GATE_MODE ?? 'shadow';
@@ -516,7 +524,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         pipelineFunnelTotal.inc({ stage: 'delivery_gate_blocked' });
         auditLog.record({
           eventId: event.id, source: event.source, title: event.title,
-          severity: result.severity, ticker,
+          severity: classificationResult.severity, ticker,
           outcome: 'filtered', stoppedAt: 'delivery_gate',
           reason: gateResult.reason, reasonCategory: 'delivery_gate',
         });
@@ -607,12 +615,12 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           stage: 'kill_switch',
           source: event.source,
           title: logTitle(event.title),
-          severity: result.severity,
+          severity: classificationResult.severity,
           reason: 'delivery kill switch is active',
         });
         auditLog.record({
           eventId: event.id, source: event.source, title: event.title,
-          severity: result.severity, ticker,
+          severity: classificationResult.severity, ticker,
           outcome: 'filtered', stoppedAt: 'kill_switch',
           reason: 'delivery kill switch is active',
           reasonCategory: 'kill_switch',
@@ -624,7 +632,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       const routeResult = await alertRouter.route({
         storedEventId: eventId,
         event,
-        severity: result.severity,
+        severity: classificationResult.severity,
         ticker,
         confirmationCount:
           typeof event.metadata?.['confirmationCount'] === 'number'
@@ -633,8 +641,8 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         confirmedSources: Array.isArray(event.metadata?.['confirmedSources'])
           ? (event.metadata['confirmedSources'] as string[])
           : undefined,
-        classificationConfidence: result.confidence,
-        confidenceBucket: result.confidenceLevel,
+        classificationConfidence: classificationResult.confidence,
+        confidenceBucket: classificationResult.confidenceLevel,
         enrichment,
         historicalContext,
         regimeSnapshot,
@@ -668,7 +676,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           const webhookResult = await userWebhookDelivery.deliverToMatchingUsers({
             title: event.title,
             description: enrichment?.impact ?? event.title,
-            severity: result.severity,
+            severity: classificationResult.severity,
             ticker,
             source: event.source,
             timestamp: event.timestamp ?? new Date(),
@@ -697,7 +705,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         stage: 'delivery',
         source: event.source,
         title: logTitle(event.title),
-        severity: result.severity,
+        severity: classificationResult.severity,
         channels: results.map(r => r.channel),
         routingTier: routeResult.decision.tier,
         pushMode: routeResult.decision.pushMode,
@@ -713,7 +721,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         : undefined;
       auditLog.record({
         eventId: event.id, source: event.source, title: event.title,
-        severity: result.severity, ticker,
+        severity: classificationResult.severity, ticker,
         outcome: 'delivered', stoppedAt: 'delivery',
         reason: filterResult.reason,
         reasonCategory: reasonCat,

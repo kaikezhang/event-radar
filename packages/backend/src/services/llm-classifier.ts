@@ -8,6 +8,7 @@ import {
 } from '@event-radar/shared';
 import { type LLMProvider, LLMError } from './llm-provider.js';
 import { buildClassifyPrompt, parseLLMClassification } from './classification-prompt.js';
+import { shouldForcePoliticalLlmClassification } from '../pipeline/political-llm-policy.js';
 
 export interface ClassifyInput {
   headline: string;
@@ -77,6 +78,10 @@ export class LLMClassifierService {
   }
 
   shouldUseLLM(event: RawEvent, ruleResult: ClassificationResult): boolean {
+    if (shouldForcePoliticalLlmClassification(ruleResult)) {
+      return true;
+    }
+
     // Rule engine confidence < 0.6 → use LLM
     if (ruleResult.confidence < 0.6) {
       return true;

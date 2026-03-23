@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { resetMetrics, registry } from '../metrics.js';
 import { safeCloseServer } from './helpers/test-db.js';
@@ -93,15 +93,17 @@ describe('metrics tracking via event bus', () => {
       timestamp: new Date(),
     });
 
-    const metricsResponse = await ctx.server.inject({
-      method: 'GET',
-      url: '/metrics',
-    });
+    await vi.waitFor(async () => {
+      const metricsResponse = await ctx.server.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
 
-    const body = metricsResponse.body;
-    expect(body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 1');
-    expect(body).toContain('events_by_source{source="sec-edgar"} 1');
-    expect(body).toContain('events_by_severity{severity="MEDIUM"} 1');
+      const body = metricsResponse.body;
+      expect(body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 1');
+      expect(body).toContain('events_by_source{source="sec-edgar"} 1');
+      expect(body).toContain('events_by_severity{severity="MEDIUM"} 1');
+    });
   });
 
   it('should track processing duration histogram', async () => {
@@ -114,13 +116,15 @@ describe('metrics tracking via event bus', () => {
       timestamp: new Date(),
     });
 
-    const metricsResponse = await ctx.server.inject({
-      method: 'GET',
-      url: '/metrics',
-    });
+    await vi.waitFor(async () => {
+      const metricsResponse = await ctx.server.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
 
-    expect(metricsResponse.body).toContain('processing_duration_seconds_bucket');
-    expect(metricsResponse.body).toContain('processing_duration_seconds_count');
+      expect(metricsResponse.body).toContain('processing_duration_seconds_bucket');
+      expect(metricsResponse.body).toContain('processing_duration_seconds_count');
+    });
   });
 
   it('should accumulate counters across multiple events', async () => {
@@ -142,15 +146,17 @@ describe('metrics tracking via event bus', () => {
       timestamp: new Date(),
     });
 
-    const metricsResponse = await ctx.server.inject({
-      method: 'GET',
-      url: '/metrics',
-    });
+    await vi.waitFor(async () => {
+      const metricsResponse = await ctx.server.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
 
-    const body = metricsResponse.body;
-    expect(body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 1');
-    expect(body).toContain('events_processed_total{source="sec-edgar",event_type="form-4"} 1');
-    expect(body).toContain('events_by_source{source="sec-edgar"} 2');
+      const body = metricsResponse.body;
+      expect(body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 1');
+      expect(body).toContain('events_processed_total{source="sec-edgar",event_type="form-4"} 1');
+      expect(body).toContain('events_by_source{source="sec-edgar"} 2');
+    });
   });
 });
 
