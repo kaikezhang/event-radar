@@ -10,6 +10,7 @@ import { useAudioSquawk } from './hooks/useAudioSquawk.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { AuthVerify } from './pages/AuthVerify.js';
+import { Calendar } from './pages/Calendar.js';
 import { EventDetail } from './pages/EventDetail.js';
 import { Feed } from './pages/Feed.js';
 import { Login } from './pages/Login.js';
@@ -183,6 +184,7 @@ const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Feed /> },
+      { path: 'calendar', element: <Calendar /> },
       { path: 'scorecard', element: <Scorecard /> },
       { path: 'event/:id', element: <EventDetail /> },
       { path: 'ticker/:symbol', element: <TickerProfile /> },
