@@ -185,7 +185,10 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               {data.outcome && (
                 <WhatHappenedNext outcome={data.outcome} direction={direction} />
               )}
-              <SimilarPastEvents similarEvents={data.historicalPattern.similarEvents} />
+              <SimilarPastEvents
+                similarEvents={data.historicalPattern.similarEvents}
+                outcomeStats={data.historicalPattern.outcomeStats}
+              />
               <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 lg:hidden">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                   Quick actions

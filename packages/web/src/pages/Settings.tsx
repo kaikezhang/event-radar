@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
 import { useAlertSound } from '../hooks/useAlertSound.js';
-import { useAudioSquawk, type SquawkThreshold } from '../hooks/useAudioSquawk.js';
+import { useAudioSquawk } from '../hooks/useAudioSquawk.js';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -162,7 +162,7 @@ export function Settings() {
   const {
     preferences: squawkPreferences,
     setEnabled: setSquawkEnabled,
-    setThreshold: setSquawkThreshold,
+    setSpeakWhenHidden,
   } = useAudioSquawk();
   const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
     ...getWebPushSupport(),
@@ -1056,7 +1056,7 @@ export function Settings() {
         id="audio-squawk"
         title="Audio squawk"
         eyebrow="TTS"
-        description="Browser text-to-speech announcements for live events."
+        description="Critical-only spoken alerts with a short attention tone."
       >
         <div className="space-y-4">
           <div>
@@ -1064,13 +1064,13 @@ export function Settings() {
               Audio squawk
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Reads event headlines aloud using your browser&apos;s built-in text-to-speech. No external API needed.
+              Plays a short tone, then reads new CRITICAL event headlines with your browser&apos;s built-in text-to-speech.
             </p>
           </div>
 
           <label className="flex items-center justify-between gap-4" htmlFor="squawk-toggle">
             <span>
-              <span className="block text-sm font-medium text-text-primary">Enable audio squawk</span>
+              <span className="block text-sm font-medium text-text-primary">Audio alerts for CRITICAL events</span>
               <span className="mt-1 block text-xs text-text-secondary">
                 Stores this preference locally on this device.
               </span>
@@ -1085,20 +1085,26 @@ export function Settings() {
           </label>
 
           {squawkPreferences.enabled ? (
-            <label className="block space-y-2" htmlFor="squawk-threshold">
-              <span className="block text-sm font-medium text-text-primary">Severity threshold</span>
-              <select
-                id="squawk-threshold"
-                value={squawkPreferences.threshold}
-                onChange={(event) => setSquawkThreshold(event.target.value as SquawkThreshold)}
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-              >
-                <option value="critical">Critical only</option>
-                <option value="critical+high">Critical + High</option>
-                <option value="all">All severities</option>
-              </select>
+            <label className="flex items-center justify-between gap-4" htmlFor="squawk-hidden-toggle">
+              <span>
+                <span className="block text-sm font-medium text-text-primary">Speak while this tab is hidden</span>
+                <span className="mt-1 block text-xs text-text-secondary">
+                  Leave this off to keep spoken alerts limited to the visible tab.
+                </span>
+              </span>
+              <input
+                id="squawk-hidden-toggle"
+                type="checkbox"
+                checked={squawkPreferences.speakWhenHidden}
+                onChange={(event) => setSpeakWhenHidden(event.target.checked)}
+                className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
+              />
             </label>
-          ) : null}
+          ) : (
+            <p className="text-sm leading-6 text-text-secondary">
+              Turn this on only if you want an audible callout for top-priority alerts.
+            </p>
+          )}
         </div>
       </CollapsiblePanel>
 

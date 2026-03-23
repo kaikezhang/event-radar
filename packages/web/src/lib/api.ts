@@ -15,6 +15,7 @@ import type {
   ScorecardSeverityBreakdownItem,
   ScorecardSummary,
   SimilarEvent,
+  SimilarEventOutcomeStats,
   TickerProfileData,
   WatchlistItem,
   WatchlistSection,
@@ -410,6 +411,59 @@ function normalizeHistoricalMove(value: number | undefined, treatAsFraction: boo
   return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)}%`;
 }
 
+function normalizeSimilarEvent(raw: Record<string, unknown>): SimilarEvent {
+  const changeT5 = typeof raw.changeT5 === 'number'
+    ? raw.changeT5
+    : typeof raw.change_t5 === 'number'
+      ? raw.change_t5
+      : null;
+
+  return {
+    eventId: typeof raw.eventId === 'string' ? raw.eventId
+      : typeof raw.id === 'string' ? raw.id
+      : undefined,
+    title: cleanHtml((raw.title as string) ?? (raw.headline as string) ?? (raw.description as string) ?? ''),
+    date: (raw.date as string)
+      ?? (raw.eventDate as string)
+      ?? (raw.eventTime as string)
+      ?? (raw.receivedAt as string)
+      ?? (raw.createdAt as string)
+      ?? '',
+    move: typeof raw.move === 'string'
+      ? raw.move
+      : typeof changeT5 === 'number'
+        ? `${changeT5 > 0 ? '+' : ''}${changeT5.toFixed(1)}%`
+        : '',
+    ticker: typeof raw.ticker === 'string' ? raw.ticker : null,
+    changeT5,
+  };
+}
+
+function mapSimilarOutcomeStats(raw: Record<string, unknown> | undefined): SimilarEventOutcomeStats | null {
+  if (!raw) {
+    return null;
+  }
+
+  const bestOutcome = raw.bestOutcome as Record<string, unknown> | undefined;
+  const worstOutcome = raw.worstOutcome as Record<string, unknown> | undefined;
+
+  return {
+    totalWithOutcomes: typeof raw.totalWithOutcomes === 'number' ? raw.totalWithOutcomes : 0,
+    avgMoveT5: typeof raw.avgMoveT5 === 'number' ? raw.avgMoveT5 : null,
+    setupWorkedPct: typeof raw.setupWorkedPct === 'number' ? raw.setupWorkedPct : null,
+    bestOutcome: bestOutcome ? {
+      ticker: String(bestOutcome.ticker ?? ''),
+      changeT5: Number(bestOutcome.changeT5 ?? 0),
+      date: typeof bestOutcome.date === 'string' ? bestOutcome.date : null,
+    } : null,
+    worstOutcome: worstOutcome ? {
+      ticker: String(worstOutcome.ticker ?? ''),
+      changeT5: Number(worstOutcome.changeT5 ?? 0),
+      date: typeof worstOutcome.date === 'string' ? worstOutcome.date : null,
+    } : null,
+  };
+}
+
 function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDetailData['historicalPattern'] | null {
   if (!raw) return null;
 
@@ -432,6 +486,7 @@ function mapHistoricalPattern(raw: Record<string, unknown> | undefined): EventDe
     patternSummary: typeof raw.patternSummary === 'string' ? raw.patternSummary : undefined,
     bestCase: bestRaw ? { ticker: String(bestRaw.ticker ?? ''), move: Number(bestRaw.move ?? 0) } : null,
     worstCase: worstRaw ? { ticker: String(worstRaw.ticker ?? ''), move: Number(worstRaw.move ?? 0) } : null,
+    outcomeStats: null,
   };
 }
 
@@ -501,20 +556,35 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
 
     // Try to get similar events from API as fallback
     let apiSimilarEvents: SimilarEvent[] = [];
+    let apiOutcomeStats: SimilarEventOutcomeStats | null = null;
     try {
       const simData = await apiFetch(`/events/${id}/similar`);
-      const simEvents = simData.data ?? simData.events ?? simData ?? [];
-      apiSimilarEvents = simEvents.slice(0, 5).map((s: Record<string, unknown>) => ({
-        title: cleanHtml((s.title as string) ?? ''),
-        date: (s.receivedAt as string) ?? (s.createdAt as string) ?? '',
-        move: '',
-      }));
+      const rawPayload = simData.data && typeof simData.data === 'object' && !Array.isArray(simData.data)
+        ? simData.data as Record<string, unknown>
+        : simData as Record<string, unknown>;
+      const simEvents = Array.isArray(rawPayload.events)
+        ? rawPayload.events as Array<Record<string, unknown>>
+        : Array.isArray(simData.data)
+          ? simData.data as Array<Record<string, unknown>>
+          : Array.isArray(simData)
+            ? simData as Array<Record<string, unknown>>
+            : [];
+
+      apiSimilarEvents = simEvents.slice(0, 5).map(normalizeSimilarEvent);
+      apiOutcomeStats = mapSimilarOutcomeStats(rawPayload.outcomeStats as Record<string, unknown> | undefined);
     } catch {
       // No similar events available
     }
 
-    // Merge similar events: prefer historical context, fall back to API
-    const similarEvents = historical?.similarEvents.length
+    const shouldPreferApiSimilar = apiSimilarEvents.length > 0 && (
+      apiOutcomeStats != null
+      || apiSimilarEvents.some((event) => event.changeT5 != null)
+    );
+
+    // Merge similar events: prefer enhanced API response, then historical context, then fallback API list
+    const similarEvents = shouldPreferApiSimilar
+      ? apiSimilarEvents
+      : historical?.similarEvents.length
       ? historical.similarEvents
       : responseHistoricalPattern?.similarEvents.length
         ? responseHistoricalPattern.similarEvents
@@ -610,6 +680,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
         patternSummary: historical?.patternLabel ?? undefined,
         bestCase: historical?.bestCase ?? null,
         worstCase: historical?.worstCase ?? null,
+        outcomeStats: apiOutcomeStats ?? responseHistoricalPattern?.outcomeStats ?? null,
       },
       audit,
     };
