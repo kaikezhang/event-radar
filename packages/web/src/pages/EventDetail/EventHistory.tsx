@@ -21,7 +21,7 @@ export function EventHistory({
   return (
     <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
       <div className="mb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
           Pattern match
         </p>
         <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
@@ -51,7 +51,7 @@ export function EventHistory({
         <div className="mt-4 grid grid-cols-2 gap-3">
           {historicalPattern.bestCase && (
             <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Best</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">Best</p>
               <p className="mt-2 text-sm font-semibold text-emerald-300">
                 {historicalPattern.bestCase.ticker} {formatSignedPercent(historicalPattern.bestCase.move)}
               </p>
@@ -59,7 +59,7 @@ export function EventHistory({
           )}
           {historicalPattern.worstCase && (
             <div className="rounded-2xl border border-red-400/15 bg-red-400/5 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">Worst</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">Worst</p>
               <p className="mt-2 text-sm font-semibold text-severity-critical">
                 {historicalPattern.worstCase.ticker} {formatSignedPercent(historicalPattern.worstCase.move)}
               </p>

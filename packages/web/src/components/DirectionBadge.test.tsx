@@ -1,15 +1,33 @@
 import { screen } from '@testing-library/react';
 import { render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { DirectionBadge } from './DirectionBadge.js';
 
 describe('DirectionBadge', () => {
   it('renders bullish direction with correct label', () => {
     render(<DirectionBadge direction="bullish" />);
+    const badge = screen.getByRole('button', { name: /bullish direction/i });
+
     expect(screen.getByText(/BULLISH/)).toBeInTheDocument();
-    expect(screen.getByText(/BULLISH/).closest('div')).toHaveAttribute(
+    expect(badge).toHaveAttribute(
       'title',
       'Bullish = Expected to push price UP, Bearish = Expected to push price DOWN',
     );
+  });
+
+  it('shows a tap-friendly tooltip and dismisses it when clicked again', async () => {
+    const user = userEvent.setup();
+
+    render(<DirectionBadge direction="bullish" />);
+
+    const badge = screen.getByRole('button', { name: /bullish direction/i });
+    expect(screen.queryByText(/expected to push price up/i)).not.toBeInTheDocument();
+
+    await user.click(badge);
+    expect(screen.getByText(/expected to push price up/i)).toBeInTheDocument();
+
+    await user.click(badge);
+    expect(screen.queryByText(/expected to push price up/i)).not.toBeInTheDocument();
   });
 
   it('renders bearish direction with correct label', () => {

@@ -10,8 +10,8 @@ export function Footer() {
         <span>|</span>
         <Link to="/terms" className="hover:text-text-secondary transition">Terms of Service</Link>
       </div>
-      <p className="mt-2 text-[11px]">Not financial advice. Always do your own research.</p>
-      <p className="mt-1 text-[11px]">&copy; 2026 Event Radar</p>
+      <p className="mt-2 text-xs">Not financial advice. Always do your own research.</p>
+      <p className="mt-1 text-xs">&copy; 2026 Event Radar</p>
     </footer>
   );
 }

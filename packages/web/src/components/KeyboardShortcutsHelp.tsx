@@ -56,7 +56,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: KeyboardShortcutsHelpPr
         </div>
 
         <p className="mt-5 text-center text-xs text-text-tertiary">
-          Press <kbd className="rounded border border-border-default bg-bg-elevated px-1 py-0.5 font-mono text-[10px]">ESC</kbd> to close
+          Press <kbd className="rounded border border-border-default bg-bg-elevated px-1 py-0.5 font-mono text-xs">ESC</kbd> to close
         </p>
       </div>
     </div>

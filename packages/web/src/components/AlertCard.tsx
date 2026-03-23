@@ -76,7 +76,7 @@ export function AlertCard({
         <div className="absolute inset-y-0 left-0 w-px bg-border-default" aria-hidden="true" />
 
         {/* Row 1: Metadata */}
-        <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+        <div className="flex items-center gap-2 text-xs text-text-tertiary">
           <span className={cn('font-semibold uppercase tracking-wider', severityColor.LOW)}>
             LOW
           </span>
@@ -93,7 +93,7 @@ export function AlertCard({
           <div className="ml-auto flex items-center gap-2">
             {alert.direction && (
               <span className={cn(
-                'text-[10px] font-semibold uppercase tracking-wide',
+                'text-xs font-semibold uppercase tracking-wide',
                 alert.direction.toLowerCase() === 'bullish' ? 'text-emerald-400' :
                 alert.direction.toLowerCase() === 'bearish' ? 'text-red-400' :
                 'text-zinc-400',
@@ -133,7 +133,7 @@ export function AlertCard({
         </Link>
 
         {/* Single-line footer */}
-        <div className="mt-1.5 flex items-center gap-1 text-[11px]">
+        <div className="mt-1.5 flex items-center gap-1 text-xs">
           {Array.isArray(alert.tickers) && alert.tickers.slice(0, 3).map((t) => (
             <Link
               key={t}
@@ -176,7 +176,7 @@ export function AlertCard({
       />
 
       {/* Row 1: Signal metadata */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-tertiary">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-tertiary">
         <span className="inline-flex items-center gap-1.5">
           <span
             className={cn('inline-block h-1.5 w-1.5 rounded-full', severityDot[alert.severity] ?? 'bg-severity-low')}
@@ -270,7 +270,7 @@ export function AlertCard({
       )}
 
       {/* Row 4: Footer */}
-      <div className="mt-3 flex items-center gap-1.5 text-[11px]">
+      <div className="mt-3 flex items-center gap-1.5 text-xs">
         {/* Ticker chips */}
         {Array.isArray(alert.tickers) && alert.tickers.slice(0, 3).map((t) => (
           <Link
@@ -320,7 +320,7 @@ function PushDeliveryBadge({ compact = false }: { compact?: boolean }) {
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-full border border-sky-400/20 bg-sky-400/10 font-semibold uppercase tracking-[0.16em] text-sky-300',
-        compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+        compact ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-0.5 text-xs',
       )}
       aria-label="Sent as a push alert"
       title="Sent as a push alert"
@@ -365,7 +365,7 @@ function SourceDetailStrip({
       return (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
           {formType && (
-            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-text-primary">
+            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs font-semibold text-text-primary">
               {formType}
             </span>
           )}
@@ -420,7 +420,7 @@ function SourceDetailStrip({
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
           {name && <span>{name}</span>}
           {freq && (
-            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[11px] text-text-tertiary capitalize">
+            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs text-text-tertiary capitalize">
               {freq}
             </span>
           )}
@@ -483,7 +483,7 @@ function OutcomeBadge({ direction, change5d }: { direction: string; change5d?: n
   if (!direction || direction === 'neutral') return null;
 
   if (change5d == null) {
-    return <span className="text-zinc-500" title="Outcome pending">&#x23F3;</span>;
+    return <span className="text-zinc-400" title="Outcome pending">&#x23F3;</span>;
   }
 
   if (change5d === 0) {

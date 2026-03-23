@@ -164,7 +164,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               )}
               <SimilarPastEvents similarEvents={data.historicalPattern.similarEvents} />
               <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 lg:hidden">
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                   Quick actions
                 </p>
                 <div className="space-y-2">
@@ -223,7 +223,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
             </>
           )}
           <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
               Quick actions
             </p>
             <div className="space-y-2">

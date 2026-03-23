@@ -304,7 +304,7 @@ export function EventChart({ symbol, events, compact, height: heightProp, defaul
             className="absolute left-4 top-4 max-w-[240px] rounded-2xl border border-overlay-medium bg-black/85 px-4 py-3 text-left shadow-[0_14px_28px_var(--shadow-color)] backdrop-blur"
           >
             <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${SEVERITY_CLASSNAME[selectedEvent.severity] ?? SEVERITY_CLASSNAME['LOW']}`}>
+              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${SEVERITY_CLASSNAME[selectedEvent.severity] ?? SEVERITY_CLASSNAME['LOW']}`}>
                 {selectedEvent.severity}
               </span>
               <span className="text-xs text-text-secondary">{selectedEvent.direction ?? 'neutral'}</span>

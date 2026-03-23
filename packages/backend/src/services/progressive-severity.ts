@@ -268,8 +268,13 @@ export class ProgressiveSeverityService {
     let reason = state.override?.reason ?? 'Default MEDIUM severity';
 
     if (!locked) {
-      nextSeverity = this.severityFromSourceCount(sourceCount);
-      reason = this.reasonFromState(sourceCount, state.feedbackVerdict);
+      if (currentSeverity === 'LOW' && sourceCount <= 1) {
+        nextSeverity = 'LOW';
+        reason = 'Default LOW severity';
+      } else {
+        nextSeverity = this.severityFromSourceCount(sourceCount);
+        reason = this.reasonFromState(sourceCount, state.feedbackVerdict);
+      }
 
       if (state.feedbackVerdict === 'incorrect') {
         nextSeverity = this.downgrade(nextSeverity);
@@ -362,7 +367,12 @@ export class ProgressiveSeverityService {
   }
 
   private startingSeverity(severity: string | null): Priority {
-    if (severity === 'CRITICAL' || severity === 'HIGH' || severity === 'MEDIUM') {
+    if (
+      severity === 'CRITICAL'
+      || severity === 'HIGH'
+      || severity === 'MEDIUM'
+      || severity === 'LOW'
+    ) {
       return severity;
     }
 

@@ -97,7 +97,9 @@ describe('Scorecard page', () => {
     expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
   });
 
-  it('adds tooltip help for scorecard jargon and renders real severity labels', async () => {
+  it('adds tap-friendly tooltip help for scorecard jargon and renders real severity labels', async () => {
+    const user = userEvent.setup();
+
     renderWithRouter(
       [{ path: '/scorecard', element: <Scorecard /> }],
       ['/scorecard'],
@@ -107,9 +109,19 @@ describe('Scorecard page', () => {
       expect(screen.getByText('Critical')).toBeInTheDocument();
     });
 
-    expect(screen.getByTitle(/how often the predicted direction \(up\/down\) matched actual price movement/i)).toBeInTheDocument();
-    expect(screen.getAllByTitle(/price change 20 trading days/i)).toHaveLength(2);
-    expect(screen.getByTitle(/how often the event led to a tradeable move of 5%\+/i)).toBeInTheDocument();
+    const directionHelp = screen.getByRole('button', { name: /directional hit rate explanation/i });
+    expect(directionHelp).toHaveAttribute('title', expect.stringMatching(/predicted direction/));
+    await user.click(directionHelp);
+    expect(screen.getByText(/how often the predicted direction \(up\/down\) matched actual price movement/i)).toBeInTheDocument();
+
+    const moveHelps = screen.getAllByRole('button', { name: /t\+20 move explanation/i });
+    expect(moveHelps).toHaveLength(2);
+    await user.click(moveHelps[0]!);
+    expect(screen.getByText(/price change 20 trading days/i)).toBeInTheDocument();
+
+    const setupHelp = screen.getByRole('button', { name: /setup worked rate explanation/i });
+    await user.click(setupHelp);
+    expect(screen.getByText(/how often the event led to a tradeable move of 5%\+/i)).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
   });
 

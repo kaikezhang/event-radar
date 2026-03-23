@@ -53,9 +53,10 @@ export function Feed() {
   });
 
   const feedList = (
-    <FeedList
-      activeFilterCount={state.activeFilterCount}
-      activeSeverities={state.activeSeverities}
+      <FeedList
+        activeFilterCount={state.activeFilterCount}
+        highSignalCount={state.highSignalCount}
+        activeSeverities={state.activeSeverities}
       activeSources={state.activeSources}
       activeTab={state.activeTab}
       addFilterRef={state.addFilterRef}

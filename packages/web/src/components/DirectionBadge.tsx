@@ -1,4 +1,5 @@
 import { cn } from '../lib/utils.js';
+import { TapTooltip } from './TapTooltip.js';
 
 interface DirectionBadgeProps {
   direction: 'bullish' | 'bearish' | 'neutral' | string;
@@ -47,28 +48,30 @@ export function DirectionBadge({ direction, confidence, confidenceBucket, size =
   const tooltip = 'Bullish = Expected to push price UP, Bearish = Expected to push price DOWN';
 
   return (
-    <div
+    <TapTooltip
+      ariaLabel={`${config.label.toLowerCase()} direction`}
       className={cn(
         'inline-flex flex-col items-center justify-center rounded-lg border',
         config.classes,
         conf?.low && 'border-dashed opacity-70',
         size === 'sm' ? 'w-[100px] px-2 py-1.5' : 'w-[120px] px-3 py-2',
       )}
-      title={tooltip}
+      panelClassName="w-60"
+      tooltip={tooltip}
     >
-      <span className={cn('font-semibold tracking-wide', size === 'sm' ? 'text-[11px]' : 'text-xs')}>
+      <span className="font-semibold tracking-wide text-xs">
         {config.icon} {config.label}
       </span>
       {conf && (
         <span
           className={cn(
-            'mt-0.5 text-[10px]',
+            'mt-0.5 text-xs',
             conf.high ? 'opacity-100' : 'opacity-60',
           )}
         >
           {conf.text}
         </span>
       )}
-    </div>
+    </TapTooltip>
   );
 }

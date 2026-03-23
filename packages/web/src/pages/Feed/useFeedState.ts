@@ -28,6 +28,10 @@ export const BUILT_IN_PRESETS: FilterPreset[] = [
 export const POPULAR_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN'];
 export const PULL_THRESHOLD = 80;
 
+export function getDefaultSeverities(tab: FeedTab): string[] {
+  return tab === 'smart' ? [...SEVERITIES] : ['HIGH', 'CRITICAL'];
+}
+
 export function loadCustomPresets(): FilterPreset[] {
   try {
     const raw = localStorage.getItem(PRESETS_KEY);
@@ -140,10 +144,30 @@ function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
     }
   }
 
-  // Re-sort by original order (time descending)
-  output.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
   return output;
+}
+
+export function sortFeedAlerts(
+  alerts: AlertSummary[],
+  sortMode: SortMode,
+  isSmartMode: boolean,
+): AlertSummary[] {
+  const compareBySeverityThenTime = (a: AlertSummary, b: AlertSummary) => {
+    const severityDiff =
+      (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4);
+    if (severityDiff !== 0) {
+      return severityDiff;
+    }
+    return new Date(b.time).getTime() - new Date(a.time).getTime();
+  };
+
+  if (sortMode === 'severity' || isSmartMode) {
+    return [...alerts].sort(compareBySeverityThenTime);
+  }
+
+  return [...alerts].sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+  );
 }
 
 export function groupAlertsByDate(alerts: AlertSummary[]): DateGroup[] {
@@ -278,13 +302,16 @@ export function useFeedState({
     saveFeedSort(sortMode);
   }, [sortMode]);
 
+  const isSmartMode = activeTab === 'smart';
+  const isWatchlistMode = activeTab === 'watchlist';
+
   const activeSeverities = useMemo(() => {
     const param = searchParams.get('severity');
     if (param !== null) {
       return param.length > 0 ? param.split(',') : [];
     }
-    return ['HIGH', 'CRITICAL'];
-  }, [searchParams]);
+    return getDefaultSeverities(activeTab);
+  }, [isSmartMode, searchParams]);
 
   const activeSources = useMemo(() => {
     const param = searchParams.get('source');
@@ -293,8 +320,6 @@ export function useFeedState({
   const pushOnly = searchParams.get('push') === 'only';
 
   const allPresets = useMemo(() => [...BUILT_IN_PRESETS, ...customPresets], [customPresets]);
-  const isSmartMode = activeTab === 'smart';
-  const isWatchlistMode = activeTab === 'watchlist';
   const isDefaultSeverity = !searchParams.has('severity');
   const hasActiveFilters = ((!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0) || pushOnly;
   const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + activeSources.length + (pushOnly ? 1 : 0);
@@ -446,21 +471,18 @@ export function useFeedState({
     if (pushOnly) {
       result = result.filter((alert) => alert.pushed);
     }
-    if (sortMode === 'severity') {
-      result = [...result].sort((a, b) => {
-        const severityDiff = (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4);
-        if (severityDiff !== 0) {
-          return severityDiff;
-        }
-        return new Date(b.time).getTime() - new Date(a.time).getTime();
-      });
-    }
-
     // Deduplicate: same source + same primary ticker + within 24 hours — keep most recent
     result = deduplicateAlerts(result);
 
+    result = sortFeedAlerts(result, sortMode, isSmartMode);
+
     return result;
-  }, [activeSeverities, activeSources, alerts, dismissedIds, pushOnly, sortMode]);
+  }, [activeSeverities, activeSources, alerts, dismissedIds, isSmartMode, pushOnly, sortMode]);
+
+  const highSignalCount = useMemo(
+    () => filteredAlerts.filter((alert) => alert.severity === 'CRITICAL' || alert.severity === 'HIGH').length,
+    [filteredAlerts],
+  );
 
   useEffect(() => {
     if (selectedEventId && filteredAlerts.length > 0 && !filteredAlerts.some((alert) => alert.id === selectedEventId)) {
@@ -622,6 +644,7 @@ export function useFeedState({
     dismissBanner,
     error,
     filteredAlerts,
+    highSignalCount,
     handleCardClick,
     handleDismiss,
     handleQuickWatchlist,

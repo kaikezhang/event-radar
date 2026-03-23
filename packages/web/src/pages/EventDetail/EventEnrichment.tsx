@@ -76,13 +76,13 @@ export function EventEvidenceContent({
         <SectionHeading eyebrow="Original source evidence" title="Source Evidence" />
         <div className="space-y-4 text-sm leading-6 text-text-secondary">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source type</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source type</p>
             <p className="mt-1 text-text-primary">{sourceTypeLabel}</p>
           </div>
 
           {eventUrl ? (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source URL</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Source URL</p>
               <a
                 href={eventUrl}
                 target="_blank"
@@ -97,7 +97,7 @@ export function EventEvidenceContent({
 
           {rawExcerpt ? (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Original filing excerpt:</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-tertiary">Original filing excerpt:</p>
               <p className="mt-1 whitespace-pre-wrap rounded-xl border border-overlay-medium bg-bg-elevated/50 px-4 py-3 text-text-primary">
                 {rawExcerpt}
               </p>

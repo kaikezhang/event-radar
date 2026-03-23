@@ -31,7 +31,7 @@ export function EventVerdict({
         <section className="mt-4 rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                 Trust / scorecard context
               </p>
               <h2 className="mt-1 text-[17px] font-semibold leading-[1.4] text-text-primary">
@@ -79,7 +79,7 @@ export function EventVerdict({
 
               {data.scorecard.notes.items.length > 0 && (
                 <div className="mt-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                     Verification notes
                   </h3>
                   <div className="mt-3 space-y-2">
@@ -318,7 +318,7 @@ function Disclaimer() {
         className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
       >
         <div className="flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-secondary">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
             Informational only
           </p>
           <span className="mt-1 block text-[17px] font-semibold leading-6 text-text-primary">

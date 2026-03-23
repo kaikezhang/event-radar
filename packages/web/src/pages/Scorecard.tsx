@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts';
 import { EmptyState } from '../components/EmptyState.js';
+import { TapTooltip } from '../components/TapTooltip.js';
 import {
   formatScorecardBucketLabel,
   getScorecardSeverityBreakdown,
@@ -156,7 +157,7 @@ export function Scorecard() {
     return (
       <div className="space-y-4">
         <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
+          <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
             <Target className="h-3.5 w-3.5" />
             Scorecard
           </p>
@@ -194,7 +195,7 @@ export function Scorecard() {
       <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent-default">
+            <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
               <Target className="h-3.5 w-3.5" />
               Scorecard
             </p>
@@ -603,13 +604,14 @@ function MetricLabel({ label, tooltip }: { label: string; tooltip: string }) {
   return (
     <div className="mt-1 flex items-center gap-1.5 text-sm text-text-secondary">
       <span>{label}</span>
-      <span
+      <TapTooltip
+        ariaLabel={`${label} explanation`}
         className="inline-flex h-4 w-4 items-center justify-center text-text-tertiary"
-        title={tooltip}
-        aria-label={`${label} explanation`}
+        panelClassName="w-64"
+        tooltip={tooltip}
       >
         <HelpCircle className="h-3.5 w-3.5" />
-      </span>
+      </TapTooltip>
     </div>
   );
 }
@@ -685,7 +687,7 @@ function BucketSection({
                     key={column.key}
                     className="rounded-2xl border border-overlay-medium bg-white/[0.03] px-3 py-3"
                   >
-                    <dt className="text-[11px] uppercase tracking-[0.16em] text-text-secondary">
+                    <dt className="text-xs uppercase tracking-[0.16em] text-text-secondary">
                       {column.label}
                     </dt>
                     <dd className="mt-2 text-sm font-semibold text-text-primary">

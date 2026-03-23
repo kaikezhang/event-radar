@@ -51,6 +51,18 @@ describe('Feed page', () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
 
+      if (url.pathname === '/api/watchlist') {
+        return jsonResponse({
+          data: [
+            {
+              id: 'watch-1',
+              ticker: 'TSLA',
+              addedAt: '2026-03-12T19:00:00.000Z',
+            },
+          ],
+        });
+      }
+
       if (url.pathname === '/api/v1/feed') {
         return jsonResponse({
           events: [

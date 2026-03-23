@@ -52,7 +52,7 @@ export function FeedCard({
         onToggleWatchlist={onToggleWatchlist}
       />
       {alert.dedupCount != null && alert.dedupCount > 0 && (
-        <p className="mt-1 px-3 pb-1 text-[11px] text-text-tertiary">
+        <p className="mt-1 px-3 pb-1 text-xs text-text-tertiary">
           and {alert.dedupCount} similar
         </p>
       )}

@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, Dot } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { cn } from '../lib/utils.js';
+import { TapTooltip } from './TapTooltip.js';
 
 const severityConfig: Record<string, {
     label: string;
@@ -50,14 +51,14 @@ export function SeverityBadge({
   const tooltip = 'CRITICAL = Major market-moving event, HIGH = Significant event, MEDIUM = Notable event, LOW = Minor event';
 
   return (
-    <span
+    <TapTooltip
+      ariaLabel={`${config.label} severity alert`}
       className={cn(
-        'inline-flex min-h-9 items-center gap-2 rounded-full border border-overlay-medium bg-bg-elevated/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]',
+        'inline-flex min-h-9 items-center gap-2 rounded-full border border-overlay-medium bg-bg-elevated/80 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em]',
         config.color,
         className,
       )}
-      aria-label={`${config.label} severity alert`}
-      title={tooltip}
+      tooltip={tooltip}
     >
       <span
         className={cn('h-5 shrink-0 rounded-full', config.barClassName)}
@@ -65,6 +66,6 @@ export function SeverityBadge({
       />
       {config.icon}
       <span>{severity}</span>
-    </span>
+    </TapTooltip>
   );
 }

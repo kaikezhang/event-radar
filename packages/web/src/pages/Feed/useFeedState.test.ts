@@ -1,10 +1,12 @@
 import type { ScorecardSummary } from '../../types/index.js';
 import {
+  getDefaultSeverities,
   getTrustCue,
   groupAlertsByDate,
   loadCustomPresets,
   loadFeedTab,
   loadFeedSort,
+  sortFeedAlerts,
 } from './useFeedState.js';
 
 describe('useFeedState helpers', () => {
@@ -111,5 +113,58 @@ describe('useFeedState helpers', () => {
     ]);
 
     expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday', 'Mar 1']);
+  });
+
+  it('defaults smart feed to all severities so low-signal alerts remain visible', () => {
+    expect(getDefaultSeverities('smart')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+    expect(getDefaultSeverities('all')).toEqual(['HIGH', 'CRITICAL']);
+  });
+
+  it('sorts smart-feed alerts by severity before recency so low alerts sink to the bottom', () => {
+    const sorted = sortFeedAlerts([
+      {
+        id: 'low-newest',
+        severity: 'LOW',
+        source: 'stocktwits',
+        title: 'Low alert',
+        summary: 'Low summary',
+        tickers: ['TSLA'],
+        time: '2026-03-20T12:10:00.000Z',
+      },
+      {
+        id: 'critical-older',
+        severity: 'CRITICAL',
+        source: 'sec-edgar',
+        title: 'Critical alert',
+        summary: 'Critical summary',
+        tickers: ['NVDA'],
+        time: '2026-03-20T12:09:00.000Z',
+      },
+      {
+        id: 'medium-middle',
+        severity: 'MEDIUM',
+        source: 'breaking-news',
+        title: 'Medium alert',
+        summary: 'Medium summary',
+        tickers: ['AMD'],
+        time: '2026-03-20T12:08:00.000Z',
+      },
+      {
+        id: 'high-oldest',
+        severity: 'HIGH',
+        source: 'sec-edgar',
+        title: 'High alert',
+        summary: 'High summary',
+        tickers: ['AAPL'],
+        time: '2026-03-20T12:07:00.000Z',
+      },
+    ], 'latest', true);
+
+    expect(sorted.map((alert) => alert.id)).toEqual([
+      'critical-older',
+      'high-oldest',
+      'medium-middle',
+      'low-newest',
+    ]);
   });
 });

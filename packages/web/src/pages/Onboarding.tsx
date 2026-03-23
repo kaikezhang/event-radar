@@ -72,7 +72,7 @@ function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
       {/* Sample alert preview */}
       <div className="mt-6 w-full max-w-sm rounded-2xl border border-border-default bg-bg-surface/96 p-4 text-left">
         <div className="flex items-start gap-2">
-          <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase bg-severity-high/15 text-severity-high">
+          <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase bg-severity-high/15 text-severity-high">
             HIGH
           </span>
           <div className="min-w-0 flex-1">

@@ -4,12 +4,15 @@ import { join } from 'node:path';
 import { InMemoryEventBus } from '@event-radar/shared';
 import {
   StockTwitsScanner,
+  getStockTwitsTrendingDefaultSeverity,
   parseTrendingResponse,
   analyzeSentiment,
   type StockTwitsTrendingResponse,
   type StockTwitsStreamResponse,
   type StockTwitsMessage,
 } from '../scanners/stocktwits-scanner.js';
+import { RuleEngine } from '../pipeline/rule-engine.js';
+import { DEFAULT_RULES } from '../pipeline/default-rules.js';
 
 const mockFixture = JSON.parse(
   readFileSync(
@@ -97,6 +100,10 @@ describe('StockTwitsScanner', () => {
   });
 
   describe('scan — trending detection', () => {
+    it('uses LOW as the default configured severity for new trending entries', () => {
+      expect(getStockTwitsTrendingDefaultSeverity()).toBe('LOW');
+    });
+
     it('should emit events for new trending symbols on first poll', async () => {
       const eventBus = new InMemoryEventBus();
       const scanner = new StockTwitsScanner(eventBus);
@@ -123,6 +130,7 @@ describe('StockTwitsScanner', () => {
         expect(trendingEvents).toHaveLength(5);
         expect(trendingEvents[0]!.source).toBe('stocktwits');
         expect(trendingEvents[0]!.metadata!['ticker']).toBe('TSLA');
+        expect(trendingEvents[0]!.metadata!['default_severity']).toBe('LOW');
       }
     });
 
@@ -150,6 +158,37 @@ describe('StockTwitsScanner', () => {
           (e) => e.type === 'social-trending',
         );
         expect(trendingEvents).toHaveLength(0);
+      }
+    });
+
+    it('classifies entered trending events as LOW instead of falling back to MEDIUM', async () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new StockTwitsScanner(eventBus);
+      const ruleEngine = new RuleEngine();
+      ruleEngine.loadRules(DEFAULT_RULES);
+
+      fetchSpy.mockImplementation(async (input) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('trending')) {
+          return new Response(JSON.stringify(mockTrendingResponse), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify(mockStreamResponse), {
+          status: 200,
+        });
+      });
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+
+      if (result.ok) {
+        const firstTrendingEvent = result.value.find(
+          (event) => event.type === 'social-trending',
+        );
+
+        expect(firstTrendingEvent).toBeDefined();
+        expect(ruleEngine.classify(firstTrendingEvent!).severity).toBe('LOW');
       }
     });
   });

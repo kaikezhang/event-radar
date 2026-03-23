@@ -268,7 +268,7 @@ function SortableTickerRow({ item, tickerSummary, onRemove, editMode, isSelected
           </span>
           {tickerSummary?.latestEvent && (
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold uppercase ${
                 SEVERITY_COLORS[tickerSummary.latestEvent.severity] ?? SEVERITY_COLORS.MEDIUM
               }`}
             >
@@ -847,7 +847,7 @@ export function Watchlist() {
         >
           <Search className="h-4 w-4" />
           <span>{isEmpty ? 'Search tickers to add (e.g. AAPL)' : 'Search tickers...'}</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded border border-overlay-medium bg-overlay-subtle px-1.5 py-0.5 text-xs font-medium text-text-secondary">
             /
           </kbd>
         </button>

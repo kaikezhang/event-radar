@@ -62,7 +62,7 @@ export function FeedFilters({
             key={`sev-${severity}`}
             type="button"
             onClick={() => onToggleSeverity(severity)}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             role="listitem"
           >
             {severity}
@@ -75,7 +75,7 @@ export function FeedFilters({
             key={`src-${source}`}
             type="button"
             onClick={() => onToggleSource(source)}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-[11px] font-medium text-interactive-default"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
             role="listitem"
           >
             {source}
@@ -87,7 +87,7 @@ export function FeedFilters({
           type="button"
           onClick={onTogglePushOnly}
           className={cn(
-            'inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+            'inline-flex min-h-[44px] items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition',
             pushOnly
               ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
               : 'border-border-default text-text-secondary hover:border-sky-400/30 hover:text-text-primary',
@@ -103,7 +103,7 @@ export function FeedFilters({
           <button
             type="button"
             onClick={onToggleAddFilterDropdown}
-            className="inline-flex items-center gap-1 rounded-lg border border-border-default px-2 py-1 text-[11px] font-medium text-text-tertiary transition hover:border-border-default hover:text-text-secondary"
+            className="inline-flex items-center gap-1 rounded-lg border border-border-default px-2 py-1 text-xs font-medium text-text-tertiary transition hover:border-border-default hover:text-text-secondary"
           >
             <Plus className="h-3 w-3" />
             Add filter
@@ -112,7 +112,7 @@ export function FeedFilters({
           {showAddFilterDropdown && (
             <div className="absolute left-0 top-full z-30 mt-1 w-64 space-y-3 rounded-xl border border-border-default bg-bg-surface p-3 shadow-lg">
               <div>
-                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Severity</h4>
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Severity</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {severities.map((severity) => (
                     <button
@@ -120,7 +120,7 @@ export function FeedFilters({
                       type="button"
                       onClick={() => onToggleSeverity(severity)}
                       className={cn(
-                        'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                        'rounded-lg border px-2 py-1 text-xs font-medium transition',
                         activeSeverities.includes(severity)
                           ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                           : 'border-border-default text-text-secondary hover:text-text-primary',
@@ -134,7 +134,7 @@ export function FeedFilters({
 
               {visibleSources.length > 0 && (
                 <div>
-                  <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Source</h4>
+                  <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Source</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {visibleSources.map((source) => (
                       <button
@@ -142,7 +142,7 @@ export function FeedFilters({
                         type="button"
                         onClick={() => onToggleSource(source)}
                         className={cn(
-                          'rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                          'rounded-lg border px-2 py-1 text-xs font-medium transition',
                           activeSources.includes(source)
                             ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
                             : 'border-border-default text-text-secondary hover:text-text-primary',
@@ -156,12 +156,12 @@ export function FeedFilters({
               )}
 
               <div>
-                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h4>
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h4>
                 <button
                   type="button"
                   onClick={onTogglePushOnly}
                   className={cn(
-                    'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition',
+                    'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition',
                     pushOnly
                       ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
                       : 'border-border-default text-text-secondary hover:text-text-primary',
@@ -175,7 +175,7 @@ export function FeedFilters({
               </div>
 
               <div>
-                <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Presets</h4>
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Presets</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {allPresets.map((preset) => (
                     <button
@@ -185,7 +185,7 @@ export function FeedFilters({
                         onApplyPreset(preset);
                         onCloseAddFilterDropdown?.();
                       }}
-                      className="rounded-lg border border-border-default px-2 py-1 text-[11px] font-medium text-text-secondary transition hover:text-text-primary"
+                      className="rounded-lg border border-border-default px-2 py-1 text-xs font-medium text-text-secondary transition hover:text-text-primary"
                     >
                       {preset.name}
                     </button>
@@ -200,7 +200,7 @@ export function FeedFilters({
           <button
             type="button"
             onClick={onClearFilters}
-            className="px-1 text-[11px] text-text-tertiary hover:text-text-primary"
+            className="px-1 text-xs text-text-tertiary hover:text-text-primary"
           >
             Clear all
           </button>

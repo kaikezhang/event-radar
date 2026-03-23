@@ -7,6 +7,7 @@ import type { FeedTab, SortMode } from './useFeedState.js';
 interface FeedHeaderProps {
   activeFilterCount: number;
   activeTab: FeedTab;
+  highSignalCount: number;
   hasActiveFilters: boolean;
   onSortModeChange: (mode: SortMode) => void;
   onTabChange: (tab: FeedTab) => void;
@@ -14,11 +15,13 @@ interface FeedHeaderProps {
   onToggleModeDropdown: () => void;
   showModeDropdown: boolean;
   sortMode: SortMode;
+  totalCount: number;
 }
 
 export function FeedHeader({
   activeFilterCount,
   activeTab,
+  highSignalCount,
   hasActiveFilters,
   onSortModeChange,
   onTabChange,
@@ -26,6 +29,7 @@ export function FeedHeader({
   onToggleModeDropdown,
   showModeDropdown,
   sortMode,
+  totalCount,
 }: FeedHeaderProps) {
   const connectionStatus = useConnectionStatus();
   const connectionRetry = useConnectionRetry();
@@ -70,6 +74,12 @@ export function FeedHeader({
         </span>
       )}
 
+      {activeTab === 'smart' && totalCount > 0 ? (
+        <span className="rounded-full border border-overlay-medium bg-overlay-light px-2.5 py-1 text-xs font-medium text-text-secondary">
+          {highSignalCount} high-signal / {totalCount} total
+        </span>
+      ) : null}
+
       <select
         value={sortMode}
         onChange={(event) => onSortModeChange(event.target.value as SortMode)}
@@ -93,7 +103,7 @@ export function FeedHeader({
         <SlidersHorizontal className="h-3.5 w-3.5" />
         Filters
         {activeFilterCount > 0 && (
-          <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-interactive-default text-[10px] text-white">
+          <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-interactive-default text-xs text-white">
             {activeFilterCount}
           </span>
         )}

@@ -21,7 +21,7 @@ export function EventHeader({
       <div className="flex items-center gap-3">
         <SeverityBadge
           severity={data.severity}
-          className="min-h-7 px-2.5 py-1 text-[10px] tracking-[0.14em]"
+          className="min-h-7 px-2.5 py-1 text-xs tracking-[0.14em]"
         />
         <span className="text-sm text-text-secondary">{data.source}</span>
         <span className="font-mono text-sm text-text-secondary">{formatRelativeTime(data.time)}</span>
