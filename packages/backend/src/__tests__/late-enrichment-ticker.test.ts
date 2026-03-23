@@ -163,8 +163,8 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     expect(event.metadata).toHaveProperty('ticker', 'AAPL');
 
     // scheduleOutcomeTrackingForEvent is called twice:
-    // 1. Initial call after storeEvent (no ticker → tracker returns error internally)
-    // 2. Late-enrichment call after ticker UPDATE won the race
+    // 1. Initial call after storeEvent (fallback ticker)
+    // 2. Late-enrichment call after the concrete ticker replaces the fallback
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledTimes(2);
     // The second call should have the uppercase ticker in metadata
     const secondCall = outcomeTracker.scheduleOutcomeTrackingForEvent.mock.calls[1];
@@ -181,6 +181,88 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
       return sqlStr.includes('SET ticker') && sqlStr.includes('ticker IS NULL');
     });
     expect(updateTickerCall).toBeDefined();
+  });
+
+  it('infers a ticker from the event title before delivery when high-priority news has no ticker', async () => {
+    const event = makeEvent({
+      title: 'Urgent: $TSLA shares halted after delivery update',
+      body: 'Momentum traders react to the halt headline.',
+    });
+
+    const mockDb = makeMockDb([
+      [],
+    ]);
+
+    const deps = makeMinimalDeps({
+      db: mockDb as never,
+      alertRouter: {
+        enabled: true,
+        route: vi.fn().mockResolvedValue({
+          deliveries: [],
+          decision: { tier: 'high', reason: 'test' },
+        }),
+      } as never,
+      outcomeTracker: outcomeTracker as unknown as OutcomeTracker,
+    });
+
+    wireEventPipeline(deps);
+    deps.eventBus.publish(event);
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(event.metadata).toMatchObject({
+      ticker: 'TSLA',
+      ticker_inferred: true,
+    });
+    expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledWith(
+      'evt-late-001',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          ticker: 'TSLA',
+          ticker_inferred: true,
+        }),
+      }),
+    );
+  });
+
+  it('falls back to QQQ when high-priority tech news has no direct ticker', async () => {
+    const event = makeEvent({
+      title: 'Semiconductor and AI leaders slump on export-control fears',
+      body: 'Large-cap tech names are leading the decline.',
+    });
+
+    const mockDb = makeMockDb([
+      [],
+    ]);
+
+    const deps = makeMinimalDeps({
+      db: mockDb as never,
+      alertRouter: {
+        enabled: true,
+        route: vi.fn().mockResolvedValue({
+          deliveries: [],
+          decision: { tier: 'high', reason: 'test' },
+        }),
+      } as never,
+      outcomeTracker: outcomeTracker as unknown as OutcomeTracker,
+    });
+
+    wireEventPipeline(deps);
+    deps.eventBus.publish(event);
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(event.metadata).toMatchObject({
+      ticker: 'QQQ',
+      ticker_inferred: true,
+    });
+    expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledWith(
+      'evt-late-001',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          ticker: 'QQQ',
+          ticker_inferred: true,
+        }),
+      }),
+    );
   });
 
   it('does NOT schedule outcome tracking when UPDATE loses the race (0 rows affected)', async () => {
@@ -223,8 +305,12 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
 
     // Only the initial call (before enrichment) should happen — NOT the late-enrichment call
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledTimes(1);
-    // Metadata should NOT have ticker (race lost)
-    expect(event.metadata).not.toHaveProperty('ticker');
+    // The inferred fallback stays in memory when the late concrete ticker loses the race.
+    expect(event.metadata).toMatchObject({
+      ticker: 'QQQ',
+      ticker_inferred: true,
+      ticker_inference_strategy: 'fallback',
+    });
   });
 
   it('normalizes ticker casing to uppercase consistently', async () => {

@@ -29,7 +29,15 @@ export const POPULAR_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN'];
 export const PULL_THRESHOLD = 80;
 
 export function getDefaultSeverities(tab: FeedTab): string[] {
-  return tab === 'smart' ? [...SEVERITIES] : ['HIGH', 'CRITICAL'];
+  switch (tab) {
+    case 'smart':
+      return ['CRITICAL', 'HIGH', 'MEDIUM'];
+    case 'all':
+      return [...SEVERITIES];
+    case 'watchlist':
+    default:
+      return ['HIGH', 'CRITICAL'];
+  }
 }
 
 export function loadCustomPresets(): FilterPreset[] {
@@ -311,7 +319,7 @@ export function useFeedState({
       return param.length > 0 ? param.split(',') : [];
     }
     return getDefaultSeverities(activeTab);
-  }, [isSmartMode, searchParams]);
+  }, [activeTab, searchParams]);
 
   const activeSources = useMemo(() => {
     const param = searchParams.get('source');
@@ -378,9 +386,7 @@ export function useFeedState({
   }, [activeSeverities, activeSources, pushOnly, updateFilters]);
 
   const clearFilters = useCallback(() => {
-    const params = new URLSearchParams();
-    params.set('severity', '');
-    setSearchParams(params, { replace: true });
+    setSearchParams(new URLSearchParams(), { replace: true });
   }, [setSearchParams]);
 
   const applyPreset = useCallback((preset: FilterPreset) => {
@@ -457,13 +463,10 @@ export function useFeedState({
     prevAlertIdsRef.current = currentIds;
   }, [alerts]);
 
-  const filteredAlerts = useMemo(() => {
+  const scopedAlerts = useMemo(() => {
     let result = alerts;
     if (dismissedIds.size > 0) {
       result = result.filter((alert) => !dismissedIds.has(alert.id));
-    }
-    if (activeSeverities.length > 0) {
-      result = result.filter((alert) => activeSeverities.includes(alert.severity));
     }
     if (activeSources.length > 0) {
       result = result.filter((alert) => activeSources.includes(alert.source));
@@ -473,15 +476,36 @@ export function useFeedState({
     }
     // Deduplicate: same source + same primary ticker + within 24 hours — keep most recent
     result = deduplicateAlerts(result);
-
-    result = sortFeedAlerts(result, sortMode, isSmartMode);
-
     return result;
-  }, [activeSeverities, activeSources, alerts, dismissedIds, isSmartMode, pushOnly, sortMode]);
+  }, [activeSources, alerts, dismissedIds, pushOnly]);
+
+  const filteredAlerts = useMemo(() => {
+    let result = scopedAlerts;
+    if (activeSeverities.length > 0) {
+      result = result.filter((alert) => activeSeverities.includes(alert.severity));
+    }
+
+    return sortFeedAlerts(result, sortMode, isSmartMode);
+  }, [activeSeverities, isSmartMode, scopedAlerts, sortMode]);
 
   const highSignalCount = useMemo(
-    () => filteredAlerts.filter((alert) => alert.severity === 'CRITICAL' || alert.severity === 'HIGH').length,
-    [filteredAlerts],
+    () => scopedAlerts.filter((alert) => alert.severity === 'CRITICAL' || alert.severity === 'HIGH').length,
+    [scopedAlerts],
+  );
+
+  const mediumSignalCount = useMemo(
+    () => scopedAlerts.filter((alert) => alert.severity === 'MEDIUM').length,
+    [scopedAlerts],
+  );
+
+  const lowSignalCount = useMemo(
+    () => scopedAlerts.filter((alert) => alert.severity === 'LOW').length,
+    [scopedAlerts],
+  );
+
+  const hiddenLowCount = useMemo(
+    () => (isSmartMode && !activeSeverities.includes('LOW') ? lowSignalCount : 0),
+    [activeSeverities, isSmartMode, lowSignalCount],
   );
 
   useEffect(() => {
@@ -547,10 +571,19 @@ export function useFeedState({
   const handleTabChange = useCallback((tab: FeedTab) => {
     setActiveTab(tab);
     setShowModeDropdown(false);
+    setSearchParams(new URLSearchParams(), { replace: true });
     if (isAuthenticated) {
       saveFeedTab(tab);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, setSearchParams]);
+
+  const revealLowSeverity = useCallback(() => {
+    if (activeSeverities.includes('LOW')) {
+      return;
+    }
+
+    updateFilters([...activeSeverities, 'LOW'], activeSources, pushOnly);
+  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
 
   const handleCardClick = useCallback((event: React.MouseEvent, alertId: string) => {
     if (!isDesktop) {
@@ -645,6 +678,7 @@ export function useFeedState({
     error,
     filteredAlerts,
     highSignalCount,
+    hiddenLowCount,
     handleCardClick,
     handleDismiss,
     handleQuickWatchlist,
@@ -659,12 +693,15 @@ export function useFeedState({
     isRefreshing,
     isSmartMode,
     isWatchlistMode,
+    lowSignalCount,
+    mediumSignalCount,
     newAlertIds,
     pendingCount,
     presetName,
     pushOnly,
     pullDistance,
     savePreset,
+    scopedAlertCount: scopedAlerts.length,
     selectedEventId,
     sentinelRef,
     setPresetName,
@@ -682,6 +719,7 @@ export function useFeedState({
     sortMode,
     toastMessage,
     toastVisible,
+    revealLowSeverity,
     toggleSeverity,
     toggleSource,
     togglePushOnly,

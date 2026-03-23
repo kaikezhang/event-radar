@@ -33,6 +33,40 @@ function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   };
 }
 
+async function seedDeliveredEvent(
+  db: Database,
+  event: RawEvent,
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+): Promise<void> {
+  await storeEvent(db, { event, severity });
+  const ticker =
+    event.metadata && typeof event.metadata['ticker'] === 'string'
+      ? event.metadata['ticker']
+      : null;
+
+  await db.execute(sql`
+    INSERT INTO pipeline_audit (
+      event_id,
+      source,
+      title,
+      severity,
+      ticker,
+      outcome,
+      stopped_at,
+      reason
+    ) VALUES (
+      ${event.id},
+      ${event.source},
+      ${event.title},
+      ${severity},
+      ${ticker},
+      'delivered',
+      'delivery',
+      'Passed pipeline'
+    )
+  `);
+}
+
 describe('GET /api/events/search', () => {
   let ctx: AppContext;
 
@@ -206,42 +240,30 @@ describe('GET /api/events?q=', () => {
   beforeAll(async () => {
     await cleanTestDb(sharedDb);
 
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'Tesla',
-        body: 'Single-word exact title match for relevance sorting',
-        metadata: { ticker: 'TSLA', tickers: ['TSLA'] },
-      }),
-      severity: 'HIGH',
-    });
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'Tesla',
+      body: 'Single-word exact title match for relevance sorting',
+      metadata: { ticker: 'TSLA', tickers: ['TSLA'] },
+    }), 'HIGH');
 
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'Tesla supplier wins battery contract',
-        body: 'Battery supplier update with partial Tesla title match',
-        metadata: { ticker: 'QS', tickers: ['QS'] },
-      }),
-      severity: 'MEDIUM',
-    });
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'Tesla supplier wins battery contract',
+      body: 'Battery supplier update with partial Tesla title match',
+      metadata: { ticker: 'QS', tickers: ['QS'] },
+    }), 'MEDIUM');
 
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'Refiner guidance raised after outage',
-        body: 'Oil traders reacted to the refinery outage and demand shock.',
-        metadata: { ticker: 'XOM', tickers: ['XOM'] },
-      }),
-      severity: 'LOW',
-    });
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'Refiner guidance raised after outage',
+      body: 'Oil traders reacted to the refinery outage and demand shock.',
+      metadata: { ticker: 'XOM', tickers: ['XOM'] },
+    }), 'LOW');
 
     for (let index = 0; index < 55; index += 1) {
-      await storeEvent(sharedDb, {
-        event: makeEvent({
-          title: `Oil setup ${index + 1}`,
-          body: `Oil follow-through case ${index + 1}`,
-          metadata: { ticker: 'CVX', tickers: ['CVX'] },
-        }),
-        severity: 'LOW',
-      });
+      await seedDeliveredEvent(sharedDb, makeEvent({
+        title: `Oil setup ${index + 1}`,
+        body: `Oil follow-through case ${index + 1}`,
+        metadata: { ticker: 'CVX', tickers: ['CVX'] },
+      }), 'LOW');
     }
 
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
@@ -486,27 +508,18 @@ describe('GET /api/events?watchlist=true', () => {
     await cleanTestDb(sharedDb);
 
     // Seed events
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'AAPL event',
-        metadata: { ticker: 'AAPL', tickers: ['AAPL'] },
-      }),
-      severity: 'HIGH',
-    });
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'NVDA event',
-        metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
-      }),
-      severity: 'MEDIUM',
-    });
-    await storeEvent(sharedDb, {
-      event: makeEvent({
-        title: 'TSLA event',
-        metadata: { ticker: 'TSLA', tickers: ['TSLA'] },
-      }),
-      severity: 'LOW',
-    });
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'AAPL event',
+      metadata: { ticker: 'AAPL', tickers: ['AAPL'] },
+    }), 'HIGH');
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'NVDA event',
+      metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
+    }), 'MEDIUM');
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'TSLA event',
+      metadata: { ticker: 'TSLA', tickers: ['TSLA'] },
+    }), 'LOW');
 
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
     await ctx.server.ready();

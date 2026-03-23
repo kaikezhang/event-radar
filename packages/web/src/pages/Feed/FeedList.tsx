@@ -22,6 +22,9 @@ import {
 interface FeedListProps {
   activeFilterCount: number;
   highSignalCount: number;
+  hiddenLowCount: number;
+  lowSignalCount: number;
+  mediumSignalCount: number;
   activeSeverities: string[];
   activeSources: string[];
   activeTab: FeedTab;
@@ -55,7 +58,9 @@ interface FeedListProps {
   presetName: string;
   pushOnly: boolean;
   pullDistance: number;
+  revealLowSeverity: () => void;
   savePreset: () => void;
+  scopedAlertCount: number;
   scorecardSummary: ScorecardSummary | null;
   selectedEventId: string | null;
   sentinelRef: RefObject<HTMLDivElement | null>;
@@ -83,6 +88,9 @@ interface FeedListProps {
 export function FeedList({
   activeFilterCount,
   highSignalCount,
+  hiddenLowCount,
+  lowSignalCount,
+  mediumSignalCount,
   activeSeverities,
   activeSources,
   activeTab,
@@ -116,7 +124,9 @@ export function FeedList({
   presetName,
   pushOnly,
   pullDistance,
+  revealLowSeverity,
   savePreset,
+  scopedAlertCount,
   scorecardSummary,
   selectedEventId,
   sentinelRef,
@@ -168,14 +178,18 @@ export function FeedList({
         activeFilterCount={activeFilterCount}
         activeTab={activeTab}
         highSignalCount={highSignalCount}
+        hiddenLowCount={hiddenLowCount}
         hasActiveFilters={hasActiveFilters}
+        lowSignalCount={lowSignalCount}
+        mediumSignalCount={mediumSignalCount}
+        onRevealLowSeverity={revealLowSeverity}
         onSortModeChange={toggleSortMode}
         onTabChange={handleTabChange}
         onToggleFilters={toggleFilters}
         onToggleModeDropdown={onToggleModeDropdown}
         showModeDropdown={showModeDropdown}
         sortMode={sortMode}
-        totalCount={filteredAlerts.length}
+        totalCount={scopedAlertCount}
       />
 
       <FeedFilters

@@ -26,6 +26,7 @@ import { createUserWebhookDelivery } from './services/user-webhook-delivery.js';
 import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
 import { buildPredictionPayload } from './prediction-helpers.js';
+import { inferHighPriorityTicker, shouldInferTicker } from './pipeline/ticker-inference.js';
 import { categorizeFilterReason, logTitle, PRIMARY_SOURCES_SET } from './pipeline-helpers.js';
 import {
   eventsProcessedTotal,
@@ -148,6 +149,23 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
     if (llmClassifier && llmResult) {
       llmClassificationsTotal.inc({ status: llmResult.ok ? 'success' : 'failure' });
+    }
+
+    if (shouldInferTicker(event, result.severity, llmResult?.ok ? llmResult.value : undefined)) {
+      const inferredTicker = inferHighPriorityTicker(event);
+      const existingTickers = Array.isArray(event.metadata?.['tickers'])
+        ? (event.metadata?.['tickers'] as unknown[]).filter(
+            (value): value is string => typeof value === 'string' && value.trim().length > 0,
+          ).map((value) => value.toUpperCase())
+        : [];
+
+      event.metadata = {
+        ...(event.metadata ?? {}),
+        ticker: inferredTicker.ticker,
+        tickers: [inferredTicker.ticker, ...existingTickers.filter((value) => value !== inferredTicker.ticker)],
+        ticker_inferred: true,
+        ticker_inference_strategy: inferredTicker.strategy,
+      };
     }
 
     // Step 6: Store to DB (if available)
@@ -409,15 +427,26 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
             // If the event had no ticker before, try to extract one from LLM enrichment
             // and schedule outcome tracking (which was skipped earlier due to missing ticker)
-            if (!ticker && db && eventId && outcomeTracker) {
+            const currentTicker =
+              event.metadata && typeof event.metadata['ticker'] === 'string'
+                ? event.metadata['ticker'] as string
+                : undefined;
+            const currentTickerWasInferred = event.metadata?.['ticker_inferred'] === true;
+
+            if ((!currentTicker || currentTickerWasInferred) && db && eventId && outcomeTracker) {
               const enrichTickers = llmEnrichResult.tickers;
               const enrichTicker = enrichTickers?.[0]?.symbol;
               if (typeof enrichTicker === 'string' && enrichTicker.length > 0) {
                 const normalizedTicker = enrichTicker.toUpperCase();
-                // Update events.ticker so the LEFT JOIN + future queries work
+                // Prefer the concrete LLM-enrichment ticker over a missing or inferred placeholder.
                 const updateResult = await db.execute(sql`
-                  UPDATE events SET ticker = ${normalizedTicker}
-                  WHERE id = ${eventId} AND ticker IS NULL
+                  UPDATE events
+                  SET ticker = ${normalizedTicker}
+                  WHERE id = ${eventId}
+                    AND (
+                      ticker IS NULL
+                      OR ticker = ${currentTicker ?? null}
+                    )
                   RETURNING id
                 `);
                 const rowCount = Array.isArray(updateResult)
@@ -425,11 +454,21 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
                   : (updateResult as { rowCount?: number }).rowCount ?? 0;
 
                 if (rowCount > 0) {
-                  // Sync metadata with the persisted ticker
-                  event.metadata = {
-                    ...(event.metadata ?? {}),
-                    ticker: normalizedTicker,
-                  };
+                  const nextMetadata = { ...(event.metadata ?? {}) };
+                  nextMetadata['ticker'] = normalizedTicker;
+                  if (Array.isArray(nextMetadata['tickers'])) {
+                    nextMetadata['tickers'] = [
+                      normalizedTicker,
+                      ...(nextMetadata['tickers'] as unknown[])
+                        .filter((value): value is string => typeof value === 'string' && value.toUpperCase() !== normalizedTicker)
+                        .map((value) => value.toUpperCase()),
+                    ];
+                  } else {
+                    nextMetadata['tickers'] = [normalizedTicker];
+                  }
+                  delete nextMetadata['ticker_inferred'];
+                  delete nextMetadata['ticker_inference_strategy'];
+                  event.metadata = nextMetadata;
                   await persistEventMetadata();
                   // Schedule outcome tracking now that we have a ticker
                   await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);

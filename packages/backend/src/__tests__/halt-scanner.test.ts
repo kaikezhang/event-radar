@@ -180,8 +180,9 @@ describe('HaltScanner', () => {
     it('maps high-priority halt codes to the expected severities', () => {
       expect(mapHaltReasonSeverity('T1')).toBe('CRITICAL');
       expect(mapHaltReasonSeverity('T2')).toBe('HIGH');
-      expect(mapHaltReasonSeverity('T12')).toBe('MEDIUM');
-      expect(mapHaltReasonSeverity('H11')).toBe('LOW');
+      expect(mapHaltReasonSeverity('T12')).toBe('HIGH');
+      expect(mapHaltReasonSeverity('H4')).toBe('HIGH');
+      expect(mapHaltReasonSeverity('H11')).toBe('HIGH');
     });
 
     it('returns human-readable reason descriptions', () => {

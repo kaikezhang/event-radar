@@ -115,9 +115,9 @@ describe('useFeedState helpers', () => {
     expect(groups.map((group) => group.label)).toEqual(['Today', 'Yesterday', 'Mar 1']);
   });
 
-  it('defaults smart feed to all severities so low-signal alerts remain visible', () => {
-    expect(getDefaultSeverities('smart')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
-    expect(getDefaultSeverities('all')).toEqual(['HIGH', 'CRITICAL']);
+  it('defaults smart feed to hide LOW while all-events still includes it', () => {
+    expect(getDefaultSeverities('smart')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
+    expect(getDefaultSeverities('all')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
   });
 
   it('sorts smart-feed alerts by severity before recency so low alerts sink to the bottom', () => {

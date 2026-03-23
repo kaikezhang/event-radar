@@ -26,8 +26,8 @@ const HALT_SEVERITY_MAP: Record<string, Severity> = {
   M: 'CRITICAL',
   T2: 'HIGH',
   T8: 'HIGH',
-  T12: 'MEDIUM',
-  H4: 'MEDIUM',
+  T12: 'HIGH',
+  H4: 'HIGH',
 };
 
 const HALT_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -236,7 +236,7 @@ export function parseNasdaqTradeHaltsJson(payload: unknown): NasdaqTradeHaltReco
 }
 
 export function mapHaltReasonSeverity(reasonCode: string): Severity {
-  return HALT_SEVERITY_MAP[reasonCode.toUpperCase()] ?? 'LOW';
+  return HALT_SEVERITY_MAP[reasonCode.toUpperCase()] ?? 'HIGH';
 }
 
 export function describeHaltReason(reasonCode: string): string {

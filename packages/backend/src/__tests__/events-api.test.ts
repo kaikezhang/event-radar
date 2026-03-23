@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
 import { events } from '../db/schema.js';
@@ -93,13 +93,37 @@ describe('GET /api/events', () => {
     const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'MEDIUM'];
 
     for (let i = 0; i < sources.length; i++) {
+      const rawEvent = makeEvent({
+        source: sources[i],
+        title: `Event ${i + 1}`,
+      });
+
       await storeEvent(sharedDb, {
-        event: makeEvent({
-          source: sources[i],
-          title: `Event ${i + 1}`,
-        }),
+        event: rawEvent,
         severity: severities[i] as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
       });
+
+      await sharedDb.execute(sql`
+        INSERT INTO pipeline_audit (
+          event_id,
+          source,
+          title,
+          severity,
+          ticker,
+          outcome,
+          stopped_at,
+          reason
+        ) VALUES (
+          ${rawEvent.id},
+          ${sources[i]},
+          ${rawEvent.title},
+          ${severities[i]},
+          'AAPL',
+          'delivered',
+          'delivery',
+          'Passed pipeline'
+        )
+      `);
     }
 
     ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
@@ -242,6 +266,96 @@ describe('GET /api/events', () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe('GET /api/events delivery filtering', () => {
+  let ctx: AppContext;
+
+  beforeEach(async () => {
+    await cleanTestDb(sharedDb);
+
+    const deliveredEvent = makeEvent({
+      source: 'breaking-news',
+      title: 'Delivered market-moving event',
+      metadata: { ticker: 'SPY' },
+    });
+    const filteredEvent = makeEvent({
+      source: 'breaking-news',
+      title: 'Blocked low-quality event',
+      metadata: { ticker: 'SPY' },
+    });
+    const pendingEvent = makeEvent({
+      source: 'breaking-news',
+      title: 'No audit yet',
+      metadata: { ticker: 'QQQ' },
+    });
+
+    await storeEvent(sharedDb, { event: deliveredEvent, severity: 'HIGH' });
+    await storeEvent(sharedDb, { event: filteredEvent, severity: 'HIGH' });
+    await storeEvent(sharedDb, { event: pendingEvent, severity: 'HIGH' });
+
+    await sharedDb.execute(sql`
+      INSERT INTO pipeline_audit (
+        event_id,
+        source,
+        title,
+        severity,
+        ticker,
+        outcome,
+        stopped_at,
+        reason
+      ) VALUES
+      (
+        ${deliveredEvent.id},
+        ${deliveredEvent.source},
+        ${deliveredEvent.title},
+        'HIGH',
+        'SPY',
+        'delivered',
+        'delivery',
+        'Passed pipeline'
+      ),
+      (
+        ${filteredEvent.id},
+        ${filteredEvent.source},
+        ${filteredEvent.title},
+        'HIGH',
+        'SPY',
+        'filtered',
+        'llm_judge',
+        'Blocked by judge'
+      )
+    `);
+
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterEach(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('returns only events that were delivered by the pipeline', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      total: 1,
+      data: [
+        expect.objectContaining({
+          title: 'Delivered market-moving event',
+          source: 'breaking-news',
+          severity: 'HIGH',
+        }),
+      ],
+    });
   });
 });
 
@@ -630,20 +744,12 @@ describe('EventBus → DB storage integration', () => {
     // Wait for async event bus handler
     await new Promise((r) => setTimeout(r, 100));
 
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/events?source=sec-edgar',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
-    });
+    const [stored] = await sharedDb
+      .select()
+      .from(events)
+      .where(eq(events.sourceEventId, event.id))
+      .limit(1);
 
-    const body = response.json();
-    expect(body.total).toBeGreaterThanOrEqual(1);
-
-    const stored = body.data.find(
-      (e: { sourceEventId: string }) => e.sourceEventId === event.id,
-    );
     expect(stored).toBeDefined();
     expect(stored.title).toBe('Integration Test Event');
     expect(stored.severity).toBe('HIGH');
