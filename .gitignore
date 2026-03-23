@@ -8,4 +8,12 @@ dist/
 .env.*.local
 coverage/
 .gstack/
-.claude/skills/gstack/
+
+# Agent/coding tool files
+.claude/
+.agents/
+TASK.md
+tasks.md
+
+# Crawlee/Playwright storage
+packages/backend/storage/
