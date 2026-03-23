@@ -95,6 +95,28 @@ describe('LLMClassifierService.shouldUseLLM', () => {
 
     expect(service.shouldUseLLM(event, ruleResult)).toBe(true);
   });
+
+  it('returns true when political-market-impact tag is present, even with high confidence', () => {
+    const event = makeEvent({ source: 'x' });
+    const ruleResult = makeRuleResult({
+      confidence: 0.95,
+      tags: ['political-market-impact'],
+      matchedRules: ['elon-government'],
+    });
+
+    expect(service.shouldUseLLM(event, ruleResult)).toBe(true);
+  });
+
+  it('returns true when force-llm-classification tag is present, even on manual sources', () => {
+    const event = makeEvent({ source: 'manual' });
+    const ruleResult = makeRuleResult({
+      confidence: 0.95,
+      tags: ['force-llm-classification'],
+      matchedRules: ['manual-political-review'],
+    });
+
+    expect(service.shouldUseLLM(event, ruleResult)).toBe(true);
+  });
 });
 
 /* ── 2. LLM classify ─────────────────────────────────────────────── */
@@ -305,6 +327,28 @@ describe('Pipeline: rule high confidence → skip LLM', () => {
 
     expect(useLLM).toBe(false);
     expect(provider.classify).not.toHaveBeenCalled();
+  });
+
+  it('still calls LLM when a political post is tagged for forced classification', async () => {
+    const provider = mockLLMProvider(ok(VALID_LLM_JSON));
+    const service = new LLMClassifierService({ provider });
+    const event = makeEvent({ source: 'x' });
+    const ruleResult = makeRuleResult({
+      confidence: 0.95,
+      tags: ['political-market-impact', 'force-llm-classification'],
+      matchedRules: ['elon-government'],
+    });
+
+    const useLLM = service.shouldUseLLM(event, ruleResult);
+    expect(useLLM).toBe(true);
+
+    const result = await service.classify({
+      headline: event.title,
+      source: event.source,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(provider.classify).toHaveBeenCalledOnce();
   });
 });
 

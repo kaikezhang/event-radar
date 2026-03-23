@@ -37,12 +37,38 @@ Set direction to NEUTRAL. Direction prediction is not used in the current versio
 
 Respond ONLY with valid JSON. No markdown, no code fences, no extra text.`;
 
+const POLITICAL_POST_PROMPT = `POLITICAL POST CLASSIFICATION:
+This is a post from a political figure. Classify based on ACTUAL MARKET IMPACT:
+
+CRITICAL: Announces specific policy action (military strikes, trade deal, sanctions, executive order, tariff changes) that directly affects markets or specific sectors. Must be a concrete ACTION, not an opinion.
+Example: "I have instructed the Department of War to postpone military strikes" = CRITICAL
+
+HIGH: Announces intent or threat of policy action that could affect markets. Concrete but not yet enacted.
+Example: "We are looking very seriously at tariffs on China" = HIGH
+
+MEDIUM: Comments on economic/market topics without announcing specific action.
+Example: "The Fed should lower rates" = MEDIUM
+
+LOW: Political commentary, insults, campaign rhetoric, slogans with no specific market impact.
+Example: "PEACE THROUGH STRENGTH!!!" = LOW
+Example: "The Democrats are destroying this country" = LOW`;
+
+function isPoliticalPostSource(source: RawEvent['source']): boolean {
+  return source === 'truth-social' || source === 'x';
+}
+
 export function buildClassificationPrompt(
   event: RawEvent,
   _ruleResult?: ClassificationResult,
 ): string {
   void _ruleResult;
-  const parts: string[] = [SYSTEM_PROMPT, '', '--- EVENT ---'];
+  const parts: string[] = [SYSTEM_PROMPT];
+
+  if (isPoliticalPostSource(event.source)) {
+    parts.push('', POLITICAL_POST_PROMPT);
+  }
+
+  parts.push('', '--- EVENT ---');
 
   parts.push(`Source: ${event.source}`);
   parts.push(`Type: ${event.type}`);

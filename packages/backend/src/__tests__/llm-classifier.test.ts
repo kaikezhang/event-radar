@@ -135,6 +135,41 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('Set direction to NEUTRAL. Direction prediction is not used in the current version.');
     expect(prompt).not.toContain('what is the likely price impact?');
   });
+
+  it('should add political post severity guidance for Truth Social posts', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'POSTPONE MILITARY STRIKES',
+      body: 'I have instructed the Department of War to postpone military strikes.',
+    }));
+
+    expect(prompt).toContain('POLITICAL POST CLASSIFICATION:');
+    expect(prompt).toContain('This is a post from a political figure.');
+    expect(prompt).toContain('CRITICAL: Announces specific policy action');
+    expect(prompt).toContain('LOW: Political commentary, insults, campaign rhetoric, slogans with no specific market impact.');
+    expect(prompt).toContain('Example: "I have instructed the Department of War to postpone military strikes" = CRITICAL');
+  });
+
+  it('should add political post severity guidance for X posts', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'x',
+      type: 'political-post',
+      title: 'PEACE THROUGH STRENGTH!!!',
+      body: 'PEACE THROUGH STRENGTH!!!',
+    }));
+
+    expect(prompt).toContain('POLITICAL POST CLASSIFICATION:');
+    expect(prompt).toContain('HIGH: Announces intent or threat of policy action that could affect markets.');
+    expect(prompt).toContain('Example: "PEACE THROUGH STRENGTH!!!" = LOW');
+  });
+
+  it('should not add political post guidance for non-political sources', () => {
+    const prompt = buildClassificationPrompt(makeEvent());
+
+    expect(prompt).not.toContain('POLITICAL POST CLASSIFICATION:');
+    expect(prompt).not.toContain('PEACE THROUGH STRENGTH');
+  });
 });
 
 /* ── 2. Response parsing ─────────────────────────────────────────── */

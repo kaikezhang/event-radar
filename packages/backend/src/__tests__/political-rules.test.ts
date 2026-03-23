@@ -44,64 +44,74 @@ describe('Political Classification Rules', () => {
       const result = engine.classify(event);
 
       expect(result.severity).toBe('CRITICAL');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.tags).toContain('trade-policy');
       expect(result.matchedRules).toContain('trump-trade');
     });
 
-    it('should classify crypto posts as HIGH', () => {
+    it('should tag crypto posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         title: 'Crypto is the future of America!',
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.tags).toContain('crypto');
       expect(result.matchedRules).toContain('trump-crypto');
     });
 
-    it('should classify bitcoin posts as HIGH', () => {
+    it('should tag bitcoin posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         title: 'Bitcoin strategic reserve is happening!',
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.tags).toContain('bitcoin');
     });
 
-    it('should classify company mention posts as HIGH', () => {
+    it('should tag company mention posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         title: 'This company is doing great things for America!',
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.tags).toContain('company-mention');
     });
 
-    it('should boost Iran posts to at least HIGH severity', () => {
+    it('should tag Iran posts for LLM classification instead of boosting severity', () => {
       const event = makePoliticalEvent({
         title: 'Iran must choose peace now.',
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
       expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.matchedRules).toContain('trump-geopolitical-iran');
     });
 
-    it('should boost executive order posts to at least HIGH severity', () => {
+    it('should tag executive order posts for LLM classification instead of boosting severity', () => {
       const event = makePoliticalEvent({
         title: 'An executive order is coming soon.',
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
       expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.matchedRules).toContain('trump-policy-executive-order');
     });
 
-    it('should keep tariff posts at CRITICAL when boost and critical rules both match', () => {
+    it('should keep tariff posts at CRITICAL and still force LLM validation', () => {
       const event = makePoliticalEvent({
         title: 'Tariff and China policy updates are coming today.',
       });
@@ -109,12 +119,13 @@ describe('Political Classification Rules', () => {
 
       expect(result.severity).toBe('CRITICAL');
       expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.matchedRules).toContain('trump-tariff');
     });
   });
 
   describe('Elon — X rules', () => {
-    it('should classify DOGE posts as HIGH', () => {
+    it('should tag DOGE posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         source: 'x',
         title: 'DOGE has saved taxpayers $100 billion',
@@ -122,13 +133,15 @@ describe('Political Classification Rules', () => {
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
       expect(result.tags).toContain('elon');
       expect(result.tags).toContain('doge');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.matchedRules).toContain('elon-doge-govt');
     });
 
-    it('should classify government posts as HIGH', () => {
+    it('should tag government posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         source: 'x',
         title: 'Government efficiency is the key to prosperity',
@@ -136,8 +149,10 @@ describe('Political Classification Rules', () => {
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
       expect(result.tags).toContain('government');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
     });
 
     it('should classify Tesla posts as MEDIUM', () => {
@@ -165,7 +180,7 @@ describe('Political Classification Rules', () => {
       expect(result.tags).toContain('spacex');
     });
 
-    it('should classify Elon crypto posts as HIGH', () => {
+    it('should tag Elon crypto posts for LLM classification instead of setting HIGH severity', () => {
       const event = makePoliticalEvent({
         source: 'x',
         title: 'Crypto adoption is accelerating',
@@ -173,7 +188,9 @@ describe('Political Classification Rules', () => {
       });
       const result = engine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
       expect(result.tags).toContain('crypto');
     });
   });

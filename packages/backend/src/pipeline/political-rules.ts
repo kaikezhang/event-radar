@@ -1,5 +1,14 @@
 import type { Rule } from '@event-radar/shared';
 
+const POLITICAL_LLM_TAGS = ['political-market-impact', 'force-llm-classification'] as const;
+
+function createPoliticalTags(
+  actor: 'trump' | 'elon',
+  tags: readonly string[],
+): string[] {
+  return [actor, ...POLITICAL_LLM_TAGS, ...tags];
+}
+
 const TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS = [
   {
     id: 'trump-geopolitical-iran',
@@ -102,8 +111,7 @@ function createTruthSocialBoostRules(): Rule[] {
       { type: 'titleContains', value: rule.keyword },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['trump', 'political-market-impact', ...rule.tags] },
+      { type: 'addTags', values: createPoliticalTags('trump', rule.tags) },
       { type: 'setPriority', value: 12 },
     ],
     priority: 12,
@@ -126,7 +134,7 @@ export const POLITICAL_RULES: Rule[] = [
     ],
     actions: [
       { type: 'setSeverity', value: 'CRITICAL' },
-      { type: 'addTags', values: ['trump', 'tariff', 'trade-policy'] },
+      { type: 'addTags', values: createPoliticalTags('trump', ['tariff', 'trade-policy']) },
       { type: 'setPriority', value: 5 },
     ],
     priority: 10,
@@ -141,7 +149,7 @@ export const POLITICAL_RULES: Rule[] = [
     ],
     actions: [
       { type: 'setSeverity', value: 'CRITICAL' },
-      { type: 'addTags', values: ['trump', 'trade-policy'] },
+      { type: 'addTags', values: createPoliticalTags('trump', ['trade-policy']) },
       { type: 'setPriority', value: 5 },
     ],
     priority: 10,
@@ -158,8 +166,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'company' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['trump', 'company-mention'] },
+      { type: 'addTags', values: createPoliticalTags('trump', ['company-mention']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -173,8 +180,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'crypto' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['trump', 'crypto'] },
+      { type: 'addTags', values: createPoliticalTags('trump', ['crypto']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -188,8 +194,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'bitcoin' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['trump', 'crypto', 'bitcoin'] },
+      { type: 'addTags', values: createPoliticalTags('trump', ['crypto', 'bitcoin']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -203,8 +208,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'doge' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['elon', 'doge', 'government'] },
+      { type: 'addTags', values: createPoliticalTags('elon', ['doge', 'government']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -218,8 +222,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'government' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['elon', 'government'] },
+      { type: 'addTags', values: createPoliticalTags('elon', ['government']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -233,8 +236,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'crypto' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['elon', 'crypto'] },
+      { type: 'addTags', values: createPoliticalTags('elon', ['crypto']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
@@ -248,8 +250,7 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'titleContains', value: 'bitcoin' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'addTags', values: ['elon', 'crypto', 'bitcoin'] },
+      { type: 'addTags', values: createPoliticalTags('elon', ['crypto', 'bitcoin']) },
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
