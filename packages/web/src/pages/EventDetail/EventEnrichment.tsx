@@ -68,7 +68,6 @@ export function EventEvidenceContent({
   const hasEvidence = Boolean(eventUrl || rawExcerpt || edgarUrl);
 
   const hasSourceCard = sourceMetadata && Object.keys(sourceMetadata).length > 0;
-  const hasContent = whyNowBullets.length > 0 || hasSourceCard || enrichment?.risks || enrichment?.filingItems?.length || hasEvidence;
 
   return (
     <>
