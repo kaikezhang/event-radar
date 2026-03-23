@@ -113,11 +113,14 @@ export function Scorecard() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <Target className="h-6 w-6 animate-spin text-interactive-default" />
-        <p className="mt-3 text-sm font-medium text-text-secondary animate-pulse">
-          Calculating accuracy from tracked events&hellip;
-        </p>
+      <div className="space-y-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            data-testid="scorecard-skeleton-card"
+            className="h-28 animate-pulse rounded-2xl border border-border-default bg-bg-surface/60"
+          />
+        ))}
       </div>
     );
   }
@@ -258,6 +261,33 @@ export function Scorecard() {
         </div>
       </section>
 
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {formatRate(data.totals.directionalHitRate)}
+          </div>
+          <div className="mt-1 text-sm text-text-secondary">Directional hit rate</div>
+        </div>
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {formatRate(data.totals.setupWorkedRate)}
+          </div>
+          <div className="mt-1 text-sm text-text-secondary">Setup worked rate</div>
+        </div>
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {formatMove(data.totals.avgT20Move)}
+          </div>
+          <div className="mt-1 text-sm text-text-secondary">Avg T+20 move</div>
+        </div>
+        <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+          <div className="font-mono text-2xl font-semibold text-text-primary">
+            {formatMove(data.totals.medianT20Move)}
+          </div>
+          <div className="mt-1 text-sm text-text-secondary">Median T+20 move</div>
+        </div>
+      </section>
+
       <AdvancedAnalytics data={data} />
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
@@ -293,18 +323,21 @@ export function Scorecard() {
         description="Calibration by model confidence so users can see whether conviction tracks reality."
         group="confidence"
         buckets={data.confidenceBuckets}
+        defaultOpen
       />
       <BucketSection
         title="Source buckets"
         description="Signal quality by source family to surface where alerts deserve more trust."
         group="source"
         buckets={data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase()))}
+        defaultOpen
       />
       <BucketSection
         title="Event type buckets"
         description="Behavior by product event type, useful for tuning templates and routing."
         group="eventType"
         buckets={data.eventTypeBuckets}
+        defaultOpen
       />
     </div>
   );

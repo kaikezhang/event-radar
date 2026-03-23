@@ -507,6 +507,9 @@ function ThesisPreview({ summary, direction }: { summary?: string; direction?: s
   const firstSentence = summary.match(/^[^.!?]+[.!?]/)?.[0] ?? summary;
   const thesis = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '\u2026' : firstSentence;
 
+  // Skip when the thesis would duplicate the full summary
+  if (thesis === summary) return null;
+
   return (
     <p className="mt-1.5 line-clamp-1 text-[13px] leading-5 text-text-tertiary italic">
       {thesis}

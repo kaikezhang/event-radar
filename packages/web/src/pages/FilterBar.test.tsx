@@ -1,9 +1,13 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach } from 'vitest';
 import { Feed } from './Feed.js';
 import { renderWithRouter } from '../test/render.js';
 
 describe('Feed page with filters', () => {
+  beforeEach(() => {
+    localStorage.setItem('onboardingComplete', 'true');
+  });
   it('shows filter toggle button', async () => {
     renderWithRouter(
       [{ path: '/', element: <Feed /> }],
