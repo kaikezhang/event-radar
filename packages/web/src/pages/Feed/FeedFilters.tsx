@@ -52,6 +52,8 @@ export function FeedFilters({
   showFilters,
   sources,
 }: FeedFiltersProps) {
+  const visibleSources = sources.filter((source) => source.toLowerCase() !== 'dummy');
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Active filters">
@@ -130,11 +132,11 @@ export function FeedFilters({
                 </div>
               </div>
 
-              {sources.length > 0 && (
+              {visibleSources.length > 0 && (
                 <div>
                   <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Source</h4>
                   <div className="flex flex-wrap gap-1.5">
-                    {sources.map((source) => (
+                    {visibleSources.map((source) => (
                       <button
                         key={source}
                         type="button"

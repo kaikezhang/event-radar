@@ -142,4 +142,42 @@ describe('watchlist edit & bulk routes', () => {
       expect(res.json().error).toContain('section');
     });
   });
+
+  describe('POST /api/watchlist ordering', () => {
+    it('appends a newly added ticker to the end of the existing sort order', async () => {
+      await ctx.server.inject({ method: 'POST', url: '/api/watchlist', headers: AUTH_HEADERS, payload: { ticker: 'AAPL' } });
+      await ctx.server.inject({ method: 'POST', url: '/api/watchlist', headers: AUTH_HEADERS, payload: { ticker: 'MSFT' } });
+
+      const initialList = await ctx.server.inject({ method: 'GET', url: '/api/watchlist', headers: AUTH_HEADERS });
+      const initialItems = initialList.json().data as Array<{ ticker: string }>;
+
+      const reorderResponse = await ctx.server.inject({
+        method: 'PATCH',
+        url: '/api/watchlist/reorder',
+        headers: AUTH_HEADERS,
+        payload: {
+          items: initialItems.map((item, index) => ({
+            ticker: item.ticker,
+            sortOrder: index + 5,
+            sectionId: null,
+          })),
+        },
+      });
+      expect(reorderResponse.statusCode).toBe(200);
+
+      const addResponse = await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist',
+        headers: AUTH_HEADERS,
+        payload: { ticker: 'NVDA' },
+      });
+      expect(addResponse.statusCode).toBe(201);
+
+      const listResponse = await ctx.server.inject({ method: 'GET', url: '/api/watchlist', headers: AUTH_HEADERS });
+      const items = listResponse.json().data as Array<{ ticker: string; sortOrder: number }>;
+
+      expect(items.map((item) => item.ticker)).toEqual(['AAPL', 'MSFT', 'NVDA']);
+      expect(items[2]?.sortOrder).toBeGreaterThan(items[1]?.sortOrder ?? 0);
+    });
+  });
 });

@@ -243,13 +243,13 @@ export function History() {
       {/* Default severity note */}
       {isDefaultSeverity && (
         <div className="flex items-center gap-2 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-xs text-text-secondary">
-          <span>Showing HIGH and CRITICAL events.</span>
+          <span>Showing important events only</span>
           <button
             type="button"
-            onClick={clearFilters}
+            onClick={() => clearFilters()}
             className="font-medium text-interactive-default hover:underline"
           >
-            Clear filters to see all.
+            Show all &rarr;
           </button>
         </div>
       )}

@@ -157,6 +157,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 summary={data.aiAnalysis.summary}
                 enrichment={data.enrichment}
                 direction={direction}
+                severity={data.severity}
               />
               {data.outcome && (
                 <WhatHappenedNext outcome={data.outcome} direction={direction} />
@@ -174,7 +175,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                       rel="noreferrer"
                       className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                     >
-                      <ExternalLink className="h-4 w-4" /> View original
+                      <ExternalLink className="h-4 w-4" /> View original source
                     </a>
                   )}
                   <button
@@ -195,9 +196,10 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               <RegimeContextCard regimeContext={data.enrichment?.regimeContext} className="mt-4" />
               <EventEvidenceContent
                 enrichment={data.enrichment}
+                eventUrl={data.url}
+                rawExcerpt={data.rawExcerpt}
                 source={data.sourceKey ?? data.source}
                 sourceMetadata={data.sourceMetadata}
-                summary={data.aiAnalysis?.summary}
               />
               <EventHistory
                 historicalPattern={data.historicalPattern}
@@ -232,7 +234,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                   rel="noreferrer"
                   className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium"
                 >
-                  <ExternalLink className="h-4 w-4" /> View original
+                  <ExternalLink className="h-4 w-4" /> View original source
                 </a>
               )}
               <button

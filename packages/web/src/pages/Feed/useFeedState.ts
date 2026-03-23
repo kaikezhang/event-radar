@@ -8,6 +8,7 @@ const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2
 
 const PRESETS_KEY = 'event-radar-filter-presets';
 const FEED_TAB_KEY = 'event-radar-feed-tab';
+const FEED_SORT_KEY = 'er-feed-sort';
 const UNAUTH_BANNER_KEY = 'event-radar-unauth-banner-dismissed';
 
 export type FeedTab = 'smart' | 'watchlist' | 'all';
@@ -49,8 +50,21 @@ export function loadFeedTab(): FeedTab | null {
   }
 }
 
+export function loadFeedSort(): SortMode | null {
+  try {
+    const raw = localStorage.getItem(FEED_SORT_KEY);
+    return raw === 'latest' || raw === 'severity' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 function saveFeedTab(tab: FeedTab) {
   localStorage.setItem(FEED_TAB_KEY, tab);
+}
+
+function saveFeedSort(mode: SortMode) {
+  localStorage.setItem(FEED_SORT_KEY, mode);
 }
 
 export function getTrustCue(
@@ -196,7 +210,7 @@ export function useFeedState({
   const tabInitializedRef = useRef(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showAddFilterDropdown, setShowAddFilterDropdown] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>('latest');
+  const [sortMode, setSortMode] = useState<SortMode>(() => loadFeedSort() ?? 'latest');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [newAlertIds, setNewAlertIds] = useState<Set<string>>(new Set());
   const [bannerDismissed, setBannerDismissed] = useState(() => {
@@ -259,6 +273,10 @@ export function useFeedState({
     searchParams,
     setSearchParams,
   ]);
+
+  useEffect(() => {
+    saveFeedSort(sortMode);
+  }, [sortMode]);
 
   const activeSeverities = useMemo(() => {
     const param = searchParams.get('severity');

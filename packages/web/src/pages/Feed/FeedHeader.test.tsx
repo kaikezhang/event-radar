@@ -61,4 +61,40 @@ describe('FeedHeader', () => {
 
     expect(onSortModeChange).toHaveBeenCalledWith('severity');
   });
+
+  it('toggles the Smart Feed explainer on click', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FeedHeader
+        activeTab="smart"
+        activeFilterCount={0}
+        hasActiveFilters={false}
+        onSortModeChange={vi.fn()}
+        onTabChange={vi.fn()}
+        onToggleFilters={vi.fn()}
+        onToggleModeDropdown={vi.fn()}
+        showModeDropdown={false}
+        sortMode="latest"
+      />,
+    );
+
+    expect(screen.queryByText(/smart feed shows events matching your watchlist tickers/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /what is smart feed\?/i }));
+
+    expect(
+      screen.getByText(
+        /smart feed shows events matching your watchlist tickers, plus all critical events and high-severity events from trusted sources like sec filings and breaking news\./i,
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /what is smart feed\?/i }));
+
+    expect(
+      screen.queryByText(
+        /smart feed shows events matching your watchlist tickers, plus all critical events and high-severity events from trusted sources like sec filings and breaking news\./i,
+      ),
+    ).not.toBeInTheDocument();
+  });
 });

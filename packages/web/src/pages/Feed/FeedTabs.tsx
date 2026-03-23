@@ -1,5 +1,5 @@
 import { ChevronDown, Info } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils.js';
 import type { FeedTab } from './useFeedState.js';
 
@@ -23,6 +23,24 @@ export function FeedTabs({
   showModeDropdown,
 }: FeedTabsProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const infoButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showTooltip) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!infoButtonRef.current?.contains(event.target as Node)) {
+        setShowTooltip(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [showTooltip]);
 
   return (
     <div className="relative flex items-center gap-2">
@@ -37,18 +55,17 @@ export function FeedTabs({
 
       {activeTab === 'smart' && (
         <button
+          ref={infoButtonRef}
           type="button"
           className="relative"
           aria-label="What is Smart Feed?"
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
+          aria-expanded={showTooltip}
           onClick={() => setShowTooltip((prev) => !prev)}
-          onBlur={() => setTimeout(() => setShowTooltip(false), 150)}
         >
           <Info className="h-3.5 w-3.5 text-text-tertiary cursor-help" />
           {showTooltip && (
             <div className="absolute left-1/2 top-full z-30 mt-1.5 w-56 -translate-x-1/2 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary shadow-lg">
-              AI-curated events for your watchlist + critical market events
+              Smart Feed shows events matching your watchlist tickers, plus all CRITICAL events and HIGH-severity events from trusted sources like SEC filings and breaking news.
             </div>
           )}
         </button>
