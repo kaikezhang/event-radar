@@ -1,72 +1,58 @@
-# TASK.md — CrowdTest Round 2: Feed Noise + Trust + Accessibility
+# TASK.md — P1 Data Quality: Feed Noise + Severity + BLOCKED cleanup
 
 ## ⚠️ DO NOT MERGE ANY PRs. Create PR and STOP.
 
 ## Overview
-Fix top issues from 5-persona CrowdTest (7.0/10). Target: 8+/10.
-Create ONE PR with all changes.
+Owner evaluation scored data quality 2/10. The #1 problem: feed is 76% StockTwits noise.
+Fix signal-to-noise ratio + severity classification + clean up stale data.
 
-## 1. Fix Feed noise — StockTwits filtering (CRITICAL)
-The #1 issue across all personas: 90%+ of feed events are StockTwits "entered trending" at MEDIUM severity.
+## 1. Downgrade existing StockTwits events to LOW (SQL migration)
+- Create migration: `packages/backend/src/db/migrations/008-downgrade-stocktwits-severity.sql`
+- SQL: `UPDATE events SET severity = 'LOW' WHERE source = 'stocktwits' AND severity = 'MEDIUM';`
+- This affects ~9123 rows
+- Also update pipeline_audit: `UPDATE pipeline_audit SET severity = 'LOW' WHERE source = 'stocktwits' AND severity = 'MEDIUM';`
 
-### Backend fix:
-- File: `packages/backend/src/scanners/stocktwits-scanner.ts`
-- StockTwits "entered trending" events should be classified as LOW severity (not MEDIUM)
-- Only upgrade to MEDIUM/HIGH if the ticker has unusual volume or multiple sources confirm
-- Add a config flag `STOCKTWITS_TRENDING_DEFAULT_SEVERITY=LOW` in the scanner
+## 2. Smart Feed: hide LOW by default
+- File: `packages/web/src/pages/Feed/index.tsx` (or wherever feed filtering happens)
+- Smart Feed mode should NOT show LOW severity events at all
+- "All Events" mode should show them but with visual de-emphasis (slightly dimmed/smaller)
+- Add a pill/badge at top of Smart Feed: "Showing HIGH+ events · X LOW events hidden"
+- Clicking the pill reveals LOW events
 
-### Frontend fix — Smart Feed improvement:
-- File: `packages/web/src/pages/Feed/index.tsx` or wherever Smart Feed logic is
-- Smart Feed should deprioritize LOW severity events — show them at the bottom, after HIGH/CRITICAL
-- Add a feed quality indicator: show count of HIGH+ events vs total
+## 3. Fix trading halt severity — should be HIGH minimum
+- File: `packages/backend/src/scanners/trading-halt-scanner.ts` or the scanner's severity logic
+- Trading halts are currently classified as MEDIUM — they should be HIGH or CRITICAL
+- A stock being halted is ALWAYS a significant event
+- Also run a migration to upgrade existing trading halt events:
+  `UPDATE events SET severity = 'HIGH' WHERE source = 'trading-halt' AND severity IN ('MEDIUM', 'LOW');`
 
-## 2. Fix placeholder email on About page
-- File: `packages/web/src/pages/About.tsx`
-- Replace `[placeholder email]` with `hello@eventradar.app`
-- This is a one-line fix but trust-destroying if left as-is
+## 4. Fix null tickers on CRITICAL/HIGH events
+- Many breaking-news and truth-social events have null tickers
+- File: `packages/backend/src/pipeline/` — the classification/enrichment step
+- When LLM classifies an event as HIGH/CRITICAL but ticker is null:
+  - Try to extract ticker from the title/content using a simple regex (e.g., $AAPL, TSLA, etc.)
+  - If no ticker found, set ticker to the most relevant market ETF (SPY for general market, QQQ for tech, etc.)
+  - Add a flag `ticker_inferred: true` in metadata so we know it was auto-assigned
 
-## 3. Fix font sizes for accessibility
-- File: `packages/web/src/components/BottomNav.tsx`
-  - Change `text-[10px]` to `text-xs` (12px) for bottom nav labels
-- Check all other places with font sizes below 12px and bump them up:
-  - Card metadata text should be at least 12px
-  - Scorecard labels should be at least 12px  
-  - Footer text should be at least 12px
-- Search across `packages/web/src/` for `text-[10px]` and `text-[11px]` and fix all occurrences
+## 5. Feed card quality indicator
+- File: `packages/web/src/pages/Feed/FeedHeader.tsx` or feed header area
+- Show feed quality stats in the header:
+  - "23 events · 5 HIGH+ · 18 LOW" with a quality bar
+  - Or simpler: "5 important events today" prominent, then the rest
+- This helps users quickly see if there's anything worth their attention
 
-## 4. Mobile-friendly tooltips
-- Files: `packages/web/src/components/SeverityBadge.tsx`, `packages/web/src/components/DirectionBadge.tsx`
-- Current: uses native `title` attribute which doesn't work on touch devices
-- Fix: Replace with a click/tap-to-show tooltip component
-- Implementation: 
-  - On click/tap, show a small popover with the tooltip text
-  - Click outside or tap again to dismiss
-  - Keep the `title` attribute too for desktop hover
-  - Use a simple absolute-positioned div, no need for a tooltip library
-  - Also apply to any other components using `title` for jargon explanations (check Scorecard.tsx metric labels)
+## 6. Hide "BLOCKED" outcome events from the feed
+- Check if any events with pipeline_audit outcome='filtered' are showing in the feed
+- They should NOT appear in the web feed — only 'delivered' events should show
+- Verify the API query: `GET /api/events` should only return events that passed the pipeline
+- If BLOCKED events are showing, fix the query filter
 
-## 5. Add History page to navigation
-- File: `packages/web/src/components/BottomNav.tsx`
-- History page exists at `/history` but has no navigation link
-- Options (pick the best UX):
-  - Add "History" as 6th bottom nav item (if space allows), OR
-  - Replace one of the less-used nav items, OR  
-  - Add a "History" link in the Feed page header area
-- Use the Clock icon from lucide-react
-
-## 6. Improve tertiary text contrast
-- Search for color `#71717a` (zinc-500) used on small text
-- Replace with `#a1a1aa` (zinc-400) for better contrast on dark backgrounds
-- Check: `packages/web/src/` CSS/tailwind classes using `text-zinc-500` on dark theme
-- This affects WCAG AA compliance for small text
-
-## Testing Requirements
+## Testing Requirements  
 - `pnpm --filter @event-radar/web test` — all tests must pass
 - `pnpm --filter @event-radar/backend test` — all tests must pass
 - `pnpm --filter @event-radar/web build` — must succeed
-- Update any affected test snapshots
 
 ## PR
-- Branch: `feat/phase4-crowdtest-round2`
-- Title: `feat: CrowdTest round 2 — feed noise, accessibility, tooltips, navigation`
+- Branch: `feat/phase4-data-quality`
+- Title: `feat: P1 data quality — feed noise, severity fixes, BLOCKED cleanup`
 - **DO NOT MERGE. Create PR and stop.**
