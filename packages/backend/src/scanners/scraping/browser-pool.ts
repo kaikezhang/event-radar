@@ -40,7 +40,13 @@ class BrowserPoolManager {
       persistCookiesPerSession: true,
       launchContext: {
         launchOptions: {
-          args: ['--disable-blink-features=AutomationControlled'],
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
         },
       },
       async requestHandler(ctx) {
