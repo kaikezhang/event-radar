@@ -1,26 +1,8 @@
 import type { LlmClassificationResult, RawEvent, Severity } from '@event-radar/shared';
 import { COMPANY_TICKER_MAP } from './company-ticker-map.js';
+import { normalizeTickerCandidate as normalizeCandidateSymbol } from './ticker-candidate.js';
 
 const HIGH_PRIORITY_SEVERITIES = new Set<Severity>(['HIGH', 'CRITICAL']);
-const FALSE_POSITIVES = new Set([
-  'AI',
-  'CEO',
-  'CFO',
-  'CPI',
-  'EPS',
-  'ETF',
-  'FDA',
-  'FED',
-  'FOMC',
-  'GDP',
-  'IPO',
-  'IRS',
-  'SEC',
-  'THE',
-  'USA',
-  'USD',
-]);
-
 
 interface SectorFallback {
   ticker: string;
@@ -45,11 +27,11 @@ export interface InferredTickerResult {
 
 function normalizeTickerCandidate(value: string): string | null {
   const normalized = value.trim().toUpperCase();
-  if (!/^[A-Z]{1,5}$/.test(normalized) || FALSE_POSITIVES.has(normalized)) {
+  if (!/^[A-Z]{1,5}$/.test(normalized)) {
     return null;
   }
 
-  return normalized;
+  return normalizeCandidateSymbol(normalized);
 }
 
 export function extractTickerCandidateFromText(text: string): string | null {
@@ -110,7 +92,12 @@ export function extractCompanyTickerFromText(text: string): string | null {
     }
 
     if (!firstMatch || matchIndex < firstMatch.index) {
-      firstMatch = { index: matchIndex, ticker };
+      const normalizedTicker = normalizeCandidateSymbol(ticker);
+      if (!normalizedTicker) {
+        continue;
+      }
+
+      firstMatch = { index: matchIndex, ticker: normalizedTicker };
     }
   }
 

@@ -586,6 +586,7 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
       },
       marketData,
       enrichment,
+      enrichmentFailed: meta.enrichment_failed === true,
       historicalPattern: {
         matchCount,
         confidence: historicalConfidence,

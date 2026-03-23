@@ -178,6 +178,7 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               <EventSummaryContent
                 summary={data.aiAnalysis.summary}
                 enrichment={data.enrichment}
+                enrichmentFailed={data.enrichmentFailed}
                 direction={direction}
                 severity={data.severity}
               />

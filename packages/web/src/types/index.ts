@@ -112,6 +112,7 @@ export interface EventDetailData {
   };
   marketData: EventMarketData | null;
   enrichment: LlmEnrichment | null;
+  enrichmentFailed: boolean;
   historicalPattern: {
     matchCount: number;
     confidence: string;

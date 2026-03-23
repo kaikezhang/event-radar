@@ -413,9 +413,13 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         }
       }
 
-      // LLM Enrichment (only for events flagged by L1)
+      // LLM Enrichment (always force HIGH/CRITICAL events through when enabled)
       let enrichment: import('@event-radar/delivery').LLMEnrichment | undefined;
-      if (filterResult.enrichWithLLM && llmEnricher.enabled) {
+      const shouldForceEnrichment = classificationResult.severity === 'HIGH'
+        || classificationResult.severity === 'CRITICAL';
+      const shouldEnrich = llmEnricher.enabled
+        && (filterResult.enrichWithLLM || shouldForceEnrichment);
+      if (shouldEnrich) {
         const enrichStart = Date.now();
         try {
           const llmEnrichResult = await llmEnricher.enrich(
@@ -426,10 +430,12 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           llmEnrichmentDurationSeconds.observe(enrichDurationSec);
           if (llmEnrichResult) {
             enrichment = llmEnrichResult;
-            event.metadata = {
+            const nextMetadata: Record<string, unknown> = {
               ...(event.metadata ?? {}),
               llm_enrichment: llmEnrichResult,
             };
+            delete nextMetadata['enrichment_failed'];
+            event.metadata = nextMetadata;
             await persistEventMetadata();
             llmEnrichmentTotal.inc({ result: 'success' });
 
@@ -490,10 +496,28 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           const enrichDurationSec = (Date.now() - enrichStart) / 1000;
           llmEnrichmentDurationSeconds.observe(enrichDurationSec);
           llmEnrichmentTotal.inc({ result: 'error' });
-          server.log.error({
-            pipeline: true, stage: 'llm_enrichment', source: event.source,
-            error: enrichErr instanceof Error ? enrichErr.message : String(enrichErr),
-          });
+          const errorMessage = enrichErr instanceof Error ? enrichErr.message : String(enrichErr);
+          if (shouldForceEnrichment) {
+            event.metadata = {
+              ...(event.metadata ?? {}),
+              enrichment_failed: true,
+            };
+            await persistEventMetadata();
+            server.log.warn({
+              pipeline: true,
+              stage: 'llm_enrichment',
+              source: event.source,
+              severity: classificationResult.severity,
+              error: errorMessage,
+            });
+          } else {
+            server.log.error({
+              pipeline: true,
+              stage: 'llm_enrichment',
+              source: event.source,
+              error: errorMessage,
+            });
+          }
         }
       }
 

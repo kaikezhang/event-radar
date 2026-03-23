@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { EventEvidenceContent, EventSummaryContent } from './EventEnrichment.js';
 
 describe('EventSummaryContent', () => {
-  it('builds fallback bull and bear analysis for high-severity events when enrichment is missing', () => {
+  it('shows analysis pending for high-severity events when enrichment is missing', () => {
     render(
       <EventSummaryContent
         summary="Trump says a ceasefire deal could reduce immediate escalation risks in the region."
@@ -13,8 +13,7 @@ describe('EventSummaryContent', () => {
     );
 
     expect(screen.getByRole('heading', { name: /bull case vs bear case/i })).toBeInTheDocument();
-    expect(screen.getByText(/if the event eases faster than expected/i)).toBeInTheDocument();
-    expect(screen.getByText(/if the event proves temporary or incomplete/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/analysis pending/i)).toHaveLength(2);
     expect(screen.queryByText(/analysis not available/i)).not.toBeInTheDocument();
   });
 
@@ -40,6 +39,34 @@ describe('EventSummaryContent', () => {
 
     expect(screen.getByText(/if the event lands better than feared/i)).toBeInTheDocument();
     expect(screen.getByText(/if the event points to a deeper problem/i)).toBeInTheDocument();
+  });
+
+  it('shows the retry message when enrichment previously failed', () => {
+    render(
+      <EventSummaryContent
+        summary="The event is still being processed by the analysis pipeline."
+        enrichment={null}
+        enrichmentFailed
+        direction="neutral"
+        severity="CRITICAL"
+      />,
+    );
+
+    expect(screen.getAllByText(/analysis is being processed\. check back shortly\./i)).toHaveLength(2);
+  });
+
+  it('shows analysis not available for low-severity events that skip enrichment', () => {
+    render(
+      <EventSummaryContent
+        summary="A minor low-severity item was intentionally not enriched."
+        enrichment={null}
+        direction="neutral"
+        severity="LOW"
+      />,
+    );
+
+    expect(screen.getAllByText(/analysis not available/i)).toHaveLength(2);
+    expect(screen.queryByText(/analysis pending/i)).not.toBeInTheDocument();
   });
 });
 

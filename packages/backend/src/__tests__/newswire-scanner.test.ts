@@ -202,6 +202,22 @@ describe('NewswireScanner', () => {
       expect(tickers).toContain('CELU');
       expect(tickers).toContain('CELUW');
     });
+
+    it('should reject category entries that are only digits', () => {
+      const tickers = extractTickers('', [
+        'SEC:0001234567',
+        'Nasdaq:AAPL',
+      ]);
+      expect(tickers).toEqual(['AAPL']);
+    });
+
+    it('should reject category entries that match the false-ticker blocklist', () => {
+      const tickers = extractTickers('', [
+        'NYSE:INC',
+        'Nasdaq:TSLA',
+      ]);
+      expect(tickers).toEqual(['TSLA']);
+    });
   });
 
   describe('scan — ticker extraction', () => {

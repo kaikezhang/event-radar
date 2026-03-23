@@ -1,21 +1,5 @@
 import type { Sentiment } from '@event-radar/shared';
-
-/** Common words that look like tickers but aren't */
-const FALSE_POSITIVES = new Set([
-  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CNY', 'CHF',
-  'CEO', 'CFO', 'CTO', 'COO', 'IPO', 'ETF', 'SEC', 'FDA',
-  'THE', 'FOR', 'AND', 'NOT', 'BUT', 'ALL', 'ARE', 'WAS',
-  'HAS', 'HAD', 'HIS', 'HER', 'WHO', 'HOW', 'ITS', 'MAY',
-  'NEW', 'NOW', 'OLD', 'OUR', 'OUT', 'OWN', 'SAY', 'SHE',
-  'TOO', 'USE', 'WAY', 'GET', 'GOT', 'LET', 'PUT', 'RUN',
-  'SET', 'TRY', 'ASK', 'BIG', 'EPS', 'GDP', 'CPI', 'IMO',
-  'YOLO', 'FOMO', 'LMAO', 'ROFL', 'HODL', 'TLDR',
-  'DD', 'PT', 'SI', 'IV', 'OI', 'DTE', 'ATH', 'ATL',
-  'FYI', 'TBH', 'USA', 'FBI', 'CIA', 'NSA', 'DOJ', 'IRS',
-  'AFC', 'NFC', 'NFL', 'NBA', 'MLB', 'NHL', 'UFC',
-  'EST', 'PST', 'CST', 'MST', 'UTC', 'GMT',
-  'BAN', 'TAX', 'WAR', 'OIL', 'GAS', 'AI',
-]);
+import { isValidTickerCandidate } from '../pipeline/ticker-candidate.js';
 
 /** Top 50 company name → ticker mapping */
 const COMPANY_TO_TICKER: ReadonlyMap<string, string> = new Map([
@@ -89,7 +73,7 @@ export function extractTickers(text: string): string[] {
   CASHTAG_PATTERN.lastIndex = 0;
   while ((match = CASHTAG_PATTERN.exec(text)) !== null) {
     const ticker = match[1]!.toUpperCase();
-    if (!FALSE_POSITIVES.has(ticker)) {
+    if (isValidTickerCandidate(ticker)) {
       found.add(ticker);
     }
   }
@@ -98,7 +82,7 @@ export function extractTickers(text: string): string[] {
   EXCHANGE_PATTERN.lastIndex = 0;
   while ((match = EXCHANGE_PATTERN.exec(text)) !== null) {
     const ticker = match[1]!.toUpperCase();
-    if (!FALSE_POSITIVES.has(ticker)) {
+    if (isValidTickerCandidate(ticker)) {
       found.add(ticker);
     }
   }
