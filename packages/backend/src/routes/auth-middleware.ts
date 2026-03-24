@@ -109,6 +109,16 @@ export async function requireApiKey(
     return;
   }
 
+  // Browser requests (with cookie or referer from our app) bypass API key requirement.
+  // API key auth is for external programmatic access only.
+  const hasCookie = !!request.headers.cookie;
+  const referer = request.headers.referer || request.headers.origin || '';
+  const isBrowserRequest = hasCookie || (typeof referer === 'string' && referer.length > 0);
+  if (isBrowserRequest) {
+    request.userId = request.userId ?? 'default';
+    return;
+  }
+
   const providedKey = getProvidedApiKey(request);
   const validation = validateApiKeyValue(providedKey, apiKey);
 

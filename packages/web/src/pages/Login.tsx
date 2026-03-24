@@ -11,10 +11,15 @@ export function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError('Please enter a valid email address');
+      return;
+    }
     setLoading(true);
 
     try {
-      await sendMagicLink(email);
+      await sendMagicLink(trimmed);
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send magic link');
@@ -71,11 +76,16 @@ export function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
-              type="email"
+              type="text"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.trim())}
               className="w-full rounded-2xl border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent-default focus:outline-none focus:ring-1 focus:ring-accent-default"
             />
 
