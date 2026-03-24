@@ -235,6 +235,41 @@ describe('GET /api/events/search', () => {
     expect(response.json().data[0]).not.toHaveProperty('rawPayload');
   });
 
+  it('returns top-level classification fields in full-text search results', async () => {
+    const classifiedEventId = await storeEvent(sharedDb, {
+      event: makeEvent({
+        title: 'Iran sanctions expand energy shipping restrictions',
+        body: 'Fresh sanctions on Iran shipping routes increase regional risk premiums.',
+        metadata: { ticker: 'XOM', tickers: ['XOM'] },
+      }),
+      severity: 'HIGH',
+    });
+
+    await sharedDb.execute(sql`
+      UPDATE events
+      SET classification = 'BEARISH',
+          classification_confidence = '0.93'
+      WHERE id = ${classifiedEventId}
+    `);
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=Iran sanctions',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: classifiedEventId,
+          classification: 'BEARISH',
+          classificationConfidence: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
   it('should return 400 when q is missing', async () => {
     const response = await ctx.server.inject({
       method: 'GET',

@@ -42,6 +42,15 @@ DIRECTION CALIBRATION:
 - "Fed cuts rates" → BULLISH (easing)
 - "SEC approves Bitcoin ETF" → BULLISH for crypto
 - "Company bankruptcy filing" → BEARISH for that ticker
+- Military conflict, war escalation, missile strikes → BEARISH for equities, BULLISH for oil/gold/defense
+- Peace talks, ceasefire, de-escalation → BULLISH for equities, BEARISH for oil/gold/defense
+- If event involves military action or war, NEVER classify as NEUTRAL
+- "Iran attacks energy facilities" → BEARISH (war escalation = risk-off)
+- "Trump postpones Iran strikes, cites talks" → BULLISH (de-escalation = risk-on)
+- "Strait of Hormuz blocked" → BEARISH (oil supply crisis)
+- "Ceasefire agreement reached" → BULLISH (risk-on)
+- "Sanctions imposed on country X" → BEARISH (trade disruption)
+- "Sanctions lifted on country X" → BULLISH (trade opening)
 
 For macro, policy, and geopolitical events, assess the likely market-wide impact first:
 - De-escalation, easing, improved certainty, or supportive policy = risk-on / more BULLISH

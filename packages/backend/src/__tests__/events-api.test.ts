@@ -835,6 +835,64 @@ describe('GET /api/stats', () => {
       ]),
     );
   });
+
+  it('requires an api key when no authenticated session exists', async () => {
+    const prev = process.env.AUTH_REQUIRED;
+    process.env.AUTH_REQUIRED = 'true';
+    process.env.JWT_SECRET = 'test-jwt-secret';
+    try {
+      const authCtx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+      await authCtx.server.ready();
+      try {
+        const response = await authCtx.server.inject({
+          method: 'GET',
+          url: '/api/stats',
+        });
+
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({
+          error: 'API key required',
+          docs: '/api-docs',
+        });
+      } finally {
+        await safeCloseServer(authCtx.server);
+      }
+    } finally {
+      process.env.AUTH_REQUIRED = prev;
+      delete process.env.JWT_SECRET;
+    }
+  });
+});
+
+describe('GET /api-docs', () => {
+  let ctx: AppContext;
+
+  beforeAll(async () => {
+    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
+    await ctx.server.ready();
+  });
+
+  afterAll(async () => {
+    await safeCloseServer(ctx.server);
+  });
+
+  it('returns backend endpoint documentation for API consumers', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api-docs',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toEqual(expect.objectContaining({
+      name: 'Event Radar API',
+      endpoints: expect.arrayContaining([
+        expect.objectContaining({ path: '/api/events', method: 'GET' }),
+        expect.objectContaining({ path: '/api/events/search', method: 'GET' }),
+        expect.objectContaining({ path: '/api/stats', method: 'GET' }),
+      ]),
+    }));
+  });
 });
 
 describe('GET /health', () => {
