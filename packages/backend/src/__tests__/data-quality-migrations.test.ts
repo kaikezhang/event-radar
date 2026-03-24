@@ -22,4 +22,26 @@ describe('data quality migrations', () => {
     expect(migration).toContain("REGEXP_REPLACE(COALESCE(e.metadata->>'cik', ''), '^0+', '') = cik_map.cik");
     expect(migration).toContain("jsonb_set(COALESCE(e.metadata, '{}'::jsonb), '{ticker}'");
   });
+
+  it('includes a migration to reclassify stale neutral geopolitical war events as bearish', async () => {
+    const migration = await readFile(resolve(MIGRATIONS_DIR, '013-reclassify-geopolitical-events.sql'), 'utf8');
+
+    expect(migration).toContain('UPDATE events');
+    expect(migration).toContain("SET classification = 'BEARISH'");
+    expect(migration).toContain("WHERE classification = 'NEUTRAL'");
+    expect(migration).toContain("severity IN ('CRITICAL', 'HIGH')");
+  });
+
+  it('targets Iran and war-related keywords in the geopolitical reclassification migration', async () => {
+    const migration = await readFile(resolve(MIGRATIONS_DIR, '013-reclassify-geopolitical-events.sql'), 'utf8');
+
+    expect(migration).toContain("title ILIKE '%war%'");
+    expect(migration).toContain("title ILIKE '%military%'");
+    expect(migration).toContain("title ILIKE '%strike%'");
+    expect(migration).toContain("title ILIKE '%attack%'");
+    expect(migration).toContain("title ILIKE '%bomb%'");
+    expect(migration).toContain("title ILIKE '%iran%'");
+    expect(migration).toContain("title ILIKE '%hormuz%'");
+    expect(migration).toContain("title ILIKE '%middle east%'");
+  });
 });

@@ -173,6 +173,26 @@ function escapeLikePattern(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
 }
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replaceAll('&amp;', '&')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&apos;', "'")
+    .replaceAll('&#x2014;', '\u2014')
+    .replaceAll('&mdash;', '\u2014')
+    .replaceAll('&#x2019;', "'")
+    .replaceAll('&rsquo;', "'")
+    .replaceAll('&#x201c;', '"')
+    .replaceAll('&ldquo;', '"')
+    .replaceAll('&#x201d;', '"')
+    .replaceAll('&rdquo;', '"')
+    .replaceAll('&#x2018;', "'")
+    .replaceAll('&lsquo;', "'");
+}
+
 function toNumberOrNull(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -201,6 +221,33 @@ function toIsoDate(value: unknown): string | null {
 
 function roundToOneDecimal(value: number): number {
   return Number(value.toFixed(1));
+}
+
+function normalizeDisplayText(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const decoded = decodeHtmlEntities(value);
+  return decoded.trim().length > 0 ? decoded : null;
+}
+
+function extractPriceAtEvent(value: unknown): number | null {
+  const directNumber = toNumberOrNull(value);
+  if (directNumber != null) {
+    return directNumber;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const match = value.match(/\$[\d,.]+/);
+  if (!match) {
+    return null;
+  }
+
+  return toNumberOrNull(match[0].replaceAll('$', '').replaceAll(',', ''));
 }
 
 function extractSimilarTicker(record: Record<string, unknown>): string | null {
@@ -237,6 +284,8 @@ function normalizeSourceUrls(
   const urls = uniqueStrings([
     ...asStringArray(sourceUrls),
     typeof metadata['url'] === 'string' ? metadata['url'] : null,
+    typeof metadata['sourceUrl'] === 'string' ? metadata['sourceUrl'] : null,
+    typeof metadata['source_feed_url'] === 'string' ? metadata['source_feed_url'] : null,
     typeof source === 'string' && source === 'truth-social'
       ? buildTruthSocialSourceUrl(metadata)
       : null,
@@ -245,15 +294,136 @@ function normalizeSourceUrls(
   return urls.length > 0 ? urls : null;
 }
 
+function getTickerDirectionFromEnrichment(enrichment: Record<string, unknown>): string | null {
+  const tickers = enrichment['tickers'];
+  if (!Array.isArray(tickers)) {
+    return null;
+  }
+
+  for (const tickerEntry of tickers) {
+    if (!tickerEntry || typeof tickerEntry !== 'object' || Array.isArray(tickerEntry)) {
+      continue;
+    }
+
+    const direction = (tickerEntry as Record<string, unknown>)['direction'];
+    if (typeof direction === 'string' && direction.trim().length > 0) {
+      return direction.toUpperCase();
+    }
+  }
+
+  return null;
+}
+
+function buildTickerFilterCondition(ticker: string) {
+  return sql`(
+    upper(coalesce(${events.ticker}, '')) = upper(${ticker})
+    OR upper(coalesce(${events.metadata}->>'ticker', '')) = upper(${ticker})
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(coalesce(${events.metadata}->'tickers', '[]'::jsonb)) AS metadata_ticker(value)
+      WHERE upper(
+        CASE
+          WHEN jsonb_typeof(metadata_ticker.value) = 'string'
+            THEN trim(both '"' FROM metadata_ticker.value::text)
+          ELSE coalesce(metadata_ticker.value->>'symbol', '')
+        END
+      ) = upper(${ticker})
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(coalesce(${events.metadata}->'llm_enrichment'->'tickers', '[]'::jsonb)) AS enrichment_ticker(value)
+      WHERE upper(coalesce(enrichment_ticker.value->>'symbol', '')) = upper(${ticker})
+    )
+  )`;
+}
+
+const eventResponseSelect = {
+  id: events.id,
+  source: events.source,
+  sourceEventId: events.sourceEventId,
+  ticker: events.ticker,
+  classification: events.classification,
+  classificationConfidence: events.classificationConfidence,
+  eventType: events.eventType,
+  title: events.title,
+  summary: events.summary,
+  rawPayload: events.rawPayload,
+  metadata: events.metadata,
+  severity: events.severity,
+  receivedAt: events.receivedAt,
+  createdAt: events.createdAt,
+  mergedFrom: events.mergedFrom,
+  sourceUrls: events.sourceUrls,
+  isDuplicate: events.isDuplicate,
+  confirmedSources: events.confirmedSources,
+  confirmationCount: events.confirmationCount,
+  priceAtEvent: eventOutcomes.eventPrice,
+};
+
 function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, 'rawPayload'> {
   const safeEvent = { ...event } as T & {
     classificationConfidence?: number | null;
     sourceUrls?: string[] | null;
+    title?: string;
+    summary?: string | null;
+    rawPayload?: unknown;
+    sourceUrl?: string | null;
+    evidence?: string | null;
+    priceAtEvent?: number | null;
+    analysis?: {
+      summary: string;
+      impact: string | null;
+      risks: string | null;
+      action: string | null;
+      whyNow: string | null;
+      historicalContext: string | null;
+      regimeContext: string | null;
+    } | null;
+    direction?: string | null;
+    confidence?: number | null;
   };
+  const rawPayload = asRecord(safeEvent.rawPayload);
   delete safeEvent.rawPayload;
   const metadata = asRecord(safeEvent.metadata);
+  const enrichment = asRecord(metadata['llm_enrichment']);
+  const judge = asRecord(metadata['llm_judge']);
   safeEvent.classificationConfidence = toNumberOrNull(safeEvent.classificationConfidence);
   safeEvent.sourceUrls = normalizeSourceUrls(safeEvent.source, metadata, safeEvent.sourceUrls);
+  safeEvent.title = normalizeDisplayText(safeEvent.title) ?? '';
+  safeEvent.summary = normalizeDisplayText(safeEvent.summary);
+  safeEvent.sourceUrl = safeEvent.sourceUrls?.[0]
+    ?? normalizeDisplayText(metadata['url'])
+    ?? normalizeDisplayText(metadata['sourceUrl'])
+    ?? normalizeDisplayText(metadata['source_feed_url'])
+    ?? null;
+  safeEvent.evidence = normalizeDisplayText(metadata['rawContent'])
+    ?? normalizeDisplayText(metadata['body'])
+    ?? normalizeDisplayText(rawPayload['body'])
+    ?? safeEvent.summary
+    ?? null;
+  safeEvent.priceAtEvent = extractPriceAtEvent(safeEvent.priceAtEvent)
+    ?? extractPriceAtEvent(metadata['event_price'])
+    ?? extractPriceAtEvent(enrichment['currentSetup'])
+    ?? null;
+
+  const analysisSummary = normalizeDisplayText(enrichment['summary']);
+  safeEvent.analysis = analysisSummary
+    ? {
+        summary: analysisSummary,
+        impact: normalizeDisplayText(enrichment['impact']),
+        risks: normalizeDisplayText(enrichment['risks']),
+        action: normalizeDisplayText(enrichment['action']),
+        whyNow: normalizeDisplayText(enrichment['whyNow']),
+        historicalContext: normalizeDisplayText(enrichment['historicalContext']),
+        regimeContext: normalizeDisplayText(enrichment['regimeContext']),
+      }
+    : null;
+  safeEvent.direction = typeof safeEvent.classification === 'string' && safeEvent.classification.length > 0
+    ? safeEvent.classification
+    : getTickerDirectionFromEnrichment(enrichment);
+  safeEvent.confidence = safeEvent.classificationConfidence
+    ?? toNumberOrNull(judge['confidence'])
+    ?? null;
   return safeEvent;
 }
 
@@ -299,11 +469,7 @@ export function registerEventRoutes(
 
     // Filter by ticker (search in metadata->>'ticker')
     if (query.ticker) {
-      conditions.push(sql`(
-        ${events.ticker} = ${query.ticker}
-        OR upper(coalesce(${events.metadata}->>'ticker', '')) = upper(${query.ticker})
-        OR coalesce(${events.metadata}->'tickers', '[]'::jsonb) ? ${query.ticker}
-      )`);
+      conditions.push(buildTickerFilterCondition(query.ticker));
     }
 
     // Filter by classified event type
@@ -428,8 +594,9 @@ export function registerEventRoutes(
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select(eventResponseSelect)
         .from(events)
+        .leftJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
         .where(where)
         .orderBy(...ordering)
         .limit(pageLimit)
@@ -493,12 +660,13 @@ export function registerEventRoutes(
     if (isTickerQuery) {
       // Ticker-like query: do both ticker match AND full-text search, union results
       const ticker = trimmed;
-      const tickerCondition = sql`(${events.ticker} = ${ticker} OR ${events.metadata}->'tickers' @> ${JSON.stringify([ticker])}::jsonb)`;
+      const tickerCondition = buildTickerFilterCondition(ticker);
       const textCondition = sql`${searchVector} @@ ${tsQuery}`;
 
       const data = await db
-        .select()
+        .select(eventResponseSelect)
         .from(events)
+        .leftJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
         .where(sql`(${tickerCondition} OR ${textCondition})`)
         .orderBy(sql`${events.receivedAt} DESC`)
         .limit(searchLimit);
@@ -508,27 +676,11 @@ export function registerEventRoutes(
 
     const data = await db
       .select({
-        id: events.id,
-        source: events.source,
-        sourceEventId: events.sourceEventId,
-        ticker: events.ticker,
-        eventType: events.eventType,
-        title: events.title,
-        summary: events.summary,
-        metadata: events.metadata,
-        severity: events.severity,
-        classification: events.classification,
-        classificationConfidence: events.classificationConfidence,
-        receivedAt: events.receivedAt,
-        createdAt: events.createdAt,
-        mergedFrom: events.mergedFrom,
-        sourceUrls: events.sourceUrls,
-        isDuplicate: events.isDuplicate,
-        confirmedSources: events.confirmedSources,
-        confirmationCount: events.confirmationCount,
+        ...eventResponseSelect,
         rank: sql<number>`ts_rank(${searchVector}, ${tsQuery})`.as('rank'),
       })
       .from(events)
+      .leftJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
       .where(sql`${searchVector} @@ ${tsQuery}`)
       .orderBy(sql`ts_rank(${searchVector}, ${tsQuery}) DESC`, sql`${events.receivedAt} DESC`)
       .limit(searchLimit);
@@ -565,8 +717,9 @@ export function registerEventRoutes(
     const { id } = request.params as EventParams;
 
     const [event] = await db
-      .select()
+      .select(eventResponseSelect)
       .from(events)
+      .leftJoin(eventOutcomes, eq(eventOutcomes.eventId, events.id))
       .where(eq(events.id, id))
       .limit(1);
 
