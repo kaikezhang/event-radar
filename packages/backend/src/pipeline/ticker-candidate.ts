@@ -77,6 +77,8 @@ const TICKER_BLOCKLIST = new Set([
   'LONG',
   'SHORT',
   'USD',
+  'USDC',
+  'USDT',
   'EUR',
   'GBP',
   'JPY',
