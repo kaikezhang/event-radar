@@ -145,6 +145,19 @@ describe('GET /api/events/search', () => {
     await safeCloseServer(ctx.server);
   });
 
+  it('requires an api key for search requests', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=earnings',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: 'API key required',
+      docs: '/api-docs',
+    });
+  });
+
   it('should return results matching title text', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
@@ -209,6 +222,17 @@ describe('GET /api/events/search', () => {
     expect(body.data.length).toBeGreaterThanOrEqual(1);
     const meta = body.data[0].metadata as { ticker?: string };
     expect(meta.ticker).toBe('NVDA');
+  });
+
+  it('does not expose rawPayload in search results', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events/search?q=earnings',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data[0]).not.toHaveProperty('rawPayload');
   });
 
   it('should return 400 when q is missing', async () => {

@@ -42,8 +42,8 @@ describe('Rules API', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
+      error: 'API key required',
+      docs: '/api-docs',
     });
   });
 
@@ -99,8 +99,8 @@ describe('Rules API', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
+      error: 'API key required',
+      docs: '/api-docs',
     });
   });
 

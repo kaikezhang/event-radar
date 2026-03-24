@@ -539,8 +539,8 @@ describe('Classification accuracy API and pipeline integration', () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
+      error: 'API key required',
+      docs: '/api-docs',
     });
   });
 

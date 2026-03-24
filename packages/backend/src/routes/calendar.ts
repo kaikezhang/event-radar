@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { eventOutcomes, events } from '../db/schema.js';
 import { getScheduledReleases, loadCalendarConfig } from '../scanners/econ-calendar-scanner.js';
+import { requireApiKey } from './auth-middleware.js';
 
 const CalendarQuerySchema = {
   type: 'object',
@@ -38,6 +39,10 @@ interface CalendarQuery {
   from?: string;
   to?: string;
   tickers?: string;
+}
+
+interface CalendarRouteOptions {
+  apiKey?: string;
 }
 
 interface CalendarEventItem {
@@ -382,11 +387,17 @@ function earningsDataLimited(): boolean {
   return process.env.EARNINGS_ENABLED !== 'true';
 }
 
-export function registerCalendarRoutes(server: FastifyInstance, db: Database): void {
+export function registerCalendarRoutes(
+  server: FastifyInstance,
+  db: Database,
+  options?: CalendarRouteOptions,
+): void {
   server.get('/api/v1/calendar/earnings', {
     schema: {
       querystring: CalendarQuerySchema,
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request) => {
     const query = request.query as CalendarQuery;
     const items = await fetchEarningsEvents(db, query);
@@ -401,6 +412,8 @@ export function registerCalendarRoutes(server: FastifyInstance, db: Database): v
     schema: {
       querystring: CalendarQuerySchema,
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request) => {
     const query = request.query as CalendarQuery;
     const [earnings, halts] = await Promise.all([

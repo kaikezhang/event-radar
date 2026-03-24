@@ -39,6 +39,7 @@ import { registerRegimeRoutes } from './routes/regime.js';
 import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerReportRoutes } from './routes/reports.js';
+import { registerHealthRoutes } from './routes/health.js';
 import { createLLMProvider } from './services/llm-provider.js';
 import type { Rule } from '@event-radar/shared';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -86,6 +87,12 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     priceBatchService,
     marketDataCache: tickerMarketDataCache,
   });
+  registerHealthRoutes(server, {
+    db,
+    registry,
+    version,
+    startTime,
+  });
   registerRegimeRoutes(server, {
     apiKey,
     marketRegimeService,
@@ -94,6 +101,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
   // Register event query routes if db is available
   if (db) {
     registerEventRoutes(server, db, {
+      apiKey,
       marketDataCache: tickerMarketDataCache,
     });
     registerEventsHistoryRoutes(server, db, { apiKey });
@@ -117,7 +125,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerNotificationSettingsRoutes(server, db, { apiKey });
     registerBriefingRoutes(server, db, { apiKey });
     registerReportRoutes(server, db, { apiKey });
-    registerCalendarRoutes(server, db);
+    registerCalendarRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
     if (killSwitch && healthMonitor) {
       registerAdminDeliveryRoutes(server, {

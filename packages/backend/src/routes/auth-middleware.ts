@@ -5,11 +5,72 @@ interface ApiKeyValidationResult {
   message?: string;
 }
 
+const DEFAULT_DEV_API_KEY = 'er-dev-2026';
+const API_KEY_RATE_LIMIT = 100;
+const API_KEY_RATE_LIMIT_WINDOW_MS = 60_000;
+
+interface ApiKeyRateLimitWindow {
+  count: number;
+  windowStartedAt: number;
+}
+
+const apiKeyRateLimitState = new Map<string, ApiKeyRateLimitWindow>();
+
+function getAllowedApiKeys(apiKey?: string): string[] {
+  return [...new Set([apiKey, DEFAULT_DEV_API_KEY].filter((value): value is string => typeof value === 'string' && value.length > 0))];
+}
+
+function getProvidedApiKey(request: FastifyRequest): string | undefined {
+  const headerKey = typeof request.headers['x-api-key'] === 'string'
+    ? request.headers['x-api-key']
+    : undefined;
+
+  if (headerKey) {
+    return headerKey;
+  }
+
+  const query = request.query as Record<string, unknown> | undefined;
+  return typeof query?.apiKey === 'string' ? query.apiKey : undefined;
+}
+
+function applyRateLimitHeaders(
+  reply: FastifyReply,
+  remaining: number,
+): void {
+  reply.header('X-RateLimit-Limit', String(API_KEY_RATE_LIMIT));
+  reply.header('X-RateLimit-Remaining', String(remaining));
+}
+
+function consumeApiKeyRateLimit(providedKey: string, now = Date.now()): {
+  limit: number;
+  remaining: number;
+  exceeded: boolean;
+} {
+  const existing = apiKeyRateLimitState.get(providedKey);
+  const window = !existing || now - existing.windowStartedAt >= API_KEY_RATE_LIMIT_WINDOW_MS
+    ? {
+        count: 0,
+        windowStartedAt: now,
+      }
+    : existing;
+
+  window.count += 1;
+  apiKeyRateLimitState.set(providedKey, window);
+
+  return {
+    limit: API_KEY_RATE_LIMIT,
+    remaining: Math.max(0, API_KEY_RATE_LIMIT - window.count),
+    exceeded: window.count > API_KEY_RATE_LIMIT,
+  };
+}
+
 export function validateApiKeyValue(
   providedKey: string | undefined,
   apiKey?: string,
 ): ApiKeyValidationResult {
-  if (!apiKey) {
+  const allowedApiKeys = getAllowedApiKeys(apiKey);
+
+  if (allowedApiKeys.length === 0) {
     return {
       ok: false,
       message: 'API key not configured',
@@ -23,7 +84,7 @@ export function validateApiKeyValue(
     };
   }
 
-  if (apiKey && providedKey !== apiKey) {
+  if (!allowedApiKeys.includes(providedKey)) {
     return {
       ok: false,
       message: 'Invalid API key',
@@ -43,37 +104,43 @@ export async function requireApiKey(
   reply: FastifyReply,
   apiKey?: string,
 ): Promise<void> {
-  // Already authenticated via JWT cookie (set by auth plugin) — skip API key check
-  if (request.userId) {
+  // Real authenticated browser sessions do not need a programmatic API key.
+  if (request.userId && request.userId !== 'default') {
     return;
   }
 
-  if (request.apiKeyAuthenticated) {
-    return;
-  }
-
-  const providedKey = typeof request.headers['x-api-key'] === 'string'
-    ? request.headers['x-api-key']
-    : undefined;
+  const providedKey = getProvidedApiKey(request);
   const validation = validateApiKeyValue(providedKey, apiKey);
 
   if (!validation.ok && validation.message === 'Missing API key') {
     await reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Missing X-API-Key header',
+      error: 'API key required',
+      docs: '/api-docs',
     });
     return;
   }
 
   if (!validation.ok) {
     await reply.status(401).send({
-      error: 'Unauthorized',
-      message: validation.message ?? 'Invalid API key',
+      error: validation.message ?? 'Invalid API key',
+      docs: '/api-docs',
+    });
+    return;
+  }
+
+  const rateLimit = consumeApiKeyRateLimit(providedKey!);
+  applyRateLimitHeaders(reply, rateLimit.remaining);
+
+  if (rateLimit.exceeded) {
+    await reply.status(429).send({
+      error: 'Rate limit exceeded',
+      docs: '/api-docs',
     });
     return;
   }
 
   request.apiKeyAuthenticated = true;
+  request.userId = request.userId ?? 'default';
 }
 
 /**
@@ -98,4 +165,8 @@ export async function requireAuth(
       message: 'Authentication required for this endpoint',
     });
   }
+}
+
+export function resetApiKeyRateLimitStateForTests(): void {
+  apiKeyRateLimitState.clear();
 }

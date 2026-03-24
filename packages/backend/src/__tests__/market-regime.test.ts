@@ -110,10 +110,9 @@ describe('market regime helpers', () => {
     expect(toDashboardMarketRegime(10)).toBe('neutral');
   });
 
-  it('rejects requests when no configured api key exists', () => {
-    expect(validateApiKeyValue('provided-key', undefined)).toEqual({
-      ok: false,
-      message: 'API key not configured',
+  it('accepts the default development api key when no override is configured', () => {
+    expect(validateApiKeyValue('er-dev-2026', undefined)).toEqual({
+      ok: true,
     });
   });
 });

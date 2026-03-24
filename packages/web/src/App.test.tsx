@@ -89,6 +89,7 @@ describe('App shell spacing', () => {
     renderWithRouter(appRoutes, ['/api-docs']);
 
     expect(await screen.findByRole('heading', { name: /api docs/i })).toBeInTheDocument();
-    expect(screen.getByText('/api/v1/reports/weekly')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /authentication/i })).toBeInTheDocument();
+    expect(screen.getByText('/api/health')).toBeInTheDocument();
   });
 });

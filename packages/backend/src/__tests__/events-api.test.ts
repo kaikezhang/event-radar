@@ -170,7 +170,7 @@ describe('GET /api/events', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('should allow public access without API key (public route)', async () => {
+  it('should require an api key when no authenticated session exists', async () => {
     const prev = process.env.AUTH_REQUIRED;
     process.env.AUTH_REQUIRED = 'true';
     process.env.JWT_SECRET = 'test-jwt-secret';
@@ -183,8 +183,11 @@ describe('GET /api/events', () => {
           url: '/api/events',
         });
 
-        // /api/events is registered as a public route, so it returns 200 even without auth
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({
+          error: 'API key required',
+          docs: '/api-docs',
+        });
       } finally {
         await safeCloseServer(authCtx.server);
       }
@@ -207,6 +210,29 @@ describe('GET /api/events', () => {
     const body = response.json();
     expect(body.data).toHaveLength(5);
     expect(body.total).toBe(5);
+  });
+
+  it('should accept apiKey query params on the list route', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events?apiKey=${TEST_API_KEY}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(5);
+  });
+
+  it('should strip rawPayload from list responses', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data[0]).not.toHaveProperty('rawPayload');
   });
 
   it('should filter by source', async () => {
@@ -271,6 +297,28 @@ describe('GET /api/events', () => {
       classification: 'BULLISH',
       severity: 'CRITICAL',
     });
+  });
+
+  it('should strip rawPayload from event detail responses', async () => {
+    const listResponse = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+    const eventId = listResponse.json().data[0].id as string;
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${eventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).not.toHaveProperty('rawPayload');
   });
 
   it('should support limit and offset', async () => {
@@ -494,8 +542,9 @@ describe('GET /api/events/:id', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json()).toMatchObject({
-          error: 'Unauthorized',
+        expect(response.json()).toEqual({
+          error: 'API key required',
+          docs: '/api-docs',
         });
       } finally {
         await safeCloseServer(authCtx.server);

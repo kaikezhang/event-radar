@@ -13,6 +13,7 @@ import {
 } from './helpers/test-db.js';
 
 const TEST_API_KEY = 'test-api-key-12345';
+const AUTH_HEADERS = { 'x-api-key': TEST_API_KEY };
 
 let sharedDb: Database;
 let sharedClient: PGlite;
@@ -124,7 +125,7 @@ describe('calendar routes', () => {
     process.env.EARNINGS_ENABLED = prevEarningsEnabled;
   });
 
-  it('allows unauthenticated access to the upcoming calendar route when auth is required', async () => {
+  it('requires an api key for the upcoming calendar route when auth is required', async () => {
     await safeCloseServer(ctx.server);
 
     process.env.AUTH_REQUIRED = 'true';
@@ -139,7 +140,11 @@ describe('calendar routes', () => {
         url: '/api/v1/calendar/upcoming',
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({
+        error: 'API key required',
+        docs: '/api-docs',
+      });
     } finally {
       await safeCloseServer(authCtx.server);
       process.env.AUTH_REQUIRED = 'false';
@@ -180,6 +185,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -218,6 +224,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28&tickers=nvda',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -250,6 +257,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -288,10 +296,12 @@ describe('calendar routes', () => {
     const earningsResponse = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28',
+      headers: AUTH_HEADERS,
     });
     const upcomingResponse = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-28',
+      headers: AUTH_HEADERS,
     });
 
     expect(earningsResponse.statusCode).toBe(200);
@@ -347,6 +357,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-30',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -416,6 +427,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-30',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
@@ -436,6 +448,7 @@ describe('calendar routes', () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-30',
+      headers: AUTH_HEADERS,
     });
 
     expect(response.statusCode).toBe(200);
