@@ -150,6 +150,34 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('risk-off');
   });
 
+  it('should explicitly forbid neutral classifications for military action and war events', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'Missile strikes target energy facilities',
+      body: 'Military action escalates overnight after missile strikes near export infrastructure.',
+    }));
+
+    expect(prompt).toContain('Military conflict, war escalation, missile strikes');
+    expect(prompt).toContain('NEVER classify as NEUTRAL');
+  });
+
+  it('should include geopolitical few-shot examples for escalation and de-escalation', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'Ceasefire agreement reached',
+      body: 'Leaders agreed to a ceasefire after emergency talks.',
+    }));
+
+    expect(prompt).toContain('"Iran attacks energy facilities" → BEARISH');
+    expect(prompt).toContain('"Trump postpones Iran strikes, cites talks" → BULLISH');
+    expect(prompt).toContain('"Strait of Hormuz blocked" → BEARISH');
+    expect(prompt).toContain('"Ceasefire agreement reached" → BULLISH');
+    expect(prompt).toContain('"Sanctions imposed on country X" → BEARISH');
+    expect(prompt).toContain('"Sanctions lifted on country X" → BULLISH');
+  });
+
   it('should add political post severity guidance for Truth Social posts', () => {
     const prompt = buildClassificationPrompt(makeEvent({
       source: 'truth-social',

@@ -40,6 +40,7 @@ import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerApiDocsRoutes } from './routes/api-docs.js';
 import { createLLMProvider } from './services/llm-provider.js';
 import type { Rule } from '@event-radar/shared';
 import { DEFAULT_RULES } from './pipeline/default-rules.js';
@@ -87,6 +88,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     priceBatchService,
     marketDataCache: tickerMarketDataCache,
   });
+  registerApiDocsRoutes(server);
   registerHealthRoutes(server, {
     db,
     registry,

@@ -459,6 +459,8 @@ export function registerEventRoutes(
         summary: events.summary,
         metadata: events.metadata,
         severity: events.severity,
+        classification: events.classification,
+        classificationConfidence: events.classificationConfidence,
         receivedAt: events.receivedAt,
         createdAt: events.createdAt,
         mergedFrom: events.mergedFrom,
@@ -760,7 +762,10 @@ export function registerEventRoutes(
    * GET /api/stats
    * Returns event statistics
    */
-  server.get('/api/stats', async () => {
+  server.get('/api/stats', {
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
+  }, async () => {
     const [bySource, bySeverity, [{ total }]] = await Promise.all([
       db
         .select({ source: events.source, count: count() })

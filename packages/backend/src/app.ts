@@ -233,9 +233,11 @@ export function buildApp(options?: {
       '/api/v1/story-groups',
       '/api/v1/story-groups/:id',
       '/api/v1/sources',
+      '/api-docs',
       '/api/health',
       '/api/health/ping',
       '/api/health/delivery-stats',
+      '/api/stats',
       '/ws/events',
     ],
   });

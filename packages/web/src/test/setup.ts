@@ -1,6 +1,53 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 
+class TestWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+
+  readonly CONNECTING = TestWebSocket.CONNECTING;
+  readonly OPEN = TestWebSocket.OPEN;
+  readonly CLOSING = TestWebSocket.CLOSING;
+  readonly CLOSED = TestWebSocket.CLOSED;
+
+  url: string;
+  readyState = TestWebSocket.CONNECTING;
+  private listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+
+  constructor(url: string | URL) {
+    this.url = String(url);
+  }
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    const handlers = this.listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+    handlers.add(listener);
+    this.listeners.set(type, handlers);
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  close() {
+    this.readyState = TestWebSocket.CLOSED;
+  }
+
+  send() {}
+}
+
+Object.defineProperty(globalThis, 'WebSocket', {
+  configurable: true,
+  writable: true,
+  value: TestWebSocket,
+});
+Object.defineProperty(window, 'WebSocket', {
+  configurable: true,
+  writable: true,
+  value: TestWebSocket,
+});
+
 // Mock lightweight-charts to avoid jsdom crashes (canvas + matchMedia)
 vi.mock('lightweight-charts', () => ({
   createChart: () => ({

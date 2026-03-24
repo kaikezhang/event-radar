@@ -265,13 +265,17 @@ function resolveSourceUrl(
   eventUrl: string | null,
   sourceMetadata?: Record<string, unknown>,
 ): string | null {
-  if (eventUrl) return eventUrl;
+  if (eventUrl && eventUrl.trim().length > 0) return eventUrl.trim();
 
   const metadataUrl = sourceMetadata?.sourceUrl
+    ?? sourceMetadata?.source_feed_url
     ?? sourceMetadata?.source_url
     ?? sourceMetadata?.url
-    ?? sourceMetadata?.filingLink;
-  return typeof metadataUrl === 'string' && metadataUrl.length > 0 ? metadataUrl : null;
+    ?? sourceMetadata?.filingLink
+    ?? (typeof sourceMetadata?.headline === 'string' && sourceMetadata.headline.trim().length > 0
+      ? `https://www.google.com/search?q=${encodeURIComponent(sourceMetadata.headline.trim())}`
+      : null);
+  return typeof metadataUrl === 'string' && metadataUrl.trim().length > 0 ? metadataUrl.trim() : null;
 }
 
 function resolveSourceText(
@@ -286,6 +290,7 @@ function resolveSourceText(
 
   const metadataText = sourceMetadata?.rawContent
     ?? sourceMetadata?.raw_content
+    ?? sourceMetadata?.headline
     ?? sourceMetadata?.body
     ?? sourceMetadata?.description
     ?? sourceMetadata?.content

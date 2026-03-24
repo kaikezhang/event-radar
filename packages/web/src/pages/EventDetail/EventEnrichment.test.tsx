@@ -156,6 +156,48 @@ describe('EventEvidenceContent', () => {
     expect(screen.getByText(`${'A'.repeat(500)}...`)).toBeInTheDocument();
   });
 
+  it('uses source_feed_url and summary-style metadata fallback before showing unavailable copy', () => {
+    render(
+      <EventEvidenceContent
+        enrichment={null}
+        eventUrl={null}
+        rawExcerpt={null}
+        source="truth-social"
+        sourceMetadata={{
+          source_feed_url: 'https://example.com/feed/item',
+          headline: 'Trump postpones Iran strikes, cites talks',
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /view original source/i })).toHaveAttribute(
+      'href',
+      'https://example.com/feed/item',
+    );
+    expect(screen.getByText(/trump postpones iran strikes, cites talks/i)).toBeInTheDocument();
+    expect(screen.queryByText(/source data not available/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a search fallback URL when only a headline exists', () => {
+    render(
+      <EventEvidenceContent
+        enrichment={null}
+        eventUrl={null}
+        rawExcerpt={null}
+        source="breaking-news"
+        sourceMetadata={{
+          headline: 'Ceasefire agreement reached after emergency talks',
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /view original source/i })).toHaveAttribute(
+      'href',
+      'https://www.google.com/search?q=Ceasefire%20agreement%20reached%20after%20emergency%20talks',
+    );
+    expect(screen.queryByText(/source data not available/i)).not.toBeInTheDocument();
+  });
+
   it('renders an EDGAR link from the accession number when no direct filing url exists', () => {
     render(
       <EventEvidenceContent
