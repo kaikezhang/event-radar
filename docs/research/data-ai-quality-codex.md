@@ -1,648 +1,552 @@
-# Deep Research: Data Quality and AI Analysis Quality
+# Event Radar Data + AI Quality Research
 
-**Date:** 2026-03-24  
-**Author:** Codex  
-**Scope:** `packages/backend/src/pipeline/`, `packages/backend/src/scanners/`, `packages/backend/src/services/`, live Postgres data, and current backend container logs
+Author: Codex
+Date: 2026-03-24
 
----
+## Scope
+
+This review covered:
+
+- backend pipeline wiring in `packages/backend/src/event-pipeline.ts`
+- prompt and LLM pipeline code in `packages/backend/src/pipeline/`
+- active scanner emit paths in `packages/backend/src/scanners/`
+- outcome tracking and scorecard services in `packages/backend/src/services/`
+- runtime env flags in `.env`
+
+## Method And Runtime Limits
+
+### Code-confirmed
+
+- `.env` has `LLM_PROVIDER=openai`, `OPENAI_API_KEY` present, `LLM_ENRICHMENT_ENABLED=true`, and `LLM_GATEKEEPER_ENABLED=true`.
+- Active scanners from `.env` plus `scanner-registry-setup.ts` are: `breaking-news`, `reddit`, `stocktwits`, `econ-calendar`, `truth-social`, `whitehouse`, `federal-register`, `sec-edgar`, `newswire`, `company-ir`, `trading-halt`, and `dilution-monitor`.
+- `WARN_ENABLED=true` in `.env`, but `WarnScanner` is not registered in `packages/backend/src/scanner-registry-setup.ts`.
+
+### Blocked Live-DB Access
+
+I attempted the requested live queries three ways and all were blocked by the current execution environment:
+
+1. `sudo docker exec ... psql ...`
+   - blocked by `no new privileges`
+2. `docker exec ... psql ...`
+   - blocked by Docker socket permission denial
+3. direct PostgreSQL TCP connect to `postgresql://radar:radar@localhost:5432/event_radar`
+   - blocked with `connect EPERM 127.0.0.1:5432`
+
+Because of that, I could not honestly provide fresh live counts, per-scanner real-event samples, or the requested 30-event manual review from the running database. Every section below is therefore split into:
+
+- `Code-confirmed`
+- `Blocked live query`
+- `Inference`
+
+Where useful, I included the exact SQL to run on the host outside this sandbox.
 
 ## Executive Summary
 
-As of **2026-03-24 02:47 UTC**, the live database contains **25,701 events**. The main quality problems are not evenly distributed:
+The biggest data-quality problem is not prompt wording. It is pipeline wiring.
 
-1. **Live "LLM classification" is effectively off.** `classification_predictions` contains **24,712** rows and **24,712/24,712** are `classified_by = 'rule-engine'`. The classifier prompt exists in code, but the ingest pipeline only constructs `llmClassifier` when `options.llmProvider` is passed in `packages/backend/src/app.ts:113-115`.
-2. **Ticker resolution is the biggest data-quality bottleneck.** Recent coverage is extremely weak for the sources that need it most: `sec-edgar` **15.5%**, `breaking-news` **3.7%**, `truth-social` **5.5%**, `newswire` **12.6%**, `whitehouse` **0%**, `federal-register` **0%**.
-3. **Outcome tracking is running, but most of the dataset is stuck in partially evaluated state.** `event_outcomes` has **12,591** rows, but **12,063** rows are overdue for `1h`, **11,493** overdue for `1d`, and **8,208** overdue for `1w`. Only **324** events have `classification_outcomes`.
-4. **The current 1-hour outcome metric is fundamentally wrong.** `PriceService` fetches Yahoo data with `interval=1d` only (`packages/backend/src/services/price-service.ts:201-237`), yet `OutcomeTracker` uses it for `T+1h`. Among non-null `change_1h` values, **89.9% are exactly `0.0000`**.
-5. **Enrichment coverage exists but quality is mixed and usually generic.** `events.metadata.llm_enrichment` exists for **3,464 / 25,701 events (13.5%)**, but **1,685** enriched events have no ticker, **3,023** have empty `currentSetup`, and **2,859** have empty `historicalContext`. `sec-edgar` enrichments are mostly boilerplate restatements.
-6. **Scanner value is highly uneven.** Only **6 sources** produced events in the last 48 hours (`sec-edgar`, `stocktwits`, `breaking-news`, `truth-social`, `trading-halt`, `globenewswire`). Three enabled scanners (`reddit`, `company-ir`, `dilution-monitor`) produced **zero** audited rows.
-7. **Breaking-news source health is degraded right now.** Current backend logs show repeated `Reuters returned HTTP 404`, `AP News returned HTTP 403`, and `0 matched keywords` for MarketWatch/CNBC/Yahoo Finance on every poll in the last 30 minutes.
+1. Mainline LLM classification is effectively off in production boot.
+2. LLM enrichment is on, but it runs only in the delivery path and is stored only in `events.metadata`.
+3. Several active scanners emit low-context or no-ticker events, then rely on late heuristics or enrichment to recover quality.
+4. Outcome tracking is wired on a timer now, but the code still allows silent no-ticker failures and penny-stock distortion.
+5. Political and social sources are still overfit to keyword heuristics, while newswire and macro sources are too generic.
 
----
+If I had to prioritize only three changes:
 
-## Methodology
+1. Wire `createLlmProvider()` into the main pipeline boot path.
+2. Improve scanner-side ticker/entity extraction before events hit the pipeline.
+3. Add outcome-quality guards: price floor, split/outlier handling, and explicit tracking-failure observability.
 
-- Code review:
-  - `packages/backend/src/pipeline/`
-  - `packages/backend/src/scanners/`
-  - `packages/backend/src/services/`
-- Live DB tables queried:
-  - `events`
-  - `pipeline_audit`
-  - `classification_predictions`
-  - `classification_outcomes`
-  - `event_outcomes`
-- Runtime verification:
-  - `event-radar-backend-1` logs
-  - `event-radar-postgres-1` live SQL via `psql`
+## 1. Scanner Data Quality
 
-Important caveat:
+### Active Scanner Set
 
-- "LLM classification quality" in the live system is mostly a deployment/wiring question, because the production backend is storing only `rule-engine` predictions. The prompt exists; the live ingest path is not using it.
+| Source | Enabled | Code-derived quality | Main issue |
+| --- | --- | --- | --- |
+| `sec-edgar` | yes | 8/10 | strong structure, but some 8-Ks are catch-all noise |
+| `trading-halt` | yes | 9/10 | high quality, but resume events dilute signal stats |
+| `company-ir` | yes | 7/10 | limited issuer list, short snippets |
+| `dilution-monitor` | yes | 7/10 | good bearish signal, but ticker fallback can degrade precision |
+| `whitehouse` | yes | 5/10 | weak ticker extraction, broad market policy often mapped to no ticker |
+| `federal-register` | yes | 4/10 | many regulatory docs are too generic for single-ticker analytics |
+| `truth-social` | yes | 4/10 | ticker extraction is regex-only; rhetoric and policy get mixed |
+| `breaking-news` | yes | 3/10 | keyword bag only, no ticker extraction at scanner stage |
+| `econ-calendar` | yes | 3/10 | body is template text; no actual release values |
+| `reddit` | yes | 3/10 | many posts are commentary, not catalysts |
+| `stocktwits` | yes | 3/10 | trend and volume spikes are mostly sentiment exhaust |
+| `globenewswire` | yes | 4/10 | lots of PR noise; default feed list is GlobeNewswire-only |
 
----
-
-## 1. Scanner Output Quality
-
-### 1.1 Active scanner summary
-
-These are the **12 scanners enabled by env/config in the live backend**. Counts below are scanner-group aggregates over their DB source names.
-
-| Scanner | Stored events | Ticker coverage | Severity mix | Pipeline audits | Delivered | Main issue | Quality |
-|---|---:|---:|---|---:|---:|---|---:|
-| `sec-edgar` | 10,727 | 15.5% | 57 C / 762 H / 9,642 M / 266 L | 11,456 | 91 | Missing tickers and generic Form 4 noise | 5/10 |
-| `stocktwits` | 9,387 | 100.0% | 0 C / 21 H / 7 M / 9,359 L | 8,216 | 0 | Almost all low-information trend spam | 4/10 |
-| `breaking-news` | 3,683 | 3.7% | 610 C / 309 H / 2,764 M / 0 L | 2,081 | 84 | Keyword precision and ticker extraction are poor | 5/10 |
-| `trading-halt` | 394 | 100.0% | 0 C / 316 H / 78 M / 0 L | 614 | 16 | Useful structure, but many unknown microcaps and resume spam | 7/10 |
-| `newswire` | 199 | 12.6% | 0 C / 10 H / 189 M / 0 L | 208 | 12 | Mostly promotional PR with no ticker | 3/10 |
-| `truth-social` | 181 | 5.5% | 5 C / 6 H / 170 M / 0 L | 200 | 1 | Mostly political chatter, very weak ticker mapping | 3/10 |
-| `federal-register` | 72 | 0.0% | 0 C / 1 H / 71 M / 0 L | 83 | 0 | Source pollution + stale notices + no tickers | 2/10 |
-| `whitehouse` | 61 | 0.0% | 0 C / 20 H / 41 M / 0 L | 1 | 0 | Potentially valuable source, but current rows are stale and untickered | 3/10 |
-| `econ-calendar` | 8 | 0.0% | 0 C / 0 H / 8 M / 0 L | 4 | 0 | Clean structure, but no surprise/actual-vs-consensus data | 4/10 |
-| `reddit` | 0 | n/a | none | 0 | 0 | Enabled but no live output | 1/10 |
-| `company-ir` | 0 | n/a | none | 0 | 0 | Enabled but no live output | 1/10 |
-| `dilution-monitor` | 0 | n/a | none | 0 | 0 | Enabled but no live output | 1/10 |
-
-### 1.2 Scanner examples
-
-Each scanner below includes **3 live examples** when available. "Good" means structured and plausibly useful. "Bad" means noisy, stale, mis-tickered, or operationally low-value.
+### Code-confirmed Scanner Findings
 
 #### `sec-edgar`
 
-- Good: `SEC 8-K: CBRE GROUP, INC. — Item 5.02 ...` (`pipeline_audit` delivered, ticker `CBRE`, HIGH)
-- Bad: `SEC Form 4: Dickman Thomas J filed insider trade disclosure for Fold Holdings, Inc.` (`events` stored with no ticker)
-- Bad: `SEC 8-K: INTERGROUP CORP — Item 4.01 ...` (`events` stored with inferred fallback ticker `SPY`)
-
-Assessment:
-
-- Scanner emits rich metadata (`issuer_name`, `transaction_value`, `item_types`, `severity_hint`) in `packages/backend/src/scanners/sec-edgar-scanner.ts:488-553`.
-- The data quality problem is not lack of structure; it is **weak live ticker resolution** and **too much routine Form 4 volume**.
-- Recent filtered reasons show `sec-edgar` is paying LLM-gate cost to rediscover "routine filing" thousands of times.
-
-#### `stocktwits`
-
-- Bad: `STEM entered StockTwits trending` (`LOW`, filtered as `social noise: 0 upvotes, 0 comments`)
-- Bad: `SMMT entered StockTwits trending` (`LOW`, filtered as `social noise`)
-- Bad: `SLB entered StockTwits trending` (`LOW`, filtered as `social noise`)
-
-Assessment:
-
-- Ticker coverage is perfect because the scanner writes it directly.
-- Product value is poor: the dominant event text is one repeated template, and `pipeline_audit` shows **5,764** filtered for `social_noise`.
-- It still floods `events` and `classification_predictions`, which drowns the recent sample and pollutes analytics.
-
-#### `breaking-news`
-
-- Good: `Apollo gives investors only 45% of requested withdrawals from $15 billion private credit fund` (delivered, enriched, macro/credit relevance)
-- Bad: `Oil rises with Brent crossing $100 a barrel again as Middle East tensions keep traders on edge` (stored as `MEDIUM`, no ticker, then filtered by LLM as retrospective commentary)
-- Bad: `Jim Cramer says Monday's market rally may be short-lived` (stored as `HIGH`, ticker `CNBC`, opinion content)
-
-Assessment:
-
-- The scanner is too dependent on broad keywords in `packages/backend/src/scanners/breaking-news-scanner.ts:14-43`.
-- Live logs show feed health issues and weak recall right now:
-  - `Reuters returned HTTP 404`
-  - `AP News returned HTTP 403`
-  - `Fetched 10 items from MarketWatch, 0 matched keywords`
-  - `Fetched 30 items from CNBC, 0 matched keywords`
-  - `Fetched 44 items from Yahoo Finance, 0 matched keywords`
-- Ticker coverage is only **3.7%**, so even useful macro events are rarely tracked or evaluated correctly downstream.
+- Good:
+  - `packages/backend/src/scanners/sec-edgar-scanner.ts:488-519` emits structured 8-K events with `item_types`, `item_descriptions`, accession number, and ticker list.
+  - `packages/backend/src/scanners/sec-edgar-scanner.ts:522-553` emits Form 4 events with transaction value, shares, price per share, officer name, and ticker list.
+- Bad:
+  - `packages/backend/src/pipeline/default-rules.ts:216-228` treats 8-K `8.01` as `LOW`, but the scanner still emits all such filings; many are generic catch-all disclosures.
+  - `packages/backend/src/scanners/sec-edgar-scanner.ts:494-518` stores `severity_hint` only in metadata; the main rule engine ignores it.
 
 #### `trading-halt`
 
-- Good: `WNW trading HALTED — Other / Unknown` (delivered, HIGH)
-- Good: `PTHS trading HALTED — Volatility Trading Pause (MWCB)` (enriched, structured)
-- Bad: `HDLB trading RESUMED` (stored as event, then filtered by cooldown)
-
-Assessment:
-
-- This is one of the best-structured scanners in the system.
-- The main problem is downstream prioritization: many halts are on obscure or microcap symbols, and resumes add noise.
-- Enrichment quality is middling because the model can only say "trading halt implies volatility."
-
-#### `newswire`
-
-- Good: `Unixell Biotech receives IND clearance by FDA for its Allogeneic iPSC-Derived cell therapy ...` (delivered, HIGH)
-- Bad: `Hydrogen Fuel Cell Recycling Market to More Than Double ...` (filtered: `newswire noise: no US ticker and no relevance keyword`)
-- Bad: `Lipton Hard Iced Tea Drops a Zero Sugar Game-Changer` (filtered as newswire noise)
-
-Assessment:
-
-- The scanner correctly normalizes sources into `pr-newswire`, `globenewswire`, and `businesswire` in `packages/backend/src/scanners/newswire-scanner.ts`.
-- In practice, most live rows are generic PR copy with no reliable US equity ticker.
-- Only **12/208** newswire audit rows were delivered.
-
-#### `truth-social`
-
-- Good: `If Iran does not FULLY OPEN the Strait of Hormuz within 48 HOURS ...` (delivered as CRITICAL, ticker `XLE`)
-- Bad: `There is a very important Special Election tomorrow ...` (filtered by LLM as political endorsement, no market impact)
-- Bad: `[No Title] - Post from March 23, 2026` (deduped copies of parse-degraded posts)
-
-Assessment:
-
-- This source can produce genuinely important geopolitical alerts.
-- Most recent live rows are campaign or rhetoric content with no ticker and no actionable market mapping.
-- The scanner is fragile because it parses a third-party mirror with regex-heavy extraction.
-
-#### `federal-register`
-
-- Bad: `[Notice] Foreign-Trade Zone 27; Application for Subzone ...` (filtered as stale)
-- Bad: `[Notice] Notice of OFAC Sanctions Action` (filtered as stale)
-- Bad: `[Rule] Schedules of Controlled Substances ...` (written under source `fda`, even though it arrived through the federal-register path)
-
-Assessment:
-
-- `packages/backend/src/scanners/federal-register-scanner.ts:130-185` assigns `source` by title/abstract heuristics rather than authoritative agency IDs.
-- This pollutes source-level analytics and can make the same scanner look like multiple independent sources.
-- Current live rows are untickered and stale.
-
-#### `whitehouse`
-
-- Good-ish: `Presidential Document: Ending Certain Tariff Actions` (policy-relevant title)
-- Bad: `Presidential Document: Adjusting Certain Delegations Under the Defense Production Act` (stored, no ticker, stale)
-- Bad: `Presidential Document: Presidential Waiver of Statutory Requirements ...` (stored, no ticker)
-
-Assessment:
-
-- This scanner can be important, but current live rows are sparse and untickered.
-- `pipeline_audit` shows almost no current live throughput and no deliveries.
-
-#### `econ-calendar`
-
-- Good-ish: `Initial Jobless Claims — Data Released`
-- Bad: `Initial Jobless Claims releasing in 15 min`
-- Bad: `Retail Sales releasing in 14 min`
-
-Assessment:
-
-- The scanner is clean and structured.
-- The current problem is that it emits generic scheduling events without surprise data or market delta, so the downstream system treats them as routine.
-
-#### `reddit`
-
-- No live events in `events`
-- No live rows in `pipeline_audit`
-- Enabled, but operationally absent
-
-Assessment: no usable output right now.
+- Good:
+  - `packages/backend/src/scanners/halt-scanner.ts:495-507` emits clean halt events with ticker, halt time, market, reason code, and bearish direction.
+  - It is one of the few sources with near-perfect ticker coverage and concrete timestamps.
+- Bad:
+  - `packages/backend/src/scanners/halt-scanner.ts:522-534` also emits resume events, which are much less valuable than the halt itself but will still enter accuracy/outcome stats unless filtered downstream.
 
 #### `company-ir`
 
-- No live events in `events`
-- No live rows in `pipeline_audit`
-- Enabled, but operationally absent
-
-Assessment: no usable output right now.
+- Good:
+  - `packages/backend/src/scanners/ir-monitor-scanner.ts:260-277` and `:286-302` always attach a known ticker.
+- Bad:
+  - Body text is often only `trimSnippet(...)`, so downstream LLMs get shallow context.
+  - Coverage is only the small configured issuer list from env/default config, not broad IR coverage.
 
 #### `dilution-monitor`
 
-- No live events in `events`
-- No live rows in `pipeline_audit`
-- Enabled, but operationally absent
+- Good:
+  - `packages/backend/src/scanners/dilution-scanner.ts:244-268` carries accession number, dilution type, estimated amount, direction, and ticker list.
+- Bad:
+  - `const ticker = entry.tickers[0] ?? entry.companyName` at `:241` contaminates titles with company-name fallback while `metadata.ticker` remains nullable. That produces mixed-quality entity identity.
 
-Assessment: no usable output right now.
+#### `whitehouse`
 
-### 1.3 Scanner-quality conclusions
+- Good:
+  - `packages/backend/src/scanners/whitehouse-scanner.ts:184-205` captures EO number, signing date, topics, and source URL.
+- Bad:
+  - Ticker extraction is only `extractTickers(fullText)`, which means most sector-wide orders end up with `NULL` ticker and weak downstream outcome tracking.
 
-- Best live scanners: `trading-halt`, then `sec-edgar` once ticker quality is fixed.
-- Highest wasted volume: `stocktwits` and routine `sec-edgar` Form 4s.
-- Highest structural opportunity: `breaking-news` and `whitehouse`.
-- Highest operational concern: enabled scanners with **zero** live rows (`reddit`, `company-ir`, `dilution-monitor`).
+#### `federal-register`
 
----
+- Good:
+  - `packages/backend/src/scanners/federal-register-scanner.ts:136-157` preserves agency source and topics.
+- Bad:
+  - It emits as single `regulatory-action` events with sparse text and regex ticker extraction only; this is poor input for single-name scorecards.
 
-## 2. Classification Quality
+#### `truth-social`
 
-### 2.1 Primary finding: the live ingest path is not using the LLM classifier
+- Good:
+  - `packages/backend/src/scanners/truth-social-scanner.ts:324-342` preserves author, post ID, keywords, and sentiment.
+- Bad:
+  - The title is just truncated post text, and ticker extraction is regex-only. Concrete policy posts with no cashtag fall through to late inference.
 
-This is the most important fact in this section.
+#### `breaking-news`
 
-- `classification_predictions`: **24,712**
-- `classified_by = 'rule-engine'`: **24,712**
-- `classified_by = 'hybrid'`: **0**
+- Good:
+  - `packages/backend/src/scanners/breaking-news-scanner.ts:232-253` at least records matched keywords and source feed.
+- Bad:
+  - No scanner-side ticker extraction at all.
+  - The keyword list at `:15-43` is broad enough to admit generic market commentary.
 
-Code path:
+#### `econ-calendar`
 
-- `packages/backend/src/app.ts:113-115` only creates `llmClassifier` when `options.llmProvider` is passed.
-- The prompt in `packages/backend/src/pipeline/classification-prompt.ts` is real, but it is not driving live ingest in the current deployment.
+- Good:
+  - It emits deterministic upcoming/released events with release times.
+- Bad:
+  - `packages/backend/src/scanners/econ-calendar-scanner.ts:154-189` emits template bodies without actual values, surprise magnitude, or historical context. That is weak input for both severity and outcome analytics.
 
-So the live "LLM classification quality" answer is:
+#### `reddit`
 
-- **Prompt quality matters for future work**
-- **Current production classification quality is rule-engine quality**
+- Good:
+  - Engagement fields are preserved at `packages/backend/src/scanners/reddit-scanner.ts:160-170`.
+- Bad:
+  - Scanner ingests all hot posts from four subreddits; ticker extraction is regex-only and many posts are post-hoc commentary, not catalysts.
 
-### 2.2 Recent 50 classified events
+#### `stocktwits`
 
-The **50 most recent predictions** break down like this:
+- Good:
+  - It captures ticker-specific trend, sentiment-flip, and volume-spike events.
+- Bad:
+  - All emitted events are social reflexivity signals, not primary catalysts. This source should not be allowed to dominate `MEDIUM` severity without stronger downstream evidence.
 
-| Source | Count |
-|---|---:|
-| `stocktwits` | 37 |
-| `sec-edgar` | 12 |
-| `breaking-news` | 1 |
+#### `globenewswire`
 
-Manual assessment of that recent-50 sample:
+- Good:
+  - `packages/backend/src/scanners/newswire-scanner.ts:150-172` extracts category tickers and published time.
+- Bad:
+  - `DEFAULT_FEEDS` at `:23-45` contains only GlobeNewswire feeds. Despite the rest of the system knowing about `pr-newswire` and `businesswire`, the default live scanner does not actually fetch them.
+  - Any event with a ticker passes the L1 newswire filter even without a relevance keyword.
 
-- **Severity**
-  - `stocktwits`: the current `LOW` severity is reasonable for the repeated "`X entered StockTwits trending`" template.
-  - `sec-edgar`: the current `MEDIUM` default is too blunt. It ignores transaction size, issuer importance, and whether the filing is actually notable.
-  - `breaking-news`: the one sampled oil headline being `MEDIUM` is arguable, but the missing ticker and weak keyword signal make the classification less useful than it looks.
-- **Ticker**
-  - `stocktwits`: mostly correct, because the scanner writes it directly.
-  - `sec-edgar`: **12/12 recent rows** in the sample were missing a top-level ticker even though the issuer/company was obvious from title/metadata.
-  - `breaking-news`: missing ticker on a clearly market-relevant oil story.
-- **Direction**
-  - **0/50 useful**
-  - Every recent sampled prediction had `predicted_direction = neutral`
+### Blocked Live Query
 
-Broader live metrics:
+Run this once per source on the host:
 
-- `predicted_direction = neutral`: **24,490 / 24,712 (99.1%)**
-- `bearish`: **222**
-- `bullish`: **0**
-- `confidence = 0.8000`: **23,149 / 24,712 (93.7%)**
-
-Interpretation:
-
-- The classifier output is almost entirely default-confidence, default-direction, rule-based labeling.
-- Even when the labels are superficially "reasonable", they are not informative enough for trading decisions.
-
-### 2.3 Precision / recall for `CRITICAL` and `HIGH`
-
-I computed actual severity from the same thresholds used by `ClassificationAccuracyService`:
-
-- `CRITICAL` = max absolute move across 1h/1d/1w >= 5%
-- `HIGH` = >= 3%
-- `MEDIUM` = >= 1%
-- `LOW` = < 1%
-
-But there is a major caveat:
-
-- Only **324 / 24,712 predictions (1.3%)** have `classification_outcomes`
-- All **324** evaluated rows come from **older `stocktwits` rows**
-- In that evaluated slice, **all predictions were `MEDIUM`**
-
-That means the live precision/recall numbers are currently:
-
-| Metric | TP | FP | FN | Precision | Recall |
-|---|---:|---:|---:|---:|---:|
-| `CRITICAL` exact | 0 | 0 | 166 | n/a | 0.0000 |
-| `HIGH` exact | 0 | 0 | 62 | n/a | 0.0000 |
-| `HIGH + CRITICAL` combined | 0 | 0 | 228 | n/a | 0.0000 |
-
-These numbers are bad, but more importantly they show the evaluation system is not sampling the important event classes at all.
-
-Additional severity metric:
-
-- Evaluated rows: **324**
-- Exact severity match: **80 / 324**
-- Severity accuracy: **24.7%**
-
-### 2.4 Why the classification quality is weak
-
-Code-level reasons:
-
-1. `packages/backend/src/pipeline/classification-prompt.ts:13-38` explicitly tells the model to set `direction` to `NEUTRAL`.
-2. `packages/backend/src/pipeline/classification-prompt.ts:68-72` accepts `ruleResult` but discards it, so the prompt never sees structured rule context.
-3. `packages/backend/src/pipeline/default-rules.ts:323-620` contains many title-only heuristics (`acquire`, `merge`, `EPS`, `Phase 1`, `appoint`, `resign`) that are too broad.
-4. `packages/backend/src/pipeline/macro-rules.ts:138-200` uses broad breaking-news keyword triggers like `war`, `tariff`, `sanction`.
-5. `packages/backend/src/pipeline/ticker-inference.ts:107-143` falls back to sector ETFs like `QQQ`, `SPY`, `XLE`, which creates proxy tickers that look cleaner than the underlying data really is.
-
-Live evidence for the fallback issue:
-
-- `events` rows with `metadata.ticker_inference_strategy = 'fallback'`: **65**
-- Recent examples:
-  - `breaking-news` -> `QQQ` for `Stock futures are little changed ... Iran`
-  - `sec-edgar` -> `SPY` for `INTERGROUP CORP — Item 4.01`
-  - `sec-edgar` -> `QQQ` for `GLOBUS MEDICAL INC — Item 5.02`
-
-### 2.5 Full classification prompt for a real event
-
-This is the prompt generated from the real `breaking-news` event:
-
-Title:
-
-`Oil rises with Brent crossing $100 a barrel again as Middle East tensions keep traders on edge`
-
-Prompt:
-
-```text
-You are a financial event classifier for a real-time trading intelligence platform.
-
-Given an event from a financial data source, classify it by:
-1. **severity**: CRITICAL | HIGH | MEDIUM | LOW — how market-moving is this event?
-2. **direction**: always set to NEUTRAL
-3. **eventType**: choose exactly one of these labels: earnings_beat, earnings_miss, earnings_guidance, earnings, earnings_preannouncement, guidance_update, sec_form_8k, sec_form_4, sec_form_10q, sec_form_10k, sec_investigation, regulation_fd, fda_approval, fda_rejection, fda_orphan_drug, drug_trial, ftc_antitrust, doj_settlement, executive_order, congress_bill, federal_register, antitrust_action, regulatory_enforcement, sanctions, export_control, tax_policy, trade_policy, economic_data, fed_announcement, macro_policy, unusual_options, insider_large_trade, short_interest, options_flow, insider_purchase, insider_sale, trading_halt, social_volume_spike, reddit_trending, rumor, opinion, acquisition_disposition, bankruptcy, buyback, conference_appearance, contract_material, credit_downgrade, cybersecurity_incident, delisting, dividend_change, financing, labor_disruption, leadership_change, legal_ruling, licensing, plant_shutdown, rating_upgrade, restructuring, service_outage, share_offering, shareholder_vote, stock_split, strategic_review, supply_chain, news_breaking
-4. **confidence**: 0 to 1 — how confident are you in this classification?
-5. **reasoning**: 1-3 sentence explanation of your classification
-6. **tags**: array of relevant string tags
-7. **priority**: 0-100 — lower number = higher priority
-
-SEVERITY CALIBRATION:
-- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%. These events move prices 5%+ immediately.
-- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions. These events move prices 2-5%.
-- MEDIUM: Routine SEC filings (10-Q, 10-K), earnings in-line with estimates, industry reports, moderate news. Prices may move 0.5-2%.
-- LOW: Social media trending without news catalyst, routine corporate updates, conference presentations, minor regulatory filings. Minimal price impact expected.
-
-CONFIDENCE CALIBRATION:
-- Use the FULL range 0.3 to 0.95
-- 0.9+ = unambiguous event with clear market impact (e.g., trading halt, FDA decision)
-- 0.7-0.9 = likely classification but some ambiguity
-- 0.5-0.7 = uncertain, could go either way
-- 0.3-0.5 = best guess, limited information
-- NEVER output 1.0 or 0.0
-
-Set direction to NEUTRAL. Direction prediction is not used in the current version.
-
-Respond ONLY with valid JSON. No markdown, no code fences, no extra text.
-
---- EVENT ---
-Source: breaking-news
-Type: news_breaking
-Title: Oil rises with Brent crossing $100 a barrel again as Middle East tensions keep traders on edge
-Body: Trump's statement sent oil lower, while equities jumped. Still, the recovery on Tuesday suggests lingering skepticism over Trump signaling a de-escalation.
-URL: https://www.cnbc.com/2026/03/24/oil-prices-today-wti-brent-middle-east-iran-war.html
-Metadata: {"url":"https://www.cnbc.com/2026/03/24/oil-prices-today-wti-brent-middle-east-iran-war.html","headline":"Oil rises with Brent crossing $100 a barrel again as Middle East tensions keep traders on edge","source_feed":"CNBC","matched_keywords":["trade"]}
-Timestamp: 2026-03-24T01:51:32.000Z
-
---- OUTPUT FORMAT ---
-Respond with JSON: { "severity", "direction", "eventType", "confidence", "reasoning", "tags", "priority" }
+```sql
+SELECT
+  source,
+  COUNT(*),
+  COUNT(CASE WHEN ticker IS NOT NULL THEN 1 END) AS with_ticker,
+  AVG(CASE WHEN length(summary) > 0 THEN length(summary) END) AS avg_body_len
+FROM events
+WHERE source = 'SCANNER_NAME'
+GROUP BY source;
 ```
 
-Bottom line:
+To pull 2 good + 2 bad real events per source, I would run:
 
-- The prompt is coherent, but it is currently **not powering live ingest**
-- Even if enabled, it would still be hamstrung by `direction = NEUTRAL` and missing rule context
+```sql
+-- likely good
+SELECT id, source, ticker, severity, title, left(summary, 240) AS summary
+FROM events
+WHERE source = 'SCANNER_NAME'
+  AND ticker IS NOT NULL
+  AND summary IS NOT NULL
+  AND length(summary) >= 120
+ORDER BY created_at DESC
+LIMIT 2;
 
----
-
-## 3. LLM Enrichment Quality
-
-### 3.1 Coverage
-
-`events.metadata.llm_enrichment` coverage:
-
-- Enriched events: **3,464 / 25,701 (13.5%)**
-
-By source:
-
-| Source | Enriched | Source total | Coverage |
-|---|---:|---:|---:|
-| `sec-edgar` | 3,244 | 10,727 | 30.2% |
-| `trading-halt` | 113 | 394 | 28.7% |
-| `breaking-news` | 105 | 3,683 | 2.9% |
-| `truth-social` | 2 | 181 | 1.1% |
-| all other live sources | 0 | varies | 0.0% |
-
-Field-level completeness:
-
-| Metric | Count |
-|---|---:|
-| Enriched events | 3,464 |
-| No tickers in enrichment | 1,685 |
-| Empty `currentSetup` | 3,023 |
-| Empty `historicalContext` | 2,859 |
-| Empty `regimeContext` | 105 |
-
-Action label distribution:
-
-| Action | Count |
-|---|---:|
-| `🟡 Monitor` | 3,138 |
-| `🟢 Background` | 277 |
-| `🔴 High-Quality Setup` | 20 |
-| legacy / inconsistent labels (`🔴 立即关注`, `🟡 持续观察`, empty) | 29 |
-
-Interpretation:
-
-- The enricher is heavily biased toward `🟡 Monitor`
-- It rarely produces a strong setup call
-- It often omits the exact fields that were meant to add differentiated value
-
-### 3.2 Sampled enrichment quality
-
-I reviewed 10 live enrichments manually:
-
-| Event | Assessment | Value add |
-|---|---|---|
-| `Apollo gives investors only 45% of requested withdrawals ...` | Good | Adds real market framing beyond the title |
-| `Brent oil prices claw back losses to top $100 again after hours` | Good | Useful macro takeaway and ticker direction |
-| `Iran targets UAE energy infrastructure ...` | Strong | One of the few real `🔴 High-Quality Setup` outputs |
-| `SEC Form 4: Zakrzewski Joseph S ... AN2 Therapeutics` | Weak | Mostly rewrites the title |
-| `SEC Form 4: Wong Stephanie ... AN2 Therapeutics` | Weak | Generic "insider trades can indicate confidence" boilerplate |
-| `SEC Form 4: Gray Bradley G ... Diversified Energy Co` | Weak | No specific trade context, no actual signal |
-| `SEC 8-K: CEA Industries Inc. — Item 5.02 ...` | Fair | Some leadership-change framing, still generic |
-| `SEC 8-K: HARMONIC INC. — Item 1.01 ...` | Fair | Slightly useful, but still abstract |
-| `HDLB trading HALTED — Volatility Trading Pause (MWCB)` | Fair | Correct but repetitive |
-| `RDACU trading HALTED — Other / Unknown` | Weak | Generic uncertainty language, no real edge |
-
-Overall rating:
-
-- `breaking-news`: 6-7/10
-- `trading-halt`: 4-5/10
-- `sec-edgar`: 2-4/10
-
-The most common `sec-edgar` impact strings are near-duplicates, for example:
-
-- `Insider trades can indicate management's confidence in the company's future, potentially influencing investor sentiment.`
-- `Insider trading disclosures can indicate management's confidence in the company's future, potentially influencing investor sentiment.`
-
-That repetition is consistent with low-information enrichment that restates a generic pattern instead of the actual filing details.
-
-### 3.3 Is enrichment adding value?
-
-Short answer:
-
-- **Sometimes** for macro / breaking news
-- **Rarely** for `sec-edgar` Form 4
-- **Marginally** for trading halts
-
-Practical verdict:
-
-- Value-add is real on the small subset of geopolitical / macro / urgent news.
-- For the majority of enriched volume, the system is spending tokens to produce polished paraphrase, not differentiated analysis.
-
-### 3.4 Full enrichment prompt
-
-System prompt from `packages/backend/src/pipeline/llm-enricher.ts`:
-
-```text
-You are a stock market event analyst. Produce concise, trader-usable intelligence in English and respond ONLY with valid JSON (no markdown, no code fences).
-
-Rules:
-- Reason from the event catalyst first, then current market setup, then historical analog stats.
-- Keep each field specific and compact. No generic AI filler.
-- Do not use BUY, SELL, HOLD, or any personal financial advice language.
-- Never state what a trader should do. State what the data shows and what historically followed.
-- Frame as intelligence, not recommendations.
-- If market setup or historical analog data is unavailable, omit that field or return an empty string.
-- For tickers: identify directly impacted US-listed tickers when they are explicit or strongly implied in the event. Do NOT guess proxies, ETFs, or loosely related names. Return tickers: [] if no clear directly impacted ticker exists.
-- For direction: prefer bullish or bearish. Use neutral only when the impact is genuinely ambiguous (this should be rare — most events lean one way).
-
-Classify signal quality:
-- 🔴 High-Quality Setup: Strong catalyst + favorable current context + historical support
-- 🟡 Monitor: Notable catalyst, needs monitoring or confirmation
-- 🟢 Background: Routine event, low immediate trading relevance
-
-Use this exact schema:
-{
-  "summary": "1-2 sentence English summary of what happened",
-  "impact": "1-2 sentence English trader takeaway on why the event matters",
-  "whyNow": "1 concise sentence on why the setup matters right now",
-  "currentSetup": "1 concise sentence on the current per-ticker market setup (omit if unavailable)",
-  "historicalContext": "1 concise sentence on relevant historical pattern stats (omit if unavailable)",
-  "risks": "1 concise sentence on the main invalidation or risk to this read",
-  "action": "one of: 🔴 High-Quality Setup, 🟡 Monitor, 🟢 Background",
-  "tickers": [{"symbol": "TICKER", "direction": "bullish|bearish|neutral"}],
-  "regimeContext": "1 sentence in English on how the current market regime amplifies or dampens this event's impact (omit if no market context provided)"
-}
+-- likely bad
+SELECT id, source, ticker, severity, title, left(summary, 240) AS summary
+FROM events
+WHERE source = 'SCANNER_NAME'
+  AND (
+    ticker IS NULL
+    OR summary IS NULL
+    OR length(coalesce(summary, '')) < 80
+  )
+ORDER BY created_at DESC
+LIMIT 2;
 ```
 
-Real user prompt example (for the Apollo private-credit event):
+## 2. LLM Pipeline Analysis
 
-```text
-Event: Apollo gives investors only 45% of requested withdrawals from $15 billion private credit fund
-Details: The withdrawals show that Apollo didn't avoid the rush of investor redemptions plaguing rivals, driven by concern over private credit loans to software firms.
-Source: breaking-news
-Metadata: {"url":"https://www.cnbc.com/2026/03/23/apollo-private-credit-fund-gives-investors-only-45percent-of-requested-withdrawals.html","headline":"Apollo gives investors only 45% of requested withdrawals from $15 billion private credit fund","source_feed":"CNBC","matched_keywords":["war"]}
+### Is LLM Classification Actually Running?
+
+### Code-confirmed
+
+- `.env` is configured for OpenAI and LLM enrichment.
+- Main server boot in `packages/backend/src/index.ts:15-18` calls:
+
+```ts
+const { server, registry } = buildApp({
+  db: dbCtx?.db,
+  apiKey,
+});
 ```
 
-Two important prompt-quality issues:
+- `packages/backend/src/app.ts:113-115` only creates a pipeline `llmClassifier` when `options.llmProvider` exists.
+- No `llmProvider` is passed from `index.ts`.
+- Therefore the main ingestion pipeline runs with `llmClassifier === undefined` by default.
 
-1. `packages/backend/src/pipeline/llm-enricher.ts:167-177` does not put classifier severity/event-type/reasoning into the prompt text.
-2. `packages/backend/src/pipeline/llm-enricher.ts:197-205` does raw `JSON.parse(text)` only, unlike the classifier which strips code fences first.
+### Conclusion
 
----
+Mainline event ingestion is not using LLM classification, even though `.env` suggests that it should be.
 
-## 4. Outcome Tracking Quality
+The only obvious place that always creates an LLM provider is the debug classify route in `packages/backend/src/route-registration.ts:128-133`.
 
-### 4.1 Coverage by source
+### Classification Prompt Review
 
-| Source | Events | Outcome rows | Coverage | 1h done | 1d done | 1w done | T+5 done | T+20 done |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `stocktwits` | 9,387 | 9,375 | 99.9% | 512 | 472 | 372 | 6,308 | 0 |
-| `sec-edgar` | 10,727 | 1,663 | 15.5% | 1 | 1 | 0 | 1 | 0 |
-| `breaking-news` | 3,683 | 135 | 3.7% | 0 | 0 | 0 | 5 | 0 |
-| `trading-halt` | 394 | 394 | 100.0% | 0 | 0 | 17 | 213 | 17 |
-| `newswire` (`pr-newswire` + `globenewswire`) | 199 | 25 | 12.6% | 0 | 0 | 0 | 24 | 0 |
-| `truth-social` | 181 | 10 | 5.5% | 0 | 0 | 0 | 2 | 0 |
-| `whitehouse`, `federal-register`, `econ-calendar` | 141 | 0 | 0.0% | 0 | 0 | 0 | 0 | 0 |
+File: `packages/backend/src/pipeline/classification-prompt.ts`
 
-Key numbers:
+#### What is good
 
-- `event_outcomes` rows: **12,591**
-- `event_price IS NULL`: **4,308**
-- `change_1h IS NULL`: **12,078**
-- `change_1d IS NULL`: **12,117**
-- `change_1w IS NULL`: **12,202**
-- `change_t20 IS NULL`: **12,574**
+- Tight JSON schema instruction.
+- Political appendix for `truth-social` and `x`.
+- Severity and confidence calibration bands exist.
 
-### 4.2 Is `processOutcomes()` running?
+#### What is missing
 
-Yes, but only partially effectively.
+1. No few-shot examples for noisy sources like newswire, Reddit, StockTwits, Federal Register, White House.
+2. No instruction to preserve structured source facts already available in metadata, such as SEC item types or halt reason codes.
+3. No ticker/entity extraction output, so LLM classification cannot directly repair missing identity.
+4. It hardcodes `direction = NEUTRAL` at `classification-prompt.ts:15,36`, which throws away useful directional signal.
+5. It truncates body at 2,000 chars and provides no source-specific compression strategy for long filings.
+6. It does not tell the model how to distinguish "market headline" from "retrospective article" or "social chatter" because that logic lives elsewhere in regex filters.
 
-Evidence:
+### Enrichment Prompt Review
 
-- Current container logs show:
-  - `2026-03-24T02:33:29.251001220Z [outcome-tracker] Starting periodic outcome backfill`
-- `event_outcomes.updated_at` shows fresh writes:
-  - **23 rows updated in the last 30 minutes**
-  - latest update at **2026-03-24 02:48:31 UTC**
+File: `packages/backend/src/pipeline/llm-enricher.ts`
 
-So the loop is alive.
+#### What is good
 
-But the backlog is large:
+- Better than the classification prompt. It explicitly asks for summary, impact, why-now, risks, action, ticker list, and regime context.
+- It can inject market regime, per-ticker setup, and historical pattern stats.
 
-- Overdue `1h` rows: **12,063**
-- Overdue `1d` rows: **11,493**
-- Overdue `1w` rows: **8,208**
-- `T+5` rows already evaluated-but-still-null: **3,613**
-- `T+20` rows already evaluated-but-still-null: **987**
+#### What is weak
 
-### 4.3 Why outcome quality is poor
+1. The prompt is generic across scanners. SEC filings, halts, executive orders, and social posts all use the same enrichment template.
+2. It does not tell the model which metadata keys matter by source.
+3. It asks for ticker direction but gives no guidance on multi-ticker ordering or confidence.
+4. It can only be as good as scanner-side entity extraction, which is still weak in several sources.
+5. `LLMEnricher` uses `LLM_GATEKEEPER_API_KEY` before `OPENAI_API_KEY` at `llm-enricher.ts:144-148`, which is conceptually wrong config coupling.
 
-1. **1-hour outcomes are not real intraday outcomes**
-   - `packages/backend/src/services/price-service.ts:201-237` always queries Yahoo with `interval=1d`
-   - `packages/backend/src/services/price-service.ts:149-163` then reuses that daily-close data for `getPriceAt()`
-   - Result: `change_1h` is mostly fake flatness
-   - Live proof: among non-null `change_1h`, **461 / 513 (89.9%)** are exactly `0.0000`
+### When Does Enrichment Run?
 
-2. **Missing event prices permanently poison later intervals**
-   - `packages/backend/src/services/outcome-tracker.ts:109-121` stores `eventPrice = null` when the initial lookup fails
-   - `packages/backend/src/services/outcome-tracker.ts:315-323` cannot compute percent change when `eventPrice` is null
-   - That blocks both `event_outcomes.change_*` and `classification_outcomes`
+### Code-confirmed
 
-3. **Retry behavior is inconsistent**
-   - `packages/backend/src/services/outcome-tracker.ts:302-311`
-   - For `1h`, `1d`, `1w`, `1m`: failed lookups just return, so rows stay pending forever
-   - For `T+5`, `T+20`: the code stamps `evaluated_*_at` even when price lookup failed, so they stop retrying forever
+- Enrichment only happens inside the alert-router branch in `packages/backend/src/event-pipeline.ts:267-521`.
+- It runs when:
+  - `llmEnricher.enabled === true`
+  - and either `filterResult.enrichWithLLM === true` or severity is `HIGH/CRITICAL`
+- So enrichment is downstream of:
+  - rule classification
+  - dedup
+  - DB insert
+  - L1 alert filter
+  - optional L2 LLM gatekeeper
 
-4. **The worker is too small and unordered**
-   - `packages/backend/src/services/outcome-tracker.ts:137-155`
-   - It pulls only `50` rows per interval, without `ORDER BY`, and processes them serially
+### Implication
 
-5. **Classification-outcome coverage is almost nonexistent**
-   - `classification_predictions`: **24,712**
-   - `classification_outcomes`: **324**
-   - Coverage: **1.3%**
+If an event is filtered early, or if delivery is disabled, it never gets enriched. That means enrichment is not a general data-quality layer. It is a delivery-only layer.
 
-### 4.4 Are price fetches working? What do logs show?
+### Does Enrichment Persist To DB?
 
-What I could verify directly:
+### Yes, but only in JSONB
 
-- I did **not** find current backend log lines like `Yahoo Finance API returned ...` or `No price data found ...`
-- But this is not strong evidence of health, because `packages/backend/src/services/outcome-tracker.ts:302-305` silently returns on failed 1h/1d/1w/1m fetches without logging
+Code-confirmed in `packages/backend/src/event-pipeline.ts:431-489`:
 
-So the correct conclusion is:
+- `event.metadata.llm_enrichment = llmEnrichResult`
+- `UPDATE events SET metadata = ...`
+- if enrichment provides a better ticker, it also updates `events.ticker`
+- then it re-schedules outcome tracking
 
-- **Price fetches are working often enough to update some rows**
-- **The logging is insufficient to tell which rows fail and why**
+### What is not persisted cleanly
 
----
+- no first-class columns for enrichment summary, impact, risks, or action label
+- no normalized enrichment table
+- no persisted raw LLM classification payload in `events`
 
-## 5. Concrete Code Changes
+Scorecard code reads enrichment back from `events.metadata`:
 
-Prioritized by **impact / effort**.
+- `packages/backend/src/services/alert-scorecard.ts:156-199`
+- `packages/backend/src/services/scorecard-semantics.ts:36-39`
 
-| Priority | File / lines | What to change | Expected improvement |
-|---|---|---|---|
-| P0 | `packages/backend/src/services/price-service.ts:149-163,201-237` | Add intraday Yahoo fetches (`interval=5m` or `1m`) for sub-day windows and keep `1d` only for daily/weekly horizons. Split cache keys by interval. | Makes `1h` outcomes real instead of daily-close artifacts; fixes the foundation of accuracy tracking. |
-| P0 | `packages/backend/src/services/outcome-tracker.ts:134-155,282-340` | Add ordered batching (`ORDER BY event_time ASC`), parallel fetch with bounded concurrency, explicit `last_error` / retry counters, and consistent retry semantics for all intervals. | Reduces the huge overdue backlog and makes failures observable. |
-| P0 | `packages/backend/src/app.ts:113-115` | Wire a real `llmProvider` from env/config in production instead of leaving `llmClassifier` undefined. | Turns on actual LLM classification for live ingest instead of rule-engine-only output. |
-| P1 | `packages/backend/src/pipeline/classification-prompt.ts:13-38,68-103` | Stop forcing `direction = NEUTRAL`. Include rule-engine context in the prompt: matched rules, rule severity, rule priority, known ticker, known source reliability. | Makes the prompt capable of producing useful direction/confidence and less generic classification. |
-| P1 | `packages/backend/src/pipeline/ticker-inference.ts:107-143` and `packages/backend/src/event-pipeline.ts:162-177` | Remove ETF fallback (`SPY`, `QQQ`, `XLE`, etc.) from canonical event ticker persistence. Store proxy/market-context symbols in a separate metadata field instead. | Prevents fake precision, bad outcome tracking, and misleading analytics. |
-| P1 | `packages/backend/src/scanners/sec-edgar-scanner.ts:522-553` | Improve Form 4 ticker resolution using CIK->ticker mapping and issuer-name normalization before emitting rows. Backfill `events.ticker` from `issuer_name`/`company_name` where possible. | Would materially improve the current **15.5%** ticker coverage for the largest source. |
-| P1 | `packages/backend/src/pipeline/llm-enricher.ts:167-177,197-205` | Put classifier result into the user prompt (`eventType`, `severity`, `reasoning`) and harden parsing the same way classification does (strip code fences / JSON wrapper recovery). | Enrichment becomes more context-aware and less brittle; fewer silent null enrichments. |
-| P2 | `packages/backend/src/pipeline/default-rules.ts:323-620` and `packages/backend/src/pipeline/macro-rules.ts:138-200` | Replace broad title-only rules with source-aware rules. Require stronger evidence for `HIGH`/`CRITICAL` on `breaking-news`, executive changes, and generic M&A/earnings phrases. | Improves precision and reduces false `HIGH`/`CRITICAL` labels. |
-| P2 | `packages/backend/src/scanners/breaking-news-scanner.ts:14-43,50-71,197-260` | Fix or replace dead feeds (Reuters/AP), use source-specific parsers or safer feeds, and replace substring keywords with topic patterns / allowlists. | Improves both recall and precision for the macro/news scanner. |
-| P3 | `packages/backend/src/scanners/federal-register-scanner.ts:130-185` | Derive source from authoritative agency fields instead of title/abstract keyword guesses. | Stops source pollution (`fda`, `fed`, `sec-regulatory` rows all coming from one scanner) and makes scorecards trustworthy. |
-| P3 | `packages/backend/src/db/event-store.ts:89-97` | Store upstream IDs in `events.source_event_id` when available (`source_event_id`, `sourceEventId`, accession number) instead of always using internal UUIDs. | Makes debugging, dedup, and scanner traceability much easier. |
+## 3. Outcome Tracking Analysis
 
-### Recommended implementation order
+### Is `processOutcomes()` Called?
 
-1. Fix `price-service` + `outcome-tracker`
-2. Turn on and improve the LLM classifier
-3. Fix ticker quality (`sec-edgar` + no ETF fallback)
-4. Tighten rule precision
-5. Repair `breaking-news` source health
+### Code-confirmed
 
----
+Yes.
+
+- `packages/backend/src/app.ts:405-423` starts `startOutcomeProcessingLoop(...)`
+- startup delay: 2 minutes
+- repeat interval: 15 minutes
+- `packages/backend/src/outcome-loop.ts:19-67` runs `outcomeTracker.processOutcomes()`
+
+### Is Outcome Tracking Scheduled For New Events?
+
+Yes, twice:
+
+- immediately after `storeEvent(...)` in `packages/backend/src/event-pipeline.ts:230-231`
+- again after enrichment-derived ticker repair in `packages/backend/src/event-pipeline.ts:487-488`
+
+### Risks
+
+1. `scheduleOutcomeTrackingForEvent(...)` returns `Result<void, Error>`, but callers ignore it. Missing tickers silently fail.
+2. `OutcomeTracker.extractTicker(...)` falls back to `llm_enrichment.tickers[0]` only after enrichment exists, which is late and inconsistent.
+3. Percent moves are computed with no price floor at `packages/backend/src/services/outcome-tracker.ts:315-324` and `packages/backend/src/services/price-service.ts:274-278`.
+4. There is no split/outlier guard before scorecard and win-rate aggregation.
+
+### Penny-Stock / Outlier Distortion
+
+### Code-confirmed
+
+- I found no min-price or outlier filter in:
+  - `packages/backend/src/services/outcome-tracker.ts`
+  - `packages/backend/src/services/price-service.ts`
+  - `packages/backend/src/services/win-rate-analysis.ts`
+
+This means a move from `$0.20 -> $0.50` contributes `+150%` just like a clean catalyst on a liquid large-cap. That will corrupt source-level stats unless filtered.
+
+### Blocked Live Query
+
+Requested query:
+
+```sql
+SELECT COUNT(*), COUNT(CASE WHEN change_t5 IS NOT NULL THEN 1 END)
+FROM event_outcomes;
+```
+
+Outlier query I would run on the host:
+
+```sql
+SELECT
+  eo.event_id,
+  eo.ticker,
+  eo.event_price,
+  eo.change_t5,
+  eo.change_t20,
+  eo.change_1d,
+  e.source,
+  e.title
+FROM event_outcomes eo
+JOIN events e ON e.id = eo.event_id
+WHERE
+  ABS(COALESCE(eo.change_t5, 0)) > 100
+  OR ABS(COALESCE(eo.change_t20, 0)) > 100
+  OR ABS(COALESCE(eo.change_1d, 0)) > 100
+ORDER BY GREATEST(
+  ABS(COALESCE(eo.change_t5, 0)),
+  ABS(COALESCE(eo.change_t20, 0)),
+  ABS(COALESCE(eo.change_1d, 0))
+) DESC
+LIMIT 50;
+```
+
+## 4. Classification Accuracy
+
+### Blocked Live Review
+
+I could not honestly pull:
+
+- 30 `HIGH/CRITICAL` events
+- 30 `MEDIUM` events
+- manual ticker/severity review from the live DB
+
+### Code-confirmed Misclassification Patterns
+
+1. Political posts are over-promoted by keyword rules.
+   - `packages/backend/src/pipeline/political-rules.ts:138-170`
+   - simple keywords like `trade` or `tariff` can force `CRITICAL` before any semantic check
+2. Main pipeline never reaches the LLM classifier by default.
+   - so rule-engine biases dominate live severity
+3. Newswire events are too often treated as passable if they merely have a ticker.
+   - `packages/backend/src/pipeline/alert-filter.ts:295-316`
+4. Breaking news has no scanner-side ticker extraction.
+   - high-severity macro headlines become hard to track or attribute
+5. `inferHighPriorityTicker(...)` can fall back to ETFs like `SPY`, `QQQ`, `XLE`, etc.
+   - `packages/backend/src/pipeline/ticker-inference.ts:107-143`
+   - that is useful for delivery context, but dangerous for outcome analytics
+6. The prediction pipeline defaults missing directions to `neutral`.
+   - `packages/backend/src/prediction-helpers.ts:57-60`
+   - this suppresses meaningful direction evaluation
+7. Social scanners emit a large volume of template sentiment events.
+   - these look event-like but often do not correspond to tradeable catalysts
+
+### Inference
+
+The most common live misclassifications are likely:
+
+- `MEDIUM` inflation on noisy social/newswire content
+- `CRITICAL/HIGH` inflation on political keywords without concrete action
+- false or missing tickers on macro/policy/regulatory events
+- polluted scorecard outcomes from inferred ETF tickers and penny stocks
+
+## 5. Top 10 Code Changes
+
+| # | File + line | Current code | Proposed change | Expected improvement | Effort |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `packages/backend/src/index.ts:15-18` | `buildApp({ db, apiKey })` never passes an LLM provider | Pass `llmProvider: createLlmProvider()` into `buildApp()` and add an explicit `LLM_CLASSIFIER_ENABLED` gate | Turns on actual LLM classification in the live pipeline | 1.5h |
+| 2 | `packages/backend/src/app.ts:113-115` | pipeline classifier exists only when `options.llmProvider` is injected | Instantiate from env in app boot, not only from tests/custom callers | Removes the current config/code mismatch | 1h |
+| 3 | `packages/backend/src/pipeline/classification-prompt.ts:11-38, 68-105` | generic classifier prompt, no few-shot examples, forced `NEUTRAL` direction | Add per-source few-shot examples, explicit "noisy article" negatives, and directional output for event types where direction is knowable | Better severity calibration and usable direction analytics | 4h |
+| 4 | `packages/backend/src/pipeline/political-rules.ts:138-170` | tariff/trade keywords can force `CRITICAL` on Truth Social | Downgrade keyword rules to tags/priority boosts only, let semantic LLM or stricter action verbs decide final severity | Reduces false `CRITICAL` political alerts | 3h |
+| 5 | `packages/backend/src/scanners/breaking-news-scanner.ts:232-253` | keyword match only, no ticker extraction | Run entity extraction here, add company-map support, and emit market-wide index/ETF intent explicitly instead of leaving ticker empty | Improves ticker coverage and outcome tracking for macro headlines | 3h |
+| 6 | `packages/backend/src/scanners/newswire-scanner.ts:23-45, 150-172` | default feeds are GlobeNewswire-only; any tickered PR becomes viable input | Add real PR Newswire/BusinessWire feeds, stricter scanner-side relevance scoring, and richer metadata about release type | Less PR spam, better source mix | 4h |
+| 7 | `packages/backend/src/scanners/ticker-extractor.ts:24-64` and `packages/backend/src/pipeline/ticker-inference.ts:119-143` | regex-only extraction plus late ETF fallback | Merge company-name mapping into extractor; ban ETF fallback for outcome tracking unless explicitly marked `market_proxy=true` | Fewer false tickers and less corrupted analytics | 4h |
+| 8 | `packages/backend/src/event-pipeline.ts:162-177` | high-priority missing tickers get inferred before enrichment, including ETF fallback | Delay irreversible ticker writes until stronger entity evidence exists; write inferred market proxies to a separate metadata field | Prevents fake single-name tickers from entering `events.ticker` | 3h |
+| 9 | `packages/backend/src/services/outcome-tracker.ts:104-127, 315-324` | no-ticker failures are silent to callers; no price floor/outlier guard | Add explicit metrics/audit for schedule failures, minimum-price threshold, and split/outlier rejection before aggregate stats | Cleaner scorecards and easier debugging | 5h |
+| 10 | `packages/backend/src/scanner-registry-setup.ts:1-86` | `WARN_ENABLED` exists in env but `WarnScanner` is never registered | Register `WarnScanner` behind its env gate or remove the dead env var | Restores an expected bearish labor-signal source and removes config drift | 1h |
+
+## 6. Additional Concrete Findings
+
+### Delivery-only Enrichment Is A Structural Problem
+
+`LLMEnricher` currently improves only events that survive delivery gating. If the product goal is better stored data, enrichment should have a storage mode separate from notification mode.
+
+### Scorecard Direction Is Still Fragile
+
+- `packages/backend/src/services/scorecard-semantics.ts:61-70` resolves direction from prediction, metadata, or enrichment ticker direction.
+- But the main classification prompt forces `NEUTRAL`, and the live pipeline does not wire LLM classification at boot.
+- That means direction quality is coming from ad hoc metadata and late enrichment, not from a coherent classification system.
+
+### Prior Repo Docs Already Pointed At Some Of This
+
+These are stale baselines, not fresh live queries:
+
+- `docs/ai-observability-rfc.md` says `event_outcomes` had price rows but null change fields when the cron was not running.
+- `docs/ROADMAP-DATA-QUALITY.md` says `MEDIUM` was heavily inflated and null tickers were a major issue.
+
+The current code fixes some wiring, but the core source-quality and entity-resolution problems remain.
+
+## 7. Exact Host Queries To Finish The Blocked Live Sections
+
+### Per-source quality
+
+```sql
+SELECT
+  source,
+  COUNT(*) AS total,
+  COUNT(CASE WHEN ticker IS NOT NULL THEN 1 END) AS with_ticker,
+  ROUND(AVG(CASE WHEN length(summary) > 0 THEN length(summary) END)) AS avg_body_len
+FROM events
+GROUP BY source
+ORDER BY total DESC;
+```
+
+### Enrichment persistence
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE metadata ? 'llm_enrichment') AS with_enrichment,
+  COUNT(*) FILTER (WHERE metadata ? 'llm_judge') AS with_judge,
+  COUNT(*) FILTER (WHERE metadata ? 'enrichment_failed') AS enrich_failed
+FROM events;
+```
+
+### High/Critical manual review sample
+
+```sql
+SELECT
+  id, source, severity, ticker, title, left(summary, 300) AS summary, metadata
+FROM events
+WHERE severity IN ('HIGH', 'CRITICAL')
+ORDER BY created_at DESC
+LIMIT 30;
+```
+
+### Medium manual review sample
+
+```sql
+SELECT
+  id, source, severity, ticker, title, left(summary, 300) AS summary, metadata
+FROM events
+WHERE severity = 'MEDIUM'
+ORDER BY created_at DESC
+LIMIT 30;
+```
+
+### Outcome health
+
+```sql
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE change_t5 IS NOT NULL) AS with_t5,
+  COUNT(*) FILTER (WHERE change_t20 IS NOT NULL) AS with_t20,
+  COUNT(*) FILTER (WHERE change_1d IS NOT NULL) AS with_1d,
+  COUNT(*) FILTER (WHERE event_price IS NULL) AS missing_event_price
+FROM event_outcomes;
+```
+
+### Outlier audit
+
+```sql
+SELECT
+  eo.event_id,
+  eo.ticker,
+  eo.event_price,
+  eo.change_t5,
+  eo.change_t20,
+  eo.change_1d,
+  e.source,
+  e.severity,
+  e.title
+FROM event_outcomes eo
+JOIN events e ON e.id = eo.event_id
+WHERE ABS(COALESCE(change_t5, 0)) > 100
+   OR ABS(COALESCE(change_t20, 0)) > 100
+   OR ABS(COALESCE(change_1d, 0)) > 100
+ORDER BY e.created_at DESC;
+```
 
 ## Final Assessment
 
-The current live system has **good raw ingestion breadth** but **weak conversion from raw events into trustworthy tradable intelligence**.
+The system already has the pieces needed for much better data quality, but they are not aligned:
 
-The biggest gap is not "the model is bad." The biggest gap is:
+- scanner outputs are inconsistent
+- LLM classification is not actually in the default live path
+- enrichment is too late and too loosely stored
+- outcome analytics trust any ticker and any percent move too easily
 
-- the live classifier prompt is not actually in the production ingest path,
-- ticker quality is poor on the most important sources,
-- outcome tracking is built on daily data for intraday horizons,
-- and enrichment often burns tokens on boilerplate.
-
-If only three things are fixed first, they should be:
-
-1. Real intraday outcome pricing
-2. Live LLM classifier wiring plus prompt/context fixes
-3. Ticker-quality repair for `sec-edgar` and `breaking-news`
-
-Those three changes would improve both **data quality** and **measurable AI quality** more than any other work in the current backend.
+This is fixable without major architecture changes. The next win is not "add more AI." It is "make the current signals structured, attributable, and measurable from scanner ingress all the way to outcome stats."
