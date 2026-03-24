@@ -59,6 +59,18 @@ const TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS = [
     tags: ['geopolitics', 'peace'],
   },
   {
+    id: 'trump-geopolitical-ceasefire',
+    name: 'Trump — Ceasefire Keywords',
+    keyword: 'ceasefire',
+    tags: ['geopolitics', 'ceasefire'],
+  },
+  {
+    id: 'trump-geopolitical-complete-total',
+    name: 'Trump — Complete And Total Keywords',
+    keyword: 'complete and total',
+    tags: ['geopolitics', 'ceasefire'],
+  },
+  {
     id: 'trump-trade-deal',
     name: 'Trump — Trade Deal Keywords',
     keyword: 'trade deal',

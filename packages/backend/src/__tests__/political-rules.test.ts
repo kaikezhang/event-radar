@@ -111,6 +111,19 @@ describe('Political Classification Rules', () => {
       expect(result.matchedRules).toContain('trump-policy-executive-order');
     });
 
+    it('should tag ceasefire posts for LLM classification', () => {
+      const event = makePoliticalEvent({
+        title: 'A COMPLETE AND TOTAL CEASEFIRE has been agreed to.',
+      });
+      const result = engine.classify(event);
+
+      expect(result.severity).toBe('MEDIUM');
+      expect(result.tags).toContain('political-market-impact');
+      expect(result.tags).toContain('force-llm-classification');
+      expect(result.tags).toContain('ceasefire');
+      expect(result.matchedRules).toContain('trump-geopolitical-ceasefire');
+    });
+
     it('should keep tariff posts at CRITICAL and still force LLM validation', () => {
       const event = makePoliticalEvent({
         title: 'Tariff and China policy updates are coming today.',

@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { HelpCircle, Settings as SettingsIcon, Volume2, Zap } from 'lucide-react';
-import { Outlet, RouterProvider, ScrollRestoration, createBrowserRouter, Link } from 'react-router-dom';
+import {
+  Outlet,
+  RouterProvider,
+  ScrollRestoration,
+  createBrowserRouter,
+  Link,
+  type RouteObject,
+} from 'react-router-dom';
 import { cn } from './lib/utils.js';
 import { BottomNav } from './components/BottomNav.js';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
@@ -24,6 +31,7 @@ import { Watchlist } from './pages/Watchlist.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { Footer } from './components/Footer.js';
 import { About } from './pages/About.js';
+import { Landing } from './pages/Landing.js';
 import { NotFound } from './pages/NotFound.js';
 import { Privacy } from './pages/Privacy.js';
 import { Terms } from './pages/Terms.js';
@@ -178,7 +186,7 @@ export function AppShell() {
   );
 }
 
-const router = createBrowserRouter([
+export const appRoutes: RouteObject[] = [
   {
     path: '/',
     element: <AppShell />,
@@ -196,12 +204,15 @@ const router = createBrowserRouter([
       { path: 'login', element: <Login /> },
       { path: 'auth/verify', element: <AuthVerify /> },
       { path: 'about', element: <About /> },
+      { path: 'pricing', element: <Landing /> },
       { path: 'privacy', element: <Privacy /> },
       { path: 'terms', element: <Terms /> },
       { path: '*', element: <NotFound /> },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(appRoutes);
 
 export function App() {
   return <RouterProvider router={router} />;
