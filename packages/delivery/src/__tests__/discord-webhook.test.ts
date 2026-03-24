@@ -124,6 +124,53 @@ describe('DiscordWebhook', () => {
     expect(linkField.value).toContain('https://www.sec.gov/filing/123');
   });
 
+  it('includes ticker, severity, and source fields in the embed', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(makeAlert());
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const tickerField = embed.fields?.find((field: { name: string }) => field.name === 'Ticker');
+    const severityField = embed.fields?.find((field: { name: string }) => field.name === 'Severity');
+    const sourceField = embed.fields?.find((field: { name: string }) => field.name === 'Source');
+
+    expect(tickerField?.value).toBe('AAPL');
+    expect(severityField?.value).toBe('HIGH');
+    expect(sourceField?.value).toContain('SEC Filing');
+  });
+
+  it('includes a one-line analysis field when enrichment summary is available', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(makeAlert({
+      enrichment: {
+        summary: 'Leadership change raises execution risk into the next product cycle.',
+        impact: 'Impact text',
+        action: '🔴 High-Quality Setup',
+        tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
+      },
+    }));
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const analysisField = embed.fields?.find((field: { name: string }) => field.name === 'Analysis');
+
+    expect(analysisField?.value).toContain('Leadership change raises execution risk');
+  });
+
+  it('includes an event detail link field and prefers storedEventId when present', async () => {
+    process.env.APP_URL = 'https://eventradar.app';
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(makeAlert({
+      storedEventId: 'db-event-123',
+    }));
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const detailField = embed.fields?.find((field: { name: string }) => field.name === 'Event Detail');
+
+    expect(detailField?.value).toContain('https://eventradar.app/event/db-event-123');
+  });
+
   it('renders a confirmation field when multiple sources confirm the event', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
@@ -623,7 +670,7 @@ describe('DiscordWebhook', () => {
     expect(disclaimerField).toBeUndefined();
   });
 
-  it('does not include Severity field', async () => {
+  it('does not duplicate severity text in the title when a structured severity field is present', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(makeAlert());
@@ -632,7 +679,8 @@ describe('DiscordWebhook', () => {
     const severityField = embed.fields?.find(
       (field: { name: string }) => field.name === 'Severity',
     );
-    expect(severityField).toBeUndefined();
+    expect(severityField?.value).toBe('HIGH');
+    expect(embed.title).not.toContain('HIGH');
   });
 
   it('does not include raw event body as description', async () => {

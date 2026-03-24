@@ -151,6 +151,32 @@ export class DiscordWebhook implements DeliveryService {
 function buildFields(alert: AlertEvent): Array<{ name: string; value: string; inline: boolean }> {
   const fields: Array<{ name: string; value: string; inline: boolean }> = [];
   const enrichment = alert.enrichment;
+  const ticker = extractPrimaryTicker(alert);
+  const sourceBadge = SOURCE_BADGE[alert.event.source] ?? `📡 ${alert.event.source}`;
+  const eventDetailUrl = buildEventDetailUrl(alert);
+
+  if (ticker) {
+    fields.push({ name: 'Ticker', value: ticker, inline: true });
+  }
+
+  fields.push({ name: 'Severity', value: alert.severity, inline: true });
+  fields.push({ name: 'Source', value: sourceBadge, inline: true });
+
+  if (enrichment?.summary) {
+    fields.push({
+      name: 'Analysis',
+      value: truncate(enrichment.summary, 256),
+      inline: false,
+    });
+  }
+
+  if (eventDetailUrl) {
+    fields.push({
+      name: 'Event Detail',
+      value: `[Open in Event Radar](${eventDetailUrl})`,
+      inline: false,
+    });
+  }
 
   // Multiple tickers (when more than one)
   if (enrichment?.tickers && enrichment.tickers.length > 1) {
@@ -181,6 +207,40 @@ function buildFields(alert: AlertEvent): Array<{ name: string; value: string; in
   }
 
   return fields;
+}
+
+function extractPrimaryTicker(alert: AlertEvent): string | null {
+  if (alert.ticker) {
+    return alert.ticker;
+  }
+
+  const metadataTicker = alert.event.metadata?.['ticker'];
+  if (typeof metadataTicker === 'string' && metadataTicker.trim().length > 0) {
+    return metadataTicker.trim().toUpperCase();
+  }
+
+  const metadataTickers = alert.event.metadata?.['tickers'];
+  if (Array.isArray(metadataTickers)) {
+    const firstTicker = metadataTickers.find((value) => typeof value === 'string' && value.trim().length > 0);
+    if (typeof firstTicker === 'string') {
+      return firstTicker.trim().toUpperCase();
+    }
+  }
+
+  const enrichmentTicker = alert.enrichment?.tickers[0]?.symbol;
+  return typeof enrichmentTicker === 'string' && enrichmentTicker.trim().length > 0
+    ? enrichmentTicker.trim().toUpperCase()
+    : null;
+}
+
+function buildEventDetailUrl(alert: AlertEvent): string | null {
+  const eventId = alert.storedEventId ?? alert.event.id;
+  if (!eventId) {
+    return null;
+  }
+
+  const appUrl = (process.env.APP_URL ?? 'http://localhost:5173').replace(/\/$/, '');
+  return `${appUrl}/event/${eventId}`;
 }
 
 // ── Title ─────────────────────────────────────────────────────
