@@ -31,9 +31,10 @@ describe('Calendar page', () => {
     dateNowSpy.mockRestore();
   });
 
-  it('renders grouped calendar events with limited earnings coverage copy', async () => {
+  it('renders grouped calendar events with confirmed coverage copy', async () => {
     getUpcomingCalendarMock.mockResolvedValue({
-      earningsDataLimited: true,
+      earningsDataLimited: false,
+      coverageNote: 'Showing confirmed scheduled events',
       dates: [
         {
           date: '2026-03-24',
@@ -63,7 +64,7 @@ describe('Calendar page', () => {
     renderWithRouter([{ path: '/calendar', element: <Calendar /> }], ['/calendar']);
 
     expect(await screen.findByRole('heading', { name: /event calendar/i })).toBeInTheDocument();
-    expect(await screen.findByText(/earnings data is currently limited to sec filings/i)).toBeInTheDocument();
+    expect(await screen.findByText(/showing confirmed scheduled events/i)).toBeInTheDocument();
     expect(screen.getByText('Tuesday, March 24')).toBeInTheDocument();
     expect(screen.getByText(/NVDA Earnings After Hours/i)).toBeInTheDocument();
     expect(screen.getByText(/past events like this moved ±8.2%/i)).toBeInTheDocument();

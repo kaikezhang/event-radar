@@ -142,6 +142,33 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
 function escapeLikePattern(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
 }
@@ -193,9 +220,40 @@ function extractSimilarTicker(record: Record<string, unknown>): string | null {
   return metaTicker;
 }
 
+function buildTruthSocialSourceUrl(metadata: Record<string, unknown>): string | null {
+  const postId = metadata['postId'];
+  if (typeof postId !== 'string' || postId.length === 0) {
+    return null;
+  }
+
+  return `https://truthsocial.com/@realDonaldTrump/posts/${postId}`;
+}
+
+function normalizeSourceUrls(
+  source: unknown,
+  metadata: Record<string, unknown>,
+  sourceUrls: unknown,
+): string[] | null {
+  const urls = uniqueStrings([
+    ...asStringArray(sourceUrls),
+    typeof metadata['url'] === 'string' ? metadata['url'] : null,
+    typeof source === 'string' && source === 'truth-social'
+      ? buildTruthSocialSourceUrl(metadata)
+      : null,
+  ]);
+
+  return urls.length > 0 ? urls : null;
+}
+
 function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, 'rawPayload'> {
-  const safeEvent = { ...event };
+  const safeEvent = { ...event } as T & {
+    classificationConfidence?: number | null;
+    sourceUrls?: string[] | null;
+  };
   delete safeEvent.rawPayload;
+  const metadata = asRecord(safeEvent.metadata);
+  safeEvent.classificationConfidence = toNumberOrNull(safeEvent.classificationConfidence);
+  safeEvent.sourceUrls = normalizeSourceUrls(safeEvent.source, metadata, safeEvent.sourceUrls);
   return safeEvent;
 }
 
