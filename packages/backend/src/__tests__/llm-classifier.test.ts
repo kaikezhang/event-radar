@@ -148,7 +148,12 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('This is a post from a political figure.');
     expect(prompt).toContain('CRITICAL: Announces specific policy action');
     expect(prompt).toContain('LOW: Political commentary, insults, campaign rhetoric, slogans with no specific market impact.');
+    expect(prompt).toContain('TRUTH SOCIAL / PRESIDENTIAL POST EXAMPLES:');
     expect(prompt).toContain('Example: "I have instructed the Department of War to postpone military strikes" = CRITICAL');
+    expect(prompt).toContain('"WE WILL PUT TARIFFS OF 25% ON ALL GOODS FROM CHINA"');
+    expect(prompt).toContain('"THE FED SHOULD LOWER INTEREST RATES"');
+    expect(prompt).toContain('"MAKE AMERICA GREAT AGAIN!!!"');
+    expect(prompt).toContain('"THE DEMOCRATS ARE DESTROYING THIS COUNTRY"');
   });
 
   it('should add political post severity guidance for X posts', () => {
@@ -162,6 +167,20 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('POLITICAL POST CLASSIFICATION:');
     expect(prompt).toContain('HIGH: Announces intent or threat of policy action that could affect markets.');
     expect(prompt).toContain('Example: "PEACE THROUGH STRENGTH!!!" = LOW');
+  });
+
+  it('should distinguish concrete presidential actions from slogans in the Truth Social examples', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'COMPLETE AND TOTAL CEASEFIRE',
+      body: 'I am pleased to report a complete and total ceasefire.',
+    }));
+
+    expect(prompt).toContain('"I HAVE INSTRUCTED THE DEPARTMENT OF WAR TO POSTPONE MILITARY STRIKES" → CRITICAL');
+    expect(prompt).toContain('"WE WILL PUT TARIFFS OF 25% ON ALL GOODS FROM CHINA" → CRITICAL');
+    expect(prompt).toContain('"MAKE AMERICA GREAT AGAIN!!!" → LOW');
+    expect(prompt).toContain('"PEACE THROUGH STRENGTH!!!" → LOW');
   });
 
   it('should not add political post guidance for non-political sources', () => {

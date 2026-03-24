@@ -51,7 +51,15 @@ Example: "The Fed should lower rates" = MEDIUM
 
 LOW: Political commentary, insults, campaign rhetoric, slogans with no specific market impact.
 Example: "PEACE THROUGH STRENGTH!!!" = LOW
-Example: "The Democrats are destroying this country" = LOW`;
+Example: "The Democrats are destroying this country" = LOW
+
+TRUTH SOCIAL / PRESIDENTIAL POST EXAMPLES:
+- "I HAVE INSTRUCTED THE DEPARTMENT OF WAR TO POSTPONE MILITARY STRIKES" → CRITICAL (concrete military action)
+- "WE WILL PUT TARIFFS OF 25% ON ALL GOODS FROM CHINA" → CRITICAL (specific trade action with numbers)
+- "THE FED SHOULD LOWER INTEREST RATES" → MEDIUM (opinion, not action)
+- "MAKE AMERICA GREAT AGAIN!!!" → LOW (slogan, no market impact)
+- "PEACE THROUGH STRENGTH!!!" → LOW (slogan, no specific action)
+- "THE DEMOCRATS ARE DESTROYING THIS COUNTRY" → LOW (political commentary)`;
 
 function isPoliticalPostSource(source: RawEvent['source']): boolean {
   return source === 'truth-social' || source === 'x';

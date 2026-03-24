@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DailyBriefing } from './DailyBriefing.js';
 import { renderWithRouter } from '../test/render.js';
+import { getTodayDateKey } from '../lib/daily-briefing.js';
 
 const DISMISSED_KEY = 'lastBriefingDismissed';
 
@@ -98,11 +99,11 @@ describe('DailyBriefing', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /daily briefing/i })).not.toBeInTheDocument();
     });
-    expect(localStorage.getItem(DISMISSED_KEY)).toBe('2026-03-23');
+    expect(localStorage.getItem(DISMISSED_KEY)).toBe(getTodayDateKey());
   });
 
   it('stays hidden when already dismissed today', () => {
-    localStorage.setItem(DISMISSED_KEY, '2026-03-23');
+    localStorage.setItem(DISMISSED_KEY, getTodayDateKey());
 
     renderWithRouter([{ path: '/', element: <DailyBriefing /> }], ['/']);
 
