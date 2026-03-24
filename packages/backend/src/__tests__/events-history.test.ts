@@ -158,8 +158,9 @@ describe('events history routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json()).toMatchObject({
+        expect(response.json()).toEqual({
           error: 'Unauthorized',
+          message: 'Authentication required',
         });
       } finally {
         await safeCloseServer(authCtx.server);

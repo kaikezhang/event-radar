@@ -5,6 +5,7 @@ import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
 import { resolveRequestUserId } from './user-context.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
+import { requireApiKey } from './auth-middleware.js';
 
 // Query params schema for GET /api/events
 const ListEventsQuerySchema = {
@@ -192,10 +193,17 @@ function extractSimilarTicker(record: Record<string, unknown>): string | null {
   return metaTicker;
 }
 
+function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, 'rawPayload'> {
+  const safeEvent = { ...event };
+  delete safeEvent.rawPayload;
+  return safeEvent;
+}
+
 export function registerEventRoutes(
   server: FastifyInstance,
   db: Database,
   options?: {
+    apiKey?: string;
     marketDataCache?: {
       getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
     };
@@ -210,6 +218,8 @@ export function registerEventRoutes(
     schema: {
       querystring: ListEventsQuerySchema,
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request, reply) => {
     const query = request.query as ListEventsQuery;
     const trimmedQ = query.q?.trim();
@@ -369,7 +379,7 @@ export function registerEventRoutes(
       db.select({ total: count() }).from(events).where(where),
     ]);
 
-    return { data, total };
+    return { data: data.map((event) => stripRawPayload(event)), total };
   });
 
   /**
@@ -387,6 +397,8 @@ export function registerEventRoutes(
         required: ['q'],
       },
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request) => {
     const { q, limit: rawLimit } = request.query as { q: string; limit?: number };
     const searchLimit = Math.min(rawLimit || 20, 100);
@@ -433,7 +445,7 @@ export function registerEventRoutes(
         .orderBy(sql`${events.receivedAt} DESC`)
         .limit(searchLimit);
 
-      return { data, total: data.length };
+      return { data: data.map((event) => stripRawPayload(event)), total: data.length };
     }
 
     const data = await db
@@ -445,7 +457,6 @@ export function registerEventRoutes(
         eventType: events.eventType,
         title: events.title,
         summary: events.summary,
-        rawPayload: events.rawPayload,
         metadata: events.metadata,
         severity: events.severity,
         receivedAt: events.receivedAt,
@@ -462,7 +473,7 @@ export function registerEventRoutes(
       .orderBy(sql`ts_rank(${searchVector}, ${tsQuery}) DESC`, sql`${events.receivedAt} DESC`)
       .limit(searchLimit);
 
-    return { data, total: data.length };
+    return { data: data.map((event) => stripRawPayload(event)), total: data.length };
   });
 
   /**
@@ -488,6 +499,8 @@ export function registerEventRoutes(
     schema: {
       params: EventIdParamsSchema,
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request, reply) => {
     const { id } = request.params as EventParams;
 
@@ -563,8 +576,10 @@ export function registerEventRoutes(
     ]);
     const confirmationCount = Math.max(event.confirmationCount ?? 1, confirmedSources.length);
 
+    const safeEvent = stripRawPayload(event);
+
     return {
-      ...event,
+      ...safeEvent,
       confirmationCount,
       confirmedSources,
       audit: auditRecord
@@ -625,6 +640,8 @@ export function registerEventRoutes(
       params: EventIdParamsSchema,
       querystring: SimilarEventsQuerySchema,
     },
+    preHandler: async (request, reply) =>
+      requireApiKey(request, reply, options?.apiKey),
   }, async (request, reply) => {
     const { id } = request.params as EventParams;
     const query = request.query as {

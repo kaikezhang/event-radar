@@ -199,8 +199,9 @@ describe('event impact route', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json()).toMatchObject({
+        expect(response.json()).toEqual({
           error: 'Unauthorized',
+          message: 'Authentication required',
         });
       } finally {
         await safeCloseServer(authCtx.server);
@@ -228,7 +229,7 @@ describe('event impact route', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        expect(response.json()).toMatchObject({
+        expect(response.json()).toEqual({
           error: 'Unauthorized',
           message: 'Invalid API key',
         });

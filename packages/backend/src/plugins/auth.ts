@@ -27,6 +27,28 @@ interface AuthPluginOptions {
   publicRoutes?: string[];
 }
 
+function matchesPublicRoute(pathname: string, publicRoutes: Set<string>): boolean {
+  if (publicRoutes.has(pathname)) {
+    return true;
+  }
+
+  const pathnameParts = pathname.split('/').filter(Boolean);
+
+  for (const route of publicRoutes) {
+    const routeParts = route.split('/').filter(Boolean);
+    if (routeParts.length !== pathnameParts.length) {
+      continue;
+    }
+
+    const matches = routeParts.every((part, index) => part.startsWith(':') || part === pathnameParts[index]);
+    if (matches) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function registerAuthPlugin(
   server: FastifyInstance,
   options: AuthPluginOptions,
@@ -80,7 +102,7 @@ export async function registerAuthPlugin(
       return;
     }
 
-    if (publicRoutes.has(pathname)) {
+    if (matchesPublicRoute(pathname, publicRoutes)) {
       // Still set userId so route-level requireApiKey preHandlers pass
       if (!authRequired) {
         request.userId = 'default';
