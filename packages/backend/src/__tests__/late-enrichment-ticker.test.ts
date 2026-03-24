@@ -224,7 +224,7 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     );
   });
 
-  it('stores market context instead of assigning an ETF ticker when high-priority tech news has no direct ticker', async () => {
+  it('leaves metadata ticker fields empty when high-priority tech news has no direct ticker', async () => {
     const event = makeEvent({
       title: 'Semiconductor and AI leaders slump on export-control fears',
       body: 'Large-cap tech names are leading the decline.',
@@ -250,16 +250,16 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     deps.eventBus.publish(event);
     await new Promise((r) => setTimeout(r, 150));
 
-    expect(event.metadata).toMatchObject({
-      marketContext: 'QQQ',
-    });
+    expect(event.metadata).not.toHaveProperty('marketContext');
+    expect(event.metadata).not.toHaveProperty('sectorProxy');
     expect(event.metadata).not.toHaveProperty('ticker');
     expect(event.metadata).not.toHaveProperty('ticker_inferred');
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledWith(
       'evt-late-001',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          marketContext: 'QQQ',
+        metadata: expect.not.objectContaining({
+          marketContext: expect.anything(),
+          sectorProxy: expect.anything(),
         }),
       }),
     );
@@ -305,10 +305,8 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
 
     // Only the initial call (before enrichment) should happen — NOT the late-enrichment call
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledTimes(1);
-    // The inferred market context stays in memory when the late concrete ticker loses the race.
-    expect(event.metadata).toMatchObject({
-      marketContext: 'QQQ',
-    });
+    expect(event.metadata).not.toHaveProperty('marketContext');
+    expect(event.metadata).not.toHaveProperty('sectorProxy');
     expect(event.metadata).not.toHaveProperty('ticker');
     expect(event.metadata).not.toHaveProperty('ticker_inference_strategy');
   });

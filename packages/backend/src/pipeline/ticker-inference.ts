@@ -7,24 +7,14 @@ import {
 
 const HIGH_PRIORITY_SEVERITIES = new Set<Severity>(['HIGH', 'CRITICAL']);
 
-interface SectorFallback {
-  ticker: string;
-  keywords: string[];
-}
-
-const SECTOR_FALLBACKS: SectorFallback[] = [
-  { ticker: 'QQQ', keywords: ['ai', 'chip', 'chips', 'cloud', 'megacap', 'nasdaq', 'semiconductor', 'software', 'tech'] },
-  { ticker: 'XLF', keywords: ['bank', 'banks', 'broker', 'credit', 'financial', 'regional bank'] },
-  { ticker: 'TLT', keywords: ['bond', 'bonds', 'rates', 'treasury', 'treasuries', 'yield', 'yields'] },
-  { ticker: 'XLE', keywords: ['crude', 'energy', 'gas', 'oil', 'opec'] },
-  { ticker: 'XLV', keywords: ['biotech', 'drug', 'fda', 'healthcare', 'medical', 'pharma'] },
-  { ticker: 'XLI', keywords: ['aerospace', 'airline', 'defense', 'industrial', 'transport'] },
-  { ticker: 'IWM', keywords: ['microcap', 'russell 2000', 'small cap', 'small-cap'] },
-];
-
 export interface InferredTickerResult {
   ticker: string;
   tickerInferred: true;
+  strategy: 'regex' | 'company-map';
+}
+
+interface TickerMatchResult {
+  ticker: string;
   strategy: 'regex' | 'company-map';
 }
 
@@ -46,22 +36,55 @@ function normalizeNakedTickerCandidate(value: string): string | null {
   return isValidNakedTickerCandidate(normalized) ? normalized : null;
 }
 
-export function extractTickerCandidateFromText(text: string): string | null {
-  for (const match of text.matchAll(/\$([A-Z]{1,5})\b/g)) {
-    const ticker = normalizeExplicitTickerCandidate(match[1] ?? '');
+function resolveMappedTicker(value: string): string | null {
+  const mappedTicker = COMPANY_TICKER_MAP[value.trim().toLowerCase()];
+  return mappedTicker ? normalizeCandidateSymbol(mappedTicker) : null;
+}
+
+function extractTickerMatchFromText(text: string): TickerMatchResult | null {
+  for (const match of text.matchAll(/\$([A-Z]{1,10})\b/g)) {
+    const rawValue = match[1] ?? '';
+    const mappedTicker = resolveMappedTicker(rawValue);
+    if (mappedTicker) {
+      return {
+        ticker: mappedTicker,
+        strategy: 'company-map',
+      };
+    }
+
+    const ticker = normalizeExplicitTickerCandidate(rawValue);
     if (ticker) {
-      return ticker;
+      return {
+        ticker,
+        strategy: 'regex',
+      };
     }
   }
 
-  for (const match of text.matchAll(/\b([A-Z]{2,5})\b/g)) {
-    const ticker = normalizeNakedTickerCandidate(match[1] ?? '');
+  for (const match of text.matchAll(/\b([A-Z]{2,10})\b/g)) {
+    const rawValue = match[1] ?? '';
+    const mappedTicker = resolveMappedTicker(rawValue);
+    if (mappedTicker) {
+      return {
+        ticker: mappedTicker,
+        strategy: 'company-map',
+      };
+    }
+
+    const ticker = normalizeNakedTickerCandidate(rawValue);
     if (ticker) {
-      return ticker;
+      return {
+        ticker,
+        strategy: 'regex',
+      };
     }
   }
 
   return null;
+}
+
+export function extractTickerCandidateFromText(text: string): string | null {
+  return extractTickerMatchFromText(text)?.ticker ?? null;
 }
 
 function isCompanyMatchBoundary(text: string, start: number, length: number): boolean {
@@ -116,26 +139,14 @@ export function extractCompanyTickerFromText(text: string): string | null {
   return firstMatch?.ticker ?? null;
 }
 
-export function inferMarketContextEtf(event: RawEvent): string {
-  const haystack = `${event.title} ${event.body} ${event.source} ${event.type}`.toLowerCase();
-
-  for (const fallback of SECTOR_FALLBACKS) {
-    if (fallback.keywords.some((keyword) => haystack.includes(keyword))) {
-      return fallback.ticker;
-    }
-  }
-
-  return 'SPY';
-}
-
 export function inferHighPriorityTicker(event: RawEvent): InferredTickerResult | null {
   const combinedText = `${event.title} ${event.body}`;
-  const tickerFromText = extractTickerCandidateFromText(combinedText);
+  const tickerFromText = extractTickerMatchFromText(combinedText);
   if (tickerFromText) {
     return {
-      ticker: tickerFromText,
+      ticker: tickerFromText.ticker,
       tickerInferred: true,
-      strategy: 'regex',
+      strategy: tickerFromText.strategy,
     };
   }
 

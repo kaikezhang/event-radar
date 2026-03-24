@@ -8,6 +8,7 @@ import {
   eventOutcomes,
 } from '../db/schema.js';
 import { requireApiKey } from './auth-middleware.js';
+import { clampOutcomePercent } from '../utils/outcome-cap.js';
 
 const ImpactQuerySchema = {
   type: 'object',
@@ -83,9 +84,9 @@ function toImpactEvent(row: {
     severity: (row.severity as Severity | null) ?? null,
     direction: row.direction,
     priceAtEvent: toNumber(row.priceAtEvent),
-    priceChange1h: toNumber(row.priceChange1h) ?? 0,
-    priceChange1d: toNumber(row.priceChange1d) ?? 0,
-    priceChange1w: toNumber(row.priceChange1w) ?? 0,
+    priceChange1h: clampOutcomePercent(toNumber(row.priceChange1h)) ?? 0,
+    priceChange1d: clampOutcomePercent(toNumber(row.priceChange1d)) ?? 0,
+    priceChange1w: clampOutcomePercent(toNumber(row.priceChange1w)) ?? 0,
   };
 }
 

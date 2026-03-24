@@ -481,6 +481,56 @@ describe('Classification accuracy API and pipeline integration', () => {
     expect(evaluation).not.toBeNull();
   });
 
+  it('stores capped outcome percentages when the tracker sees an extreme move', async () => {
+    const eventId = await storeEvent(db, {
+      event: makeRawEvent({
+        source: 'stocktwits',
+        metadata: {
+          ticker: 'PEP',
+          tickers: ['PEP'],
+        },
+      }),
+      severity: 'HIGH',
+    });
+    const service = new ClassificationAccuracyService(db);
+    await service.recordPrediction(eventId, makePrediction());
+
+    const priceService = new PriceService();
+    vi.spyOn(priceService, 'getPriceAt')
+      .mockResolvedValueOnce({ ok: true, value: 1 })
+      .mockResolvedValueOnce({ ok: true, value: 5.488 })
+      .mockResolvedValueOnce({ ok: true, value: 5.488 })
+      .mockResolvedValueOnce({ ok: true, value: 5.488 })
+      .mockResolvedValueOnce({ ok: true, value: 5.488 });
+
+    const tracker = new OutcomeTracker(db, priceService, service);
+
+    await tracker.scheduleOutcomeTrackingForEvent(
+      eventId,
+      makeRawEvent({
+        source: 'stocktwits',
+        timestamp: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+        metadata: {
+          ticker: 'PEP',
+          tickers: ['PEP'],
+        },
+      }),
+    );
+    await tracker.processOutcomes();
+
+    const rows = await db.execute(sql`
+      SELECT price_change_1h, price_change_1d, price_change_1w
+      FROM classification_outcomes
+      WHERE event_id = ${eventId}
+    `);
+
+    expect(rows.rows[0]).toMatchObject({
+      price_change_1h: '200.0000',
+      price_change_1d: '200.0000',
+      price_change_1w: '200.0000',
+    });
+  });
+
   it('requires API key for accuracy routes', async () => {
     const response = await apiServer.inject({
       method: 'GET',

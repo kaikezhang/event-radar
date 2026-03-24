@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
@@ -80,6 +80,33 @@ describe('Event Store', () => {
     );
     expect((rows[0] as Record<string, unknown>).severity).toBeNull();
   });
+
+  it('should store top-level classification fields when provided', async () => {
+    const event = makeEvent({
+      metadata: {
+        ticker: 'AAPL',
+        llm_judge: {
+          direction: 'BULLISH',
+          confidence: 0.88,
+        },
+      },
+    });
+
+    const id = await storeEvent(sharedDb, {
+      event,
+      severity: 'HIGH',
+      classification: 'BULLISH',
+      classificationConfidence: 0.88,
+    });
+
+    const { rows } = await sharedClient.query(
+      'SELECT classification, classification_confidence FROM events WHERE id = $1',
+      [id],
+    );
+
+    expect((rows[0] as Record<string, unknown>).classification).toBe('BULLISH');
+    expect(Number((rows[0] as Record<string, unknown>).classification_confidence)).toBeCloseTo(0.88, 5);
+  });
 });
 
 describe('GET /api/events', () => {
@@ -91,6 +118,8 @@ describe('GET /api/events', () => {
     // Seed test data
     const sources = ['sec-edgar', 'sec-edgar', 'fed', 'fed', 'bls'];
     const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'MEDIUM'];
+    const classifications = ['BULLISH', 'BEARISH', 'NEUTRAL', 'BULLISH', 'BEARISH'];
+    const confidences = ['0.91', '0.82', '0.55', '0.77', '0.61'];
 
     for (let i = 0; i < sources.length; i++) {
       const rawEvent = makeEvent({
@@ -98,10 +127,17 @@ describe('GET /api/events', () => {
         title: `Event ${i + 1}`,
       });
 
-      await storeEvent(sharedDb, {
+      const eventId = await storeEvent(sharedDb, {
         event: rawEvent,
         severity: severities[i] as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
       });
+
+      await sharedDb.execute(sql`
+        UPDATE events
+        SET classification = ${classifications[i]},
+            classification_confidence = ${confidences[i]}
+        WHERE id = ${eventId}
+      `);
 
       await sharedDb.execute(sql`
         INSERT INTO pipeline_audit (
@@ -202,6 +238,41 @@ describe('GET /api/events', () => {
     expect(body.total).toBe(2);
   });
 
+  it('should filter by classification', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?classification=BULLISH',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(2);
+    expect(body.total).toBe(2);
+    expect(body.data.every((event: { classification: string }) => event.classification === 'BULLISH')).toBe(true);
+  });
+
+  it('should combine classification and severity filters', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?classification=BULLISH&severity=CRITICAL',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.total).toBe(1);
+    expect(body.data[0]).toMatchObject({
+      classification: 'BULLISH',
+      severity: 'CRITICAL',
+    });
+  });
+
   it('should support limit and offset', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
@@ -266,6 +337,36 @@ describe('GET /api/events', () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it('should return 400 for invalid classification enum', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?classification=CRITICAL',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'Invalid classification: CRITICAL' });
+  });
+
+  it('should return top-level classification fields in API responses', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?classification=BEARISH',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data[0]).toEqual(expect.objectContaining({
+      classification: 'BEARISH',
+      classificationConfidence: expect.any(String),
+    }));
   });
 });
 

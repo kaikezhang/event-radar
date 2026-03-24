@@ -190,4 +190,28 @@ describe('political LLM severity in event pipeline', () => {
       severity: 'CRITICAL',
     }));
   });
+
+  it('persists top-level classification direction and confidence from LLM output', async () => {
+    const ruleResult = makeRuleResult({
+      severity: 'CRITICAL',
+      matchedRules: ['trump-trade-policy'],
+    });
+    const { deps, insertedRows } = makeDeps(ruleResult, 'CRITICAL');
+
+    wireEventPipeline(deps);
+    await deps.eventBus.publish(makePoliticalEvent({
+      title: 'Trade restrictions expand overnight',
+      body: 'Markets brace for a concrete policy shock.',
+    }));
+
+    await vi.waitFor(() => {
+      expect(insertedRows).toHaveLength(1);
+    });
+
+    expect(insertedRows[0]).toMatchObject({
+      severity: 'CRITICAL',
+      classification: 'NEUTRAL',
+      classificationConfidence: '0.93',
+    });
+  });
 });

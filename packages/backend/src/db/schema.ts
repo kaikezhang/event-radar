@@ -58,6 +58,8 @@ export const events = pgTable('events', {
   source: varchar('source', { length: 100 }).notNull(),
   sourceEventId: varchar('source_event_id', { length: 255 }),
   ticker: varchar('ticker', { length: 10 }),
+  classification: varchar('classification', { length: 20 }),
+  classificationConfidence: decimal('classification_confidence', { precision: 5, scale: 4 }),
   eventType: varchar('event_type', { length: 50 }),
   title: text('title').notNull(),
   summary: text('summary'),
@@ -79,6 +81,7 @@ export const events = pgTable('events', {
   confirmationCount: integer('confirmation_count').default(1),
 }, (table) => [
   index('idx_events_ticker_type_time').on(table.ticker, table.eventType, table.createdAt),
+  index('idx_events_classification').on(table.classification),
 ]);
 
 export const priceCache = pgTable(

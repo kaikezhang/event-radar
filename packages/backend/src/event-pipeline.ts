@@ -27,7 +27,7 @@ import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
 import { buildPredictionPayload } from './prediction-helpers.js';
 import { resolvePoliticalClassificationResult } from './pipeline/political-llm-policy.js';
-import { inferHighPriorityTicker, inferMarketContextEtf, shouldInferTicker } from './pipeline/ticker-inference.js';
+import { inferHighPriorityTicker, shouldInferTicker } from './pipeline/ticker-inference.js';
 import { categorizeFilterReason, logTitle, PRIMARY_SOURCES_SET } from './pipeline-helpers.js';
 import {
   eventsProcessedTotal,
@@ -213,16 +213,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           ticker_inferred: true,
           ticker_inference_strategy: inferredTicker.strategy,
         };
-      } else {
-        const contextTicker = inferMarketContextEtf(event);
-        const contextField = contextTicker === 'SPY' || contextTicker === 'QQQ' || contextTicker === 'TLT' || contextTicker === 'GLD' || contextTicker === 'USO' || contextTicker === 'DIA' || contextTicker === 'IWM' || contextTicker === 'VIX'
-          ? 'marketContext'
-          : 'sectorProxy';
-
-        event.metadata = {
-          ...(event.metadata ?? {}),
-          [contextField]: contextTicker,
-        };
       }
     }
 
@@ -252,6 +242,8 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       eventId = await storeEvent(db, {
         event,
         severity: classificationResult.severity,
+        classification: llmResult?.ok ? llmResult.value.direction : undefined,
+        classificationConfidence: llmResult?.ok ? llmResult.value.confidence : undefined,
         ticker: typeof ticker === 'string' ? ticker : undefined,
         eventType: typeof classifiedEventType === 'string' ? classifiedEventType : undefined,
       });

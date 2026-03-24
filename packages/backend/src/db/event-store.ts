@@ -7,6 +7,8 @@ export interface StoreEventInput {
   event: RawEvent;
   severity?: Severity;
   ticker?: string;
+  classification?: string;
+  classificationConfidence?: number;
   eventType?: string;
 }
 
@@ -32,6 +34,49 @@ function normalizeString(value: unknown): string | undefined {
 function normalizeTicker(value: unknown): string | undefined {
   const normalized = normalizeString(value);
   return normalized?.toUpperCase();
+}
+
+function normalizeClassification(value: unknown): 'BULLISH' | 'BEARISH' | 'NEUTRAL' | undefined {
+  const normalized = normalizeString(value)?.toUpperCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === 'MIXED') {
+    return 'NEUTRAL';
+  }
+
+  if (normalized === 'BULLISH' || normalized === 'BEARISH' || normalized === 'NEUTRAL') {
+    return normalized;
+  }
+
+  return undefined;
+}
+
+function normalizeConfidence(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function readMetadataField(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): unknown {
+  if (!metadata) {
+    return undefined;
+  }
+
+  return metadata[key];
 }
 
 function toStringArray(value: unknown): string[] {
@@ -71,8 +116,23 @@ export async function storeEvent(
 ): Promise<string> {
   const { event, severity } = input;
   const ticker = normalizeTicker(input.ticker ?? event.metadata?.['ticker']);
-  const eventType = normalizeString(input.eventType ?? event.metadata?.['eventType']);
   const metadata: Record<string, unknown> = { ...(event.metadata ?? {}) };
+  const eventType = normalizeString(input.eventType ?? event.metadata?.['eventType']);
+  const llmJudge = readMetadataField(metadata, 'llm_judge');
+  const llmJudgeRecord =
+    llmJudge && typeof llmJudge === 'object'
+      ? llmJudge as Record<string, unknown>
+      : undefined;
+  const classification = normalizeClassification(
+    input.classification
+    ?? readMetadataField(metadata, 'classification')
+    ?? readMetadataField(llmJudgeRecord, 'direction'),
+  );
+  const classificationConfidence = normalizeConfidence(
+    input.classificationConfidence
+    ?? readMetadataField(metadata, 'classificationConfidence')
+    ?? readMetadataField(llmJudgeRecord, 'confidence'),
+  );
 
   if (ticker) {
     metadata['ticker'] = ticker;
@@ -90,6 +150,9 @@ export async function storeEvent(
         source: event.source,
         sourceEventId: event.id,
         ticker: ticker ?? null,
+        classification: classification ?? null,
+        classificationConfidence:
+          classificationConfidence != null ? String(classificationConfidence) : null,
         eventType: eventType ?? null,
         title: event.title,
         summary: event.body,

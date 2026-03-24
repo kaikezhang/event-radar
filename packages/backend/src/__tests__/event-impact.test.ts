@@ -408,4 +408,63 @@ describe('event impact route', () => {
 
     expect(response.statusCode).toBe(400);
   });
+
+  it('caps returned outcome percentages at +/-200 for StockTwits-style events', async () => {
+    const eventId = await storeEvent(sharedDb, {
+      event: makeEvent({
+        source: 'stocktwits',
+        type: 'Social',
+        title: 'PEP sentiment squeeze on StockTwits',
+        timestamp: new Date('2026-03-06T18:00:00.000Z'),
+        metadata: {
+          ticker: 'PEP',
+          direction: 'UP',
+        },
+      }),
+      severity: 'HIGH',
+    });
+
+    await sharedDb.insert(classificationOutcomes).values({
+      eventId,
+      actualDirection: 'bullish',
+      priceChange1h: '448.8000',
+      priceChange1d: '448.8000',
+      priceChange1w: '-448.8000',
+      evaluatedAt: new Date('2026-03-13T18:00:00.000Z'),
+    });
+
+    await sharedDb.insert(eventOutcomes).values({
+      eventId,
+      ticker: 'PEP',
+      eventTime: new Date('2026-03-06T18:00:00.000Z'),
+      eventPrice: '1',
+      price1h: '5.488',
+      price1d: '5.488',
+      price1w: '-3.488',
+      change1h: '200',
+      change1d: '200',
+      change1w: '-200',
+    });
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/events/impact?ticker=PEP',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      events: [
+        expect.objectContaining({
+          ticker: 'PEP',
+          headline: 'PEP sentiment squeeze on StockTwits',
+          priceChange1h: 200,
+          priceChange1d: 200,
+          priceChange1w: -200,
+        }),
+      ],
+    });
+  });
 });

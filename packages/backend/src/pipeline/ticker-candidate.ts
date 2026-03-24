@@ -156,6 +156,7 @@ const TICKER_BLOCKLIST = new Set([
   'GAS',
   'FED',
   'FOMC',
+  'OPEC',
 ]);
 
 const NAKED_TICKER_BLOCKLIST = new Set([
