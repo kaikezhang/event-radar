@@ -227,12 +227,12 @@ describe('calendar routes', () => {
     });
   });
 
-  it('matches earnings-like headlines outside sec filings and excludes unrelated filings', async () => {
+  it('includes allowlisted earnings sources and excludes unrelated filings', async () => {
     await seedEvent(sharedDb, {
       title: 'Tesla quarterly results scheduled for after the bell',
       timestamp: '2026-03-27T20:00:00.000Z',
       ticker: 'TSLA',
-      source: 'businesswire',
+      source: 'earnings',
       eventType: 'press-release',
     });
     await seedEvent(sharedDb, {
@@ -257,6 +257,63 @@ describe('calendar routes', () => {
     expect(response.json().events.map((event: { title: string }) => event.title)).not.toContain(
       'Apple files shelf registration statement',
     );
+  });
+
+  it('filters non-time-bound social and news sources out of both calendar endpoints', async () => {
+    await seedEvent(sharedDb, {
+      title: 'NVIDIA earnings after the close',
+      timestamp: '2026-03-24T20:00:00.000Z',
+      ticker: 'NVDA',
+      source: 'sec-edgar',
+      metadata: {
+        report_date: '2026-03-24',
+        report_time: 'After Hours',
+      },
+    });
+
+    for (const source of ['stocktwits', 'reddit', 'truth-social', 'breaking-news']) {
+      await seedEvent(sharedDb, {
+        title: `${source} revenue chatter says earnings are next`,
+        timestamp: '2026-03-24T12:00:00.000Z',
+        ticker: 'NVDA',
+        source,
+        eventType: 'social-post',
+        metadata: {
+          report_date: '2026-03-24',
+          report_time: 'Any Time',
+        },
+      });
+    }
+
+    const earningsResponse = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28',
+    });
+    const upcomingResponse = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-28',
+    });
+
+    expect(earningsResponse.statusCode).toBe(200);
+    expect(upcomingResponse.statusCode).toBe(200);
+
+    const earningsTitles = earningsResponse.json().events.map((event: { title: string }) => event.title);
+    const upcomingTitles = upcomingResponse.json().dates.flatMap(
+      (entry: { events: Array<{ title: string }> }) => entry.events.map((event) => event.title),
+    );
+
+    expect(earningsTitles).toContain('NVIDIA earnings after the close');
+    expect(upcomingTitles).toContain('NVIDIA earnings after the close');
+
+    for (const title of [
+      'stocktwits revenue chatter says earnings are next',
+      'reddit revenue chatter says earnings are next',
+      'truth-social revenue chatter says earnings are next',
+      'breaking-news revenue chatter says earnings are next',
+    ]) {
+      expect(earningsTitles).not.toContain(title);
+      expect(upcomingTitles).not.toContain(title);
+    }
   });
 
   it('groups upcoming events by date across earnings, economic releases, and active halts', async () => {

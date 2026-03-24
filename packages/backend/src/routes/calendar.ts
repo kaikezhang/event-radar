@@ -20,6 +20,13 @@ const EARNINGS_MATCH_PATTERNS = [
   '%eps%',
 ] as const;
 
+const CALENDAR_DB_SOURCES = [
+  'sec-edgar',
+  'earnings',
+  'fda',
+  'congress',
+] as const;
+
 const SEVERITY_RANK: Record<string, number> = {
   CRITICAL: 4,
   HIGH: 3,
@@ -124,16 +131,20 @@ function buildEarningsMatchCondition(): ReturnType<typeof sql> {
   const keywordMatch = buildKeywordMatch();
 
   return sql`(
+    ${inArray(events.source, [...CALENDAR_DB_SOURCES])}
+    AND
     (
-      lower(${events.source}) = 'sec-edgar'
-      AND (
-        lower(coalesce(${events.eventType}, '')) LIKE '%2.02%'
-        OR lower(coalesce(${events.metadata}->>'eventType', '')) LIKE '%2.02%'
-        OR ${keywordMatch}
+      (
+        lower(${events.source}) = 'sec-edgar'
+        AND (
+          lower(coalesce(${events.eventType}, '')) LIKE '%2.02%'
+          OR lower(coalesce(${events.metadata}->>'eventType', '')) LIKE '%2.02%'
+          OR ${keywordMatch}
+        )
       )
+      OR lower(coalesce(${events.eventType}, '')) LIKE '%earnings%'
+      OR ${keywordMatch}
     )
-    OR lower(coalesce(${events.eventType}, '')) LIKE '%earnings%'
-    OR ${keywordMatch}
   )`;
 }
 

@@ -20,6 +20,7 @@ interface TrackingInterval {
   changeCol: string;
   label: string;
   evaluatedAtCol?: string;
+  targetCalendarDays?: number;
 }
 
 /** Intervals in hours: 1h, 1d, 1w, 1m plus T+5/T+20. */
@@ -34,11 +35,12 @@ const TRACKING_INTERVALS: TrackingInterval[] = [
     evaluatedAtCol: 'evaluated_t5_at',
   },
   {
-    hours: 480,
+    hours: 672,
     column: 'price_t20',
     changeCol: 'change_t20',
     label: 'T+20d',
     evaluatedAtCol: 'evaluated_t20_at',
+    targetCalendarDays: 28,
   },
   { hours: 168, column: 'price_1w', changeCol: 'change_1w', label: 'T+1w' },
   { hours: 720, column: 'price_1m', changeCol: 'change_1m', label: 'T+1m' },
@@ -137,17 +139,22 @@ export class OutcomeTracker {
 
     for (const interval of TRACKING_INTERVALS) {
       const cutoff = new Date(now.getTime() - interval.hours * 3_600_000);
+      const pendingCondition = interval.evaluatedAtCol
+        ? sql`(
+          ${eventOutcomes[this.evaluatedAtColumnKey(interval.evaluatedAtCol)]} IS NULL
+          OR (
+            ${eventOutcomes.eventPrice} IS NULL
+            AND ${eventOutcomes[this.changeColumnKey(interval.changeCol)]} IS NULL
+          )
+        )`
+        : sql`${eventOutcomes[this.priceColumnKey(interval.column)]} IS NULL`;
 
       // Find outcomes where this interval is null and the event is old enough
       const pendingRows = await this.db
         .select()
         .from(eventOutcomes)
         .where(
-          sql`${eventOutcomes.eventTime} <= ${cutoff} AND ${
-            interval.evaluatedAtCol
-              ? eventOutcomes[this.evaluatedAtColumnKey(interval.evaluatedAtCol)]
-              : eventOutcomes[this.priceColumnKey(interval.column)]
-          } IS NULL`,
+          sql`${eventOutcomes.eventTime} <= ${cutoff} AND ${pendingCondition}`,
         )
         .limit(50);
 
@@ -284,18 +291,29 @@ export class OutcomeTracker {
     row: typeof eventOutcomes.$inferSelect,
     interval: TrackingInterval,
   ): Promise<void> {
-    const targetTime = new Date(
-      row.eventTime.getTime() + interval.hours * 3_600_000,
-    );
+    const updates: Record<string, string | Date> = {
+      updatedAt: new Date(),
+    };
+    let eventPrice = row.eventPrice ? Number(row.eventPrice) : null;
+
+    if (eventPrice == null) {
+      const eventPriceResult = await this.priceService.getPriceAt(
+        row.ticker,
+        row.eventTime,
+      );
+      if (eventPriceResult.ok && eventPriceResult.value != null) {
+        eventPrice = eventPriceResult.value;
+        updates.eventPrice = String(eventPriceResult.value);
+      }
+    }
+
+    const targetTime = this.resolveTargetTime(row.eventTime, interval);
 
     const priceResult = await this.priceService.getPriceAt(
       row.ticker,
       targetTime,
     );
 
-    const updates: Record<string, string | Date> = {
-      updatedAt: new Date(),
-    };
     if (interval.evaluatedAtCol) {
       updates[this.evaluatedAtColumnKey(interval.evaluatedAtCol)] = new Date();
     }
@@ -313,7 +331,6 @@ export class OutcomeTracker {
     }
 
     const price = priceResult.value;
-    const eventPrice = row.eventPrice ? Number(row.eventPrice) : null;
     const rawChange =
       eventPrice != null && eventPrice !== 0
         ? Math.round(((price - eventPrice) / eventPrice) * 100 * 10000) / 10000
@@ -352,6 +369,19 @@ export class OutcomeTracker {
       change_1m: 'change1m',
     };
     return map[col]!;
+  }
+
+  private resolveTargetTime(
+    eventTime: Date,
+    interval: TrackingInterval,
+  ): Date {
+    if (interval.targetCalendarDays != null) {
+      const target = new Date(eventTime);
+      target.setUTCDate(target.getUTCDate() + interval.targetCalendarDays);
+      return target;
+    }
+
+    return new Date(eventTime.getTime() + interval.hours * 3_600_000);
   }
 
   private async syncAccuracyOutcome(
