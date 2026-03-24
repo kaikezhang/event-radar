@@ -124,8 +124,8 @@ describe('useWebSocket', () => {
     expect(MockWebSocket.instances).toHaveLength(3);
   });
 
-  it('keeps retrying after more than five failed reconnect attempts', () => {
-    renderHook(() => useWebSocket());
+  it('marks the connection as failed after five reconnect attempts and only retries every 30 seconds after that', () => {
+    const { result } = renderHook(() => useWebSocket());
 
     act(() => {
       MockWebSocket.instances[0]?.emitClose();
@@ -139,7 +139,46 @@ describe('useWebSocket', () => {
       MockWebSocket.instances[4]?.emitClose();
       vi.advanceTimersByTime(16000);
       MockWebSocket.instances[5]?.emitClose();
-      vi.advanceTimersByTime(30000);
+    });
+
+    expect(result.current.status).toBe('failed');
+    expect(MockWebSocket.instances).toHaveLength(6);
+
+    act(() => {
+      vi.advanceTimersByTime(29_999);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(6);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(7);
+  });
+
+  it('retries immediately when retry is called from the failed state', () => {
+    const { result } = renderHook(() => useWebSocket());
+
+    act(() => {
+      MockWebSocket.instances[0]?.emitClose();
+      vi.advanceTimersByTime(1000);
+      MockWebSocket.instances[1]?.emitClose();
+      vi.advanceTimersByTime(2000);
+      MockWebSocket.instances[2]?.emitClose();
+      vi.advanceTimersByTime(4000);
+      MockWebSocket.instances[3]?.emitClose();
+      vi.advanceTimersByTime(8000);
+      MockWebSocket.instances[4]?.emitClose();
+      vi.advanceTimersByTime(16000);
+      MockWebSocket.instances[5]?.emitClose();
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(6);
+    expect(result.current.status).toBe('failed');
+
+    act(() => {
+      result.current.retry();
     });
 
     expect(MockWebSocket.instances).toHaveLength(7);
@@ -160,19 +199,23 @@ describe('useWebSocket', () => {
       MockWebSocket.instances[4]?.emitClose();
       vi.advanceTimersByTime(16000);
       MockWebSocket.instances[5]?.emitClose();
+      vi.advanceTimersByTime(30000);
+      MockWebSocket.instances[6]?.emitClose();
     });
 
-    expect(MockWebSocket.instances).toHaveLength(6);
+    expect(MockWebSocket.instances).toHaveLength(7);
 
     act(() => {
       vi.advanceTimersByTime(29_999);
     });
-    expect(MockWebSocket.instances).toHaveLength(6);
+
+    expect(MockWebSocket.instances).toHaveLength(7);
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(MockWebSocket.instances).toHaveLength(7);
+
+    expect(MockWebSocket.instances).toHaveLength(8);
   });
 
   it('registers an error listener on the websocket connection', () => {

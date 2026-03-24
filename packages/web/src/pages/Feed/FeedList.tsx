@@ -3,6 +3,7 @@ import { Plus, RefreshCw, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState.js';
 import { PillBanner } from '../../components/PillBanner.js';
+import { useConnectionStatus } from '../../contexts/ConnectionContext.js';
 import { useTickerBatchPrices } from '../../hooks/useTickerBatchPrices.js';
 import { cn } from '../../lib/utils.js';
 import { DailyBriefing } from '../../components/DailyBriefing.js';
@@ -149,6 +150,7 @@ export function FeedList({
   const priceQuotes = useTickerBatchPrices(filteredAlerts, {
     enabled: !isInitialLoading && !error,
   });
+  const connectionStatus = useConnectionStatus();
 
   return (
     <div
@@ -337,8 +339,17 @@ export function FeedList({
               }
             >
               <p className="mb-4 inline-flex items-center gap-1.5 text-xs text-text-secondary">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                Live · Scanning
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    connectionStatus === 'connected' && 'bg-emerald-500 animate-pulse',
+                    connectionStatus === 'reconnecting' && 'bg-amber-500 animate-pulse',
+                    (connectionStatus === 'disconnected' || connectionStatus === 'failed') && 'bg-red-500',
+                  )}
+                />
+                {connectionStatus === 'connected' && 'Live · Scanning'}
+                {connectionStatus === 'reconnecting' && 'Reconnecting…'}
+                {(connectionStatus === 'disconnected' || connectionStatus === 'failed') && 'Offline · Data may be stale'}
               </p>
             </EmptyState>
           ) : null}

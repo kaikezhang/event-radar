@@ -8,6 +8,7 @@ interface UseWebSocketOptions<TEvent = unknown> {
 }
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const MAX_BURST_RECONNECT_ATTEMPTS = 5;
 
 function buildWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -40,11 +41,20 @@ export function useWebSocket<TEvent = unknown>(
       socketRef.current = socket;
 
       socket.addEventListener('open', () => {
+        if (socketRef.current !== socket) {
+          return;
+        }
+
         reconnectAttemptsRef.current = 0;
+        reconnectTimeoutRef.current = null;
         setStatus('connected');
       });
 
       socket.addEventListener('message', (message) => {
+        if (socketRef.current !== socket) {
+          return;
+        }
+
         try {
           const payload = JSON.parse(String(message.data)) as {
             type?: string;
@@ -65,6 +75,10 @@ export function useWebSocket<TEvent = unknown>(
       });
 
       socket.addEventListener('close', () => {
+        if (socketRef.current !== socket) {
+          return;
+        }
+
         if (stoppedRef.current) {
           setStatus('disconnected');
           return;
@@ -72,7 +86,9 @@ export function useWebSocket<TEvent = unknown>(
 
         const delayMs = Math.min(1000 * 2 ** reconnectAttemptsRef.current, MAX_RECONNECT_DELAY_MS);
         reconnectAttemptsRef.current += 1;
-        setStatus('reconnecting');
+        setStatus(
+          reconnectAttemptsRef.current > MAX_BURST_RECONNECT_ATTEMPTS ? 'failed' : 'reconnecting',
+        );
         reconnectTimeoutRef.current = window.setTimeout(connect, delayMs);
       });
     };
@@ -93,6 +109,7 @@ export function useWebSocket<TEvent = unknown>(
           reconnectTimeoutRef.current = null;
         }
         reconnectAttemptsRef.current = 0;
+        setStatus('reconnecting');
         connect();
       }
     };
@@ -116,8 +133,10 @@ export function useWebSocket<TEvent = unknown>(
       window.clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    socketRef.current?.close();
+    const currentSocket = socketRef.current;
     socketRef.current = null;
+    currentSocket?.close();
+    setStatus('reconnecting');
     connectRef.current?.();
   }, []);
 

@@ -278,4 +278,27 @@ describe('Settings page', () => {
     expect(localStorage.getItem('lastBriefingDismissed')).toBeNull();
     expect(await screen.findByText(/today's briefing will be shown again/i)).toBeInTheDocument();
   });
+
+  it('loads and updates the local font size preference from the display section', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('er-font-size', 'large');
+
+    renderSettings();
+
+    const displayToggle = await screen.findByRole('button', {
+      name: /display.*font size/i,
+    });
+
+    if (displayToggle.getAttribute('aria-expanded') === 'false') {
+      await user.click(displayToggle);
+    }
+
+    expect(screen.getByRole('radio', { name: /large/i })).toBeChecked();
+    expect(document.documentElement.style.fontSize).toBe('18px');
+
+    await user.click(screen.getByRole('radio', { name: /small/i }));
+
+    expect(localStorage.getItem('er-font-size')).toBe('small');
+    expect(document.documentElement.style.fontSize).toBe('14px');
+  });
 });

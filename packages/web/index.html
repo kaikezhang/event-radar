@@ -27,7 +27,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Event Radar — AI-Powered Stock Market Event Intelligence</title>
     <script>
-      (function(){var t=localStorage.getItem('er-theme');if(t&&t!=='dark')localStorage.removeItem('er-theme');document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'})();
+      (function(){var d=document.documentElement;var t=localStorage.getItem('er-theme');if(t&&t!=='dark')localStorage.removeItem('er-theme');d.classList.add('dark');d.style.colorScheme='dark';var f=localStorage.getItem('er-font-size');d.style.fontSize=f==='small'?'14px':f==='large'?'18px':'16px';})();
     </script>
   </head>
   <body>
