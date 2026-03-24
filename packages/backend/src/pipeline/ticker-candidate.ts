@@ -176,6 +176,10 @@ const NAKED_TICKER_BLOCKLIST = new Set([
   'SAVE',
 ]);
 
+export function isTickerBlocklisted(value: string): boolean {
+  return TICKER_BLOCKLIST.has(value.trim().toUpperCase());
+}
+
 export function isValidTickerCandidate(value: string): boolean {
   const normalized = value.trim().toUpperCase();
   if (normalized.length === 0 || normalized.length > 5) {
@@ -186,7 +190,7 @@ export function isValidTickerCandidate(value: string): boolean {
     return false;
   }
 
-  return !TICKER_BLOCKLIST.has(normalized);
+  return !isTickerBlocklisted(normalized);
 }
 
 export function normalizeTickerCandidate(value: string): string | null {

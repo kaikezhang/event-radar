@@ -6,6 +6,7 @@ import * as schema from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { eventOutcomes, events } from '../db/schema.js';
 import { PriceService } from '../services/price-service.js';
+import { normalizeOutcomeTicker } from '../utils/outcome-ticker.js';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://radar:radar@localhost:5432/event_radar';
 const FORD_TICKER = 'FORD';
@@ -22,16 +23,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 export function normalizeStoredTicker(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const normalized = value.trim().toUpperCase();
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  return normalized === FORD_TICKER ? NORMALIZED_FORD_TICKER : normalized;
+  return normalizeOutcomeTicker(value);
 }
 
 function normalizeTickersArray(
@@ -270,12 +262,18 @@ export async function backfillMissingEventPrices(
       nextValues.ticker = ticker;
     }
 
-    const priceResult = await priceService.getPriceAt(ticker, row.eventTime);
-    if (priceResult.ok && priceResult.value != null) {
-      nextValues.eventPrice = String(priceResult.value);
-      updated += 1;
-    } else if (nextValues.ticker == null) {
-      continue;
+    try {
+      const priceResult = await priceService.getPriceAt(ticker, row.eventTime);
+      if (priceResult.ok && priceResult.value != null) {
+        nextValues.eventPrice = String(priceResult.value);
+        updated += 1;
+      } else if (nextValues.ticker == null) {
+        continue;
+      }
+    } catch {
+      if (nextValues.ticker == null) {
+        continue;
+      }
     }
 
     await db
