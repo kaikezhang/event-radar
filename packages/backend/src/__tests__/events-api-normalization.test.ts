@@ -365,7 +365,29 @@ describe('events API normalization', () => {
     expect(payload.data[0]?.priceAtEvent).toBe(478.55);
   });
 
-  it('matches ticker filters against llm_enrichment ticker symbols when the direct ticker is missing', async () => {
+  it('matches ticker filters against metadata.tickers when the top-level ticker is missing', async () => {
+    await seedDeliveredEvent({
+      event: {
+        body: 'GPU export restrictions intensified overnight.',
+        metadata: {
+          tickers: ['NVDA'],
+        },
+      },
+    });
+
+    const app = await startApp();
+    const response = await app.server.inject({
+      method: 'GET',
+      url: '/api/events?ticker=NVDA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const titles = (response.json() as { data: Array<{ title: string }> }).data.map((event) => event.title);
+    expect(titles).toContain('Default event title');
+  });
+
+  it('does not match ticker filters against llm_enrichment tickers alone', async () => {
     await seedDeliveredEvent({
       event: {
         body: 'GPU export restrictions intensified overnight.',
@@ -385,8 +407,7 @@ describe('events API normalization', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const titles = (response.json() as { data: Array<{ title: string }> }).data.map((event) => event.title);
-    expect(titles).toContain('Default event title');
+    expect((response.json() as { data: Array<{ title: string }> }).data).toHaveLength(0);
   });
 
   it('does not return events that only mention the ticker in title or body text', async () => {
