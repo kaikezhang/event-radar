@@ -49,14 +49,6 @@ export interface RssFeedConfig {
 
 const DEFAULT_FEEDS: RssFeedConfig[] = [
   {
-    name: 'Reuters',
-    url: 'https://www.reutersagency.com/feed/',
-  },
-  {
-    name: 'AP News',
-    url: 'https://rsshub.app/apnews/topics/business',
-  },
-  {
     name: 'MarketWatch',
     url: 'https://feeds.marketwatch.com/marketwatch/topstories/',
   },
@@ -65,8 +57,12 @@ const DEFAULT_FEEDS: RssFeedConfig[] = [
     url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114',
   },
   {
-    name: 'Yahoo Finance',
-    url: 'https://finance.yahoo.com/news/rssindex',
+    name: 'Bloomberg',
+    url: 'https://feeds.bloomberg.com/markets/news.rss',
+  },
+  {
+    name: 'Financial Times',
+    url: 'https://www.ft.com/rss/home',
   },
 ];
 

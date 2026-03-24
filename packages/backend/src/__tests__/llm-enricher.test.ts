@@ -239,6 +239,19 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('Current regime: overbought (score: 65)');
     expect(prompt).toContain('-15bp (INVERTED)');
   });
+
+  it('includes classification context without leaking reasoning', () => {
+    const prompt = buildPrompt(makeEvent(), {
+      classification: {
+        severity: 'HIGH',
+        eventType: 'sec_form_8k',
+      },
+    });
+
+    expect(prompt).toContain('Severity: HIGH');
+    expect(prompt).toContain('Event Type: sec_form_8k');
+    expect(prompt).not.toContain('Restructuring events often hit sentiment first.');
+  });
 });
 
 describe('LLMEnricher.enrich', () => {
@@ -305,6 +318,12 @@ describe('LLMEnricher.enrich', () => {
       llmResult,
       marketSnapshot,
     });
+    const request = create.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(request.messages[1]?.content).toContain('Severity: HIGH');
+    expect(request.messages[1]?.content).toContain('Event Type: sec_form_8k');
+    expect(request.messages[1]?.content).not.toContain('Restructuring events often hit sentiment first.');
   });
 
   it('keeps the structured enrichment fields returned by the model', async () => {

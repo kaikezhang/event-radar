@@ -58,6 +58,7 @@ export interface LLMEnrichmentPromptContext {
   regime?: RegimeSnapshot;
   marketContext?: MarketQuote;
   patternMatch?: PatternMatchResult | null;
+  classification?: Pick<LlmClassificationResult, 'severity' | 'eventType'>;
 }
 
 const SYSTEM_PROMPT = `You are a stock market event analyst. Produce concise, trader-usable intelligence in English and respond ONLY with valid JSON (no markdown, no code fences).
@@ -171,6 +172,12 @@ export class LLMEnricher {
     ]);
 
     const userPrompt = buildPrompt(event, {
+      classification: llmResult
+        ? {
+          severity: llmResult.severity,
+          eventType: llmResult.eventType,
+        }
+        : undefined,
       regime: regimeSnapshot,
       marketContext: marketContext ?? undefined,
       patternMatch,
@@ -285,12 +292,22 @@ export function buildPrompt(
   event: RawEvent,
   context?: RegimeSnapshot | LLMEnrichmentPromptContext,
 ): string {
-  const { regime, marketContext, patternMatch } = normalizePromptContext(context);
+  const {
+    regime,
+    marketContext,
+    patternMatch,
+    classification,
+  } = normalizePromptContext(context);
   const parts = [
     `Event: ${event.title}`,
     `Details: ${event.body}`,
     `Source: ${event.source}`,
   ];
+
+  if (classification) {
+    parts.push(`Severity: ${classification.severity}`);
+    parts.push(`Event Type: ${classification.eventType}`);
+  }
 
   if (event.metadata && Object.keys(event.metadata).length > 0) {
     parts.push(`Metadata: ${JSON.stringify(event.metadata)}`);
@@ -416,7 +433,8 @@ function isPromptContext(
 ): context is LLMEnrichmentPromptContext {
   return 'regime' in context
     || 'marketContext' in context
-    || 'patternMatch' in context;
+    || 'patternMatch' in context
+    || 'classification' in context;
 }
 
 function formatPercent(value: number | null | undefined): string {

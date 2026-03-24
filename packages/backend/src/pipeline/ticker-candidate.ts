@@ -28,9 +28,17 @@ const TICKER_BLOCKLIST = new Set([
   'CIA',
   'GDP',
   'CPI',
+  'NATO',
+  'DHS',
+  'TSA',
+  'EPA',
+  'FCC',
   'PPI',
   'ETF',
   'IPO',
+  'SPO',
+  'AUM',
+  'NAV',
   'COO',
   'CTO',
   'AI',
@@ -75,6 +83,7 @@ const TICKER_BLOCKLIST = new Set([
   'CAD',
   'AUD',
   'CNY',
+  'HKD',
   'CHF',
   'NOT',
   'BUT',
@@ -108,6 +117,9 @@ const TICKER_BLOCKLIST = new Set([
   'ASK',
   'BIG',
   'EPS',
+  'PE',
+  'ROI',
+  'ROE',
   'IMO',
   'YOLO',
   'FOMO',
@@ -146,6 +158,23 @@ const TICKER_BLOCKLIST = new Set([
   'FOMC',
 ]);
 
+const NAKED_TICKER_BLOCKLIST = new Set([
+  'ICE',
+  'MADE',
+  'SAID',
+  'WILL',
+  'JUST',
+  'REAL',
+  'BEST',
+  'NEXT',
+  'LAST',
+  'HUGE',
+  'DEAL',
+  'PLAN',
+  'VOTE',
+  'SAVE',
+]);
+
 export function isValidTickerCandidate(value: string): boolean {
   const normalized = value.trim().toUpperCase();
   if (normalized.length === 0 || normalized.length > 5) {
@@ -162,4 +191,9 @@ export function isValidTickerCandidate(value: string): boolean {
 export function normalizeTickerCandidate(value: string): string | null {
   const normalized = value.trim().toUpperCase();
   return isValidTickerCandidate(normalized) ? normalized : null;
+}
+
+export function isValidNakedTickerCandidate(value: string): boolean {
+  const normalized = value.trim().toUpperCase();
+  return isValidTickerCandidate(normalized) && !NAKED_TICKER_BLOCKLIST.has(normalized);
 }

@@ -1,6 +1,9 @@
 import type { LlmClassificationResult, RawEvent, Severity } from '@event-radar/shared';
 import { COMPANY_TICKER_MAP } from './company-ticker-map.js';
-import { normalizeTickerCandidate as normalizeCandidateSymbol } from './ticker-candidate.js';
+import {
+  isValidNakedTickerCandidate,
+  normalizeTickerCandidate as normalizeCandidateSymbol,
+} from './ticker-candidate.js';
 
 const HIGH_PRIORITY_SEVERITIES = new Set<Severity>(['HIGH', 'CRITICAL']);
 
@@ -25,7 +28,7 @@ export interface InferredTickerResult {
   strategy: 'regex' | 'company-map';
 }
 
-function normalizeTickerCandidate(value: string): string | null {
+function normalizeExplicitTickerCandidate(value: string): string | null {
   const normalized = value.trim().toUpperCase();
   if (!/^[A-Z]{1,5}$/.test(normalized)) {
     return null;
@@ -34,16 +37,25 @@ function normalizeTickerCandidate(value: string): string | null {
   return normalizeCandidateSymbol(normalized);
 }
 
+function normalizeNakedTickerCandidate(value: string): string | null {
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z]{1,5}$/.test(normalized)) {
+    return null;
+  }
+
+  return isValidNakedTickerCandidate(normalized) ? normalized : null;
+}
+
 export function extractTickerCandidateFromText(text: string): string | null {
   for (const match of text.matchAll(/\$([A-Z]{1,5})\b/g)) {
-    const ticker = normalizeTickerCandidate(match[1] ?? '');
+    const ticker = normalizeExplicitTickerCandidate(match[1] ?? '');
     if (ticker) {
       return ticker;
     }
   }
 
   for (const match of text.matchAll(/\b([A-Z]{2,5})\b/g)) {
-    const ticker = normalizeTickerCandidate(match[1] ?? '');
+    const ticker = normalizeNakedTickerCandidate(match[1] ?? '');
     if (ticker) {
       return ticker;
     }

@@ -49,6 +49,15 @@ export interface FederalRegisterDocument {
   signing_date: string | null;
   executive_order_number: string | null;
   subtype: string | null;
+  agencies?: Array<{
+    raw_name?: string;
+    name?: string;
+    id?: number;
+    url?: string;
+    json_url?: string;
+    parent_id?: number | null;
+    slug?: string;
+  }>;
 }
 
 export interface FederalRegisterApiResponse {

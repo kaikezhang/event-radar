@@ -32,16 +32,16 @@ const MONITORED_AGENCIES = [
   'commerce-department',
 ] as const;
 
-/** Map agency slug → source label for events */
-const AGENCY_SOURCE_MAP: Record<string, string> = {
-  'justice-department': 'doj-antitrust',
-  'food-and-drug-administration': 'fda',
-  'securities-and-exchange-commission': 'sec-regulatory',
-  'federal-trade-commission': 'ftc',
-  'consumer-financial-protection-bureau': 'cfpb',
-  'federal-reserve-system': 'fed',
-  'treasury-department': 'treasury',
-  'commerce-department': 'commerce',
+/** Map agency slug → agency tag */
+const AGENCY_TAG_MAP: Record<string, string> = {
+  'justice-department': 'agency:doj',
+  'food-and-drug-administration': 'agency:fda',
+  'securities-and-exchange-commission': 'agency:sec',
+  'federal-trade-commission': 'agency:ftc',
+  'consumer-financial-protection-bureau': 'agency:cfpb',
+  'federal-reserve-system': 'agency:fed',
+  'treasury-department': 'agency:treasury',
+  'commerce-department': 'agency:commerce',
 };
 
 /** Keywords that make a federal document HIGH priority */
@@ -127,15 +127,20 @@ export class FederalRegisterScanner extends BaseScanner {
         const tickers = extractTickers(fullText);
         const topics = extractTopics(doc);
 
-        // Determine source from agencies (use first matching monitored agency)
-        const agencySource = this.detectAgencySource(doc);
+        const agencyTags = this.detectAgencyTags(doc);
         const isHighPriority = HIGH_PRIORITY_KEYWORDS.some(kw =>
           fullText.toLowerCase().includes(kw),
         );
+        const tags = new Set<string>(isHighPriority
+          ? ['HIGH_IMPACT', 'REGULATORY']
+          : ['REGULATORY']);
+        for (const tag of agencyTags) {
+          tags.add(tag);
+        }
 
         events.push({
           id: randomUUID(),
-          source: agencySource,
+          source: 'federal-register',
           type: 'regulatory-action',
           title: `[${doc.type}] ${doc.title}`,
           body: doc.abstract ?? doc.title,
@@ -148,11 +153,11 @@ export class FederalRegisterScanner extends BaseScanner {
             document_number: doc.document_number,
             publication_date: doc.publication_date,
             topics,
-            agency_source: agencySource,
+            agencies: (doc.agencies ?? [])
+              .map((agency) => agency.name ?? agency.raw_name ?? agency.slug)
+              .filter((agency): agency is string => typeof agency === 'string' && agency.length > 0),
             federal_register_url: doc.html_url,
-            tags: isHighPriority
-              ? ['HIGH_IMPACT', 'REGULATORY']
-              : ['REGULATORY'],
+            tags: [...tags],
           },
         });
       }
@@ -164,23 +169,34 @@ export class FederalRegisterScanner extends BaseScanner {
     }
   }
 
-  /** Best-effort detection of which agency a document belongs to */
-  private detectAgencySource(doc: FederalRegisterDocument): string {
-    // Federal Register API includes agency info in the title/abstract often
-    const text = `${doc.title} ${doc.abstract ?? ''}`.toLowerCase();
+  /** Best-effort detection of which agencies a document belongs to */
+  private detectAgencyTags(doc: FederalRegisterDocument): string[] {
+    const tags = new Set<string>();
 
-    for (const [slug, source] of Object.entries(AGENCY_SOURCE_MAP)) {
-      const agencyName = slug.replace(/-/g, ' ');
-      if (text.includes(agencyName)) return source;
+    for (const agency of doc.agencies ?? []) {
+      const slug = agency.slug?.toLowerCase();
+      if (slug && AGENCY_TAG_MAP[slug]) {
+        tags.add(AGENCY_TAG_MAP[slug]);
+      }
     }
 
-    // Fallback: check common abbreviations
-    if (text.includes('doj') || text.includes('antitrust')) return 'doj-antitrust';
-    if (text.includes('fda') || text.includes('drug') || text.includes('medical device')) return 'fda';
-    if (text.includes('sec') || text.includes('securities')) return 'sec-regulatory';
-    if (text.includes('ftc')) return 'ftc';
-    if (text.includes('fed') || text.includes('federal reserve')) return 'fed';
+    if (tags.size > 0) {
+      return [...tags];
+    }
 
-    return 'federal-register';
+    const text = `${doc.title} ${doc.abstract ?? ''}`.toLowerCase();
+
+    for (const [slug, tag] of Object.entries(AGENCY_TAG_MAP)) {
+      const agencyName = slug.replace(/-/g, ' ');
+      if (text.includes(agencyName)) tags.add(tag);
+    }
+
+    if (text.includes('doj') || text.includes('antitrust')) tags.add('agency:doj');
+    if (text.includes('fda') || text.includes('drug') || text.includes('medical device')) tags.add('agency:fda');
+    if (text.includes('sec') || text.includes('securities')) tags.add('agency:sec');
+    if (text.includes('ftc')) tags.add('agency:ftc');
+    if (text.includes('fed') || text.includes('federal reserve')) tags.add('agency:fed');
+
+    return [...tags];
   }
 }

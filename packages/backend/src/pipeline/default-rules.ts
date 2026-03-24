@@ -320,67 +320,139 @@ export const DEFAULT_RULES: Rule[] = [
     enabled: true,
   },
 
-  // ── M&A / Merger Keywords (HIGH) ─────────────────────────────────────
+  // ── Breaking News — Specific Actions (CRITICAL) ──────────────────────
   {
-    id: 'ma-acquire',
-    name: 'M&A — Acquisition',
+    id: 'breaking-news-trading-halt',
+    name: 'Breaking News — Trading Halt',
     conditions: [
-      { type: 'titleContains', value: 'acquire' },
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'halted' },
+      { type: 'titleContains', value: 'trading' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'setConfidence', value: 0.85 },
-      { type: 'addTags', values: ['ma', 'acquisition'] },
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'trading-halt'] },
     ],
-    priority: 20,
+    priority: 10,
     enabled: true,
   },
   {
-    id: 'ma-acquisition',
-    name: 'M&A — Acquisition (full word)',
+    id: 'breaking-news-trading-suspended',
+    name: 'Breaking News — Trading Suspended',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'suspended' },
+      { type: 'titleContains', value: 'trading' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'trading-halt'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-executive-order-signed',
+    name: 'Breaking News — Executive Order Signed',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'executive order' },
+      { type: 'titleContains', value: 'signs' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'executive-order'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-executive-order-issued',
+    name: 'Breaking News — Executive Order Issued',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'executive order' },
+      { type: 'titleContains', value: 'issues' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'executive-order'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-bankruptcy-filed',
+    name: 'Breaking News — Bankruptcy Filed',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'files for bankruptcy' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'bankruptcy'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+
+  // ── M&A / Merger Keywords ────────────────────────────────────────────
+  {
+    id: 'breaking-news-ma-announces-acquisition',
+    name: 'Breaking News — Acquisition Announcement',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'announces' },
       { type: 'titleContains', value: 'acquisition' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setSeverity', value: 'CRITICAL' },
       { type: 'setConfidence', value: 0.9 },
       { type: 'addTags', values: ['ma', 'acquisition'] },
     ],
-    priority: 20,
+    priority: 10,
     enabled: true,
   },
   {
-    id: 'ma-merge',
-    name: 'M&A — Merger',
+    id: 'breaking-news-ma-to-acquire',
+    name: 'Breaking News — To Acquire',
     conditions: [
-      { type: 'titleContains', value: 'merger' },
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'to acquire' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.9 },
+      { type: 'addTags', values: ['ma', 'acquisition'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-ma-merger-agreement',
+    name: 'Breaking News — Merger Agreement',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'merger agreement' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
       { type: 'setConfidence', value: 0.9 },
       { type: 'addTags', values: ['ma', 'merger'] },
     ],
-    priority: 20,
+    priority: 10,
     enabled: true,
   },
   {
-    id: 'ma-merge-verb',
-    name: 'M&A — Merge (verb)',
+    id: 'breaking-news-ma-buyout',
+    name: 'Breaking News — Buyout',
     conditions: [
-      { type: 'titleContains', value: 'merge' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'setConfidence', value: 0.85 },
-      { type: 'addTags', values: ['ma', 'merger'] },
-    ],
-    priority: 20,
-    enabled: true,
-  },
-  {
-    id: 'ma-buyout',
-    name: 'M&A — Buyout',
-    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'buyout' },
     ],
     actions: [
@@ -391,12 +463,28 @@ export const DEFAULT_RULES: Rule[] = [
     priority: 20,
     enabled: true,
   },
+  {
+    id: 'breaking-news-ma-merger-talks',
+    name: 'Breaking News — Merger Talks',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'merger talks' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['ma', 'merger'] },
+    ],
+    priority: 20,
+    enabled: true,
+  },
 
   // ── Earnings Keywords (HIGH) ────────────────────────────────────────
   {
     id: 'earnings-q1',
     name: 'Earnings — Q1 Results',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Q1 earnings' },
     ],
     actions: [
@@ -411,6 +499,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-q2',
     name: 'Earnings — Q2 Results',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Q2 earnings' },
     ],
     actions: [
@@ -425,6 +514,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-q3',
     name: 'Earnings — Q3 Results',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Q3 earnings' },
     ],
     actions: [
@@ -439,6 +529,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-q4',
     name: 'Earnings — Q4 Results',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Q4 earnings' },
     ],
     actions: [
@@ -453,6 +544,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-eps',
     name: 'Earnings — EPS',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'EPS' },
     ],
     actions: [
@@ -467,6 +559,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-revenue-beat',
     name: 'Earnings — Revenue Beat',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'revenue beat' },
     ],
     actions: [
@@ -481,6 +574,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'earnings-guidance-raise',
     name: 'Earnings — Guidance Raise',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'guidance raise' },
     ],
     actions: [
@@ -492,25 +586,57 @@ export const DEFAULT_RULES: Rule[] = [
     enabled: true,
   },
 
-  // ── FDA Keywords (HIGH) ────────────────────────────────────────────
+  // ── FDA Keywords ────────────────────────────────────────────────────
   {
     id: 'fda-approval',
     name: 'FDA — Approval',
     conditions: [
-      { type: 'titleContains', value: 'FDA approval' },
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'fda approved' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'setConfidence', value: 0.9 },
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
       { type: 'addTags', values: ['fda', 'approval'] },
     ],
-    priority: 20,
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'fda-approval-granted',
+    name: 'FDA — Approval Granted',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'fda approval granted' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['fda', 'approval'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'fda-rejected',
+    name: 'FDA — Rejected',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'fda rejected' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['fda', 'rejection'] },
+    ],
+    priority: 10,
     enabled: true,
   },
   {
     id: 'fda-clinical-trial',
     name: 'FDA — Clinical Trial',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'clinical trial' },
     ],
     actions: [
@@ -525,6 +651,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'fda-phase-1',
     name: 'FDA — Phase 1 Trial',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Phase 1' },
     ],
     actions: [
@@ -539,6 +666,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'fda-phase-2',
     name: 'FDA — Phase 2 Trial',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Phase 2' },
     ],
     actions: [
@@ -553,6 +681,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'fda-phase-3',
     name: 'FDA — Phase 3 Trial',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'Phase 3' },
     ],
     actions: [
@@ -567,6 +696,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'fda-nda',
     name: 'FDA — NDA',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'NDA' },
     ],
     actions: [
@@ -583,6 +713,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'exec-appoint',
     name: 'Executive — Appointment',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'appoint' },
     ],
     actions: [
@@ -597,6 +728,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'exec-resign',
     name: 'Executive — Resignation',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'resign' },
     ],
     actions: [
@@ -611,6 +743,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'exec-promote',
     name: 'Executive — Promotion',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'promote' },
     ],
     actions: [
@@ -625,6 +758,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'exec-ceo',
     name: 'Executive — CEO Change',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'CEO' },
     ],
     actions: [
@@ -639,6 +773,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'exec-cfo',
     name: 'Executive — CFO Change',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'CFO' },
     ],
     actions: [
@@ -655,6 +790,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'partner-with',
     name: 'Partnership — Partner With',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'partner with' },
     ],
     actions: [
@@ -669,6 +805,7 @@ export const DEFAULT_RULES: Rule[] = [
     id: 'strategic-alliance',
     name: 'Partnership — Strategic Alliance',
     conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
       { type: 'titleContains', value: 'strategic alliance' },
     ],
     actions: [
