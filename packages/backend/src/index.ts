@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { createDb } from './db/connection.js';
+import { OpenAIProvider } from './pipeline/llm-provider.js';
 
 // Default AUTH_REQUIRED=true for production safety.
 // Only AUTH_REQUIRED=false when explicitly set in env (local dev).
@@ -11,10 +12,18 @@ const databaseUrl = process.env.DATABASE_URL;
 const dbCtx = databaseUrl ? createDb(databaseUrl) : undefined;
 
 const apiKey = process.env.API_KEY;
+const openaiKey = process.env.OPENAI_API_KEY;
+const llmProvider = openaiKey
+  ? new OpenAIProvider({
+    apiKey: openaiKey,
+    model: process.env.LLM_MODEL ?? 'gpt-4o-mini',
+  })
+  : undefined;
 
 const { server, registry } = buildApp({
   db: dbCtx?.db,
   apiKey,
+  llmProvider,
 });
 
 const start = async () => {

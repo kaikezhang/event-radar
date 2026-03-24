@@ -54,6 +54,44 @@ import {
 
 type HistoricalEnricherLike = Pick<HistoricalEnricher, 'enrich'>;
 
+function isRoutineSecForm4Event(
+  event: RawEvent,
+  ruleResult: ClassificationResult,
+): boolean {
+  if (event.source.toLowerCase() !== 'sec-edgar') {
+    return false;
+  }
+
+  const normalizedType = event.type.toLowerCase();
+  const titleAndBody = `${event.title} ${event.body}`.toLowerCase();
+
+  return (
+    normalizedType.includes('form-4')
+    || normalizedType.includes('form_4')
+    || titleAndBody.includes('form 4')
+  ) && (
+    titleAndBody.includes('10b5-1')
+    || titleAndBody.includes('10b5 1')
+    || ruleResult.matchedRules.includes('form4-routine-10b5-1')
+    || ruleResult.tags.includes('10b5-1-plan')
+  );
+}
+
+function shouldRunLlmClassification(
+  event: RawEvent,
+  ruleResult: ClassificationResult,
+): boolean {
+  if (event.source.toLowerCase() === 'stocktwits') {
+    return false;
+  }
+
+  if (isRoutineSecForm4Event(event, ruleResult)) {
+    return false;
+  }
+
+  return ruleResult.severity === 'HIGH' || ruleResult.severity === 'CRITICAL';
+}
+
 export interface EventPipelineDeps {
   server: FastifyInstance;
   eventBus: EventBus;
@@ -144,7 +182,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
     }
 
     // Step 5: LLM classification (once, shared by DB storage and delivery)
-    const llmResult = llmClassifier
+    const llmResult = llmClassifier && shouldRunLlmClassification(event, ruleResult)
       ? await llmClassifier.classify(event, ruleResult)
       : undefined;
 
@@ -269,16 +307,46 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         event.metadata && typeof event.metadata['ticker'] === 'string'
           ? (event.metadata['ticker'] as string)
           : undefined;
-      const persistEventMetadata = async () => {
+      const persistEventMetadata = async (metadataStage: string) => {
         if (!db || !eventId) {
           return;
         }
 
-        await db.execute(sql`
-          UPDATE events
-          SET metadata = ${JSON.stringify(event.metadata ?? {})}::jsonb
-          WHERE id = ${eventId}
-        `);
+        try {
+          const result = await db.execute(sql`
+            UPDATE events
+            SET metadata = ${JSON.stringify(event.metadata ?? {})}::jsonb
+            WHERE id = ${eventId}
+          `);
+
+          const rowCount =
+            typeof result === 'object'
+            && result !== null
+            && 'rowCount' in result
+            && typeof result.rowCount === 'number'
+              ? result.rowCount
+              : undefined;
+
+          if (rowCount === 0) {
+            server.log.warn({
+              pipeline: true,
+              stage: 'metadata_persist',
+              metadataStage,
+              eventId,
+              source: event.source,
+            });
+          }
+        } catch (error) {
+          server.log.error({
+            pipeline: true,
+            stage: 'metadata_persist',
+            metadataStage,
+            eventId,
+            source: event.source,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
       };
 
       const filterResult = alertFilter.check(
@@ -339,7 +407,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
                 reason: 'circuit breaker open — secondary source blocked',
               },
             };
-            await persistEventMetadata();
+            await persistEventMetadata('llm_judge');
             pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
             alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_circuit_breaker' });
             server.log.info({
@@ -378,7 +446,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
               reason: gateResult.reason,
             },
           };
-          await persistEventMetadata();
+          await persistEventMetadata('llm_judge');
           if (!gateResult.pass) {
             pipelineFunnelTotal.inc({ stage: 'llm_blocked' });
             alertFilterTotal.inc({ decision: 'block', source: event.source, reason_category: 'llm_judge' });
@@ -436,7 +504,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
             };
             delete nextMetadata['enrichment_failed'];
             event.metadata = nextMetadata;
-            await persistEventMetadata();
+            await persistEventMetadata('llm_enrichment');
             llmEnrichmentTotal.inc({ result: 'success' });
 
             // If the event had no ticker before, try to extract one from LLM enrichment
@@ -483,7 +551,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
                   delete nextMetadata['ticker_inferred'];
                   delete nextMetadata['ticker_inference_strategy'];
                   event.metadata = nextMetadata;
-                  await persistEventMetadata();
+                  await persistEventMetadata('llm_enrichment_ticker');
                   // Schedule outcome tracking now that we have a ticker
                   await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
                 }
@@ -502,7 +570,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
               ...(event.metadata ?? {}),
               enrichment_failed: true,
             };
-            await persistEventMetadata();
+            await persistEventMetadata('llm_enrichment_failure');
             server.log.warn({
               pipeline: true,
               stage: 'llm_enrichment',
@@ -578,7 +646,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         tier: gateResult.tier, reason: gateResult.reason, pass: gateResult.pass,
         details: gateResult.gateDetails,
       }};
-      await persistEventMetadata();
+      await persistEventMetadata('delivery_gate');
 
       // Historical enrichment (only after filter passes, before delivery)
       let historicalContext: import('@event-radar/delivery').HistoricalContext | undefined;
@@ -594,7 +662,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
             ...(event.metadata ?? {}),
             historical_context: historicalContext,
           };
-          await persistEventMetadata();
+          await persistEventMetadata('historical_enrichment');
         }
         const histDurationMs = Date.now() - histStart;
         const histDurationS = histDurationMs / 1000;

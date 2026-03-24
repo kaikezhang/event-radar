@@ -243,7 +243,7 @@ describe('AlertFilter', () => {
       const event = makeEvent({
         source: 'sec-edgar',
         type: 'form-4',
-        metadata: { ticker: 'NVDA', transactionValue: 5_000_000 },
+        metadata: { ticker: 'NVDA', transactionValue: 5_000_000, shares: 100_000 },
       });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
@@ -254,7 +254,7 @@ describe('AlertFilter', () => {
       const event = makeEvent({
         source: 'sec-edgar',
         type: 'form-4',
-        metadata: { ticker: 'XYZ', transactionValue: 500_000 },
+        metadata: { ticker: 'XYZ', transactionValue: 500_000, shares: 5_000 },
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
@@ -269,6 +269,42 @@ describe('AlertFilter', () => {
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
+    });
+
+    it('should block sec_form_4 events with zero transaction value', () => {
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: 'sec_form_4',
+        title: 'SEC Form 4 filing',
+        metadata: { ticker: 'XYZ', transactionValue: 0, shares: null },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.enrichWithLLM).toBe(false);
+    });
+
+    it('should block Form 4 title variants with missing transaction value', () => {
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: 'filing',
+        title: 'Form 4 - insider filing',
+        metadata: { ticker: 'XYZ', form_type: '4', shares: null },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.enrichWithLLM).toBe(false);
+    });
+
+    it('should block Form 4 filings with missing share counts', () => {
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: 'form-4',
+        title: 'Form 4 - officer transaction',
+        metadata: { ticker: 'XYZ', transactionValue: 5_000_000, shares: null },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.enrichWithLLM).toBe(false);
     });
   });
 

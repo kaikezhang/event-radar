@@ -43,6 +43,8 @@ const TRACKING_INTERVALS: TrackingInterval[] = [
   { hours: 720, column: 'price_1m', changeCol: 'change_1m', label: 'T+1m' },
 ] as const;
 
+const MAX_OUTCOME_CHANGE_PERCENT = 200;
+
 export interface OutcomeRecord {
   id: number;
   eventId: string;
@@ -313,10 +315,14 @@ export class OutcomeTracker {
 
     const price = priceResult.value;
     const eventPrice = row.eventPrice ? Number(row.eventPrice) : null;
-    const change =
+    const rawChange =
       eventPrice != null && eventPrice !== 0
         ? Math.round(((price - eventPrice) / eventPrice) * 100 * 10000) / 10000
         : null;
+    const change =
+      rawChange != null && Math.abs(rawChange) > MAX_OUTCOME_CHANGE_PERCENT
+        ? null
+        : rawChange;
 
     updates[this.priceColumnKey(interval.column)] = String(price);
     if (change != null) {

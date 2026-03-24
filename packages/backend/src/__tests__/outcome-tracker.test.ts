@@ -526,5 +526,125 @@ describe('OutcomeTracker', () => {
         }),
       );
     });
+
+    it('drops extreme positive change outliers above 200%', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt: vi.fn().mockResolvedValue({ ok: true, value: 4.05 }) } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: '0.10',
+        },
+        {
+          hours: 24,
+          column: 'price_1d',
+          changeCol: 'change_1d',
+          label: 'T+1d',
+        },
+      );
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          price1d: '4.05',
+        }),
+      );
+      expect(setSpy.mock.calls[0]?.[0]).not.toHaveProperty('change1d');
+    });
+
+    it('keeps large negative moves that are still within the cap', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt: vi.fn().mockResolvedValue({ ok: true, value: 0.20 }) } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: '1.00',
+        },
+        {
+          hours: 1,
+          column: 'price_1h',
+          changeCol: 'change_1h',
+          label: 'T+1h',
+        },
+      );
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          price1h: '0.2',
+          change1h: '-80',
+        }),
+      );
+    });
+
+    it('keeps normal price changes within the outlier cap', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt: vi.fn().mockResolvedValue({ ok: true, value: 12 }) } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: '10.00',
+        },
+        {
+          hours: 24,
+          column: 'price_1d',
+          changeCol: 'change_1d',
+          label: 'T+1d',
+        },
+      );
+
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          price1d: '12',
+          change1d: '20',
+        }),
+      );
+    });
   });
 });
