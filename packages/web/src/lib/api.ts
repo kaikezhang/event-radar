@@ -860,10 +860,14 @@ export async function getTickerPricesBatch(tickers: string[]): Promise<Record<st
   const data = await apiFetch(`/price/batch?${params.toString()}`);
   const rawPrices = typeof data === 'object' && data !== null && 'prices' in data
     ? ((data as { prices?: Record<string, Record<string, unknown>> }).prices ?? {})
-    : data as Record<string, Record<string, unknown>>;
+    : data as Record<string, Record<string, unknown> | null>;
   const quotes: Record<string, PriceBatchQuote> = {};
 
   for (const [ticker, value] of Object.entries(rawPrices)) {
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+
     quotes[ticker.toUpperCase()] = {
       price: Number(value.price ?? 0),
       change: Number(value.change ?? 0),

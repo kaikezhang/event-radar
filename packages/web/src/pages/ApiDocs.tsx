@@ -106,7 +106,8 @@ const ENDPOINTS = [
     requestExample: `curl -s -H "x-api-key: er-dev-2026" \
   "http://localhost:3001/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-30"`,
     responseExample: `{
-  "earningsDataLimited": true,
+  "earningsDataLimited": false,
+  "coverageNote": "Showing confirmed scheduled events",
   "dates": [
     {
       "date": "2026-03-25",

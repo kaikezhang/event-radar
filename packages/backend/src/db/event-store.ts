@@ -36,6 +36,15 @@ function normalizeTicker(value: unknown): string | undefined {
   return normalized?.toUpperCase();
 }
 
+function buildTruthSocialSourceUrl(postId: unknown): string | undefined {
+  const normalizedPostId = normalizeString(postId);
+  if (!normalizedPostId) {
+    return undefined;
+  }
+
+  return `https://truthsocial.com/@realDonaldTrump/posts/${normalizedPostId}`;
+}
+
 function normalizeClassification(value: unknown): 'BULLISH' | 'BEARISH' | 'NEUTRAL' | undefined {
   const normalized = normalizeString(value)?.toUpperCase();
   if (!normalized) {
@@ -110,6 +119,30 @@ function toStringArray(value: unknown): string[] {
   return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
+function getEventSourceUrls(event: RawEvent): string[] | null {
+  const urls = new Set<string>();
+
+  if (typeof event.url === 'string' && event.url.length > 0) {
+    urls.add(event.url);
+  }
+
+  const metadataUrl = typeof event.metadata?.['url'] === 'string'
+    ? event.metadata['url']
+    : undefined;
+  if (metadataUrl) {
+    urls.add(metadataUrl);
+  }
+
+  if (event.source === 'truth-social') {
+    const truthSocialUrl = buildTruthSocialSourceUrl(event.metadata?.['postId']);
+    if (truthSocialUrl) {
+      urls.add(truthSocialUrl);
+    }
+  }
+
+  return urls.size > 0 ? [...urls] : null;
+}
+
 export async function storeEvent(
   db: Database,
   input: StoreEventInput,
@@ -144,6 +177,7 @@ export async function storeEvent(
   event.metadata = metadata;
 
   return db.transaction(async (tx) => {
+    const sourceUrls = getEventSourceUrls(event);
     const [row] = await tx
       .insert(events)
       .values({
@@ -160,7 +194,7 @@ export async function storeEvent(
         metadata,
         severity: severity ?? null,
         receivedAt: event.timestamp,
-        sourceUrls: event.url ? [event.url] : null,
+        sourceUrls,
         confirmedSources: [event.source],
         confirmationCount: 1,
       })
@@ -205,7 +239,7 @@ export async function storeEvent(
     ])];
     const updatedSourceUrls = [...new Set([
       ...toStringArray(candidate.source_urls),
-      ...(event.url ? [event.url] : []),
+      ...(sourceUrls ?? []),
     ])];
     const confirmationCount = updatedSources.length;
 

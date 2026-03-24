@@ -413,7 +413,43 @@ describe('GET /api/events', () => {
     const body = response.json();
     expect(body.data[0]).toEqual(expect.objectContaining({
       classification: 'BEARISH',
-      classificationConfidence: expect.any(String),
+      classificationConfidence: expect.any(Number),
+    }));
+  });
+
+  it('should synthesize Truth Social sourceUrls when older rows are missing them', async () => {
+    const truthEventId = await storeEvent(sharedDb, {
+      event: makeEvent({
+        source: 'truth-social',
+        type: 'political-post',
+        title: 'Trump Truth post',
+        body: 'Tariffs are coming back.',
+        metadata: {
+          ticker: 'SPY',
+          postId: '116278232362967212',
+        },
+      }),
+      severity: 'HIGH',
+    });
+
+    await sharedDb.execute(sql`
+      UPDATE events
+      SET source_urls = NULL
+      WHERE id = ${truthEventId}
+    `);
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${truthEventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.objectContaining({
+      id: truthEventId,
+      sourceUrls: ['https://truthsocial.com/@realDonaldTrump/posts/116278232362967212'],
     }));
   });
 });

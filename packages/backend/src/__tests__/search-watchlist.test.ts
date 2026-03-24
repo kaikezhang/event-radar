@@ -264,7 +264,7 @@ describe('GET /api/events/search', () => {
         expect.objectContaining({
           id: classifiedEventId,
           classification: 'BEARISH',
-          classificationConfidence: expect.any(String),
+          classificationConfidence: expect.any(Number),
         }),
       ]),
     );

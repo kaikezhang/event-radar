@@ -538,7 +538,7 @@ describe('GET /api/price/batch', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('drops tickers whose quote lookup fails', async () => {
+  it('returns null for requested tickers whose quote lookup fails', async () => {
     const marketDataCache = {
       getOrFetch: vi
         .fn()
@@ -576,6 +576,7 @@ describe('GET /api/price/batch', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
+      NVDA: null,
       TSLA: {
         price: 212.75,
         change: 212.75 * -3.4 / 100,

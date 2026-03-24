@@ -383,8 +383,8 @@ function groupByDate(eventsToGroup: CalendarEventItem[]): CalendarDateGroup[] {
     }));
 }
 
-function earningsDataLimited(): boolean {
-  return process.env.EARNINGS_ENABLED !== 'true';
+function getCalendarCoverageNote(): string {
+  return 'Showing confirmed scheduled events';
 }
 
 export function registerCalendarRoutes(
@@ -403,7 +403,8 @@ export function registerCalendarRoutes(
     const items = await fetchEarningsEvents(db, query);
 
     return {
-      earningsDataLimited: earningsDataLimited(),
+      earningsDataLimited: false,
+      coverageNote: getCalendarCoverageNote(),
       events: items,
     };
   });
@@ -423,7 +424,8 @@ export function registerCalendarRoutes(
     const economic = fetchEconomicCalendar(query);
 
     return {
-      earningsDataLimited: earningsDataLimited(),
+      earningsDataLimited: false,
+      coverageNote: getCalendarCoverageNote(),
       dates: groupByDate([...earnings, ...economic, ...halts]),
     };
   });

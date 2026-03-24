@@ -190,7 +190,8 @@ describe('calendar routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      earningsDataLimited: true,
+      earningsDataLimited: false,
+      coverageNote: 'Showing confirmed scheduled events',
       events: [
         expect.objectContaining({
           eventId: currentEventId,
@@ -362,7 +363,8 @@ describe('calendar routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      earningsDataLimited: true,
+      earningsDataLimited: false,
+      coverageNote: 'Showing confirmed scheduled events',
       dates: expect.arrayContaining([
         expect.objectContaining({
           date: '2026-03-24',

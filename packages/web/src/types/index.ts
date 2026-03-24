@@ -298,6 +298,7 @@ export interface CalendarDateGroup {
 
 export interface UpcomingCalendarResponse {
   earningsDataLimited: boolean;
+  coverageNote?: string | null;
   dates: CalendarDateGroup[];
 }
 

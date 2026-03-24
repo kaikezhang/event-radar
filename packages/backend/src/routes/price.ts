@@ -58,7 +58,7 @@ export interface PriceBatchQuote {
   changePercent: number;
 }
 
-export type PriceBatchResponse = Record<string, PriceBatchQuote>;
+export type PriceBatchResponse = Record<string, PriceBatchQuote | null>;
 
 export interface PriceBatchUnavailableResponse {
   prices: PriceBatchResponse;
@@ -345,6 +345,11 @@ export class YahooPriceBatchService implements PriceBatchService {
         continue;
       }
 
+      if (result.error.message.includes('No price data found')) {
+        prices[ticker] = null;
+        continue;
+      }
+
       this.recordFailure();
 
       const staleCached = this.getCachedQuote(ticker, true);
@@ -482,6 +487,12 @@ export function registerPriceRoutes(
           error: fallback.error ?? PRICE_TEMPORARILY_UNAVAILABLE_ERROR,
         };
         return reply.send(unavailable);
+      }
+    }
+
+    for (const ticker of tickers) {
+      if (!(ticker in payload)) {
+        payload[ticker] = null;
       }
     }
 
