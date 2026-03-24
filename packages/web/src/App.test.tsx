@@ -84,4 +84,11 @@ describe('App shell spacing', () => {
 
     expect(await screen.findByRole('heading', { name: /know what moves markets/i })).toBeInTheDocument();
   });
+
+  it('routes to the API docs page', async () => {
+    renderWithRouter(appRoutes, ['/api-docs']);
+
+    expect(await screen.findByRole('heading', { name: /api docs/i })).toBeInTheDocument();
+    expect(screen.getByText('/api/v1/reports/weekly')).toBeInTheDocument();
+  });
 });

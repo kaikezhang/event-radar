@@ -34,6 +34,7 @@ const OnboardingPage = lazy(async () => ({ default: (await import('./pages/Onboa
 const HistoryPage = lazy(async () => ({ default: (await import('./pages/History.js')).History }));
 const WatchlistPage = lazy(async () => ({ default: (await import('./pages/Watchlist.js')).Watchlist }));
 const AboutPage = lazy(async () => ({ default: (await import('./pages/About.js')).About }));
+const ApiDocsPage = lazy(async () => ({ default: (await import('./pages/ApiDocs.js')).ApiDocs }));
 const NotFoundPage = lazy(async () => ({ default: (await import('./pages/NotFound.js')).NotFound }));
 const PrivacyPage = lazy(async () => ({ default: (await import('./pages/Privacy.js')).Privacy }));
 const TermsPage = lazy(async () => ({ default: (await import('./pages/Terms.js')).Terms }));
@@ -287,6 +288,7 @@ export const appRoutes: RouteObject[] = [
       { path: 'login', element: loadPage(<LoginPage />) },
       { path: 'auth/verify', element: loadPage(<AuthVerifyPage />) },
       { path: 'about', element: loadPage(<AboutPage />) },
+      { path: 'api-docs', element: loadPage(<ApiDocsPage />) },
       { path: 'pricing', element: <Landing /> },
       { path: 'privacy', element: loadPage(<PrivacyPage />) },
       { path: 'terms', element: loadPage(<TermsPage />) },
