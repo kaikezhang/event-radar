@@ -55,7 +55,7 @@ describe('ticker inference helpers', () => {
     expect(extractCompanyTickerFromText('Samsung expands memory output')).toBe('SSNLF');
   });
 
-  it('maps tech-heavy headlines to QQQ when no direct ticker is found', () => {
+  it('maps tech-heavy headlines to QQQ market context when no direct ticker is found', () => {
     const event = makeEvent({
       title: 'AI software stocks surge after cloud spending commentary',
       body: 'Semiconductor and megacap tech names lead the move.',
@@ -64,7 +64,16 @@ describe('ticker inference helpers', () => {
     expect(inferMarketContextEtf(event)).toBe('QQQ');
   });
 
-  it('maps broad market headlines to SPY when no sector cue is present', () => {
+  it('maps energy-heavy headlines to XLE sector context', () => {
+    const event = makeEvent({
+      title: 'Oil and gas stocks jump after OPEC production cut',
+      body: 'Crude prices rise sharply in early trading.',
+    });
+
+    expect(inferMarketContextEtf(event)).toBe('XLE');
+  });
+
+  it('maps broad market headlines to SPY market context when no sector cue is present', () => {
     const event = makeEvent({
       title: 'Stocks rise after White House tariff comments',
       body: 'Broad market sentiment improves across major indexes.',
@@ -138,16 +147,22 @@ describe('ticker inference helpers', () => {
     });
   });
 
-  it('falls back to a market ETF when no direct ticker is present', () => {
+  it('returns null instead of assigning an ETF ticker when no direct ticker is present', () => {
     const event = makeEvent({
       title: 'Tech giants sink after new export controls',
       body: 'Chip and software names are under pressure.',
     });
 
-    expect(inferHighPriorityTicker(event)).toEqual({
-      ticker: 'QQQ',
-      tickerInferred: true,
-      strategy: 'fallback',
+    expect(inferHighPriorityTicker(event)).toBeNull();
+  });
+
+  it('returns null for broad market headlines and keeps market context separate', () => {
+    const event = makeEvent({
+      title: 'Markets slip after tariff headlines',
+      body: 'Investors cut risk across major indexes.',
     });
+
+    expect(inferHighPriorityTicker(event)).toBeNull();
+    expect(inferMarketContextEtf(event)).toBe('SPY');
   });
 });

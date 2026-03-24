@@ -367,6 +367,96 @@ describe('PriceService', () => {
   });
 
   describe('getPriceAfterEvent', () => {
+    it('uses intraday prices for the 1-hour window and daily prices for longer windows', async () => {
+      const intradayResponse = {
+        chart: {
+          result: [
+            {
+              timestamp: [1709557200, 1709559000, 1709560800],
+              indicators: {
+                quote: [
+                  {
+                    open: [179.0, 180.0, 181.0],
+                    high: [180.0, 181.0, 182.0],
+                    low: [178.8, 179.8, 180.8],
+                    close: [179.5, 180.5, 181.5],
+                    volume: [1000000, 1100000, 1200000],
+                  },
+                ],
+              },
+            },
+          ],
+          error: null,
+        },
+      };
+
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify(intradayResponse), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(mockChartResponse), { status: 200 }));
+
+      const result = await service.getPriceAfterEvent(
+        'AAPL',
+        new Date('2024-03-04T15:00:00Z'),
+        [1, 24],
+      );
+
+      expect(result.ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fetchSpy.mock.calls[0]?.[0]).toContain('interval=5m');
+      expect(fetchSpy.mock.calls[1]?.[0]).toContain('interval=1d');
+    });
+
+    it('keeps intraday and daily cache entries separate', async () => {
+      fetchSpy.mockResolvedValue(
+        new Response(JSON.stringify(mockChartResponse), { status: 200 }),
+      );
+
+      const start = new Date('2024-03-04T00:00:00Z');
+      const end = new Date('2024-03-15T00:00:00Z');
+
+      await service.getHistoricalPrices('AAPL', start, end, '1d');
+      await service.getHistoricalPrices('AAPL', start, end, '5m');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fetchSpy.mock.calls[0]?.[0]).toContain('interval=1d');
+      expect(fetchSpy.mock.calls[1]?.[0]).toContain('interval=5m');
+    });
+
+    it('reuses the intraday cache for repeated 1-hour lookups', async () => {
+      const intradayResponse = {
+        chart: {
+          result: [
+            {
+              timestamp: [1709557200, 1709559000, 1709560800],
+              indicators: {
+                quote: [
+                  {
+                    open: [179.0, 180.0, 181.0],
+                    high: [180.0, 181.0, 182.0],
+                    low: [178.8, 179.8, 180.8],
+                    close: [179.5, 180.5, 181.5],
+                    volume: [1000000, 1100000, 1200000],
+                  },
+                ],
+              },
+            },
+          ],
+          error: null,
+        },
+      };
+
+      fetchSpy.mockResolvedValue(
+        new Response(JSON.stringify(intradayResponse), { status: 200 }),
+      );
+
+      const eventTime = new Date('2024-03-04T15:00:00Z');
+      await service.getPriceAfterEvent('AAPL', eventTime, [1]);
+      await service.getPriceAfterEvent('AAPL', eventTime, [1]);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0]?.[0]).toContain('interval=5m');
+    });
+
     it('should return price changes at T+1d and T+1w intervals', async () => {
       fetchSpy.mockResolvedValue(
         new Response(JSON.stringify(mockChartResponse), { status: 200 }),

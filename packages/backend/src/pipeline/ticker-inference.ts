@@ -22,7 +22,7 @@ const SECTOR_FALLBACKS: SectorFallback[] = [
 export interface InferredTickerResult {
   ticker: string;
   tickerInferred: true;
-  strategy: 'regex' | 'company-map' | 'fallback';
+  strategy: 'regex' | 'company-map';
 }
 
 function normalizeTickerCandidate(value: string): string | null {
@@ -116,7 +116,7 @@ export function inferMarketContextEtf(event: RawEvent): string {
   return 'SPY';
 }
 
-export function inferHighPriorityTicker(event: RawEvent): InferredTickerResult {
+export function inferHighPriorityTicker(event: RawEvent): InferredTickerResult | null {
   const combinedText = `${event.title} ${event.body}`;
   const tickerFromText = extractTickerCandidateFromText(combinedText);
   if (tickerFromText) {
@@ -136,11 +136,7 @@ export function inferHighPriorityTicker(event: RawEvent): InferredTickerResult {
     };
   }
 
-  return {
-    ticker: inferMarketContextEtf(event),
-    tickerInferred: true,
-    strategy: 'fallback',
-  };
+  return null;
 }
 
 export function shouldInferTicker(

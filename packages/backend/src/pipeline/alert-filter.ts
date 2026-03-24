@@ -170,10 +170,12 @@ export class AlertFilter {
 
     // Rule 5: Insider trade threshold and meaningless Form 4 suppression
     if (source === 'sec-edgar' && isSecForm4Event(event)) {
-      const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
-      const shares = numMeta(event, 'shares') ?? numMeta(event, 'transactionShares');
-      if (value <= 0 || shares == null || shares <= 0) {
-        return { pass: false, reason: 'Form 4 missing meaningful transaction data', enrichWithLLM: false };
+      const value = numMeta(event, 'transactionValue')
+        ?? numMeta(event, 'transaction_value')
+        ?? numMeta(event, 'value')
+        ?? 0;
+      if (value <= 0) {
+        return { pass: false, reason: 'form-4 with no transaction value', enrichWithLLM: false };
       }
       if (value < this.insiderMinValue) {
         return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };

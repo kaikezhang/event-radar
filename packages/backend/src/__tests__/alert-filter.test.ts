@@ -269,6 +269,8 @@ describe('AlertFilter', () => {
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
+      expect(result.reason).toBe('form-4 with no transaction value');
+      expect(result.enrichWithLLM).toBe(false);
     });
 
     it('should block sec_form_4 events with zero transaction value', () => {
@@ -280,6 +282,7 @@ describe('AlertFilter', () => {
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
+      expect(result.reason).toBe('form-4 with no transaction value');
       expect(result.enrichWithLLM).toBe(false);
     });
 
@@ -292,10 +295,24 @@ describe('AlertFilter', () => {
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
+      expect(result.reason).toBe('form-4 with no transaction value');
       expect(result.enrichWithLLM).toBe(false);
     });
 
-    it('should block Form 4 filings with missing share counts', () => {
+    it('should block Form 4 filings when snake_case transaction_value is zero', () => {
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: 'form-4',
+        title: 'Form 4 - officer transaction',
+        metadata: { ticker: 'XYZ', transaction_value: 0 },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('form-4 with no transaction value');
+      expect(result.enrichWithLLM).toBe(false);
+    });
+
+    it('should allow Form 4 filings with a meaningful transaction value even if shares are missing', () => {
       const event = makeEvent({
         source: 'sec-edgar',
         type: 'form-4',
@@ -303,8 +320,8 @@ describe('AlertFilter', () => {
         metadata: { ticker: 'XYZ', transactionValue: 5_000_000, shares: null },
       });
       const result = filter.check(event);
-      expect(result.pass).toBe(false);
-      expect(result.enrichWithLLM).toBe(false);
+      expect(result.pass).toBe(true);
+      expect(result.enrichWithLLM).toBe(true);
     });
   });
 

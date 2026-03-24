@@ -23,6 +23,8 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+type YahooInterval = '1d' | '5m' | '15m';
+
 const DEFAULT_CACHE_TTL_MS = 3_600_000; // 1 hour
 
 const INTERVAL_LABELS: Record<number, string> = {
@@ -202,14 +204,15 @@ export class PriceService {
     ticker: string,
     startDate: Date,
     endDate: Date,
+    interval: YahooInterval = '1d',
   ): Promise<Result<PriceData[], Error>> {
-    const cacheKey = `${ticker}:${startDate.toISOString()}:${endDate.toISOString()}`;
+    const cacheKey = `${ticker}:${startDate.toISOString()}:${endDate.toISOString()}:${interval}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return ok(cached);
 
     const period1 = Math.floor(startDate.getTime() / 1000);
     const period2 = Math.floor(endDate.getTime() / 1000);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=${interval}`;
 
     try {
       const response = await this.fetchFn(url, {
@@ -246,45 +249,91 @@ export class PriceService {
     eventTime: Date,
     intervals: number[] = [1, 24, 168, 720],
   ): Promise<Result<PriceAfterEvent, Error>> {
-    const maxIntervalHours = Math.max(...intervals);
-    const endDate = new Date(eventTime.getTime() + maxIntervalHours * 3_600_000 + 86_400_000);
+    const uniqueIntervals = [...new Set(intervals)];
+    const intradayIntervals = uniqueIntervals.filter((hours) => hours <= 1);
+    const dailyIntervals = uniqueIntervals.filter((hours) => hours > 1);
 
-    // Fetch range from 7 days before event to cover holiday lookback
-    const startDate = new Date(eventTime);
-    startDate.setDate(startDate.getDate() - 7);
+    const priceIntervals: PriceAfterEvent['prices'] = [];
 
-    const result = await this.getHistoricalPrices(ticker, startDate, endDate);
-    if (!result.ok) return result;
+    if (intradayIntervals.length > 0) {
+      const intradayStartDate = new Date(eventTime.getTime() - 6 * 3_600_000);
+      const intradayEndDate = new Date(eventTime.getTime() + Math.max(...intradayIntervals) * 3_600_000 + 3_600_000);
+      const intradayResult = await this.getHistoricalPrices(ticker, intradayStartDate, intradayEndDate, '5m');
+      if (!intradayResult.ok) return intradayResult;
 
-    const eventPrice = findClosestPrice(result.value, eventTime);
-    if (!eventPrice) {
-      return err(new Error(`No price data found for ${ticker} around event time`));
-    }
-
-    const priceIntervals = intervals.map((hours) => {
-      const targetDate = new Date(eventTime.getTime() + hours * 3_600_000);
-      const target = findClosestPrice(result.value, targetDate);
-
-      const label = INTERVAL_LABELS[hours] ?? `T+${hours}h`;
-
-      if (!target) {
-        return { interval: hours, label, price: null, change: null, absolute: null };
+      const eventPrice = findClosestPrice(intradayResult.value, eventTime);
+      if (!eventPrice) {
+        return err(new Error(`No intraday price data found for ${ticker} around event time`));
       }
 
-      const absolute = Math.round((target.close - eventPrice.close) * 100) / 100;
-      const change =
-        eventPrice.close !== 0
-          ? Math.round(((target.close - eventPrice.close) / eventPrice.close) * 100 * 10000) / 10000
-          : null;
+      for (const hours of intradayIntervals) {
+        const targetDate = new Date(eventTime.getTime() + hours * 3_600_000);
+        const target = findClosestPrice(intradayResult.value, targetDate);
+        const label = INTERVAL_LABELS[hours] ?? `T+${hours}h`;
 
-      return {
-        interval: hours,
-        label,
-        price: target.close,
-        change,
-        absolute,
-      };
-    });
+        if (!target) {
+          priceIntervals.push({ interval: hours, label, price: null, change: null, absolute: null });
+          continue;
+        }
+
+        const absolute = Math.round((target.close - eventPrice.close) * 100) / 100;
+        const change =
+          eventPrice.close !== 0
+            ? Math.round(((target.close - eventPrice.close) / eventPrice.close) * 100 * 10000) / 10000
+            : null;
+
+        priceIntervals.push({
+          interval: hours,
+          label,
+          price: target.close,
+          change,
+          absolute,
+        });
+      }
+    }
+
+    if (dailyIntervals.length > 0) {
+      const maxIntervalHours = Math.max(...dailyIntervals);
+      const endDate = new Date(eventTime.getTime() + maxIntervalHours * 3_600_000 + 86_400_000);
+      const startDate = new Date(eventTime);
+      startDate.setDate(startDate.getDate() - 7);
+
+      const result = await this.getHistoricalPrices(ticker, startDate, endDate, '1d');
+      if (!result.ok) return result;
+
+      const eventPrice = findClosestPrice(result.value, eventTime);
+      if (!eventPrice) {
+        return err(new Error(`No price data found for ${ticker} around event time`));
+      }
+
+      for (const hours of dailyIntervals) {
+        const targetDate = new Date(eventTime.getTime() + hours * 3_600_000);
+        const target = findClosestPrice(result.value, targetDate);
+
+        const label = INTERVAL_LABELS[hours] ?? `T+${hours}h`;
+
+        if (!target) {
+          priceIntervals.push({ interval: hours, label, price: null, change: null, absolute: null });
+          continue;
+        }
+
+        const absolute = Math.round((target.close - eventPrice.close) * 100) / 100;
+        const change =
+          eventPrice.close !== 0
+            ? Math.round(((target.close - eventPrice.close) / eventPrice.close) * 100 * 10000) / 10000
+            : null;
+
+        priceIntervals.push({
+          interval: hours,
+          label,
+          price: target.close,
+          change,
+          absolute,
+        });
+      }
+    }
+
+    priceIntervals.sort((left, right) => left.interval - right.interval);
 
     return ok({
       ticker,
