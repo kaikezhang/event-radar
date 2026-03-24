@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ScannerRegistry, EventBus, IMarketRegimeService } from '@event-radar/shared';
 import type { Database } from './db/connection.js';
-import type { PriceChartService } from './routes/price.js';
+import type { PriceBatchService, PriceChartService } from './routes/price.js';
 import type { IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
 import type { HealthMonitorService } from './services/health-monitor.js';
 import type { MarketContextCache } from './services/market-context-cache.js';
@@ -55,6 +55,7 @@ export interface RouteRegistrationOptions {
   killSwitch?: IDeliveryKillSwitch;
   healthMonitor?: HealthMonitorService;
   priceChartService?: PriceChartService;
+  priceBatchService?: PriceBatchService;
   startTime: number;
   version: string;
   rules?: Rule[];
@@ -73,6 +74,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     killSwitch,
     healthMonitor,
     priceChartService,
+    priceBatchService,
     startTime,
     version,
     rules,
@@ -81,6 +83,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
   registerPriceRoutes(server, {
     apiKey,
     priceChartService,
+    priceBatchService,
     marketDataCache: tickerMarketDataCache,
   });
   registerRegimeRoutes(server, {

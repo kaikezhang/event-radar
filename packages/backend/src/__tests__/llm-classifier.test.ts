@@ -96,9 +96,8 @@ describe('buildClassificationPrompt', () => {
     const prompt = buildClassificationPrompt(event);
 
     expect(prompt).toContain('...');
-    // The body in the prompt should be truncated to 2000 chars + "..."
-    // Body truncated to 2000 chars; prompt includes template boilerplate
-    expect(prompt.length).toBeLessThan(longBody.length + 2500);
+    expect(prompt).toContain(`Body: ${'x'.repeat(2000)}...`);
+    expect(prompt).not.toContain('x'.repeat(2200));
   });
 
   it('should handle event with no URL or metadata', () => {
@@ -129,11 +128,26 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('NEVER output 1.0 or 0.0');
   });
 
-  it('should instruct the model to set direction to NEUTRAL', () => {
+  it('should include direction calibration guidance instead of forcing NEUTRAL', () => {
     const prompt = buildClassificationPrompt(makeEvent());
 
-    expect(prompt).toContain('Set direction to NEUTRAL. Direction prediction is not used in the current version.');
-    expect(prompt).not.toContain('what is the likely price impact?');
+    expect(prompt).toContain('DIRECTION CALIBRATION:');
+    expect(prompt).toContain('"Trump threatens Iran with military action" → BEARISH');
+    expect(prompt).toContain('"Trade deal reached with China" → BULLISH');
+    expect(prompt).not.toContain('Set direction to NEUTRAL');
+  });
+
+  it('should tell the model to assess market-wide impact for macro and geopolitical events', () => {
+    const prompt = buildClassificationPrompt(makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'Trump threatens Iran with military action',
+      body: 'If Iran does not comply, the US will respond militarily.',
+    }));
+
+    expect(prompt).toContain('For macro, policy, and geopolitical events, assess the likely market-wide impact');
+    expect(prompt).toContain('risk-on');
+    expect(prompt).toContain('risk-off');
   });
 
   it('should add political post severity guidance for Truth Social posts', () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@event-radar/shared';
 import { buildApp } from '../app.js';
 import { safeCloseServer } from './helpers/test-db.js';
-import { YahooPriceChartService } from '../routes/price.js';
+import { YahooPriceBatchService, YahooPriceChartService } from '../routes/price.js';
 
 const TEST_API_KEY = 'price-test-key';
 
@@ -142,6 +142,122 @@ describe('YahooPriceChartService', () => {
     if (!result.ok) {
       expect(result.error.message).toContain('No price data');
     }
+  });
+});
+
+describe('YahooPriceBatchService', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-24T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('retries yahoo quote lookups with exponential backoff before succeeding', async () => {
+    const quote = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rate limit'))
+      .mockRejectedValueOnce(new Error('rate limit'))
+      .mockResolvedValueOnce({
+        regularMarketPrice: 178.5,
+        regularMarketChange: 4.11,
+        regularMarketChangePercent: 2.36,
+      });
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const service = new YahooPriceBatchService({
+      yahooFinance: { quote } as never,
+      sleep,
+    });
+
+    const result = await service.getQuotes(['NVDA']);
+
+    expect(result).toEqual({
+      prices: {
+        NVDA: {
+          price: 178.5,
+          change: 4.11,
+          changePercent: 2.36,
+        },
+      },
+    });
+    expect(quote).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 250);
+    expect(sleep).toHaveBeenNthCalledWith(2, 500);
+  });
+
+  it('reuses cached batch quotes within the ttl window', async () => {
+    const quote = vi.fn().mockResolvedValue({
+      regularMarketPrice: 178.5,
+      regularMarketChange: 4.11,
+      regularMarketChangePercent: 2.36,
+    });
+    const service = new YahooPriceBatchService({
+      yahooFinance: { quote } as never,
+      cacheTtlMs: 300_000,
+    });
+
+    await service.getQuotes(['NVDA']);
+    await service.getQuotes(['NVDA']);
+
+    expect(quote).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to stale cached quotes when yahoo is temporarily unavailable', async () => {
+    const quote = vi
+      .fn()
+      .mockResolvedValueOnce({
+        regularMarketPrice: 178.5,
+        regularMarketChange: 4.11,
+        regularMarketChangePercent: 2.36,
+      })
+      .mockRejectedValueOnce(new Error('temporary outage'));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const service = new YahooPriceBatchService({
+      yahooFinance: { quote } as never,
+      cacheTtlMs: 300_000,
+      retryDelaysMs: [0],
+      sleep,
+    });
+
+    await service.getQuotes(['NVDA']);
+    vi.advanceTimersByTime(300_001);
+    const result = await service.getQuotes(['NVDA']);
+
+    expect(result).toEqual({
+      prices: {
+        NVDA: {
+          price: 178.5,
+          change: 4.11,
+          changePercent: 2.36,
+        },
+      },
+    });
+    expect(quote).toHaveBeenCalledTimes(3);
+  });
+
+  it('opens the circuit breaker after five consecutive yahoo failures', async () => {
+    const quote = vi.fn().mockRejectedValue(new Error('yahoo down'));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const service = new YahooPriceBatchService({
+      yahooFinance: { quote } as never,
+      retryDelaysMs: [0],
+      sleep,
+    });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await service.getQuotes(['NVDA']);
+    }
+
+    const result = await service.getQuotes(['NVDA']);
+
+    expect(result).toEqual({
+      prices: {},
+      error: 'Price data temporarily unavailable',
+    });
+    expect(quote).toHaveBeenCalledTimes(10);
   });
 });
 
@@ -352,6 +468,34 @@ describe('GET /api/price/batch', () => {
     await safeCloseServer(ctx.server);
   });
 
+  it('returns a non-503 fallback payload when live price data is unavailable', async () => {
+    const priceBatchService = {
+      getQuotes: vi.fn().mockResolvedValue({
+        prices: {},
+        error: 'Price data temporarily unavailable',
+      }),
+    };
+    const ctx = buildApp({
+      logger: false,
+      apiKey: TEST_API_KEY,
+      priceBatchService: priceBatchService as never,
+    });
+    await ctx.server.ready();
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/price/batch?tickers=AAPL',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      prices: {},
+      error: 'Price data temporarily unavailable',
+    });
+    await safeCloseServer(ctx.server);
+  });
+
   it('deduplicates and normalizes requested tickers', async () => {
     const marketDataCache = {
       getOrFetch: vi.fn().mockResolvedValue({
@@ -413,10 +557,14 @@ describe('GET /api/price/batch', () => {
           resistance: 218.0,
         }),
     };
+    const priceBatchService = {
+      getQuotes: vi.fn().mockResolvedValue({ prices: {} }),
+    };
     const ctx = buildApp({
       logger: false,
       apiKey: TEST_API_KEY,
       marketDataCache,
+      priceBatchService: priceBatchService as never,
     });
     await ctx.server.ready();
 

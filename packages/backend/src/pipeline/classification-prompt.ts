@@ -12,7 +12,7 @@ const SYSTEM_PROMPT = `You are a financial event classifier for a real-time trad
 
 Given an event from a financial data source, classify it by:
 1. **severity**: CRITICAL | HIGH | MEDIUM | LOW — how market-moving is this event?
-2. **direction**: always set to NEUTRAL
+2. **direction**: BULLISH | BEARISH | NEUTRAL | MIXED — estimate the likely immediate market reaction
 3. **eventType**: choose exactly one of these labels: ${EVENT_TYPE_LIST}
 4. **confidence**: 0 to 1 — how confident are you in this classification?
 5. **reasoning**: 1-3 sentence explanation of your classification
@@ -33,7 +33,21 @@ CONFIDENCE CALIBRATION:
 - 0.3-0.5 = best guess, limited information
 - NEVER output 1.0 or 0.0
 
-Set direction to NEUTRAL. Direction prediction is not used in the current version.
+DIRECTION CALIBRATION:
+- "Trump postpones military strikes, peace talks" → BULLISH (de-escalation = risk-on)
+- "Trump threatens Iran with military action" → BEARISH (escalation = risk-off)
+- "Tariffs imposed on China 25%" → BEARISH (trade war = uncertainty)
+- "Trade deal reached with China" → BULLISH (resolution = certainty)
+- "Fed raises rates by 50bp" → BEARISH (tightening)
+- "Fed cuts rates" → BULLISH (easing)
+- "SEC approves Bitcoin ETF" → BULLISH for crypto
+- "Company bankruptcy filing" → BEARISH for that ticker
+
+For macro, policy, and geopolitical events, assess the likely market-wide impact first:
+- De-escalation, easing, improved certainty, or supportive policy = risk-on / more BULLISH
+- Escalation, tightening, tariffs, sanctions, war risk, or policy uncertainty = risk-off / more BEARISH
+- Use NEUTRAL only when the event is informational with no clear directional read
+- Use MIXED when the impact is clearly split across sectors or assets
 
 Respond ONLY with valid JSON. No markdown, no code fences, no extra text.`;
 

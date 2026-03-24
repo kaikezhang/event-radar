@@ -280,7 +280,7 @@ describe('EventDetail page', () => {
 
     expect(within(sourceEvidenceSection).getByText(/source type/i)).toBeInTheDocument();
     expect(within(sourceEvidenceSection).getByText(/^SEC Filing$/i)).toBeInTheDocument();
-    expect(within(sourceEvidenceSection).getByRole('link', { name: /source url/i })).toHaveAttribute(
+    expect(within(sourceEvidenceSection).getByRole('link', { name: /view original source/i })).toHaveAttribute(
       'href',
       'https://example.com/sec/nvda-export-filing',
     );

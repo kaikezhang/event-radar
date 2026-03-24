@@ -25,6 +25,12 @@ const PriceBatchQuerySchema = z.object({
     .min(1),
 });
 
+const DEFAULT_CACHE_TTL_MS = 300_000;
+const DEFAULT_BATCH_RETRY_DELAYS_MS = [250, 500];
+const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 5;
+const DEFAULT_CIRCUIT_BREAKER_MS = 300_000;
+const PRICE_TEMPORARILY_UNAVAILABLE_ERROR = 'Price data temporarily unavailable';
+
 export type PriceRange = z.infer<typeof PriceRangeSchema>;
 
 export interface PriceCandle {
@@ -54,7 +60,16 @@ export interface PriceBatchQuote {
 
 export type PriceBatchResponse = Record<string, PriceBatchQuote>;
 
-interface YahooQuote {
+export interface PriceBatchUnavailableResponse {
+  prices: PriceBatchResponse;
+  error: string;
+}
+
+export interface PriceBatchService {
+  getQuotes(tickers: string[]): Promise<{ prices: PriceBatchResponse; error?: string }>;
+}
+
+interface YahooChartQuote {
   date: Date;
   open: number | null;
   high: number | null;
@@ -64,10 +79,16 @@ interface YahooQuote {
 }
 
 interface YahooChartResult {
-  quotes?: YahooQuote[];
+  quotes?: YahooChartQuote[];
 }
 
-interface YahooFinanceClient {
+interface YahooQuoteResult {
+  regularMarketPrice?: number | null;
+  regularMarketChange?: number | null;
+  regularMarketChangePercent?: number | null;
+}
+
+interface YahooFinanceChartClient {
   chart(
     symbol: string,
     options: {
@@ -78,12 +99,14 @@ interface YahooFinanceClient {
   ): Promise<YahooChartResult>;
 }
 
+interface YahooFinanceQuoteClient {
+  quote(symbol: string): Promise<YahooQuoteResult>;
+}
+
 interface CacheEntry<T> {
   data: T;
   expiresAt: number;
 }
-
-const DEFAULT_CACHE_TTL_MS = 300_000;
 
 function toDateKey(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -113,13 +136,64 @@ function getPeriodStart(now: Date, range: PriceRange): Date {
   return start;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeBatchTickers(input: string): string[] | null {
+  const unique = new Set<string>();
+
+  for (const rawTicker of input.split(',')) {
+    const parsedTicker = PriceTickerSchema.safeParse(rawTicker);
+    if (!parsedTicker.success) {
+      return null;
+    }
+
+    unique.add(parsedTicker.data.toUpperCase());
+  }
+
+  return Array.from(unique);
+}
+
+function quoteToBatchQuote(quote: YahooQuoteResult): PriceBatchQuote | null {
+  const price = quote.regularMarketPrice;
+  if (typeof price !== 'number' || Number.isNaN(price)) {
+    return null;
+  }
+
+  const changePercent = typeof quote.regularMarketChangePercent === 'number'
+    ? quote.regularMarketChangePercent
+    : 0;
+  const change = typeof quote.regularMarketChange === 'number'
+    ? quote.regularMarketChange
+    : price * changePercent / 100;
+
+  if (Number.isNaN(change) || Number.isNaN(changePercent)) {
+    return null;
+  }
+
+  return {
+    price,
+    change,
+    changePercent,
+  };
+}
+
+function normalizeBatchQuote(quote: MarketQuote): PriceBatchQuote {
+  return {
+    price: quote.price,
+    change: quote.price * quote.change1d / 100,
+    changePercent: quote.change1d,
+  };
+}
+
 export class YahooPriceChartService implements PriceChartService {
   private readonly cache = new Map<string, CacheEntry<PriceChartResponse>>();
-  private readonly yahooFinance: YahooFinanceClient;
+  private readonly yahooFinance: YahooFinanceChartClient;
   private readonly cacheTtlMs: number;
 
   constructor(options?: {
-    yahooFinance?: YahooFinanceClient;
+    yahooFinance?: YahooFinanceChartClient;
     cacheTtlMs?: number;
   }) {
     this.yahooFinance = options?.yahooFinance ?? new YahooFinance();
@@ -203,27 +277,149 @@ export class YahooPriceChartService implements PriceChartService {
   }
 }
 
-export interface PriceRouteOptions {
-  apiKey?: string;
-  priceChartService?: PriceChartService;
-  marketDataCache?: {
-    getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
-  };
-}
+export class YahooPriceBatchService implements PriceBatchService {
+  private readonly cache = new Map<string, CacheEntry<PriceBatchQuote>>();
+  private readonly yahooFinance: YahooFinanceQuoteClient;
+  private readonly cacheTtlMs: number;
+  private readonly retryDelaysMs: number[];
+  private readonly circuitBreakerThreshold: number;
+  private readonly circuitBreakerMs: number;
+  private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private consecutiveFailures = 0;
+  private circuitOpenUntil = 0;
 
-function normalizeBatchTickers(input: string): string[] | null {
-  const unique = new Set<string>();
+  constructor(options?: {
+    yahooFinance?: YahooFinanceQuoteClient;
+    cacheTtlMs?: number;
+    retryDelaysMs?: number[];
+    circuitBreakerThreshold?: number;
+    circuitBreakerMs?: number;
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
+  }) {
+    this.yahooFinance = options?.yahooFinance ?? new YahooFinance();
+    this.cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    this.retryDelaysMs = options?.retryDelaysMs ?? DEFAULT_BATCH_RETRY_DELAYS_MS;
+    this.circuitBreakerThreshold = options?.circuitBreakerThreshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD;
+    this.circuitBreakerMs = options?.circuitBreakerMs ?? DEFAULT_CIRCUIT_BREAKER_MS;
+    this.now = options?.now ?? (() => Date.now());
+    this.sleep = options?.sleep ?? sleep;
+  }
 
-  for (const rawTicker of input.split(',')) {
-    const parsedTicker = PriceTickerSchema.safeParse(rawTicker);
-    if (!parsedTicker.success) {
+  async getQuotes(tickers: string[]): Promise<{ prices: PriceBatchResponse; error?: string }> {
+    const prices: PriceBatchResponse = {};
+    const normalizedTickers = Array.from(
+      new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean)),
+    );
+
+    if (normalizedTickers.length === 0) {
+      return { prices };
+    }
+
+    if (this.now() < this.circuitOpenUntil) {
+      for (const ticker of normalizedTickers) {
+        const staleCached = this.getCachedQuote(ticker, true);
+        if (staleCached) {
+          prices[ticker] = staleCached;
+        }
+      }
+
+      return Object.keys(prices).length > 0
+        ? { prices }
+        : { prices: {}, error: PRICE_TEMPORARILY_UNAVAILABLE_ERROR };
+    }
+
+    for (const ticker of normalizedTickers) {
+      const freshCached = this.getCachedQuote(ticker, false);
+      if (freshCached) {
+        prices[ticker] = freshCached;
+        continue;
+      }
+
+      const result = await this.fetchQuoteWithRetry(ticker);
+      if (result.ok) {
+        this.setCachedQuote(ticker, result.value);
+        this.recordSuccess();
+        prices[ticker] = result.value;
+        continue;
+      }
+
+      this.recordFailure();
+
+      const staleCached = this.getCachedQuote(ticker, true);
+      if (staleCached) {
+        prices[ticker] = staleCached;
+      }
+    }
+
+    return Object.keys(prices).length > 0
+      ? { prices }
+      : { prices: {}, error: PRICE_TEMPORARILY_UNAVAILABLE_ERROR };
+  }
+
+  private async fetchQuoteWithRetry(ticker: string): Promise<Result<PriceBatchQuote, Error>> {
+    for (let attempt = 0; attempt <= this.retryDelaysMs.length; attempt += 1) {
+      try {
+        const quote = await this.yahooFinance.quote(ticker);
+        const normalized = quoteToBatchQuote(quote);
+        if (!normalized) {
+          return err(new Error(`No price data found for ${ticker}`));
+        }
+
+        return ok(normalized);
+      } catch (error) {
+        if (attempt === this.retryDelaysMs.length) {
+          return err(error instanceof Error ? error : new Error(String(error)));
+        }
+
+        await this.sleep(this.retryDelaysMs[attempt] ?? 0);
+      }
+    }
+
+    return err(new Error(`No price data found for ${ticker}`));
+  }
+
+  private getCachedQuote(ticker: string, allowStale: boolean): PriceBatchQuote | null {
+    const entry = this.cache.get(ticker);
+    if (!entry) {
       return null;
     }
 
-    unique.add(parsedTicker.data.toUpperCase());
+    if (!allowStale && this.now() > entry.expiresAt) {
+      return null;
+    }
+
+    return entry.data;
   }
 
-  return Array.from(unique);
+  private setCachedQuote(ticker: string, quote: PriceBatchQuote): void {
+    this.cache.set(ticker, {
+      data: quote,
+      expiresAt: this.now() + this.cacheTtlMs,
+    });
+  }
+
+  private recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.circuitOpenUntil = 0;
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= this.circuitBreakerThreshold) {
+      this.circuitOpenUntil = this.now() + this.circuitBreakerMs;
+    }
+  }
+}
+
+export interface PriceRouteOptions {
+  apiKey?: string;
+  priceChartService?: PriceChartService;
+  priceBatchService?: PriceBatchService;
+  marketDataCache?: {
+    getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
+  };
 }
 
 export function registerPriceRoutes(
@@ -236,6 +432,7 @@ export function registerPriceRoutes(
   ) => requireApiKey(request, reply, options?.apiKey);
 
   const priceChartService = options?.priceChartService ?? new YahooPriceChartService();
+  const priceBatchService = options?.priceBatchService ?? new YahooPriceBatchService();
 
   server.get('/api/price/batch', { preHandler: withAuth }, async (request, reply) => {
     const query = PriceBatchQuerySchema.safeParse(request.query);
@@ -254,31 +451,38 @@ export function registerPriceRoutes(
       });
     }
 
-    if (!options?.marketDataCache) {
-      return reply.status(503).send({
-        error: 'Service Unavailable',
-        message: 'Real-time price data is unavailable',
-      });
+    const payload: PriceBatchResponse = {};
+    const missingTickers = new Set(tickers);
+
+    if (options?.marketDataCache) {
+      const quotes = await Promise.allSettled(
+        tickers.map(async (ticker) => ({
+          ticker,
+          quote: await options.marketDataCache?.getOrFetch(ticker),
+        })),
+      );
+
+      for (const item of quotes) {
+        if (item.status !== 'fulfilled' || !item.value.quote) {
+          continue;
+        }
+
+        payload[item.value.ticker] = normalizeBatchQuote(item.value.quote);
+        missingTickers.delete(item.value.ticker);
+      }
     }
 
-    const quotes = await Promise.all(
-      tickers.map(async (ticker) => ({
-        ticker,
-        quote: await options.marketDataCache?.getOrFetch(ticker),
-      })),
-    );
+    if (missingTickers.size > 0) {
+      const fallback = await priceBatchService.getQuotes(Array.from(missingTickers));
+      Object.assign(payload, fallback.prices);
 
-    const payload: PriceBatchResponse = {};
-    for (const item of quotes) {
-      if (!item.quote) {
-        continue;
+      if (Object.keys(payload).length === 0) {
+        const unavailable: PriceBatchUnavailableResponse = {
+          prices: {},
+          error: fallback.error ?? PRICE_TEMPORARILY_UNAVAILABLE_ERROR,
+        };
+        return reply.send(unavailable);
       }
-
-      payload[item.ticker] = {
-        price: item.quote.price,
-        change: item.quote.price * item.quote.change1d / 100,
-        changePercent: item.quote.change1d,
-      };
     }
 
     return reply.send(payload);

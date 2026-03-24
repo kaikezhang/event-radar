@@ -42,7 +42,7 @@ import { ClassificationAccuracyService } from './services/classification-accurac
 import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import { PatternMatcher } from './services/pattern-matcher.js';
 import { validateJwtConfig } from './routes/auth.js';
-import type { PriceChartService } from './routes/price.js';
+import type { PriceBatchService, PriceChartService } from './routes/price.js';
 
 // Extracted modules
 import { registerScanners } from './scanner-registry-setup.js';
@@ -83,6 +83,7 @@ export function buildApp(options?: {
   historicalEnricherConfig?: ConstructorParameters<typeof HistoricalEnricher>[2];
   historicalEnricher?: HistoricalEnricherLike;
   priceChartService?: PriceChartService;
+  priceBatchService?: PriceBatchService;
   marketRegimeService?: IMarketRegimeService;
   killSwitch?: IDeliveryKillSwitch;
   marketDataCache?: {
@@ -392,6 +393,7 @@ export function buildApp(options?: {
     killSwitch,
     healthMonitor,
     priceChartService: options?.priceChartService,
+    priceBatchService: options?.priceBatchService,
     startTime,
     version: backendPackage.version,
     rules: options?.rules,

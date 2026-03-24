@@ -105,9 +105,9 @@ export function EventEvidenceContent({
                 target="_blank"
                 rel="noreferrer"
                 className="mt-1 inline-flex items-center break-all text-accent-default hover:underline"
-                aria-label="Source URL"
+                aria-label="View original source"
               >
-                {sourceUrl}
+                View original source →
               </a>
             </div>
           ) : null}
@@ -267,7 +267,10 @@ function resolveSourceUrl(
 ): string | null {
   if (eventUrl) return eventUrl;
 
-  const metadataUrl = sourceMetadata?.sourceUrl ?? sourceMetadata?.source_url ?? sourceMetadata?.url;
+  const metadataUrl = sourceMetadata?.sourceUrl
+    ?? sourceMetadata?.source_url
+    ?? sourceMetadata?.url
+    ?? sourceMetadata?.filingLink;
   return typeof metadataUrl === 'string' && metadataUrl.length > 0 ? metadataUrl : null;
 }
 
@@ -276,12 +279,34 @@ function resolveSourceText(
   source: string,
   sourceMetadata?: Record<string, unknown>,
 ): string | null {
-  if (rawExcerpt) return rawExcerpt;
+  const directText = typeof rawExcerpt === 'string' ? rawExcerpt.trim() : '';
+  if (directText.length > 0) {
+    return truncateSourceText(directText);
+  }
+
+  const metadataText = sourceMetadata?.rawContent
+    ?? sourceMetadata?.raw_content
+    ?? sourceMetadata?.body
+    ?? sourceMetadata?.description
+    ?? sourceMetadata?.content
+    ?? sourceMetadata?.text
+    ?? sourceMetadata?.postBody
+    ?? sourceMetadata?.postText;
+
+  if (typeof metadataText === 'string' && metadataText.trim().length > 0) {
+    return truncateSourceText(metadataText.trim());
+  }
 
   if (source === 'breaking-news' || source === 'businesswire' || source === 'pr-newswire' || source === 'reuters') {
     const headline = sourceMetadata?.headline;
-    return typeof headline === 'string' && headline.trim().length > 0 ? headline.trim() : null;
+    return typeof headline === 'string' && headline.trim().length > 0
+      ? truncateSourceText(headline.trim())
+      : null;
   }
 
   return null;
+}
+
+function truncateSourceText(value: string): string {
+  return value.length > 500 ? `${value.slice(0, 500)}...` : value;
 }

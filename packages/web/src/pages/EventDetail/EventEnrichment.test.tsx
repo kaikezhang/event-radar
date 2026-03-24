@@ -96,7 +96,7 @@ describe('EventEvidenceContent', () => {
       />,
     );
 
-    expect(screen.getByRole('link', { name: /source url/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /view original source/i })).toHaveAttribute(
       'href',
       'https://truthsocial.com/@user/posts/123',
     );
@@ -130,5 +130,47 @@ describe('EventEvidenceContent', () => {
     );
 
     expect(screen.getByText(/source data not available/i)).toBeInTheDocument();
+  });
+
+  it('falls back to metadata body text and truncates long source content', () => {
+    const longBody = 'A'.repeat(620);
+
+    render(
+      <EventEvidenceContent
+        enrichment={null}
+        eventUrl={null}
+        rawExcerpt={null}
+        source="truth-social"
+        sourceMetadata={{
+          body: longBody,
+          url: 'https://truthsocial.com/@user/posts/456',
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /view original source/i })).toHaveAttribute(
+      'href',
+      'https://truthsocial.com/@user/posts/456',
+    );
+    expect(screen.getByText(/original source text/i)).toBeInTheDocument();
+    expect(screen.getByText(`${'A'.repeat(500)}...`)).toBeInTheDocument();
+  });
+
+  it('renders an EDGAR link from the accession number when no direct filing url exists', () => {
+    render(
+      <EventEvidenceContent
+        enrichment={null}
+        eventUrl={null}
+        rawExcerpt={null}
+        source="sec-edgar"
+        sourceMetadata={{ accessionNumber: '0000320193-24-000123' }}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /view on edgar/i })).toHaveAttribute(
+      'href',
+      'https://www.sec.gov/edgar/search/#/q=0000320193-24-000123',
+    );
+    expect(screen.queryByText(/source data not available/i)).not.toBeInTheDocument();
   });
 });
