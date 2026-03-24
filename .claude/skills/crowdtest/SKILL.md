@@ -1,391 +1,403 @@
-# CrowdTest — Deep Interactive QA for Event Radar
+# CrowdTest — Persona-Driven Interactive QA for Event Radar
 
 ## Purpose
 
-Run a rigorous, interaction-driven QA test of Event Radar from the perspective of multiple user personas. Unlike shallow "page loaded = pass" testing, every test case **defines expected behavior FIRST**, then **performs the actual interaction**, then **compares result vs expectation**.
+Simulate 10 real users with different backgrounds, each navigating the app **as they naturally would**, performing actions relevant to their workflow, and scoring based on whether things work for their use case.
 
 ## Core Philosophy
 
 > "If you didn't type into the search box and verify results, you didn't test search."
+> "Each persona tests the app through THEIR lens, not a generic checklist."
 
 Every feature MUST be tested by **doing the thing**, not just seeing that the UI element exists.
-
-## Test Structure
-
-For every test case:
-```
-1. EXPECTED: What should happen when I do X
-2. ACTION: Actually do X (click, type, submit, call API)
-3. RESULT: What actually happened
-4. VERDICT: ✅ PASS / ❌ FAIL / ⚠️ PARTIAL (with explanation)
-```
 
 ## Test Execution Method
 
 - Use **Playwright MCP** or **browser tool** to interact with pages
-- Use **curl/fetch** to test API endpoints directly
-- **Screenshot** or **snapshot** after each interaction to verify
+- Use **curl** to test API endpoints directly
+- **Snapshot** after each interaction to verify what's on screen
 - **Never** mark something as "Working" without performing the interaction
+- Each persona runs their **own journey** through the app
 
-## Test Suite
+## Verification Pattern
 
-### Phase 1: Core Functionality (must all pass for beta)
-
-#### TC-01: Feed Loads with Real Events
+For every action a persona takes:
 ```
-EXPECTED: Feed page shows recent events with severity badges, timestamps, source labels
-ACTION: Navigate to / → Skip onboarding → Check feed
-VERIFY:
-  - [ ] At least 5 events visible
-  - [ ] Each event has: title, severity badge (CRITICAL/HIGH/MEDIUM/LOW), source, timestamp
-  - [ ] Events sorted by recency (newest first)
-  - [ ] "Live" indicator shows connection status
+EXPECTED: What should happen
+ACTION: What I actually did (click, type, curl)  
+RESULT: What actually happened (quote exact text/error from snapshot)
+VERDICT: ✅ PASS / ❌ FAIL / ⚠️ PARTIAL
 ```
 
-#### TC-02: Event Detail Page Shows Full Analysis  
-```
-EXPECTED: Clicking an event shows summary, classification, evidence, historical context
-ACTION: Click any event in feed → Check detail page tabs
-VERIFY:
-  - [ ] Summary tab: AI analysis with bull/bear case
-  - [ ] Classification badge visible (BULLISH/BEARISH/NEUTRAL + confidence)
-  - [ ] Evidence tab: source URL or raw text (NOT "Source data not available")
-  - [ ] Trust score or similar events section
-  - [ ] Price at event time shown (if ticker exists)
-  - [ ] "View original source" link works (opens in new tab)
+## Pre-Flight Checks (before any persona runs)
+
+Run these first to ensure the environment is testable:
+
+```bash
+# 1. Backend alive?
+curl -s http://localhost:3001/api/health | jq .
+
+# 2. Frontend accessible?
+curl -s -o /dev/null -w "%{http_code}" $APP_URL
+
+# 3. How many events in DB?
+curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?limit=1" | jq '.total'
+
+# 4. Any events with classification?
+curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?classification=BEARISH&limit=1" | jq '.total'
+
+# 5. Which tickers have data?
+curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?ticker=SPY&limit=1" | jq '.total'
+curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?ticker=AAPL&limit=1" | jq '.total'
 ```
 
-#### TC-03: Search Actually Returns Results
-```
-EXPECTED: Searching for a known ticker returns matching events
-ACTION: 
-  1. Navigate to /search
-  2. Type "SPY" in search box → Press Enter
-  3. Verify results appear
-  4. Type "Iran" in search box → Press Enter  
-  5. Verify text-based results appear
-VERIFY:
-  - [ ] Ticker search (SPY) returns events with SPY ticker
-  - [ ] Text search (Iran) returns events mentioning Iran
-  - [ ] Results show event cards with title, severity, date
-  - [ ] Clicking a result navigates to event detail
-  - [ ] "No results" only shown for genuinely absent queries
-PRE-CHECK: curl /api/events?ticker=SPY to confirm data exists
-```
+Record all pre-flight results. If backend is down or zero events, STOP and report.
 
-#### TC-04: Search Popular Ticker Buttons Work
-```
-EXPECTED: Clicking $AAPL/$NVDA/$SPY buttons performs search or navigates to ticker page
-ACTION: Navigate to /search → Click "$SPY" button
-VERIFY:
-  - [ ] Page navigates or search executes
-  - [ ] Results or ticker profile shown
-  - [ ] NOT showing "No results" for major tickers with data in DB
-```
+---
 
-#### TC-05: Watchlist CRUD
-```
-EXPECTED: Can add/remove tickers from watchlist
-ACTION:
-  1. Navigate to /watchlist
-  2. If empty, navigate to an event with a ticker
-  3. Click "Add to watchlist" button
-  4. Navigate back to /watchlist
-  5. Verify ticker appears
-VERIFY:
-  - [ ] Add to watchlist button exists on event cards
-  - [ ] After adding, ticker appears on watchlist page
-  - [ ] Watchlist shows event count per ticker
-```
+## Persona Journeys
 
-#### TC-06: Calendar Shows Scheduled Events Only
-```
-EXPECTED: Calendar shows time-bound events (earnings, economic data), NOT social media trending
-ACTION: Navigate to /calendar
-VERIFY:
-  - [ ] Events have specific dates/times
-  - [ ] Sources are: earnings, econ-calendar, sec-edgar, fda, congress
-  - [ ] NO StockTwits trending or Reddit posts
-  - [ ] Week/month view works
-```
+### 👩‍💻 Persona 1: Sarah — Day Trader ($500K, Benzinga Pro user)
 
-#### TC-07: Scorecard Shows Real Statistics
-```
-EXPECTED: Scorecard shows event tracking stats with non-zero outcomes
-ACTION: Navigate to /scorecard
-VERIFY:
-  - [ ] Total events tracked shown (should be 20,000+)
-  - [ ] Source accuracy breakdown visible
-  - [ ] Outcome intervals shown (1h, 1d, T+5, etc.)
-  - [ ] At least some intervals have non-zero values
-  - [ ] NOT all 0.0% across the board
-```
+**Profile:** Full-time day trader, needs sub-second alerts, trades earnings/halts/breakouts, pays $150/mo for Benzinga Pro.
 
-#### TC-08: Settings Page Loads All Sections
-```
-EXPECTED: Settings shows notification config, display preferences, font size control
-ACTION: Navigate to /settings
-VERIFY:
-  - [ ] Push alerts toggle exists
-  - [ ] Discord webhook config exists
-  - [ ] Email digest config exists
-  - [ ] Font size control exists (small/medium/large)
-  - [ ] Font size change actually affects page text
-```
+**Sarah's Journey:**
+1. **Open the app** → Skip onboarding
+   - VERIFY: Feed loads with real events, not demo data
+   - VERIFY: "Live" indicator shows actual WebSocket status
+   
+2. **Scan the feed for today's actionable events**
+   - VERIFY: Events have severity badges, timestamps, source labels
+   - VERIFY: At least 1 event today has a classification (BULLISH/BEARISH)
+   - Count how many events are visible without scrolling
+   
+3. **Click the highest-severity event**
+   - VERIFY: Detail page loads with AI analysis (bull/bear case)
+   - VERIFY: Evidence tab shows real source data (NOT "Source data not available")
+   - VERIFY: Price at event time is shown (if ticker exists)
+   - Click "View original source" link → VERIFY it opens real URL
+   
+4. **Search for "NVDA"** (her favorite stock)
+   - Navigate to /search → Type "NVDA" → Enter
+   - VERIFY: Results appear (or explain why none exist)
+   - PRE-CHECK: `curl /api/events?ticker=NVDA` to see if data exists
+   
+5. **Search for "Iran"** (today's big macro story)
+   - Type "Iran" in search → Enter
+   - VERIFY: Events about Iran/geopolitical situation appear
+   
+6. **Check the Scorecard**
+   - Navigate to /scorecard
+   - VERIFY: Total events tracked > 20,000
+   - VERIFY: Outcome percentages are NOT all 0.0%
+   - VERIFY: No outcome exceeds ±200%
 
-### Phase 2: Authentication & Sign-in
+**Sarah's Score Categories:** Alert Speed, Event Quality, Classification Accuracy, Price Context, Actionability, Source Coverage, Search, Mobile
 
-#### TC-09: Magic Link Sign-in Flow
-```
-EXPECTED: Entering email sends magic link, shows confirmation
-ACTION:
-  1. Navigate to /login
-  2. Type "test@example.com" in email field
-  3. Click "Send magic link"
-VERIFY:
-  - [ ] No validation error on valid email
-  - [ ] Shows "Check your email" confirmation page
-  - [ ] OR shows meaningful error (not JSON parse error, not 530, not 503)
-  - [ ] Autofilled email (mobile) also works without errors
-```
+---
 
-#### TC-10: Login with Autofill (Mobile Simulation)
-```
-EXPECTED: Autofill should not cause pattern validation errors
-ACTION: 
-  1. Navigate to /login
-  2. Type email with leading/trailing spaces: "  test@example.com  "
-  3. Submit
-VERIFY:
-  - [ ] Trimmed automatically, no "pattern mismatch" error
-  - [ ] type="text" with inputMode="email" (not type="email")
-```
+### 👨‍💼 Persona 2: Marcus — Hedge Fund CFA (Bloomberg Terminal)
 
-### Phase 3: API Endpoint Verification
+**Profile:** Fundamental analyst at $2B fund, requires institutional-grade data provenance and audit trail.
 
-#### TC-11: Public API Health
-```
-EXPECTED: /api/health returns system status without auth
-ACTION: curl http://localhost:3001/api/health
-VERIFY:
-  - [ ] Returns 200 with JSON
-  - [ ] Contains: status, version, uptime, services.database, services.scanners
-  - [ ] database = "connected"
-  - [ ] scanners.active > 0
-```
+**Marcus's Journey:**
+1. **Test the API programmatically** (Marcus uses APIs, not GUIs)
+   ```bash
+   # Health check
+   curl -s http://localhost:3001/api/health | jq .
+   
+   # List events with auth
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?limit=5" | jq '.data[0] | {id, classification, classificationConfidence, ticker, severity}'
+   
+   # Classification filter
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?classification=BEARISH&limit=5" | jq '.data | length'
+   
+   # Without API key (should 401 for programmatic access)
+   curl -s "http://localhost:3001/api/events?limit=1" | jq .
+   ```
+   - VERIFY: classification field is NOT null/empty on classified events
+   - VERIFY: filter returns only BEARISH events
+   - VERIFY: no rawPayload in response
+   - VERIFY: rate limit headers present (X-RateLimit-Limit, X-RateLimit-Remaining)
 
-#### TC-12: API with Key Returns Data
-```
-EXPECTED: /api/events with API key returns classified events
-ACTION: curl -H "x-api-key: er-dev-2026" http://localhost:3001/api/events?limit=5
-VERIFY:
-  - [ ] Returns 200 with data array
-  - [ ] Events have: id, source, title, summary, severity, metadata
-  - [ ] At least some events have non-null classification field
-  - [ ] classificationConfidence is number or null (not empty string)
-  - [ ] rawPayload NOT present in response
-```
+2. **Check Evidence tab on 3 different events**
+   - Click 3 events from different sources (SEC, Breaking News, Truth Social)
+   - For each: check Evidence tab
+   - VERIFY: At least 2 of 3 have real source data (URL or text)
 
-#### TC-13: API without Key from Browser Works
-```
-EXPECTED: Browser requests (with referer/cookie) bypass API key requirement
-ACTION: 
-  1. From browser, navigate to any page that fetches /api/events
-  2. Check browser DevTools network tab for 401 errors
-  3. Also: curl without API key but with Referer header
-VERIFY:
-  - [ ] Browser requests to /api/events return 200 (not 401)
-  - [ ] curl with Referer header returns 200
-  - [ ] curl WITHOUT Referer AND without API key returns 401
-```
+3. **Verify data quality on event detail**
+   - Find an SEC 8-K filing event
+   - VERIFY: "View filing →" link goes to real SEC EDGAR URL
+   - VERIFY: Ticker is correct (e.g., FCX not QQQ for a Freeport-McMoRan filing)
+   
+4. **Check API docs page**
+   - Navigate to /api-docs (if it exists in frontend)
+   - VERIFY: Endpoint documentation is present
 
-#### TC-14: API Classification Filter Works
-```
-EXPECTED: ?classification=BEARISH returns only BEARISH events
-ACTION: curl -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?classification=BEARISH&limit=10"
-VERIFY:
-  - [ ] All returned events have classification = "BEARISH"
-  - [ ] Count is less than total events (filter is working, not returning all)
-  - [ ] Invalid classification value returns 400 error
-```
+**Marcus's Score Categories:** Data Quality, Source Provenance, Classification Rigor, Scorecard/Analytics, Historical Context, API Access, Compliance, Trust Framework
 
-#### TC-15: API Rate Limiting
-```
-EXPECTED: 100+ rapid requests get rate limited
-ACTION: Send 105 rapid requests with API key
-VERIFY:
-  - [ ] First 100 return 200 with X-RateLimit-Remaining header
-  - [ ] Requests 101+ return 429
-  - [ ] X-RateLimit-Limit header = 100
-```
+---
 
-### Phase 4: Classification & Data Quality
+### 🧑‍🎓 Persona 3: Jordan — College Student (Reddit/Robinhood)
 
-#### TC-16: Geopolitical Events Have Correct Direction
-```
-EXPECTED: Military/trade/sanctions events are NOT classified as NEUTRAL
-ACTION: Search for events mentioning "Iran", "tariff", "sanctions", "military"
-VERIFY:
-  - [ ] Military escalation events → BEARISH (not NEUTRAL)
-  - [ ] Trade deal/peace events → BULLISH (not NEUTRAL)
-  - [ ] NEUTRAL only for genuinely ambiguous events
-```
+**Profile:** 20yo, $2K in Robinhood, follows r/wallstreetbets, wants simple explanations.
 
-#### TC-17: Ticker Extraction Quality
-```
-EXPECTED: No full company names as tickers (FORD→F, GOOGLE→GOOGL)
-ACTION: curl API and check ticker fields
-VERIFY:
-  - [ ] No ticker longer than 5 chars (except known exceptions like BRK.B)
-  - [ ] "FORD" does not appear as ticker (should be "F")
-  - [ ] No ETF fallback tickers (QQQ/SPY) on unrelated events
-```
+**Jordan's Journey:**
+1. **First-time user experience**
+   - Open app for the first time
+   - VERIFY: Landing/onboarding page is welcoming
+   - VERIFY: "Get started" and "Skip setup" buttons work
+   - Click "Skip setup"
+   
+2. **Browse the feed casually**
+   - VERIFY: Headlines are readable without finance jargon overload
+   - Find one event Jordan would understand
+   - VERIFY: Summary is in plain English
+   
+3. **Try the popular ticker buttons**
+   - Navigate to /search → Click "$TSLA" button
+   - VERIFY: Something happens (results or ticker page)
+   - VERIFY: NOT a dead click or error page
+   
+4. **Try adding a stock to watchlist**
+   - Find an event with a ticker
+   - Click "Add to watchlist" button
+   - Navigate to /watchlist
+   - VERIFY: Ticker appears on watchlist
 
-#### TC-18: Outcome Values Are Capped
-```
-EXPECTED: No outcome percentages exceed ±200%
-ACTION: Query scorecard or event outcomes from API
-VERIFY:
-  - [ ] All percentage values between -200% and +200%
-  - [ ] No ±448% or other uncapped outliers
-```
+5. **Check settings**
+   - Navigate to /settings
+   - VERIFY: Font size control exists
+   - Change font size → verify it changes
 
-### Phase 5: UI Polish & Accessibility
+**Jordan's Score Categories:** Onboarding, Ease of Use, Learning Value, Jargon Level, Mobile Experience, Fun Factor, Watchlist, Price
 
-#### TC-19: Font Size Control Works
-```
-EXPECTED: Changing font size in settings affects all text
-ACTION:
-  1. Navigate to /settings
-  2. Change font size to "Large"
-  3. Navigate to /feed
-VERIFY:
-  - [ ] Text visibly larger across all pages
-  - [ ] Setting persists after page refresh
-  - [ ] Can toggle back to small/medium
-```
+---
 
-#### TC-20: WebSocket Connection Status
-```
-EXPECTED: Shows accurate connection state
-ACTION: Observe header status indicator
-VERIFY:
-  - [ ] Shows "Connected" or "Live" when WebSocket is active
-  - [ ] Shows "Offline" or "Reconnecting..." when disconnected
-  - [ ] Does NOT show "Live" when WebSocket is actually dead
-```
+### 📈 Persona 4: David — Swing Trader ($100K, Unusual Whales)
 
-#### TC-21: Daily Briefing Expandable
-```
-EXPECTED: Briefing card expands to show details on click
-ACTION: Find daily briefing card → Click it
-VERIFY:
-  - [ ] Card expands to show market regime details
-  - [ ] Can collapse back
-  - [ ] NOT a dead click (no response)
-```
+**David's Journey:**
+1. **Look for multi-day catalysts in the feed**
+   - Browse feed for events with tickers
+   - VERIFY: At least some events have price + outcome tracking (price chips)
+   
+2. **Check historical outcomes on Scorecard**
+   - Navigate to /scorecard
+   - VERIFY: T+5 (or similar multi-day interval) shows data
+   - VERIFY: Source accuracy breakdown exists
+   
+3. **Search for sector plays**
+   - Search "oil" → VERIFY: energy-related events appear
+   - Search "XLE" → VERIFY: ticker results
+   
+4. **Check Calendar for upcoming catalysts**
+   - Navigate to /calendar
+   - VERIFY: Shows scheduled events with dates
+   - VERIFY: NO StockTwits trending posts in calendar
+   - VERIFY: Events are from earnings/econ-calendar/sec/fda
 
-#### TC-22: About Page AI References
-```
-EXPECTED: No hardcoded AI model names
-ACTION: Navigate to /about
-VERIFY:
-  - [ ] Text says "advanced language models" or similar
-  - [ ] Does NOT say "GPT-4" or "Claude" specifically
-  - [ ] AI Disclosure section exists
-```
+**David's Score Categories:** Catalyst Detection, Outcome Tracking, Sector Analysis, Options Flow, Chart/Visual, Signal Quality, Calendar, Backtesting
 
-#### TC-23: Mobile Responsiveness
-```
-EXPECTED: All pages work at mobile viewport (375px wide)
-ACTION: Set viewport to 375x812 (iPhone) → Navigate each main page
-VERIFY:
-  - [ ] Bottom navigation visible and tappable
-  - [ ] Feed cards readable (no horizontal overflow)
-  - [ ] Text not truncated beyond readability
-  - [ ] Buttons are large enough to tap (min 44x44px touch target)
-```
+---
 
-### Phase 6: Edge Cases & Error Handling
+### 👩‍💼 Persona 5: Maria — Financial Advisor RIA ($20M AUM)
 
-#### TC-24: Empty States
-```
-EXPECTED: Graceful empty states for no-data scenarios
-ACTION: Search for nonsense string "xyzzy12345"
-VERIFY:
-  - [ ] Shows "No results found" with suggestion
-  - [ ] Does NOT show error/crash/blank page
-  - [ ] Has call-to-action (clear search, back to feed)
-```
+**Maria's Journey:**
+1. **Check today's macro events for client calls**
+   - Browse feed for HIGH/CRITICAL events
+   - VERIFY: Macro events (rates, geopolitical) are covered
+   - VERIFY: Events mention specific impact on sectors/tickers
+   
+2. **Test notification settings**
+   - Navigate to /settings
+   - VERIFY: Discord webhook config exists
+   - VERIFY: Email digest option exists
+   - VERIFY: Notification budget / quiet hours exist
+   
+3. **Try the Daily Briefing**
+   - Find the Daily Briefing card (if visible)
+   - Click it → VERIFY it expands with details
+   - VERIFY: NOT a dead click
+   
+4. **Check About page for compliance**
+   - Navigate to /about
+   - VERIFY: AI Disclosure section exists
+   - VERIFY: Does NOT mention specific model names (GPT-4, Claude)
+   - VERIFY: "Verify with primary sources" disclaimer present
 
-#### TC-25: Invalid Event ID
-```
-EXPECTED: 404 page for non-existent event
-ACTION: Navigate to /event/00000000-0000-0000-0000-000000000000
-VERIFY:
-  - [ ] Shows "Event not found" or 404 page
-  - [ ] Does NOT show blank white page or JSON error
-  - [ ] Has navigation back to feed
-```
+**Maria's Score Categories:** Macro Coverage, Client Communication, Compliance, Alert Management, Reliability, Daily Briefing, Multi-Client, Professionalism
 
-#### TC-26: Price Endpoint Resilience
-```
-EXPECTED: Price API returns data or graceful fallback
-ACTION: curl http://localhost:3001/api/price/batch?tickers=AAPL,MSFT,FAKE123
-VERIFY:
-  - [ ] Returns 200 (not 503)
-  - [ ] Known tickers have price data
-  - [ ] Unknown tickers return null (not error)
-  - [ ] Response within 5 seconds
-```
+---
 
-## Persona Scoring
+### 👴 Persona 6: Ray — Retired PM (60+, accessibility)
 
-After completing ALL test cases above, score from each persona's perspective.
+**Ray's Journey:**
+1. **Test font size controls**
+   - Navigate to /settings
+   - Find font size control
+   - Change to "Large" → Navigate to /feed
+   - VERIFY: Text is visibly larger
+   - Change back to "Medium"
+   - VERIFY: Text returns to normal size
+   - Refresh page → VERIFY: Font size setting persisted
+   
+2. **Test keyboard navigation**
+   - Press "?" → VERIFY: keyboard shortcuts help appears
+   
+3. **Test readability on event detail**
+   - Click any event
+   - VERIFY: Key information (ticker, direction, price) is not buried
+   - VERIFY: Text has sufficient contrast
 
-For each persona, assign scores to these categories:
-1. **Alert Speed & Relevance** (0-10)
-2. **Classification Accuracy** (0-10)  
-3. **Data Reliability** (0-10) — prices, outcomes, evidence
-4. **Search & Discovery** (0-10)
-5. **UI/UX Quality** (0-10)
-6. **API/Integration** (0-10) — only for technical personas
-7. **Trust & Transparency** (0-10)
-8. **Value for Price** (0-10) — would pay $39/mo?
+**Ray's Score Categories:** Font Size, Contrast, Navigation, Information Density, Keyboard Access, Loading Speed, Error Handling, Audio Alerts
 
-### Personas
+---
 
-1. **Sarah** — Day trader ($500K, Benzinga Pro user)
-2. **Marcus** — Hedge Fund CFA (Bloomberg Terminal)
-3. **Jordan** — College student (Reddit/Robinhood beginner)
-4. **David** — Swing trader ($100K, Unusual Whales)
-5. **Maria** — Financial advisor RIA ($20M AUM)
-6. **Ray** — Retired PM (60+, accessibility needs)
-7. **Chen Wei** — Quant developer (prop trading firm)
-8. **Lisa** — Fintech PM (evaluating for partnership)
-9. **Mike** — Crypto/macro trader (follows Trump)
-10. **Priya** — ESG analyst (pension fund)
+### 👨‍💻 Persona 7: Chen Wei — Quant Developer (prop trading firm)
+
+**Chen Wei's Journey:**
+1. **Comprehensive API audit**
+   ```bash
+   # Health endpoint
+   curl -s http://localhost:3001/api/health | jq .
+   
+   # Events with classification
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?limit=3" | jq '.data[] | {classification, classificationConfidence, ticker}'
+   
+   # Filter by classification
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?classification=BULLISH&limit=5" | jq '[.data[] | .classification] | unique'
+   
+   # Verify rawPayload stripped
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?limit=1" | jq '.data[0] | has("rawPayload")'
+   
+   # Test without API key (programmatic = 401)
+   curl -s "http://localhost:3001/api/events?limit=1" -w "\n%{http_code}"
+   
+   # Test with browser referer (should bypass)
+   curl -s -H "Referer: https://example.com" "http://localhost:3001/api/events?limit=1" | jq '.data | length'
+   
+   # Rate limit headers
+   curl -sI -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?limit=1" | grep -i "ratelimit"
+   
+   # Price batch
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/price/batch?tickers=AAPL,MSFT,FAKE123" | jq .
+   
+   # Invalid classification filter (should 400)
+   curl -s -H "x-api-key: er-dev-2026" "http://localhost:3001/api/events?classification=INVALID" | jq .
+   ```
+   
+2. **Check schema consistency**
+   - VERIFY: classification is string or null (not empty string "")
+   - VERIFY: classificationConfidence is number or null
+   - VERIFY: severity is always one of CRITICAL/HIGH/MEDIUM/LOW
+   - VERIFY: eventType field exists (even if null)
+
+**Chen Wei's Score Categories:** API Quality, Data Schema, WebSocket, Bulk Data, Event Classification, Historical Data, Rate Limiting, Webhook/Callback
+
+---
+
+### 👩‍💼 Persona 8: Lisa — Fintech PM (evaluating for partnership)
+
+**Lisa's Journey:**
+1. **Product walkthrough for exec demo**
+   - Navigate every main page: Feed → Watchlist → Calendar → Scorecard → Search → Settings → About
+   - For EACH page: VERIFY it loads, has content, no errors in snapshot
+   
+2. **Test sign-in flow**
+   - Navigate to /login
+   - Type "demo@example.com"
+   - Click "Send magic link"
+   - VERIFY: Shows "Check your email" (NOT JSON error or pattern mismatch)
+   
+3. **Check pricing page**
+   - Navigate to /pricing (if exists)
+   - VERIFY: Pricing tiers visible or skeleton exists
+   
+4. **Evaluate design consistency**
+   - VERIFY: Dark mode consistent across all pages
+   - VERIFY: Footer on every page
+   - VERIFY: Navigation works (clicking between pages doesn't break)
+
+**Lisa's Score Categories:** Product Vision, Design Quality, Feature Completeness, Data Reliability, API/Integration, Competitive Edge, Scalability Signals, Partnership Readiness
+
+---
+
+### 🧔 Persona 9: Mike — Crypto/Macro Trader (follows Trump)
+
+**Mike's Journey:**
+1. **Look for Trump/Truth Social posts**
+   - Browse feed for Truth Social source events
+   - VERIFY: If any exist, they have CRITICAL or HIGH severity
+   - VERIFY: Geopolitical events have non-NEUTRAL classification
+   
+2. **Search for geopolitical events**
+   - Search "Iran" → VERIFY: results appear
+   - Search "tariff" → VERIFY: results appear or "no results" (both acceptable)
+   
+3. **Check classification on Iran events**
+   - Click an Iran-related event
+   - VERIFY: Classification is BEARISH (military escalation) or BULLISH (peace talks)
+   - VERIFY: NOT NEUTRAL on clearly directional geopolitical events
+   
+4. **Test ticker extraction quality**
+   - Browse events with tickers
+   - VERIFY: No "FORD" (should be "F")
+   - VERIFY: No QQQ on unrelated events
+   - VERIFY: Reasonable tickers (1-5 chars)
+
+**Mike's Score Categories:** Trump/Truth Social, Geopolitical Coverage, Crypto Coverage, Speed, Cross-Asset, Classification, Notifications, Macro Thesis
+
+---
+
+### 👩‍🔬 Persona 10: Priya — ESG Analyst (pension fund)
+
+**Priya's Journey:**
+1. **Check regulatory source coverage**
+   - Browse feed → filter or look for SEC/FDA/Congress sources
+   - VERIFY: Multiple regulatory sources present
+   
+2. **Test edge cases**
+   - Search nonsense string "xyzzy12345" → VERIFY: graceful empty state
+   - Navigate to /event/00000000-0000-0000-0000-000000000000 → VERIFY: 404 page
+   - Navigate to /nonexistent-page → VERIFY: 404 page
+   
+3. **Check About page for data transparency**
+   - Navigate to /about
+   - VERIFY: Lists data sources
+   - VERIFY: AI disclosure present
+   - VERIFY: Update frequency or freshness info
+
+**Priya's Score Categories:** Regulatory Coverage, Sanctions/Geopolitical, ESG Detection, Company Mapping, Report Export, Historical Analysis, Compliance Integration, Data Granularity
+
+---
+
+## Scoring
+
+Each persona scores their categories 0-10, plus:
+- **NPS** (0-10): Would you recommend this?
+- **Would pay $39/mo?**: Yes / Maybe / No (with reason)
 
 ## Output Format
 
-Save results to `docs/reviews/crowdtest-YYYY-MM-DD.md` with:
+Save to `docs/reviews/crowdtest-YYYY-MM-DD.md` with:
 
-1. **Test Suite Results** — every TC with PASS/FAIL/PARTIAL and actual result
-2. **Regression Check** — compare with previous test results
-3. **Per-Persona Scores** — table with all categories
-4. **Aggregate Scores** — category averages, overall, NPS
-5. **Score Trajectory** — chart showing historical scores
-6. **Top Issues** — ranked by severity, with affected personas
-7. **Top Strengths** — what's working well
-8. **Beta Readiness Verdict** — YES/NO with conditions
-9. **Before/After Comparison** — if previous test exists
+1. **Pre-Flight Results** — environment status
+2. **Persona Journeys** — each persona's full journey with EXPECTED/ACTION/RESULT/VERDICT for every step
+3. **Per-Persona Score Table** — all categories + NPS + payment willingness
+4. **Aggregate Scores** — overall average, category averages
+5. **Test Case Summary** — total PASS/FAIL/PARTIAL count
+6. **Score Trajectory** — chart comparing to previous tests
+7. **Top Issues** — ranked by severity
+8. **Top Strengths** — what's working
+9. **Beta Readiness Verdict** — YES/NO with conditions
+10. **Comparison** — before/after table if previous test exists
 
 ## Critical Rules
 
 1. **NEVER mark a feature as "Working" without interacting with it**
-2. **Pre-check data exists** before testing (curl API to confirm)
-3. **Test both happy path AND edge cases** for every feature
-4. **Test from the ACTUAL deployed URL**, not localhost (unless testing API)
-5. **Record exact error messages** — "didn't work" is not acceptable
-6. **Test API both WITH and WITHOUT auth** to verify middleware behavior
-7. **Every test produces a PASS/FAIL** — no ambiguous "mostly works"
+2. **Pre-check data exists** before testing (curl API first)
+3. **Each persona DOES their own actions** — not just scoring after a generic test
+4. **Record exact text** from snapshots — "didn't work" is not acceptable
+5. **Test API both WITH and WITHOUT auth** 
+6. **Every interaction produces a PASS/FAIL** — no ambiguous "mostly works"
+7. **Different personas can test the same feature** — that's expected! They may find different issues based on their use case
