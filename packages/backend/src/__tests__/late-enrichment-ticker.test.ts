@@ -224,7 +224,7 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     );
   });
 
-  it('falls back to QQQ when high-priority tech news has no direct ticker', async () => {
+  it('stores market context instead of assigning an ETF ticker when high-priority tech news has no direct ticker', async () => {
     const event = makeEvent({
       title: 'Semiconductor and AI leaders slump on export-control fears',
       body: 'Large-cap tech names are leading the decline.',
@@ -251,15 +251,15 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
     await new Promise((r) => setTimeout(r, 150));
 
     expect(event.metadata).toMatchObject({
-      ticker: 'QQQ',
-      ticker_inferred: true,
+      marketContext: 'QQQ',
     });
+    expect(event.metadata).not.toHaveProperty('ticker');
+    expect(event.metadata).not.toHaveProperty('ticker_inferred');
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledWith(
       'evt-late-001',
       expect.objectContaining({
         metadata: expect.objectContaining({
-          ticker: 'QQQ',
-          ticker_inferred: true,
+          marketContext: 'QQQ',
         }),
       }),
     );
@@ -305,12 +305,12 @@ describe('Late-enrichment ticker: metadata sync, concurrency, casing', () => {
 
     // Only the initial call (before enrichment) should happen — NOT the late-enrichment call
     expect(outcomeTracker.scheduleOutcomeTrackingForEvent).toHaveBeenCalledTimes(1);
-    // The inferred fallback stays in memory when the late concrete ticker loses the race.
+    // The inferred market context stays in memory when the late concrete ticker loses the race.
     expect(event.metadata).toMatchObject({
-      ticker: 'QQQ',
-      ticker_inferred: true,
-      ticker_inference_strategy: 'fallback',
+      marketContext: 'QQQ',
     });
+    expect(event.metadata).not.toHaveProperty('ticker');
+    expect(event.metadata).not.toHaveProperty('ticker_inference_strategy');
   });
 
   it('normalizes ticker casing to uppercase consistently', async () => {

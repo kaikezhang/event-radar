@@ -27,7 +27,7 @@ import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
 import { buildPredictionPayload } from './prediction-helpers.js';
 import { resolvePoliticalClassificationResult } from './pipeline/political-llm-policy.js';
-import { inferHighPriorityTicker, shouldInferTicker } from './pipeline/ticker-inference.js';
+import { inferHighPriorityTicker, inferMarketContextEtf, shouldInferTicker } from './pipeline/ticker-inference.js';
 import { categorizeFilterReason, logTitle, PRIMARY_SOURCES_SET } from './pipeline-helpers.js';
 import {
   eventsProcessedTotal,
@@ -199,19 +199,31 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
 
     if (shouldInferTicker(event, classificationResult.severity, llmResult?.ok ? llmResult.value : undefined)) {
       const inferredTicker = inferHighPriorityTicker(event);
-      const existingTickers = Array.isArray(event.metadata?.['tickers'])
-        ? (event.metadata?.['tickers'] as unknown[]).filter(
-            (value): value is string => typeof value === 'string' && value.trim().length > 0,
-          ).map((value) => value.toUpperCase())
-        : [];
+      if (inferredTicker) {
+        const existingTickers = Array.isArray(event.metadata?.['tickers'])
+          ? (event.metadata?.['tickers'] as unknown[]).filter(
+              (value): value is string => typeof value === 'string' && value.trim().length > 0,
+            ).map((value) => value.toUpperCase())
+          : [];
 
-      event.metadata = {
-        ...(event.metadata ?? {}),
-        ticker: inferredTicker.ticker,
-        tickers: [inferredTicker.ticker, ...existingTickers.filter((value) => value !== inferredTicker.ticker)],
-        ticker_inferred: true,
-        ticker_inference_strategy: inferredTicker.strategy,
-      };
+        event.metadata = {
+          ...(event.metadata ?? {}),
+          ticker: inferredTicker.ticker,
+          tickers: [inferredTicker.ticker, ...existingTickers.filter((value) => value !== inferredTicker.ticker)],
+          ticker_inferred: true,
+          ticker_inference_strategy: inferredTicker.strategy,
+        };
+      } else {
+        const contextTicker = inferMarketContextEtf(event);
+        const contextField = contextTicker === 'SPY' || contextTicker === 'QQQ' || contextTicker === 'TLT' || contextTicker === 'GLD' || contextTicker === 'USO' || contextTicker === 'DIA' || contextTicker === 'IWM' || contextTicker === 'VIX'
+          ? 'marketContext'
+          : 'sectorProxy';
+
+        event.metadata = {
+          ...(event.metadata ?? {}),
+          [contextField]: contextTicker,
+        };
+      }
     }
 
     // Step 6: Store to DB (if available)

@@ -9,6 +9,8 @@ import {
 } from '@event-radar/shared';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
+import { findTickerByCik } from '../data/cik-ticker-map.js';
+import { extractCompanyTickerFromText } from '../pipeline/ticker-inference.js';
 import {
   deterministicScannerUuid,
   SEC_USER_AGENT,
@@ -237,6 +239,29 @@ function build8KSummaryText(entry: EdgarAtomEntry): string {
 
   const summaryLine = lines.find((line) => !/^Size:/i.test(line) && !/^AccNo:/i.test(line));
   return summaryLine?.replace(/^Summary:\s*/i, '').trim() ?? 'Recent SEC 8-K filing detected.';
+}
+
+function resolveEntryTickers(entry: EdgarAtomEntry): string[] {
+  const resolved = new Set(
+    entry.tickers
+      .filter((ticker): ticker is string => typeof ticker === 'string' && ticker.trim().length > 0)
+      .map((ticker) => ticker.toUpperCase()),
+  );
+
+  const cikTicker = findTickerByCik(entry.cik);
+  if (cikTicker) {
+    resolved.add(cikTicker);
+  }
+
+  const companyNameTicker = extractCompanyTickerFromText([
+    entry.issuerName,
+    entry.companyName,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0).join(' '));
+  if (companyNameTicker) {
+    resolved.add(companyNameTicker);
+  }
+
+  return [...resolved];
 }
 
 function inferForm4Action(entry: EdgarAtomEntry): 'bought' | 'sold' | 'filed' {
@@ -491,7 +516,8 @@ export class SecEdgarScanner extends BaseScanner {
       ? entry.itemDescriptions[primaryItem] ?? 'Recent filing update'
       : 'Recent filing update';
     const severityHint = map8KSeverity(entry.itemTypes);
-    const ticker = entry.tickers[0];
+    const tickers = resolveEntryTickers(entry);
+    const ticker = tickers[0];
 
     return {
       id: accessionToUuid(entry.accessionNumber),
@@ -513,7 +539,7 @@ export class SecEdgarScanner extends BaseScanner {
         item_types: entry.itemTypes,
         item_descriptions: entry.itemDescriptions,
         ticker: ticker ?? null,
-        tickers: entry.tickers,
+        tickers,
         severity_hint: severityHint,
       },
     };
@@ -522,13 +548,17 @@ export class SecEdgarScanner extends BaseScanner {
   private toForm4Event(entry: EdgarAtomEntry): RawEvent {
     const transactionValue = entry.transactionValue ?? 0;
     const severityHint = mapForm4Severity(transactionValue);
-    const ticker = entry.tickers[0];
+    const tickers = resolveEntryTickers(entry);
+    const ticker = tickers[0];
+    const normalizedEntry = tickers === entry.tickers
+      ? entry
+      : { ...entry, tickers };
 
     return {
       id: accessionToUuid(entry.accessionNumber),
       source: 'sec-edgar',
       type: 'sec_form_4',
-      title: buildForm4Title(entry),
+      title: buildForm4Title(normalizedEntry),
       body: buildForm4Body(entry),
       url: entry.link || undefined,
       timestamp: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
@@ -547,7 +577,7 @@ export class SecEdgarScanner extends BaseScanner {
         shares: entry.shares ?? null,
         price_per_share: entry.pricePerShare ?? null,
         ticker: ticker ?? null,
-        tickers: entry.tickers,
+        tickers,
         severity_hint: severityHint,
       },
     };

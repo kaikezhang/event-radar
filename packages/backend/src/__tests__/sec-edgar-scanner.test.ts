@@ -86,6 +86,54 @@ const MOCK_FORM4_MINIMAL_ATOM = `<?xml version="1.0" encoding="ISO-8859-1" ?>
   </entry>
 </feed>`;
 
+const MOCK_8K_CIK_MAPPED_ATOM = `<?xml version="1.0" encoding="ISO-8859-1" ?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>8-K - Unknown Holdings LLC (0000320193) (Filer)</title>
+    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/320193/000032019326000001/0000320193-26-000001-index.htm"/>
+    <summary type="html">
+      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0000320193-26-000001 &lt;b&gt;Size:&lt;/b&gt; 50 KB
+      &lt;br&gt;Item 8.01: Other Events
+      &lt;br&gt;Summary: Unknown Holdings posted a filing update with no ticker in the text.
+    </summary>
+    <updated>2026-03-12T20:05:00-04:00</updated>
+    <category scheme="https://www.sec.gov/" label="form type" term="8-K"/>
+    <id>urn:tag:sec.gov,2008:accession-number=0000320193-26-000001</id>
+  </entry>
+</feed>`;
+
+const MOCK_FORM4_COMPANY_NAME_MAPPED_ATOM = `<?xml version="1.0" encoding="ISO-8859-1" ?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>4 - Jane Doe (0000000001) (Reporting)</title>
+    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/1/000000000126000001/0000000001-26-000001-index.htm"/>
+    <summary type="html">
+      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0000000001-26-000001 &lt;b&gt;Size:&lt;/b&gt; 45 KB
+      &lt;br&gt;Officer: Jane Doe
+      &lt;br&gt;Issuer: Apple Inc.
+      &lt;br&gt;Transaction: Purchase
+      &lt;br&gt;Value: $2,500,000
+    </summary>
+    <updated>2026-03-12T20:06:00-04:00</updated>
+    <category scheme="https://www.sec.gov/" label="form type" term="4"/>
+    <id>urn:tag:sec.gov,2008:accession-number=0000000001-26-000001</id>
+  </entry>
+  <entry>
+    <title>4 - Apple Inc. (0000000002) (Issuer)</title>
+    <link rel="alternate" type="text/html" href="https://www.sec.gov/Archives/edgar/data/2/000000000126000001/0000000001-26-000001-index.htm"/>
+    <summary type="html">
+      &lt;b&gt;Filed:&lt;/b&gt; 2026-03-12 &lt;b&gt;AccNo:&lt;/b&gt; 0000000001-26-000001 &lt;b&gt;Size:&lt;/b&gt; 45 KB
+      &lt;br&gt;Officer: Jane Doe
+      &lt;br&gt;Issuer: Apple Inc.
+      &lt;br&gt;Transaction: Purchase
+      &lt;br&gt;Value: $2,500,000
+    </summary>
+    <updated>2026-03-12T20:06:00-04:00</updated>
+    <category scheme="https://www.sec.gov/" label="form type" term="4"/>
+    <id>urn:tag:sec.gov,2008:accession-number=0000000001-26-000001</id>
+  </entry>
+</feed>`;
+
 describe('SecEdgarScanner', () => {
   const originalSecEnabled = process.env.SEC_EDGAR_ENABLED;
 
@@ -261,6 +309,44 @@ describe('SecEdgarScanner', () => {
         'SEC Form 4: Jane Doe filed insider trade disclosure for Example Corp',
       );
       expect(form4?.metadata?.['transaction_value']).toBe(0);
+    });
+
+    it('fills missing SEC tickers from the CIK mapping when the feed has no ticker', async () => {
+      const scanner = new SecEdgarScanner(new InMemoryEventBus());
+      scanner.fetchFn = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(MOCK_8K_CIK_MAPPED_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 }));
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.metadata).toMatchObject({
+        cik: '0000320193',
+        ticker: 'AAPL',
+        tickers: ['AAPL'],
+      });
+    });
+
+    it('falls back to company-name ticker inference for SEC filings when the CIK is unmapped', async () => {
+      const scanner = new SecEdgarScanner(new InMemoryEventBus());
+      scanner.fetchFn = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(new Response(MOCK_8K_ATOM, { status: 200 }))
+        .mockResolvedValueOnce(new Response(MOCK_FORM4_COMPANY_NAME_MAPPED_ATOM, { status: 200 }));
+
+      const result = await scanner.scan();
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const form4 = result.value.find((event) => event.type === 'sec_form_4');
+      expect(form4?.metadata).toMatchObject({
+        issuer_name: 'Apple Inc.',
+        ticker: 'AAPL',
+        tickers: ['AAPL'],
+      });
     });
   });
 
