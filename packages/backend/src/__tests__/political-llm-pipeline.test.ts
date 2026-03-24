@@ -128,7 +128,7 @@ function makeDeps(
 }
 
 describe('political LLM severity in event pipeline', () => {
-  it('uses LLM severity and confidence for forced political classification', async () => {
+  it('keeps forced political classifications rule-only when the rule severity is below HIGH', async () => {
     const ruleResult = makeRuleResult();
     const { deps, insertedRows, alertRouter, deliveryGate } = makeDeps(ruleResult, 'LOW');
     const payloads: Array<Record<string, unknown>> = [];
@@ -144,17 +144,18 @@ describe('political LLM severity in event pipeline', () => {
       expect(payloads).toHaveLength(1);
     });
 
-    expect(insertedRows[0]?.['severity']).toBe('LOW');
-    expect(payloads[0]?.['severity']).toBe('LOW');
+    expect(deps.llmClassifier?.classify).not.toHaveBeenCalled();
+    expect(insertedRows[0]?.['severity']).toBe('MEDIUM');
+    expect(payloads[0]?.['severity']).toBe('MEDIUM');
     expect(deliveryGate.evaluate).toHaveBeenCalledWith(expect.objectContaining({
-      classifierSeverity: 'LOW',
-      classificationConfidence: 0.41,
-      confidenceBucket: 'low',
+      classifierSeverity: 'MEDIUM',
+      classificationConfidence: 0.95,
+      confidenceBucket: 'high',
     }));
     expect(alertRouter.route).toHaveBeenCalledWith(expect.objectContaining({
-      severity: 'LOW',
-      classificationConfidence: 0.41,
-      confidenceBucket: 'low',
+      severity: 'MEDIUM',
+      classificationConfidence: 0.95,
+      confidenceBucket: 'high',
     }));
 
     unsubscribe?.();

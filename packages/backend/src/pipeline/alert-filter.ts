@@ -168,9 +168,13 @@ export class AlertFilter {
       return this.checkNewswire(event, ticker);
     }
 
-    // Rule 5: Insider trade value threshold (Form 4 from SEC)
-    if (source === 'sec-edgar' && event.type === 'form-4') {
+    // Rule 5: Insider trade threshold and meaningless Form 4 suppression
+    if (source === 'sec-edgar' && isSecForm4Event(event)) {
       const value = numMeta(event, 'transactionValue') ?? numMeta(event, 'value') ?? 0;
+      const shares = numMeta(event, 'shares') ?? numMeta(event, 'transactionShares');
+      if (value <= 0 || shares == null || shares <= 0) {
+        return { pass: false, reason: 'Form 4 missing meaningful transaction data', enrichWithLLM: false };
+      }
       if (value < this.insiderMinValue) {
         return { pass: false, reason: `insider trade value $${value} < $${this.insiderMinValue}`, enrichWithLLM: false };
       }
@@ -482,6 +486,23 @@ function num(envKey: string, fallback: number): number {
   if (v == null) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function isSecForm4Event(event: RawEvent): boolean {
+  const normalizedType = event.type.toLowerCase();
+  const title = event.title.toLowerCase();
+  const body = event.body.toLowerCase();
+  const formType = event.metadata?.['form_type'] ?? event.metadata?.['formType'];
+
+  return (
+    normalizedType.includes('form-4')
+    || normalizedType.includes('form_4')
+    || normalizedType === '4'
+    || title.includes('form 4')
+    || body.includes('form 4')
+    || formType === '4'
+    || formType === 'Form 4'
+  );
 }
 
 function numMeta(event: RawEvent, key: string): number | undefined {
