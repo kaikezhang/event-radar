@@ -21,6 +21,7 @@ import {
   classificationPredictions,
   events,
 } from '../db/schema.js';
+import { clampOutcomePercent } from '../utils/outcome-cap.js';
 
 interface ClassificationAccuracyServiceOptions {
   eventBus?: EventBus;
@@ -95,24 +96,27 @@ export class ClassificationAccuracyService {
       ...outcome,
       eventId,
     });
+    const priceChangePercent1h = clampOutcomePercent(parsed.priceChangePercent1h) ?? 0;
+    const priceChangePercent1d = clampOutcomePercent(parsed.priceChangePercent1d) ?? 0;
+    const priceChangePercent1w = clampOutcomePercent(parsed.priceChangePercent1w) ?? 0;
 
     await this.db
       .insert(classificationOutcomes)
       .values({
         eventId: parsed.eventId,
         actualDirection: parsed.actualDirection,
-        priceChange1h: String(parsed.priceChangePercent1h),
-        priceChange1d: String(parsed.priceChangePercent1d),
-        priceChange1w: String(parsed.priceChangePercent1w),
+        priceChange1h: String(priceChangePercent1h),
+        priceChange1d: String(priceChangePercent1d),
+        priceChange1w: String(priceChangePercent1w),
         evaluatedAt: new Date(parsed.evaluatedAt),
       })
       .onConflictDoUpdate({
         target: classificationOutcomes.eventId,
         set: {
           actualDirection: parsed.actualDirection,
-          priceChange1h: String(parsed.priceChangePercent1h),
-          priceChange1d: String(parsed.priceChangePercent1d),
-          priceChange1w: String(parsed.priceChangePercent1w),
+          priceChange1h: String(priceChangePercent1h),
+          priceChange1d: String(priceChangePercent1d),
+          priceChange1w: String(priceChangePercent1w),
           evaluatedAt: new Date(parsed.evaluatedAt),
         },
       });

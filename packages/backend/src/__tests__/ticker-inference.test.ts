@@ -4,7 +4,6 @@ import {
   extractCompanyTickerFromText,
   extractTickerCandidateFromText,
   inferHighPriorityTicker,
-  inferMarketContextEtf,
 } from '../pipeline/ticker-inference.js';
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
@@ -67,33 +66,6 @@ describe('ticker inference helpers', () => {
 
   it('preserves mapped company tickers that are valid at five characters', () => {
     expect(extractCompanyTickerFromText('Samsung expands memory output')).toBe('SSNLF');
-  });
-
-  it('maps tech-heavy headlines to QQQ market context when no direct ticker is found', () => {
-    const event = makeEvent({
-      title: 'AI software stocks surge after cloud spending commentary',
-      body: 'Semiconductor and megacap tech names lead the move.',
-    });
-
-    expect(inferMarketContextEtf(event)).toBe('QQQ');
-  });
-
-  it('maps energy-heavy headlines to XLE sector context', () => {
-    const event = makeEvent({
-      title: 'Oil and gas stocks jump after OPEC production cut',
-      body: 'Crude prices rise sharply in early trading.',
-    });
-
-    expect(inferMarketContextEtf(event)).toBe('XLE');
-  });
-
-  it('maps broad market headlines to SPY market context when no sector cue is present', () => {
-    const event = makeEvent({
-      title: 'Stocks rise after White House tariff comments',
-      body: 'Broad market sentiment improves across major indexes.',
-    });
-
-    expect(inferMarketContextEtf(event)).toBe('SPY');
   });
 
   it('prefers an extracted ticker over ETF fallback for high-priority events', () => {
@@ -177,6 +149,40 @@ describe('ticker inference helpers', () => {
     });
 
     expect(inferHighPriorityTicker(event)).toBeNull();
-    expect(inferMarketContextEtf(event)).toBe('SPY');
+  });
+
+  it('maps uppercase company names to their canonical tickers before accepting a long naked symbol', () => {
+    const event = makeEvent({
+      title: 'FORD raises production targets',
+      body: 'The automaker updated its full-year guidance.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'F',
+      tickerInferred: true,
+      strategy: 'company-map',
+    });
+  });
+
+  it('maps GOOGLE to GOOGL instead of accepting the company name as the ticker candidate', () => {
+    const event = makeEvent({
+      title: 'GOOGLE cloud unit wins a large federal contract',
+      body: 'Alphabet shares move higher in premarket.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toEqual({
+      ticker: 'GOOGL',
+      tickerInferred: true,
+      strategy: 'company-map',
+    });
+  });
+
+  it('returns null for sector headlines instead of assigning ETF context metadata', () => {
+    const event = makeEvent({
+      title: 'Oil and gas stocks jump after OPEC production cut',
+      body: 'Crude prices rise sharply in early trading.',
+    });
+
+    expect(inferHighPriorityTicker(event)).toBeNull();
   });
 });

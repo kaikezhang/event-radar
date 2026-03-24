@@ -527,7 +527,7 @@ describe('OutcomeTracker', () => {
       );
     });
 
-    it('drops extreme positive change outliers above 200%', async () => {
+    it('clamps extreme positive change outliers above 200%', async () => {
       const setSpy = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       });
@@ -562,9 +562,9 @@ describe('OutcomeTracker', () => {
       expect(setSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           price1d: '4.05',
+          change1d: '200',
         }),
       );
-      expect(setSpy.mock.calls[0]?.[0]).not.toHaveProperty('change1d');
     });
 
     it('keeps large negative moves that are still within the cap', async () => {

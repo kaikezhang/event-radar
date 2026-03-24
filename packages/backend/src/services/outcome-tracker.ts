@@ -12,6 +12,7 @@ import { eventOutcomes } from '../db/schema.js';
 import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { ClassificationAccuracyService } from './classification-accuracy.js';
+import { clampOutcomePercent } from '../utils/outcome-cap.js';
 
 interface TrackingInterval {
   hours: number;
@@ -42,8 +43,6 @@ const TRACKING_INTERVALS: TrackingInterval[] = [
   { hours: 168, column: 'price_1w', changeCol: 'change_1w', label: 'T+1w' },
   { hours: 720, column: 'price_1m', changeCol: 'change_1m', label: 'T+1m' },
 ] as const;
-
-const MAX_OUTCOME_CHANGE_PERCENT = 200;
 
 export interface OutcomeRecord {
   id: number;
@@ -319,10 +318,7 @@ export class OutcomeTracker {
       eventPrice != null && eventPrice !== 0
         ? Math.round(((price - eventPrice) / eventPrice) * 100 * 10000) / 10000
         : null;
-    const change =
-      rawChange != null && Math.abs(rawChange) > MAX_OUTCOME_CHANGE_PERCENT
-        ? null
-        : rawChange;
+    const change = clampOutcomePercent(rawChange);
 
     updates[this.priceColumnKey(interval.column)] = String(price);
     if (change != null) {

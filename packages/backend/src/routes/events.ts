@@ -28,6 +28,10 @@ const ListEventsQuerySchema = {
       type: 'string',
       description: 'Filter by severity level (comma-separated for multiple, e.g. "HIGH,CRITICAL")',
     },
+    classification: {
+      type: 'string',
+      description: 'Filter by classification direction (comma-separated, e.g. "BULLISH,BEARISH")',
+    },
     source: {
       type: 'string',
       description: 'Filter by event source',
@@ -117,6 +121,7 @@ export interface ListEventsQuery {
   ticker?: string;
   type?: string;
   severity?: string;
+  classification?: string;
   source?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -247,6 +252,24 @@ export function registerEventRoutes(
         conditions.push(eq(events.severity, typed[0]));
       } else if (typed.length > 1) {
         conditions.push(inArray(events.severity, typed));
+      }
+    }
+
+    if (query.classification) {
+      const validClassifications = new Set(['BULLISH', 'BEARISH', 'NEUTRAL']);
+      const classificationValues = query.classification
+        .split(',')
+        .map((value: string) => value.trim().toUpperCase())
+        .filter(Boolean);
+      const invalid = classificationValues.find((value) => !validClassifications.has(value));
+      if (invalid) {
+        return reply.status(400).send({ error: `Invalid classification: ${invalid}` });
+      }
+      const typed = classificationValues as Array<'BULLISH' | 'BEARISH' | 'NEUTRAL'>;
+      if (typed.length === 1) {
+        conditions.push(eq(events.classification, typed[0]));
+      } else if (typed.length > 1) {
+        conditions.push(inArray(events.classification, typed));
       }
     }
 

@@ -111,6 +111,8 @@ export async function createTestDb(): Promise<{
       source VARCHAR(100) NOT NULL,
       source_event_id VARCHAR(255),
       ticker VARCHAR(10),
+      classification VARCHAR(20),
+      classification_confidence DECIMAL(5, 4),
       event_type VARCHAR(50),
       title TEXT NOT NULL,
       summary TEXT,
@@ -130,6 +132,11 @@ export async function createTestDb(): Promise<{
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_events_ticker_type_time
     ON events (ticker, event_type, created_at DESC)
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_events_classification
+    ON events (classification)
   `);
 
   await db.execute(sql`
