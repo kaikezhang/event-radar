@@ -18,7 +18,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 900,
+    minify: 'esbuild',
+    modulePreload: {
+      polyfill: true,
+    },
     sourcemap: true,
+    target: 'es2022',
+    rollupOptions: {
+      treeshake: 'recommended',
+    },
   },
   test: {
     environment: 'jsdom',
