@@ -273,7 +273,7 @@ function resolveSourceUrl(
     ?? sourceMetadata?.url
     ?? sourceMetadata?.filingLink
     ?? (typeof sourceMetadata?.headline === 'string' && sourceMetadata.headline.trim().length > 0
-      ? `Search: ${sourceMetadata.headline.trim()}`
+      ? `https://www.google.com/search?q=${encodeURIComponent(sourceMetadata.headline.trim())}`
       : null);
   return typeof metadataUrl === 'string' && metadataUrl.trim().length > 0 ? metadataUrl.trim() : null;
 }

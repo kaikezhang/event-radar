@@ -193,7 +193,7 @@ describe('EventEvidenceContent', () => {
 
     expect(screen.getByRole('link', { name: /view original source/i })).toHaveAttribute(
       'href',
-      'Search: Ceasefire agreement reached after emergency talks',
+      'https://www.google.com/search?q=Ceasefire%20agreement%20reached%20after%20emergency%20talks',
     );
     expect(screen.queryByText(/source data not available/i)).not.toBeInTheDocument();
   });

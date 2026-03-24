@@ -52,7 +52,7 @@ export function registerApiDocsRoutes(server: FastifyInstance): void {
       version: '1.0',
       authentication: {
         header: 'x-api-key',
-        defaultDevKey: 'er-dev-2026',
+        description: 'Pass your API key via the x-api-key header or apiKey query parameter.',
       },
       endpoints: API_ENDPOINTS,
     });
