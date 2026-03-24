@@ -231,7 +231,11 @@ export function registerEventRoutes(
 
     // Filter by ticker (search in metadata->>'ticker')
     if (query.ticker) {
-      conditions.push(eq(events.ticker, query.ticker));
+      conditions.push(sql`(
+        ${events.ticker} = ${query.ticker}
+        OR upper(coalesce(${events.metadata}->>'ticker', '')) = upper(${query.ticker})
+        OR coalesce(${events.metadata}->'tickers', '[]'::jsonb) ? ${query.ticker}
+      )`);
     }
 
     // Filter by classified event type
@@ -323,8 +327,18 @@ export function registerEventRoutes(
       conditions.push(sql`(
         ${events.title} ILIKE ${containsPattern} ESCAPE '\\'
         OR coalesce(${events.summary}, '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.rawPayload}->>'body', '') ILIKE ${containsPattern} ESCAPE '\\'
         OR coalesce(${events.eventType}, '') ILIKE ${containsPattern} ESCAPE '\\'
         OR coalesce(${events.source}, '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.metadata}->>'ticker', '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.metadata}->>'companyName', '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.metadata}->>'company_name', '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR coalesce(${events.metadata}->>'issuer_name', '') ILIKE ${containsPattern} ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(coalesce(${events.metadata}->'tickers', '[]'::jsonb)) AS ticker(value)
+          WHERE ticker.value ILIKE ${containsPattern} ESCAPE '\\'
+        )
       )`);
     }
 

@@ -445,6 +445,29 @@ describe('OutcomeTracker', () => {
   });
 
   describe('fillInterval', () => {
+    it('should use a 28-day target for T+20 intervals', async () => {
+      const db = makeMockDb();
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const targetTime = (tracker as any).resolveTargetTime(
+        new Date('2024-03-04T10:00:00Z'),
+        {
+          hours: 480,
+          column: 'price_t20',
+          changeCol: 'change_t20',
+          label: 'T+20d',
+          evaluatedAtCol: 'evaluated_t20_at',
+          targetCalendarDays: 28,
+        },
+      );
+
+      expect(targetTime.toISOString()).toBe('2024-04-01T10:00:00.000Z');
+    });
+
     it('should stamp evaluated_t5_at even when no price is available', async () => {
       const setSpy = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -520,6 +543,57 @@ describe('OutcomeTracker', () => {
 
       expect(setSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          priceT20: '194.5',
+          changeT20: expect.any(String),
+          evaluatedT20At: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should recover a missing event price before storing T+20 change', async () => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const getPriceAt = vi.fn()
+        .mockResolvedValueOnce({ ok: true, value: 179.5 })
+        .mockResolvedValueOnce({ ok: true, value: 194.5 });
+      const db = {
+        ...makeMockDb(),
+        update: () => ({ set: setSpy }),
+      };
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { getPriceAt } as any,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tracker as any).fillInterval(
+        {
+          id: 1,
+          eventId: 'evt-001',
+          ticker: 'AAPL',
+          eventTime: new Date('2024-03-04T10:00:00Z'),
+          eventPrice: null,
+        },
+        {
+          hours: 480,
+          column: 'price_t20',
+          changeCol: 'change_t20',
+          label: 'T+20d',
+          evaluatedAtCol: 'evaluated_t20_at',
+        },
+      );
+
+      expect(getPriceAt).toHaveBeenNthCalledWith(
+        1,
+        'AAPL',
+        new Date('2024-03-04T10:00:00.000Z'),
+      );
+      expect(setSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventPrice: '179.5',
           priceT20: '194.5',
           changeT20: expect.any(String),
           evaluatedT20At: expect.any(Date),

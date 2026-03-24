@@ -300,6 +300,107 @@ describe('GET /api/events?q=', () => {
     expect(body.data[1].title).toContain('Tesla supplier');
   });
 
+  it('should match ticker filters against metadata tickers when the top-level ticker is null', async () => {
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'GPU export risk intensifies',
+      body: 'China channel checks softened further this week.',
+      metadata: { tickers: ['NVDA'] },
+    }), 'HIGH');
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?ticker=NVDA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const titles = response.json().data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('GPU export risk intensifies');
+  });
+
+  it('should match q searches against metadata tickers when the symbol is absent from title and summary', async () => {
+    await seedDeliveredEvent(sharedDb, makeEvent({
+      title: 'GPU export risk intensifies',
+      body: 'China channel checks softened further this week.',
+      metadata: { tickers: ['NVDA'] },
+    }), 'HIGH');
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=NVDA',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const titles = response.json().data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('GPU export risk intensifies');
+  });
+
+  it('should match q searches against raw body text when summary is empty', async () => {
+    const sourceEventId = crypto.randomUUID();
+
+    await sharedDb.execute(sql`
+      INSERT INTO events (
+        source,
+        source_event_id,
+        ticker,
+        title,
+        summary,
+        raw_payload,
+        metadata,
+        severity,
+        received_at,
+        created_at
+      ) VALUES (
+        'sec-edgar',
+        ${sourceEventId},
+        'NVDA',
+        'Semiconductor supply chain update',
+        NULL,
+        ${JSON.stringify({
+          body: 'Blackwell demand remained stronger than expected.',
+          metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
+        })}::jsonb,
+        ${JSON.stringify({ ticker: 'NVDA', tickers: ['NVDA'] })}::jsonb,
+        'HIGH',
+        NOW(),
+        NOW()
+      )
+    `);
+
+    await sharedDb.execute(sql`
+      INSERT INTO pipeline_audit (
+        event_id,
+        source,
+        title,
+        severity,
+        ticker,
+        outcome,
+        stopped_at,
+        reason
+      ) VALUES (
+        ${sourceEventId},
+        'sec-edgar',
+        'Semiconductor supply chain update',
+        'HIGH',
+        'NVDA',
+        'delivered',
+        'delivery',
+        'Passed pipeline'
+      )
+    `);
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=Blackwell',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const titles = response.json().data.map((event: { title: string }) => event.title);
+    expect(titles).toContain('Semiconductor supply chain update');
+  });
+
   it('should cap q search results at 50 even when a larger limit is requested', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
