@@ -329,11 +329,6 @@ function buildTickerFilterCondition(ticker: string) {
         END
       ) = upper(${ticker})
     )
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(coalesce(${events.metadata}->'llm_enrichment'->'tickers', '[]'::jsonb)) AS enrichment_ticker(value)
-      WHERE upper(coalesce(enrichment_ticker.value->>'symbol', '')) = upper(${ticker})
-    )
   )`;
 }
 
