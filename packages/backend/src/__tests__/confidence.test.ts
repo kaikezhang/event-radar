@@ -76,7 +76,7 @@ describe('Confidence Score System', () => {
   describe('Rule Engine Confidence', () => {
     const createMockEvent = (overrides: Partial<RawEvent> = {}): RawEvent => ({
       id: 'test-event-1',
-      source: 'test-source',
+      source: 'breaking-news',
       title: 'Test Event Title',
       type: 'test',
       timestamp: new Date(),
@@ -104,8 +104,8 @@ describe('Confidence Score System', () => {
       const result = ruleEngine.classify(event);
 
       // Should match acquisition rule
-      expect(result.matchedRules).toContain('ma-acquisition');
-      // ma-acquisition has confidence 0.9
+      expect(result.matchedRules).toContain('breaking-news-ma-announces-acquisition');
+      // breaking-news-ma-announces-acquisition has confidence 0.9
       expect(result.confidence).toBe(0.9);
       expect(result.confidenceLevel).toBe('high');
     });
@@ -141,7 +141,7 @@ describe('Confidence Rules', () => {
 
   const createEvent = (title: string): RawEvent => ({
     id: `test-${Date.now()}`,
-    source: 'news',
+    source: 'breaking-news',
     title,
     type: 'press-release',
     timestamp: new Date(),
@@ -149,25 +149,22 @@ describe('Confidence Rules', () => {
   });
 
   describe('M&A Rules', () => {
-    it('should classify acquisition as HIGH with 0.9 confidence', () => {
+    it('should classify acquisition announcements as CRITICAL with 0.9 confidence', () => {
       const event = createEvent('Company announces acquisition of rival firm');
       const result = ruleEngine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('CRITICAL');
       expect(result.tags).toContain('acquisition');
-      // ma-acquisition rule has confidence 0.9
       expect(result.confidence).toBe(0.9);
     });
 
-    it('should classify merger as HIGH with 0.85 confidence', () => {
-      const event = createEvent('Two companies announce merger');
+    it('should classify merger agreements as CRITICAL with 0.9 confidence', () => {
+      const event = createEvent('Two companies announce merger agreement');
       const result = ruleEngine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('CRITICAL');
       expect(result.tags).toContain('merger');
-      // "merger" contains "merge" so both ma-merge and ma-merge-verb rules match
-      // Minimum confidence is taken: min(0.9, 0.85) = 0.85
-      expect(result.confidence).toBe(0.85);
+      expect(result.confidence).toBe(0.9);
     });
 
     it('should classify buyout as HIGH with 0.85 confidence', () => {
@@ -208,11 +205,11 @@ describe('Confidence Rules', () => {
   });
 
   describe('FDA Rules', () => {
-    it('should classify FDA approval as HIGH', () => {
-      const event = createEvent('Drug receives FDA approval');
+    it('should classify FDA approval as CRITICAL', () => {
+      const event = createEvent('FDA approved a new oncology treatment');
       const result = ruleEngine.classify(event);
 
-      expect(result.severity).toBe('HIGH');
+      expect(result.severity).toBe('CRITICAL');
       expect(result.tags).toContain('fda');
       expect(result.tags).toContain('approval');
     });

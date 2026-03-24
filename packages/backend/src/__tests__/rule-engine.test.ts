@@ -478,5 +478,71 @@ describe('RuleEngine', () => {
       expect(result.severity).toBe('MEDIUM');
       expect(result.matchedRules).toEqual([]);
     });
+
+    it('classifies concrete breaking-news trading halts as CRITICAL', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'NYSE halted trading in Acme shares after volatility pause',
+        body: 'The exchange said trading was halted pending additional information.',
+      }));
+
+      expect(result.severity).toBe('CRITICAL');
+    });
+
+    it('classifies breaking-news FDA approvals as CRITICAL', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'FDA approved Acme Pharma treatment for rare disease',
+        body: 'The approval clears the company to launch commercially in the US.',
+      }));
+
+      expect(result.severity).toBe('CRITICAL');
+    });
+
+    it('classifies sanctions imposed headlines as CRITICAL for breaking-news', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'US sanctions imposed on Russian tanker fleet operators',
+        body: 'The Treasury action immediately targets shipping and energy trade flows.',
+      }));
+
+      expect(result.severity).toBe('CRITICAL');
+    });
+
+    it('classifies concrete merger announcements as CRITICAL for breaking-news', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'Acme announces merger agreement to acquire Beta Robotics',
+        body: 'The companies said the cash-and-stock deal is expected to close this year.',
+      }));
+
+      expect(result.severity).toBe('CRITICAL');
+    });
+
+    it('keeps breaking-news explainers about merger rumors at MEDIUM', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'What you need to know about the Acme merger rumors',
+        body: 'Analysts break down what a potential deal could mean for the sector.',
+      }));
+
+      expect(result.severity).toBe('MEDIUM');
+    });
+
+    it('classifies executive orders affecting sectors as CRITICAL for breaking-news', () => {
+      const result = engine.classify(makeEvent({
+        source: 'breaking-news',
+        type: 'headline',
+        title: 'White House signs executive order restricting chip exports to China',
+        body: 'The action targets advanced AI chips and related semiconductor equipment.',
+      }));
+
+      expect(result.severity).toBe('CRITICAL');
+    });
   });
 });

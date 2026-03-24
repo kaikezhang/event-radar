@@ -144,9 +144,39 @@ export const MACRO_RULES: Rule[] = [
       { type: 'titleContains', value: 'war' },
     ],
     actions: [
-      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setSeverity', value: 'HIGH' },
       { type: 'setConfidence', value: 0.85 },
       { type: 'addTags', values: ['breaking-news', 'geopolitical', 'war'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-sanctions-imposed',
+    name: 'Breaking News — Sanctions Imposed',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'sanctions imposed' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'sanction', 'geopolitical'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-defaults-on',
+    name: 'Breaking News — Defaults On Debt',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'defaults on' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'default', 'credit'] },
     ],
     priority: 10,
     enabled: true,

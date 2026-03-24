@@ -264,5 +264,20 @@ describe('BreakingNewsScanner', () => {
       expect(scanner.health().status).toBe('healthy');
       expect(scanner.health().scanner).toBe('breaking-news');
     });
+
+    it('uses only the verified default feeds', () => {
+      const eventBus = new InMemoryEventBus();
+      const scanner = new BreakingNewsScanner(eventBus);
+      const feeds = (scanner as unknown as {
+        feeds: Array<{ name: string; url: string }>;
+      }).feeds;
+
+      expect(feeds.map((feed) => feed.name)).toEqual([
+        'MarketWatch',
+        'CNBC',
+        'Bloomberg',
+        'Financial Times',
+      ]);
+    });
   });
 });

@@ -42,6 +42,20 @@ describe('ticker inference helpers', () => {
     expect(extractTickerCandidateFromText('CORP sees elevated options volume')).toBeNull();
   });
 
+  it('ignores newly blocked political and financial acronyms', () => {
+    expect(extractTickerCandidateFromText('ICE says sanctions review remains active')).toBeNull();
+    expect(extractTickerCandidateFromText('NATO officials meet after weekend talks')).toBeNull();
+  });
+
+  it('ignores uppercase regular English words when they are not cashtags', () => {
+    expect(extractTickerCandidateFromText('PLAN to expand chip restrictions gains support')).toBeNull();
+    expect(extractTickerCandidateFromText('VOTE on the bill is scheduled for Friday')).toBeNull();
+  });
+
+  it('still accepts a cashtag even when the symbol is a common English word', () => {
+    expect(extractTickerCandidateFromText('Shares of $PLAN rally after earnings')).toBe('PLAN');
+  });
+
   it('extracts a mapped ticker from a company name case-insensitively', () => {
     expect(extractCompanyTickerFromText('Breaking: Apple unveils new devices')).toBe('AAPL');
     expect(extractCompanyTickerFromText('NVIDIA expands AI chip production')).toBe('NVDA');
