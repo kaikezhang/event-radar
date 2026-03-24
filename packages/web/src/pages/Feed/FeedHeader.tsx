@@ -66,7 +66,7 @@ export function FeedHeader({
             title="Click to retry WebSocket connection"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-            Connection lost — click to retry
+            Connection lost. Click to retry.
           </button>
         ) : (
           <span
@@ -83,7 +83,7 @@ export function FeedHeader({
             />
             {connectionStatus === 'connected' && 'Live'}
             {connectionStatus === 'reconnecting' && 'Reconnecting\u2026'}
-            {connectionStatus === 'disconnected' && 'Offline'}
+            {connectionStatus === 'disconnected' && 'Offline \u2014 data may be stale'}
           </span>
         )}
 

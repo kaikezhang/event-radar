@@ -66,6 +66,8 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
     ? 'Connected'
     : connectionStatus === 'reconnecting'
       ? 'Reconnecting'
+      : connectionStatus === 'failed'
+        ? 'Connection lost'
       : 'Offline';
 
   const statusIndicator = (
@@ -75,7 +77,7 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
           'inline-block h-1.5 w-1.5 rounded-full',
           connectionStatus === 'connected' && 'bg-emerald-500 animate-pulse',
           connectionStatus === 'reconnecting' && 'bg-amber-500 animate-pulse',
-          connectionStatus === 'disconnected' && 'bg-red-500',
+          (connectionStatus === 'disconnected' || connectionStatus === 'failed') && 'bg-red-500',
         )}
         aria-hidden="true"
       />

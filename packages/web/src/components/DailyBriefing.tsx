@@ -54,6 +54,33 @@ function formatSourceBreakdown(bySource: Record<string, number>): string {
     .join(', ');
 }
 
+function inferMarketRegime(bySeverity: {
+  CRITICAL: number;
+  HIGH: number;
+  MEDIUM: number;
+  LOW: number;
+}): string {
+  const total = bySeverity.CRITICAL + bySeverity.HIGH + bySeverity.MEDIUM + bySeverity.LOW;
+
+  if (total === 0) {
+    return 'Quiet tape';
+  }
+
+  if (bySeverity.CRITICAL > 0) {
+    return 'Risk elevated';
+  }
+
+  if (bySeverity.HIGH >= 3) {
+    return 'Headline-driven';
+  }
+
+  if (bySeverity.HIGH > 0 || bySeverity.MEDIUM >= 2) {
+    return 'Active but orderly';
+  }
+
+  return 'Steady flow';
+}
+
 export function DailyBriefing() {
   const [dismissed, setDismissed] = useState(isDailyBriefingDismissedToday);
   const [expanded, setExpanded] = useState(false);
@@ -111,6 +138,15 @@ export function DailyBriefing() {
               </p>
               <p className="mt-2 font-medium text-text-primary">
                 {formatSeveritySummary(data.bySeverity)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-950/60">
+                Market regime
+              </p>
+              <p className="mt-2 font-medium text-text-primary">
+                {inferMarketRegime(data.bySeverity)}
               </p>
             </div>
 

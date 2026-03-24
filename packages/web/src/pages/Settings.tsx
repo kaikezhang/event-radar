@@ -14,6 +14,12 @@ import {
 } from '../lib/api.js';
 import { restoreDailyBriefing } from '../lib/daily-briefing.js';
 import {
+  applyFontScale,
+  getStoredFontScale,
+  setStoredFontScale,
+  type FontScale,
+} from '../lib/font-scale.js';
+import {
   getWebPushDeviceState,
   getWebPushStatusDetails,
   getWebPushSupport,
@@ -77,6 +83,16 @@ const SIGNAL_TIER_ROWS = [
     detail: 'Kept available in feed for lower-priority review.',
   },
 ] as const;
+
+const FONT_SCALE_OPTIONS: Array<{
+  value: FontScale;
+  label: string;
+  detail: string;
+}> = [
+  { value: 'small', label: 'Small', detail: '14px base text for denser layouts.' },
+  { value: 'medium', label: 'Medium', detail: '16px base text for the default reading size.' },
+  { value: 'large', label: 'Large', detail: '18px base text for easier scanning.' },
+];
 
 function getPlatformHint(): 'ios' | 'ios-pwa' | 'android-pwa' | 'pwa' | 'desktop' {
   const ua = navigator.userAgent;
@@ -185,6 +201,7 @@ export function Settings() {
   const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
   const [channelSaveState, setChannelSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [discordTestState, setDiscordTestState] = useState<'idle' | 'testing' | 'sent'>('idle');
+  const [fontScale, setFontScaleState] = useState<FontScale>(() => getStoredFontScale());
   const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
   const isChannelSaving = channelSaveState === 'saving';
   const isChannelSaved = channelSaveState === 'saved';
@@ -200,6 +217,15 @@ export function Settings() {
     restoreDailyBriefing();
     setBriefingRestoreMessage("Today's briefing will be shown again.");
   }
+
+  function handleFontScaleChange(nextScale: FontScale): void {
+    setFontScaleState(nextScale);
+    setStoredFontScale(nextScale);
+  }
+
+  useEffect(() => {
+    applyFontScale(fontScale);
+  }, [fontScale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -491,6 +517,53 @@ export function Settings() {
       </div>
 
       {/* Appearance/theme panel hidden — light mode is broken, dark only for now */}
+
+      <CollapsiblePanel
+        id="display"
+        title="Display"
+        eyebrow="Display"
+        description="Adjust font size and reading comfort across the app."
+      >
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-[22px] font-semibold text-text-primary">
+              Font size
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Stored locally on this device so the app stays comfortable to read every time you open it.
+            </p>
+          </div>
+
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium text-text-primary">Choose a text size</legend>
+            <div className="grid gap-3 md:grid-cols-3">
+              {FONT_SCALE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-4 transition ${
+                    fontScale === option.value
+                      ? 'border-accent-default/40 bg-accent-default/10'
+                      : 'border-overlay-medium bg-bg-elevated/50 hover:bg-bg-elevated/70'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-text-primary">{option.label}</span>
+                    <input
+                      type="radio"
+                      name="font-scale"
+                      value={option.value}
+                      checked={fontScale === option.value}
+                      onChange={() => handleFontScaleChange(option.value)}
+                      className="h-4 w-4 border-overlay-medium text-accent-default focus:ring-accent-default"
+                    />
+                  </div>
+                  <p className="text-sm leading-6 text-text-secondary">{option.detail}</p>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </CollapsiblePanel>
 
       <CollapsiblePanel
         id="push-alerts"

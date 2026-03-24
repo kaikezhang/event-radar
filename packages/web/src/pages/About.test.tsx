@@ -12,8 +12,10 @@ describe('About page', () => {
     expect(screen.getByRole('heading', { name: /ai disclosure/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /contact/i })).toBeInTheDocument();
     expect(screen.getByText(/sec edgar/i)).toBeInTheDocument();
+    expect(screen.getByText(/advanced language models/i)).toBeInTheDocument();
     expect(screen.getByText(/always verify with primary sources/i)).toBeInTheDocument();
     expect(screen.getByText(/hello@eventradar\.app/i)).toBeInTheDocument();
+    expect(screen.queryByText(/gpt-4|gpt-4o|claude/i)).not.toBeInTheDocument();
   });
 
   it('lists only the active source set shown by the product', () => {
