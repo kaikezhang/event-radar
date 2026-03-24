@@ -289,7 +289,7 @@ function normalizeSourceUrls(
     typeof source === 'string' && source === 'truth-social'
       ? buildTruthSocialSourceUrl(metadata)
       : null,
-  ]);
+  ]).map((url) => decodeHtmlEntities(url));
 
   return urls.length > 0 ? urls : null;
 }
