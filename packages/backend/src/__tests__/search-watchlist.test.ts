@@ -359,7 +359,7 @@ describe('GET /api/events?q=', () => {
     expect(body.data[1].title).toContain('Tesla supplier');
   });
 
-  it('should match ticker filters against metadata tickers when the top-level ticker is null', async () => {
+  it('should not match ticker filters against metadata tickers when the top-level ticker is null', async () => {
     await seedDeliveredEvent(sharedDb, makeEvent({
       title: 'GPU export risk intensifies',
       body: 'China channel checks softened further this week.',
@@ -373,8 +373,7 @@ describe('GET /api/events?q=', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const titles = response.json().data.map((event: { title: string }) => event.title);
-    expect(titles).toContain('GPU export risk intensifies');
+    expect(response.json().data).toHaveLength(0);
   });
 
   it('should match q searches against metadata tickers when the symbol is absent from title and summary', async () => {

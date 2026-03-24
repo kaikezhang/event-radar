@@ -166,6 +166,42 @@ describe('OutcomeTracker', () => {
       }
     });
 
+    it('should return error when the only discovered ticker is longer than the event_outcomes column allows', async () => {
+      const db = makeMockDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tracker = new OutcomeTracker(db as any);
+      const event = makeEvent({
+        metadata: {
+          llm_enrichment: {
+            tickers: [{ symbol: 'HEAVYPULP.X', direction: 'bullish' }],
+          },
+        },
+      });
+
+      const result = await tracker.scheduleOutcomeTracking(event);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('No ticker found');
+      }
+    });
+
+    it('should return error when the only discovered ticker is digits only', async () => {
+      const db = makeMockDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tracker = new OutcomeTracker(db as any);
+      const event = makeEvent({
+        metadata: {
+          tickers: ['123456'],
+        },
+      });
+
+      const result = await tracker.scheduleOutcomeTracking(event);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('No ticker found');
+      }
+    });
+
     it('should schedule tracking for event with ticker', async () => {
       const insertValues = vi.fn().mockReturnValue({
         onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
@@ -260,6 +296,37 @@ describe('OutcomeTracker', () => {
       expect(result.ok).toBe(true);
       expect(insertValues).toHaveBeenCalledWith(
         expect.objectContaining({
+          eventPrice: null,
+        }),
+      );
+    });
+
+    it('should handle thrown price service failures gracefully', async () => {
+      const insertValues = vi.fn().mockReturnValue({
+        onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      });
+      const db = {
+        ...makeMockDb(),
+        insert: () => ({ values: insertValues }),
+      };
+
+      const mockPriceService = {
+        getPriceAt: vi.fn().mockRejectedValue(new Error('upstream exploded')),
+      };
+
+      const tracker = new OutcomeTracker(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        db as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockPriceService as any,
+      );
+
+      const result = await tracker.scheduleOutcomeTracking(makeEvent());
+
+      expect(result.ok).toBe(true);
+      expect(insertValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticker: 'AAPL',
           eventPrice: null,
         }),
       );

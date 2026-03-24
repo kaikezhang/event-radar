@@ -315,21 +315,7 @@ function getTickerDirectionFromEnrichment(enrichment: Record<string, unknown>): 
 }
 
 function buildTickerFilterCondition(ticker: string) {
-  return sql`(
-    upper(coalesce(${events.ticker}, '')) = upper(${ticker})
-    OR upper(coalesce(${events.metadata}->>'ticker', '')) = upper(${ticker})
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements(coalesce(${events.metadata}->'tickers', '[]'::jsonb)) AS metadata_ticker(value)
-      WHERE upper(
-        CASE
-          WHEN jsonb_typeof(metadata_ticker.value) = 'string'
-            THEN trim(both '"' FROM metadata_ticker.value::text)
-          ELSE coalesce(metadata_ticker.value->>'symbol', '')
-        END
-      ) = upper(${ticker})
-    )
-  )`;
+  return sql`upper(coalesce(${events.ticker}, '')) = upper(${ticker})`;
 }
 
 const eventResponseSelect = {
@@ -401,7 +387,10 @@ function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, '
     ?? extractPriceAtEvent(enrichment['currentSetup'])
     ?? null;
 
-  const analysisSummary = normalizeDisplayText(enrichment['summary']);
+  const analysisSummary = normalizeDisplayText(enrichment['summary'])
+    ?? normalizeDisplayText(enrichment['impact'])
+    ?? safeEvent.summary
+    ?? null;
   safeEvent.analysis = analysisSummary
     ? {
         summary: analysisSummary,

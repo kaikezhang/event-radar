@@ -365,7 +365,7 @@ describe('events API normalization', () => {
     expect(payload.data[0]?.priceAtEvent).toBe(478.55);
   });
 
-  it('matches ticker filters against metadata.tickers when the top-level ticker is missing', async () => {
+  it('does not match ticker filters against metadata.tickers when the top-level ticker is missing', async () => {
     await seedDeliveredEvent({
       event: {
         body: 'GPU export restrictions intensified overnight.',
@@ -383,8 +383,7 @@ describe('events API normalization', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const titles = (response.json() as { data: Array<{ title: string }> }).data.map((event) => event.title);
-    expect(titles).toContain('Default event title');
+    expect((response.json() as { data: Array<{ title: string }> }).data).toHaveLength(0);
   });
 
   it('does not match ticker filters against llm_enrichment tickers alone', async () => {
@@ -443,5 +442,70 @@ describe('events API normalization', () => {
     const titles = (response.json() as { data: Array<{ title: string }> }).data.map((event) => event.title);
     expect(titles).toContain('Real NVDA catalyst');
     expect(titles).not.toContain('NVDA mentioned in commentary, but this is a Tesla event');
+  });
+
+  it('builds an analysis object for Truth Social events from llm_enrichment impact when summary is missing', async () => {
+    await seedDeliveredEvent({
+      event: {
+        source: 'truth-social',
+        body: 'If Iran does not FULLY OPEN the Strait of Hormuz...',
+        metadata: {
+          ticker: 'XLE',
+          postId: '114206835879731385',
+          llm_enrichment: {
+            impact: 'Oil and defense names could reprice sharply on escalation risk.',
+            risks: 'Rapid de-escalation would reverse the move.',
+            action: 'Watch crude and defense beta for confirmation.',
+          },
+        },
+      },
+    });
+
+    const app = await startApp();
+    const response = await app.server.inject({
+      method: 'GET',
+      url: '/api/events?ticker=XLE',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as { data: Array<Record<string, unknown>> };
+    expect(payload.data[0]?.analysis).toMatchObject({
+      summary: 'Oil and defense names could reprice sharply on escalation risk.',
+      impact: 'Oil and defense names could reprice sharply on escalation risk.',
+      risks: 'Rapid de-escalation would reverse the move.',
+      action: 'Watch crude and defense beta for confirmation.',
+    });
+  });
+
+  it('falls back analysis summary to the stored event summary when enrichment summary and impact are missing', async () => {
+    await seedDeliveredEvent({
+      event: {
+        source: 'truth-social',
+        body: 'Trump warned Iran over Strait of Hormuz access.',
+        metadata: {
+          ticker: 'USO',
+          postId: '114206835879731386',
+          llm_enrichment: {
+            risks: 'Crowded positioning may amplify volatility.',
+          },
+        },
+      },
+    });
+
+    const app = await startApp();
+    const response = await app.server.inject({
+      method: 'GET',
+      url: '/api/events?ticker=USO',
+      headers: { 'x-api-key': TEST_API_KEY },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as { data: Array<Record<string, unknown>> };
+    expect(payload.data[0]?.analysis).toMatchObject({
+      summary: 'Trump warned Iran over Strait of Hormuz access.',
+      impact: null,
+      risks: 'Crowded positioning may amplify volatility.',
+    });
   });
 });

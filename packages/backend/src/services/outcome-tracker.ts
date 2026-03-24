@@ -13,6 +13,7 @@ import { events } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { ClassificationAccuracyService } from './classification-accuracy.js';
 import { clampOutcomePercent } from '../utils/outcome-cap.js';
+import { normalizeOutcomeTicker } from '../utils/outcome-ticker.js';
 
 interface TrackingInterval {
   hours: number;
@@ -110,8 +111,13 @@ export class OutcomeTracker {
     }
 
     const eventTime = event.timestamp ?? new Date();
-    const priceResult = await this.priceService.getPriceAt(ticker, eventTime);
-    const eventPrice = priceResult.ok ? priceResult.value : null;
+    let eventPrice: number | null = null;
+    try {
+      const priceResult = await this.priceService.getPriceAt(ticker, eventTime);
+      eventPrice = priceResult.ok ? priceResult.value : null;
+    } catch {
+      eventPrice = null;
+    }
 
     try {
       await this.db
@@ -249,16 +255,23 @@ export class OutcomeTracker {
   private extractTicker(event: RawEvent): string | null {
     if (event.metadata && typeof event.metadata === 'object') {
       const meta = event.metadata as Record<string, unknown>;
-      if (typeof meta['ticker'] === 'string') return meta['ticker'].toUpperCase();
+      const metadataTicker = normalizeOutcomeTicker(meta['ticker']);
+      if (metadataTicker) return metadataTicker;
       if (Array.isArray(meta['tickers']) && typeof meta['tickers'][0] === 'string') {
-        return (meta['tickers'][0] as string).toUpperCase();
+        const listTicker = normalizeOutcomeTicker(meta['tickers'][0]);
+        if (listTicker) {
+          return listTicker;
+        }
       }
       // Check LLM enrichment tickers (e.g. breaking-news events)
       const enrichment = meta['llm_enrichment'] as Record<string, unknown> | undefined;
       if (enrichment && Array.isArray(enrichment['tickers'])) {
         const first = enrichment['tickers'][0] as Record<string, unknown> | undefined;
-        if (first && typeof first['symbol'] === 'string') {
-          return first['symbol'].toUpperCase();
+        if (first) {
+          const enrichedTicker = normalizeOutcomeTicker(first['symbol']);
+          if (enrichedTicker) {
+            return enrichedTicker;
+          }
         }
       }
     }

@@ -9,6 +9,7 @@ import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { normalizeOutcomeTicker } from '../utils/outcome-ticker.js';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://radar:radar@localhost:5432/event_radar';
 
@@ -25,21 +26,40 @@ async function main() {
   const before = (beforeResult as unknown as { rows: Array<{ events_with_ticker: string; existing_outcomes: string }> }).rows[0];
   console.log(`[backfill-outcomes] Before: ${before?.events_with_ticker ?? 0} events with ticker, ${before?.existing_outcomes ?? 0} existing outcomes`);
 
-  // Insert missing outcome rows
+  // Create only rows whose ticker is valid for event_outcomes.ticker.
   console.log('[backfill-outcomes] Creating event_outcomes for events without outcome tracking...');
 
-  const result = await db.execute(sql`
-    INSERT INTO event_outcomes (event_id, ticker, event_time)
-    SELECT e.id, LEFT(e.ticker, 10), e.received_at
+  const candidateResult = await db.execute(sql`
+    SELECT e.id, e.ticker, e.received_at
     FROM events e
     WHERE e.ticker IS NOT NULL
-      AND LENGTH(e.ticker) <= 10
       AND e.id NOT IN (SELECT event_id FROM event_outcomes)
-    ON CONFLICT DO NOTHING
   `);
+  const candidates = (
+    candidateResult as unknown as { rows: Array<{ id: string; ticker: string; received_at: Date }> }
+  ).rows;
 
-  const count = result.rowCount ?? 0;
+  let count = 0;
+  let skipped = 0;
+  for (const row of candidates) {
+    const ticker = normalizeOutcomeTicker(row.ticker);
+    if (!ticker) {
+      skipped += 1;
+      continue;
+    }
+
+    const result = await db.execute(sql`
+      INSERT INTO event_outcomes (event_id, ticker, event_time)
+      VALUES (${row.id}, ${ticker}, ${row.received_at})
+      ON CONFLICT DO NOTHING
+    `);
+    count += result.rowCount ?? 0;
+  }
+
   console.log(`[backfill-outcomes] Created ${count} new event_outcomes rows`);
+  if (skipped > 0) {
+    console.log(`[backfill-outcomes] Skipped ${skipped} invalid tickers`);
+  }
 
   // Also fix the Iran/Hormuz direction
   console.log('[backfill-outcomes] Fixing Iran/Hormuz event direction...');
@@ -55,7 +75,7 @@ async function main() {
   `);
   const after = (afterResult as unknown as { rows: Array<{ total_outcomes: string }> }).rows[0];
   console.log(`[backfill-outcomes] After: ${after?.total_outcomes ?? 0} total outcomes`);
-  console.log('[backfill-outcomes] Done! The processOutcomes cron will fill in prices.');
+  console.log('[backfill-outcomes] Done! /api/events reads priceAtEvent from event_outcomes.event_price when available.');
 
   await pool.end();
 }

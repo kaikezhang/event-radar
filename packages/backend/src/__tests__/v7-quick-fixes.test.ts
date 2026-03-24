@@ -186,6 +186,60 @@ describe('v7 quick fixes helpers', () => {
       );
       expect((outcomeRow.rows[0] as { ticker: string }).ticker).toBe('F');
     });
+
+    it('skips outcome creation for long metadata tickers that would overflow event_outcomes.ticker', async () => {
+      const eventId = await storeEvent(sharedDb, {
+        event: makeEvent({
+          metadata: {
+            tickers: ['HEAVYPULP.X'],
+          },
+        }),
+        severity: 'HIGH',
+      });
+
+      await sharedDb.execute(sql`
+        UPDATE events
+        SET ticker = NULL,
+            metadata = jsonb_set(coalesce(metadata, '{}'::jsonb) - 'ticker', '{tickers}', '["HEAVYPULP.X"]'::jsonb)
+        WHERE id = ${eventId}
+      `);
+
+      const created = await createMissingEventOutcomes(sharedDb);
+      expect(created).toBe(0);
+
+      const outcomeRow = await sharedClient.query(
+        'SELECT ticker FROM event_outcomes WHERE event_id = $1',
+        [eventId],
+      );
+      expect(outcomeRow.rows).toHaveLength(0);
+    });
+
+    it('skips outcome creation for digits-only metadata tickers', async () => {
+      const eventId = await storeEvent(sharedDb, {
+        event: makeEvent({
+          metadata: {
+            tickers: ['123456'],
+          },
+        }),
+        severity: 'HIGH',
+      });
+
+      await sharedDb.execute(sql`
+        UPDATE events
+        SET ticker = NULL,
+            metadata = jsonb_set(coalesce(metadata, '{}'::jsonb) - 'ticker', '{tickers}', '["123456"]'::jsonb)
+        WHERE id = ${eventId}
+      `);
+
+      const created = await createMissingEventOutcomes(sharedDb);
+      expect(created).toBe(0);
+
+      const outcomeRow = await sharedClient.query(
+        'SELECT ticker FROM event_outcomes WHERE event_id = $1',
+        [eventId],
+      );
+      expect(outcomeRow.rows).toHaveLength(0);
+    });
   });
 
   describe('backfillMissingEventPrices', () => {
@@ -264,6 +318,59 @@ describe('v7 quick fixes helpers', () => {
       const updated = await backfillMissingEventPrices(sharedDb, priceService);
 
       expect(updated).toBe(0);
+    });
+
+    it('continues backfilling after an individual price lookup throws', async () => {
+      const badEventId = await storeEvent(sharedDb, {
+        event: makeEvent({
+          title: 'Bad ticker row',
+          metadata: {
+            ticker: 'TSLA',
+          },
+        }),
+        severity: 'HIGH',
+      });
+
+      const goodEventId = await storeEvent(sharedDb, {
+        event: makeEvent({
+          title: 'Good ticker row',
+          metadata: {
+            ticker: 'NVDA',
+          },
+        }),
+        severity: 'HIGH',
+      });
+
+      await sharedDb.execute(sql`
+        INSERT INTO event_outcomes (event_id, ticker, event_time, event_price)
+        VALUES
+          (${badEventId}, 'TSLA', '2026-03-20T15:00:00.000Z', NULL),
+          (${goodEventId}, 'NVDA', '2026-03-20T15:00:00.000Z', NULL)
+      `);
+
+      const priceService = {
+        getPriceAt: vi.fn(async (ticker: string) => {
+          if (ticker === 'TSLA') {
+            throw new Error('transient yahoo failure');
+          }
+
+          return { ok: true, value: 905.12 };
+        }),
+      };
+
+      const updated = await backfillMissingEventPrices(sharedDb, priceService);
+
+      expect(updated).toBe(1);
+      expect(priceService.getPriceAt).toHaveBeenCalledTimes(2);
+
+      const rows = await sharedClient.query(
+        'SELECT ticker, event_price FROM event_outcomes WHERE event_id IN ($1, $2) ORDER BY ticker ASC',
+        [goodEventId, badEventId],
+      );
+      expect(rows.rows).toMatchObject([
+        { ticker: 'NVDA', event_price: '905.12' },
+        { ticker: 'TSLA', event_price: null },
+      ]);
     });
   });
 });
