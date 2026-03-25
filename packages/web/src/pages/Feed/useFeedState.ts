@@ -9,14 +9,13 @@ const SOURCE_DISPLAY: Record<string, string> = {
   'sec-edgar': 'SEC EDGAR',
   'breaking-news': 'Breaking News',
   'trading-halt': 'Trading Halt',
-  'stocktwits': 'StockTwits',
-  'reddit': 'Reddit',
+  stocktwits: 'StockTwits',
+  reddit: 'Reddit',
   'econ-calendar': 'Econ Calendar',
   'federal-register': 'Federal Register',
   'pr-newswire': 'PR Newswire',
   reuters: 'Reuters',
 };
-
 const PRESETS_KEY = 'event-radar-filter-presets';
 const FEED_SORT_KEY = 'er-feed-sort';
 const UNAUTH_BANNER_KEY = 'event-radar-unauth-banner-dismissed';
@@ -36,6 +35,10 @@ export const BUILT_IN_PRESETS: FilterPreset[] = [
 
 export const POPULAR_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN'];
 export const PULL_THRESHOLD = 80;
+
+function displaySource(source: string): string {
+  return SOURCE_DISPLAY[source] ?? source;
+}
 
 export function getDefaultSeverities(): string[] {
   return ['CRITICAL', 'HIGH', 'MEDIUM'];
@@ -89,10 +92,6 @@ export function getTrustCue(
 
 const DEDUP_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-function displaySource(source: string): string {
-  return SOURCE_DISPLAY[source] ?? source;
-}
-
 export function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
   // Group by primary ticker; within each group, keep the most recent event and
   // surface other source reports from the same 2-hour window.
@@ -138,7 +137,7 @@ export function deduplicateAlerts(alerts: AlertSummary[]): AlertSummary[] {
         if (diff <= DEDUP_WINDOW_MS) {
           used.add(j);
           cluster.push(sorted[j]);
-          relatedSources.add(displaySource(sorted[j]?.sourceKey ?? sorted[j]?.source));
+          relatedSources.add(displaySource(sorted[j]?.sourceKey ?? sorted[j]?.source ?? 'Unknown'));
         }
       }
 
@@ -280,16 +279,12 @@ export function useFeedState({
     return getDefaultSeverities();
   }, [searchParams]);
 
-  const activeSources = useMemo(() => {
-    const param = searchParams.get('source');
-    return param ? param.split(',') : [];
-  }, [searchParams]);
   const pushOnly = searchParams.get('push') === 'only';
 
   const allPresets = useMemo(() => [...BUILT_IN_PRESETS, ...customPresets], [customPresets]);
   const isDefaultSeverity = !searchParams.has('severity');
-  const hasActiveFilters = ((!isDefaultSeverity && activeSeverities.length > 0) || activeSources.length > 0) || pushOnly;
-  const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + activeSources.length + (pushOnly ? 1 : 0);
+  const hasActiveFilters = ((!isDefaultSeverity && activeSeverities.length > 0) || pushOnly);
+  const activeFilterCount = (isDefaultSeverity ? 0 : activeSeverities.length) + (pushOnly ? 1 : 0);
 
   const {
     alerts,
@@ -308,13 +303,10 @@ export function useFeedState({
   });
 
   const updateFilters = useCallback(
-    (severities: string[], sources: string[], nextPushOnly: boolean) => {
+    (severities: string[], nextPushOnly: boolean) => {
       const params = new URLSearchParams();
       if (severities.length > 0) {
         params.set('severity', severities.join(','));
-      }
-      if (sources.length > 0) {
-        params.set('source', sources.join(','));
       }
       if (nextPushOnly) {
         params.set('push', 'only');
@@ -328,26 +320,19 @@ export function useFeedState({
     const next = activeSeverities.includes(severity)
       ? activeSeverities.filter((value) => value !== severity)
       : [...activeSeverities, severity];
-    updateFilters(next, activeSources, pushOnly);
-  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
-
-  const toggleSource = useCallback((source: string) => {
-    const next = activeSources.includes(source)
-      ? activeSources.filter((value) => value !== source)
-      : [...activeSources, source];
-    updateFilters(activeSeverities, next, pushOnly);
-  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
+    updateFilters(next, pushOnly);
+  }, [activeSeverities, pushOnly, updateFilters]);
 
   const togglePushOnly = useCallback(() => {
-    updateFilters(activeSeverities, activeSources, !pushOnly);
-  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
+    updateFilters(activeSeverities, !pushOnly);
+  }, [activeSeverities, pushOnly, updateFilters]);
 
   const clearFilters = useCallback(() => {
     setSearchParams(new URLSearchParams(), { replace: true });
   }, [setSearchParams]);
 
   const applyPreset = useCallback((preset: FilterPreset) => {
-    updateFilters(preset.severities, preset.sources, pushOnly);
+    updateFilters(preset.severities, pushOnly);
   }, [pushOnly, updateFilters]);
 
   const savePreset = useCallback(() => {
@@ -358,13 +343,13 @@ export function useFeedState({
     const preset: FilterPreset = {
       name: presetName.trim(),
       severities: [...activeSeverities],
-      sources: [...activeSources],
+      sources: [],
     };
     const updated = [...customPresets, preset];
     setCustomPresets(updated);
     saveCustomPresets(updated);
     setPresetName('');
-  }, [activeSeverities, activeSources, customPresets, presetName]);
+  }, [activeSeverities, customPresets, presetName]);
 
   const deletePreset = useCallback((name: string) => {
     const updated = customPresets.filter((preset) => preset.name !== name);
@@ -425,16 +410,13 @@ export function useFeedState({
     if (dismissedIds.size > 0) {
       result = result.filter((alert) => !dismissedIds.has(alert.id));
     }
-    if (activeSources.length > 0) {
-      result = result.filter((alert) => activeSources.includes(alert.source));
-    }
     if (pushOnly) {
       result = result.filter((alert) => alert.pushed);
     }
     // Deduplicate: same source + same primary ticker + within 24 hours — keep most recent
     result = deduplicateAlerts(result);
     return result;
-  }, [activeSources, alerts, dismissedIds, pushOnly]);
+  }, [alerts, dismissedIds, pushOnly]);
 
   const filteredAlerts = useMemo(() => {
     let result = scopedAlerts;
@@ -606,7 +588,6 @@ export function useFeedState({
   return {
     activeFilterCount,
     activeSeverities,
-    activeSources,
     addFilterRef,
     allPresets,
     bannerDismissed,
@@ -654,7 +635,6 @@ export function useFeedState({
     toastMessage,
     toastVisible,
     toggleSeverity,
-    toggleSource,
     togglePushOnly,
     applyPreset,
     applyPendingAlerts,

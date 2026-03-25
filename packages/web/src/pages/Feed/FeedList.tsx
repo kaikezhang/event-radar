@@ -21,7 +21,6 @@ import {
 interface FeedListProps {
   activeFilterCount: number;
   activeSeverities: string[];
-  activeSources: string[];
   addFilterRef: RefObject<HTMLDivElement | null>;
   addToWatchlist: (ticker: string) => void;
   applyPendingAlerts: () => void;
@@ -53,13 +52,11 @@ interface FeedListProps {
   showSmartFeedEmpty: boolean;
   showWatchlistOnboarding: boolean;
   sortMode: SortMode;
-  sources: string[];
   toggleAddFilterDropdown: () => void;
   toggleFilters: () => void;
   togglePushOnly: () => void;
   toggleSortMode: (mode: SortMode) => void;
   toggleSeverity: (severity: string) => void;
-  toggleSource: (source: string) => void;
   touchHandlers: {
     onTouchEnd: () => void;
     onTouchMove: (event: TouchEvent<HTMLDivElement>) => void;
@@ -70,7 +67,6 @@ interface FeedListProps {
 export function FeedList({
   activeFilterCount,
   activeSeverities,
-  activeSources,
   addFilterRef,
   addToWatchlist,
   applyPendingAlerts,
@@ -102,13 +98,11 @@ export function FeedList({
   showUnauthBanner,
   showWatchlistOnboarding,
   sortMode,
-  sources,
   toggleAddFilterDropdown,
   toggleFilters,
   togglePushOnly,
   toggleSortMode,
   toggleSeverity,
-  toggleSource,
   touchHandlers,
 }: FeedListProps) {
   const priceQuotes = useTickerBatchPrices(filteredAlerts, {
@@ -152,7 +146,6 @@ export function FeedList({
 
       <FeedFilters
         activeSeverities={activeSeverities}
-        activeSources={activeSources}
         addFilterRef={addFilterRef}
         hasActiveFilters={hasActiveFilters}
         pushOnly={pushOnly}
@@ -160,11 +153,9 @@ export function FeedList({
         onToggleAddFilterDropdown={toggleAddFilterDropdown}
         onTogglePushOnly={togglePushOnly}
         onToggleSeverity={toggleSeverity}
-        onToggleSource={toggleSource}
         severities={SEVERITIES}
         showAddFilterDropdown={showAddFilterDropdown}
         showFilters={showFilters}
-        sources={sources}
       />
 
       <div

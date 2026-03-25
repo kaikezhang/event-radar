@@ -385,7 +385,6 @@ export function buildApp(options?: {
     server,
     db,
     apiKey,
-    eventBus,
     registry,
     marketRegimeService,
     tickerMarketDataCache,
@@ -396,7 +395,6 @@ export function buildApp(options?: {
     priceBatchService: options?.priceBatchService,
     startTime,
     version: backendPackage.version,
-    rules: options?.rules,
   });
 
   // Start health monitor (production only)

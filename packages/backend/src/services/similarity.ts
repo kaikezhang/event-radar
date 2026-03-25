@@ -23,6 +23,8 @@ const SEVERITY_ORDER = {
 } as const;
 
 type ConfidenceLevel = 'insufficient' | 'low' | 'medium' | 'high';
+type SeverityLogger = Pick<Console, 'debug'>;
+const HISTORICAL_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
 export interface SimilarityQuery {
   eventType: string;
@@ -108,6 +110,31 @@ export interface SimilarityResult {
   confidence: ConfidenceLevel;
   stats: AggregateStats;
   totalCandidates: number;
+}
+
+export function parseSeverityCsv(raw?: string, logger?: SeverityLogger): string[] {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0)
+    .filter((value): value is (typeof HISTORICAL_SEVERITIES)[number] => {
+      const isKnownSeverity = HISTORICAL_SEVERITIES.includes(
+        value as (typeof HISTORICAL_SEVERITIES)[number],
+      );
+
+      if (!isKnownSeverity) {
+        logger?.debug(
+          { severity: value },
+          'Ignoring unrecognized historical severity filter',
+        );
+      }
+
+      return isKnownSeverity;
+    });
 }
 
 function normalizeText(value?: string | null): string | null {

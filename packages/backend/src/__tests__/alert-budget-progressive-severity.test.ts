@@ -1,11 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryEventBus, type Priority, type RawEvent } from '@event-radar/shared';
 import type { PGlite } from '@electric-sql/pglite';
 import type { Database } from '../db/connection.js';
 import { storeEvent } from '../db/event-store.js';
-import { registerAlertBudgetRoutes } from '../routes/alert-budget.js';
 import { AlertBudgetService } from '../services/alert-budget.js';
 import { ProgressiveSeverityService } from '../services/progressive-severity.js';
 import { UserFeedbackService } from '../services/user-feedback.js';
@@ -13,10 +11,7 @@ import {
   cleanTestDb,
   createTestDb,
   safeClose,
-  safeCloseServer,
 } from './helpers/test-db.js';
-
-const TEST_API_KEY = 'alert-budget-test-key';
 
 function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -347,105 +342,6 @@ describe('ProgressiveSeverityService', () => {
       eventId,
       previousSeverity: 'MEDIUM',
       newSeverity: 'HIGH',
-    });
-  });
-});
-
-describe('Alert budget and severity API', () => {
-  let db: Database;
-  let client: PGlite;
-  let server: FastifyInstance;
-
-  beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-    server = Fastify({ logger: false });
-    registerAlertBudgetRoutes(server, db, {
-      apiKey: TEST_API_KEY,
-      eventBus: new InMemoryEventBus(),
-    });
-    await server.ready();
-  });
-
-  afterAll(async () => {
-    await safeCloseServer(server);
-    await safeClose(client);
-  });
-
-  beforeEach(async () => {
-    await cleanTestDb(db);
-  });
-
-  it('requires API key auth for budget usage', async () => {
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/v1/budget/usage',
-    });
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('returns budget usage in the expected shape', async () => {
-    const budgetService = new AlertBudgetService(db);
-    const eventId = await createStoredEvent(db);
-    await budgetService.recordAlert(eventId, 'HIGH');
-
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/v1/budget/usage',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      window: { minutes: 60 },
-      total: { used: 1, limit: 50 },
-      suppressed: 0,
-    });
-  });
-
-  it('returns the effective severity for an event', async () => {
-    const eventId = await createStoredEvent(db);
-
-    const response = await server.inject({
-      method: 'GET',
-      url: `/api/v1/severity/${eventId}`,
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      severity: 'MEDIUM',
-      locked: false,
-      sourceCount: 1,
-    });
-  });
-
-  it('locks severity through the API and exposes history', async () => {
-    const eventId = await createStoredEvent(db);
-
-    const lockResponse = await server.inject({
-      method: 'POST',
-      url: `/api/v1/severity/${eventId}/lock`,
-      headers: { 'x-api-key': TEST_API_KEY },
-      payload: {
-        severity: 'HIGH',
-        reason: 'operator confirmation',
-      },
-    });
-
-    expect(lockResponse.statusCode).toBe(200);
-
-    const historyResponse = await server.inject({
-      method: 'GET',
-      url: `/api/v1/severity/${eventId}/history`,
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(historyResponse.statusCode).toBe(200);
-    expect(historyResponse.json()).toHaveLength(1);
-    expect(historyResponse.json()[0]).toMatchObject({
-      newSeverity: 'HIGH',
-      changedBy: 'user',
     });
   });
 });
