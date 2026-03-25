@@ -743,11 +743,33 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
 
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
-    // Query all events for this ticker (any severity), sorted by date descending.
-    // Previously filtered to HIGH+CRITICAL only, which caused "Ticker not found" for
-    // tickers that only had MEDIUM events (e.g., AAPL).
-    const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20`);
-    const events = (data.data ?? data.events ?? []) as Record<string, unknown>[];
+    // Query MEDIUM+ events for this ticker. LOW events (StockTwits trending etc.) are
+    // excluded to reduce noise. Fetches CRITICAL, HIGH, and MEDIUM separately because
+    // the severity filter is an exact match, not >=.
+    const [critData, highData, medData] = await Promise.all([
+      apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=CRITICAL`),
+      apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`),
+      apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=MEDIUM`),
+    ]);
+    const seen = new Set<string>();
+    const allEvents: Record<string, unknown>[] = [];
+    for (const e of [
+      ...((critData.data ?? []) as Record<string, unknown>[]),
+      ...((highData.data ?? []) as Record<string, unknown>[]),
+      ...((medData.data ?? []) as Record<string, unknown>[]),
+    ]) {
+      const id = e.id as string;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        allEvents.push(e);
+      }
+    }
+    allEvents.sort((a, b) => {
+      const ta = new Date(a.receivedAt as string ?? a.received_at as string ?? 0).getTime();
+      const tb = new Date(b.receivedAt as string ?? b.received_at as string ?? 0).getTime();
+      return tb - ta;
+    });
+    const events = allEvents.slice(0, 20);
 
     if (events.length === 0) return null;
 
