@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
 import { useAlertSound } from '../hooks/useAlertSound.js';
-import { useAudioSquawk } from '../hooks/useAudioSquawk.js';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -175,11 +174,6 @@ type ToastTone = 'success' | 'error';
 export function Settings() {
   const location = useLocation();
   const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
-  const {
-    preferences: squawkPreferences,
-    setEnabled: setSquawkEnabled,
-    setSpeakWhenHidden,
-  } = useAudioSquawk();
   const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
     ...getWebPushSupport(),
     subscribed: false,
@@ -1122,62 +1116,6 @@ export function Settings() {
               />
             </label>
           </div>
-        </div>
-      </CollapsiblePanel>
-
-      <CollapsiblePanel
-        id="audio-squawk"
-        title="Audio squawk"
-        eyebrow="TTS"
-        description="Critical-only spoken alerts with a short attention tone."
-      >
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-[22px] font-semibold text-text-primary">
-              Audio squawk
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Plays a short tone, then reads new CRITICAL event headlines with your browser&apos;s built-in text-to-speech.
-            </p>
-          </div>
-
-          <label className="flex items-center justify-between gap-4" htmlFor="squawk-toggle">
-            <span>
-              <span className="block text-sm font-medium text-text-primary">Audio alerts for CRITICAL events</span>
-              <span className="mt-1 block text-xs text-text-secondary">
-                Stores this preference locally on this device.
-              </span>
-            </span>
-            <input
-              id="squawk-toggle"
-              type="checkbox"
-              checked={squawkPreferences.enabled}
-              onChange={(event) => setSquawkEnabled(event.target.checked)}
-              className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-            />
-          </label>
-
-          {squawkPreferences.enabled ? (
-            <label className="flex items-center justify-between gap-4" htmlFor="squawk-hidden-toggle">
-              <span>
-                <span className="block text-sm font-medium text-text-primary">Speak while this tab is hidden</span>
-                <span className="mt-1 block text-xs text-text-secondary">
-                  Leave this off to keep spoken alerts limited to the visible tab.
-                </span>
-              </span>
-              <input
-                id="squawk-hidden-toggle"
-                type="checkbox"
-                checked={squawkPreferences.speakWhenHidden}
-                onChange={(event) => setSpeakWhenHidden(event.target.checked)}
-                className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-              />
-            </label>
-          ) : (
-            <p className="text-sm leading-6 text-text-secondary">
-              Turn this on only if you want an audible callout for top-priority alerts.
-            </p>
-          )}
         </div>
       </CollapsiblePanel>
 

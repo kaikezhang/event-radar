@@ -18,7 +18,6 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
-import { registerWatchlistSectionRoutes } from './routes/watchlist-sections.js';
 import { registerTickerRoutes } from './routes/tickers.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
@@ -118,7 +117,6 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerFeedbackRoutes(server, db, { apiKey });
     registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
-    registerWatchlistSectionRoutes(server, db, { apiKey });
     registerWatchlistRoutes(server, db, { apiKey });
     registerTickerRoutes(server, db);
     registerOnboardingRoutes(server, db, { apiKey });

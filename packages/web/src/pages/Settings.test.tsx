@@ -191,23 +191,14 @@ describe('Settings page', () => {
     expect(within(section).getByText(/if enabled/i)).toBeInTheDocument();
   });
 
-  it('shows the critical audio alerts toggle as disabled by default', async () => {
+  it('does not render the removed audio squawk settings group', async () => {
     renderSettings();
 
-    const audioToggle = await screen.findByRole('button', { name: /audio squawk/i });
-    await userEvent.setup().click(audioToggle);
+    await screen.findByRole('button', { name: /web push/i });
 
-    expect(screen.getByLabelText(/audio alerts for critical events/i)).not.toBeChecked();
-  });
-
-  it('reveals the hidden-tab preference after enabling critical audio alerts', async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole('button', { name: /audio squawk/i }));
-    await user.click(screen.getByLabelText(/audio alerts for critical events/i));
-
-    expect(screen.getByLabelText(/speak while this tab is hidden/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /audio squawk/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/audio alerts for critical events/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/speak while this tab is hidden/i)).not.toBeInTheDocument();
   });
 
   it('shows saved feedback on the notification channels save button for two seconds', async () => {
