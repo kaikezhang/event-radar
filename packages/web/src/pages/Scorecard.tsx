@@ -1,158 +1,135 @@
-import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, CalendarRange, ChevronDown, HelpCircle, Info, Target } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { CalendarRange, Gauge, MoveUpRight, Target, Trophy } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState.js';
-import { TapTooltip } from '../components/TapTooltip.js';
-import {
-  formatScorecardBucketLabel,
-  getScorecardSeverityBreakdown,
-  getScorecardSummary,
-} from '../lib/api.js';
-import { cn } from '../lib/utils.js';
-import type {
-  ScorecardBucketSummary,
-  ScorecardSeverityBreakdownItem,
-  ScorecardSummary,
-} from '../types/index.js';
+import { formatScorecardBucketLabel, getScorecardSummary } from '../lib/api.js';
+import type { ScorecardBucketSummary, ScorecardSummary } from '../types/index.js';
 
 const EXCLUDED_SOURCE_NAMES = new Set(['dummy', 'test', 'internal']);
 
-const WINDOWS = [
-  { value: 30, label: '30d', description: 'Recent setups only' },
-  { value: 90, label: '90d', description: 'Recommended default' },
-  { value: 'all', label: 'All', description: 'Full-history scorecard' },
-] as const;
+function formatRate(value: number | null): string {
+  if (value == null) {
+    return 'N/A';
+  }
 
-type ScorecardWindow = (typeof WINDOWS)[number]['value'];
-
-const BUCKET_COLUMNS = [
-  { key: 'totalAlerts', label: 'Tracked' },
-  { key: 'alertsWithUsableVerdicts', label: 'T+5 data' },
-  { key: 'setupWorkedRate', label: 'Worked rate' },
-  { key: 'avgT20Move', label: 'Avg T+20' },
-] as const;
-
-function useIsDarkMode(): boolean {
-  const [isDark, setIsDark] = useState(() =>
-    document.documentElement.classList.contains('dark'),
-  );
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  return isDark;
+  return `${(value * 100).toFixed(1)}%`;
 }
 
-function moveMagnitudeColor(move: number): string {
-  if (move >= 8) return '#f97316';
-  if (move >= 5) return '#eab308';
-  return '#22c55e';
+function formatMove(value: number | null): string {
+  if (value == null) {
+    return 'N/A';
+  }
+
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${value.toFixed(1)}%`;
 }
 
-const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: 'var(--severity-critical)',
-  HIGH: 'var(--severity-high)',
-  MEDIUM: 'var(--severity-medium)',
-  LOW: 'var(--severity-low)',
-};
-
-function usePanelState(panelKey: string, defaultOpen: boolean): [boolean, () => void] {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const paramValue = searchParams.get(panelKey);
-  const isOpen = paramValue != null ? paramValue === '1' : defaultOpen;
-
-  const toggle = useCallback(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      const newValue = !isOpen;
-      if (newValue === defaultOpen) {
-        next.delete(panelKey);
-      } else {
-        next.set(panelKey, newValue ? '1' : '0');
-      }
-      return next;
-    }, { replace: true });
-  }, [panelKey, defaultOpen, isOpen, setSearchParams]);
-
-  return [isOpen, toggle];
+function formatMovePair(t5: number | null, t20: number | null): string {
+  return `${formatMove(t5)} / ${formatMove(t20)}`;
 }
 
-function InfoBanner({ data }: { data: ScorecardSummary }) {
+function getTopSource(sourceBuckets: ScorecardBucketSummary[]): ScorecardBucketSummary | null {
+  const filtered = sourceBuckets
+    .filter((bucket) => !EXCLUDED_SOURCE_NAMES.has(bucket.bucket.toLowerCase()))
+    .filter((bucket) => bucket.alertsWithUsableVerdicts > 0 && bucket.setupWorkedRate != null);
+
+  if (filtered.length === 0) {
+    return null;
+  }
+
+  return filtered.sort((left, right) => {
+    const rateDiff = (right.setupWorkedRate ?? 0) - (left.setupWorkedRate ?? 0);
+    if (rateDiff !== 0) {
+      return rateDiff;
+    }
+
+    return right.alertsWithUsableVerdicts - left.alertsWithUsableVerdicts;
+  })[0] ?? null;
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: ReactNode;
+}) {
   return (
-    <section className="rounded-2xl border border-sky-500/20 bg-sky-500/8 p-4 shadow-[0_12px_28px_var(--shadow-color)]">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-sky-500/12 text-sky-300">
-          <Info className="h-4 w-4" />
-        </span>
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-text-primary">
-            Scorecard tracks how market events correlate with price movements. This is a calibration tool, not a prediction score.
-          </p>
-          <p className="text-sm leading-6 text-text-secondary">
-            Price data from T+5 (5 trading days after event). Coverage: {formatCoverageRateValue(
-              data.overview.eventsWithPriceOutcomes,
-              data.overview.eventsWithTickers,
-            )} of events.
-          </p>
+    <article className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">{label}</p>
+          <p className="mt-3 font-mono text-3xl font-bold text-text-primary sm:text-4xl">{value}</p>
         </div>
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-default/12 text-accent-default">
+          {icon}
+        </span>
       </div>
+      <p className="mt-3 text-sm leading-6 text-text-secondary">{detail}</p>
+    </article>
+  );
+}
+
+function ScorecardSkeleton() {
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      {Array.from({ length: 5 }, (_, index) => (
+        <div
+          key={index}
+          data-testid="scorecard-skeleton-card"
+          className="h-48 animate-pulse rounded-3xl border border-border-default bg-bg-surface/60"
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScorecardIntro({ data }: { data: ScorecardSummary }) {
+  return (
+    <section className="rounded-3xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-6 shadow-[0_18px_40px_var(--shadow-color)]">
+      <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
+        <Target className="h-3.5 w-3.5" />
+        Scorecard
+      </p>
+      <h1 className="mt-3 text-[24px] font-semibold leading-8 text-text-primary">Scorecard</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
+        Five numbers that show whether the alert stream is producing workable setups, not a faux terminal dashboard.
+      </p>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-text-primary">
+        Coverage currently tracks {data.overview.eventsWithPriceOutcomes.toLocaleString()} events with price outcomes across {data.overview.eventsWithTickers.toLocaleString()} ticker-linked alerts.
+      </p>
     </section>
   );
 }
 
 export function Scorecard() {
-  const [windowValue, setWindowValue] = useState<ScorecardWindow>(90);
-  const isDark = useIsDarkMode();
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['scorecard-summary', windowValue],
-    queryFn: () => getScorecardSummary(windowValue === 'all' ? undefined : windowValue),
+  const summaryQuery = useQuery({
+    queryKey: ['scorecard-summary', 90],
+    queryFn: () => getScorecardSummary(90),
     staleTime: 60_000,
   });
-  const { data: severityBreakdown } = useQuery({
-    queryKey: ['scorecard-severity-breakdown', windowValue],
-    queryFn: () => getScorecardSeverityBreakdown(windowValue === 'all' ? undefined : windowValue),
+  const weekQuery = useQuery({
+    queryKey: ['scorecard-summary', 7],
+    queryFn: () => getScorecardSummary(7),
     staleTime: 60_000,
   });
 
-  const windowMeta = WINDOWS.find((option) => option.value === windowValue) ?? WINDOWS[1];
+  const data = summaryQuery.data;
+  const topSource = useMemo(
+    () => (data ? getTopSource(data.sourceBuckets) : null),
+    [data],
+  );
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            data-testid="scorecard-skeleton-card"
-            className="h-28 animate-pulse rounded-2xl border border-border-default bg-bg-surface/60"
-          />
-        ))}
-      </div>
-    );
+  if (summaryQuery.isLoading || weekQuery.isLoading) {
+    return <ScorecardSkeleton />;
   }
 
-  if (isError || !data) {
+  if (summaryQuery.isError || !data) {
     return (
       <EmptyState
         icon="📉"
@@ -179,28 +156,13 @@ export function Scorecard() {
   if (data.totals.alertsWithUsableVerdicts === 0) {
     return (
       <div className="space-y-4">
-        <InfoBanner data={data} />
-        <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
-            <Target className="h-3.5 w-3.5" />
-            Scorecard
-          </p>
-          <h1 className="mt-3 text-[24px] font-semibold leading-8 text-text-primary">
-            Scorecard is building
-          </h1>
-        </section>
+        <ScorecardIntro data={data} />
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-6">
           <div className="flex flex-col items-center text-center">
             <span className="text-5xl">📊</span>
-            <h2 className="mt-4 text-[17px] font-semibold text-text-primary">
-              Tracking outcomes for every alert
-            </h2>
+            <h2 className="mt-4 text-[17px] font-semibold text-text-primary">Scorecard is building</h2>
             <p className="mt-3 max-w-md text-sm leading-6 text-text-secondary">
-              Event Radar is monitoring T+5 and T+20 price moves for each alert it sends.
-              Once enough time has passed, accuracy data will appear here automatically.
-            </p>
-            <p className="mt-2 text-sm text-text-secondary">
-              {data.overview.totalEvents.toLocaleString()} events tracked, with {data.overview.eventsWithTickers.toLocaleString()} tied to individual tickers so far.
+              Event Radar is monitoring T+5 and T+20 price moves for each alert it sends. Once enough time has passed, the simplified scorecard will fill in automatically.
             </p>
             <Link
               to="/"
@@ -214,547 +176,48 @@ export function Scorecard() {
     );
   }
 
+  const eventsThisWeek = weekQuery.data?.overview.totalEvents ?? 0;
+  const topSourceLabel = topSource ? formatScorecardBucketLabel('source', topSource.bucket) : 'N/A';
+  const topSourceDetail = topSource
+    ? `${formatRate(topSource.setupWorkedRate)} worked rate across ${topSource.alertsWithUsableVerdicts.toLocaleString()} verdict-ready alerts.`
+    : 'Not enough source-level verdicts yet.';
+
   return (
     <div className="space-y-4">
-      <InfoBanner data={data} />
+      <ScorecardIntro data={data} />
 
-      <section className="rounded-2xl border border-border-default bg-[linear-gradient(145deg,rgba(249,115,22,0.12),rgba(17,18,23,0.98))] p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-accent-default/20 bg-accent-default/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
-              <Target className="h-3.5 w-3.5" />
-              Scorecard
-            </p>
-            <h1 className="mt-3 text-[24px] font-semibold leading-8 text-text-primary">
-              Scorecard
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              Outcome tracking across the full event stream
-            </p>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-text-primary">
-              {windowMeta.description}
-            </p>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              Use this to see where alerts consistently lead to meaningful price movement, not to grade directional calls.
-            </p>
-          </div>
-
-          <div className="hidden rounded-2xl border border-overlay-medium bg-overlay-light p-3 text-text-secondary sm:block">
-            <CalendarRange className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {WINDOWS.map((option) => (
-            <button
-              key={option.label}
-              type="button"
-              onClick={() => {
-                startTransition(() => {
-                  setWindowValue(option.value);
-                });
-              }}
-              className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
-                windowValue === option.value
-                  ? 'border-accent-default/30 bg-accent-default/14 text-accent-default'
-                  : 'border-overlay-medium bg-overlay-light text-text-secondary hover:bg-overlay-medium'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard
+          label="Total Events Tracked"
+          value={data.overview.totalEvents.toLocaleString()}
+          detail="Everything Event Radar has monitored so far."
+          icon={<Target className="h-5 w-5" />}
+        />
+        <MetricCard
+          label="Setup-Worked Rate"
+          value={formatRate(data.totals.setupWorkedRate)}
+          detail={`${data.totals.setupWorkedCount.toLocaleString()} of ${data.totals.alertsWithUsableVerdicts.toLocaleString()} verdict-ready alerts produced a tradeable move.`}
+          icon={<Gauge className="h-5 w-5" />}
+        />
+        <MetricCard
+          label="Average T+5 / T+20"
+          value={formatMovePair(data.totals.avgT5Move, data.totals.avgT20Move)}
+          detail="Average short-term and one-month move after each alert."
+          icon={<MoveUpRight className="h-5 w-5" />}
+        />
+        <MetricCard
+          label="Top Performing Source"
+          value={topSourceLabel}
+          detail={topSourceDetail}
+          icon={<Trophy className="h-5 w-5" />}
+        />
+        <MetricCard
+          label="Events This Week"
+          value={eventsThisWeek.toLocaleString()}
+          detail="Activity indicator for the last 7 days."
+          icon={<CalendarRange className="h-5 w-5" />}
+        />
       </section>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Events Tracked</div>
-          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
-            {data.overview.totalEvents.toLocaleString()}
-          </div>
-        </div>
-        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Sources Monitored</div>
-          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
-            {data.overview.sourcesMonitored.toLocaleString()}
-          </div>
-        </div>
-        <div className="rounded-3xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Events with Price Data</div>
-          <div className="mt-3 font-mono text-4xl font-bold text-text-primary">
-            {data.overview.eventsWithPriceOutcomes.toLocaleString()}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.95fr]">
-        <article className="rounded-3xl border border-border-default bg-bg-surface/96 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">Coverage</p>
-          <p className="mt-3 text-2xl font-semibold leading-8 text-text-primary sm:text-3xl">
-            {data.overview.eventsWithPriceOutcomes.toLocaleString()} events with price outcomes / {data.overview.eventsWithTickers.toLocaleString()} events with tickers ({formatCoverageRateValue(
-              data.overview.eventsWithPriceOutcomes,
-              data.overview.eventsWithTickers,
-            )})
-          </p>
-          <p className="mt-3 text-sm leading-6 text-text-secondary">
-            Events without tickers (macro events, government actions) don&apos;t have individual price tracking.
-          </p>
-        </article>
-
-        <article className="rounded-3xl border border-border-default bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.18),rgba(17,18,23,0.96)_62%)] p-6 shadow-[0_18px_40px_var(--shadow-color)]">
-          <div className="font-mono text-4xl font-semibold text-text-primary">
-            {formatRate(data.totals.setupWorkedRate)}
-          </div>
-          <MetricLabel
-            label="Setup Worked Rate"
-            tooltip="How often the event led to a tradeable move of 5%+"
-          />
-          <p className="mt-4 text-sm leading-6 text-text-secondary">
-            {data.totals.setupWorkedCount.toLocaleString()} of {data.totals.alertsWithUsableVerdicts.toLocaleString()} events with T+5 price data produced 5%+ moves.
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-overlay-medium bg-black/10 px-3 py-3">
-              <div className="font-mono text-lg font-semibold text-text-primary">
-                {formatMove(data.totals.avgT20Move)}
-              </div>
-              <MetricLabel
-                label="Avg T+20 move"
-                tooltip="Price change 20 trading days (~1 month) after the event"
-              />
-            </div>
-            <div className="rounded-2xl border border-overlay-medium bg-black/10 px-3 py-3">
-              <div className="font-mono text-lg font-semibold text-text-primary">
-                {formatMove(data.totals.medianT20Move)}
-              </div>
-              <MetricLabel
-                label="Median T+20 move"
-                tooltip="Price change 20 trading days (~1 month) after the event"
-              />
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <AdvancedAnalytics data={data} />
-
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-        <SourceAccuracyChart data={data} isDark={isDark} />
-        <SeverityBreakdownChart data={severityBreakdown} isDark={isDark} />
-      </div>
-
-      <RollingAccuracyTrend />
-
-      <BucketSection
-        title="Signal buckets"
-        description="Outcome quality grouped by the product signal labels users see first."
-        group="action"
-        buckets={data.actionBuckets}
-        defaultOpen
-      />
-      <BucketSection
-        title="Confidence buckets"
-        description="Calibration by model confidence so users can see whether conviction tracks reality."
-        group="confidence"
-        buckets={data.confidenceBuckets}
-        defaultOpen
-      />
-      <BucketSection
-        title="Source buckets"
-        description="Signal quality by source family to surface where alerts deserve more trust."
-        group="source"
-        buckets={data.sourceBuckets.filter((b) => !EXCLUDED_SOURCE_NAMES.has(b.bucket.toLowerCase()))}
-        defaultOpen
-      />
-      <BucketSection
-        title="Event type buckets"
-        description="Behavior by product event type, useful for tuning templates and routing."
-        group="eventType"
-        buckets={data.eventTypeBuckets}
-        defaultOpen
-      />
     </div>
   );
-}
-
-function SourceAccuracyChart({ data, isDark }: { data: ScorecardSummary; isDark: boolean }) {
-  const chartData = useMemo(
-    () =>
-      data.sourceBuckets
-        .filter((bucket) => !EXCLUDED_SOURCE_NAMES.has(bucket.bucket.toLowerCase()))
-        .filter((bucket) => bucket.alertsWithUsableVerdicts > 0)
-        .map((bucket) => ({
-          name: formatScorecardBucketLabel('source', bucket.bucket),
-          moveMagnitude: Math.abs(bucket.avgT20Move ?? bucket.avgT5Move ?? 0),
-          count: bucket.alertsWithUsableVerdicts,
-        }))
-        .sort((left, right) => right.moveMagnitude - left.moveMagnitude),
-    [data.sourceBuckets],
-  );
-
-  const axisColor = isDark ? '#a1a1aa' : '#4b5563';
-  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-
-  const renderCustomLabel = useCallback(
-    (props: { x: number; y: number; width: number; height: number; value: number; index: number }) => {
-      const item = chartData[props.index];
-      return (
-        <text
-          x={props.x + props.width + 6}
-          y={props.y + props.height / 2}
-          fill={axisColor}
-          fontSize={11}
-          dominantBaseline="central"
-        >
-          {item?.count ?? ''}
-        </text>
-      );
-    },
-    [chartData, axisColor],
-  );
-
-  if (chartData.length === 0) return null;
-
-  const barHeight = 36;
-  const chartHeight = Math.max(200, chartData.length * barHeight + 40);
-
-  return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-      <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
-        Source accuracy
-      </h2>
-      <p className="mb-4 text-sm leading-6 text-text-secondary">
-        Which sources most often lead to the biggest post-event moves.
-      </p>
-      <ResponsiveContainer width="100%" height={chartHeight} minWidth={0}>
-        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-          <XAxis type="number" tick={{ fill: axisColor, fontSize: 12 }} tickFormatter={(value: number) => `${value}%`} />
-          <YAxis type="category" dataKey="name" width={70} tick={{ fill: axisColor, fontSize: 12 }} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: isDark ? '#171923' : '#ffffff',
-              border: `1px solid ${isDark ? '#252834' : '#dfe2e8'}`,
-              borderRadius: 12,
-              color: isDark ? '#fafaf9' : '#111827',
-              fontSize: 13,
-            }}
-            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Move magnitude']}
-          />
-          <Bar dataKey="moveMagnitude" radius={[0, 6, 6, 0]} label={renderCustomLabel}>
-            {chartData.map((entry) => (
-              <Cell key={entry.name} fill={moveMagnitudeColor(entry.moveMagnitude)} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </section>
-  );
-}
-
-function SeverityBreakdownChart({
-  data,
-  isDark,
-}: {
-  data: ScorecardSeverityBreakdownItem[] | null | undefined;
-  isDark: boolean;
-}) {
-  const severityData = useMemo(
-    () => (data ?? [])
-      .filter((entry) => entry.count > 0)
-      .map((entry) => ({
-        name: entry.severity,
-        label: formatSeverityLabel(entry.severity),
-        value: entry.count,
-      })),
-    [data],
-  );
-
-  const total = severityData.reduce((accumulator, entry) => accumulator + entry.value, 0);
-
-  return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-      <h2 className="mb-4 text-[17px] font-semibold leading-6 text-text-primary">
-        Severity breakdown
-      </h2>
-      {severityData.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-overlay-medium bg-bg-elevated/50 px-4 py-8 text-center text-sm text-text-secondary">
-          No severity data available yet
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-4 sm:flex-row">
-          <ResponsiveContainer width="100%" height={220} minWidth={0}>
-            <PieChart>
-              <Pie
-                data={severityData}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-                stroke="none"
-              >
-                {severityData.map((entry) => (
-                  <Cell key={entry.name} fill={SEVERITY_COLORS[entry.name] ?? '#94a3b8'} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: isDark ? '#171923' : '#ffffff',
-                  border: `1px solid ${isDark ? '#252834' : '#dfe2e8'}`,
-                  borderRadius: 12,
-                  color: isDark ? '#fafaf9' : '#111827',
-                  fontSize: 13,
-                }}
-                formatter={(value: number) => [value, 'Alerts']}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-wrap justify-center gap-3 sm:flex-col sm:gap-2">
-            {severityData.map((entry) => (
-              <div key={entry.name} className="flex items-center gap-2">
-                <span
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ backgroundColor: SEVERITY_COLORS[entry.name] ?? '#94a3b8' }}
-                />
-                <span className="text-sm text-text-primary">{entry.label}</span>
-                <span className="text-xs text-text-secondary">
-                  {entry.value} ({total > 0 ? ((entry.value / total) * 100).toFixed(0) : 0}%)
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function RollingAccuracyTrend() {
-  return (
-    <section className="rounded-2xl border border-dashed border-overlay-medium bg-bg-surface/96 p-5">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
-          <BarChart3 className="h-5 w-5" />
-        </span>
-        <div>
-          <h2 className="text-[17px] font-semibold leading-6 text-text-primary">
-            Rolling accuracy trend
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            Coming soon. We&apos;re collecting enough data to show meaningful trends. Check back
-            in a few weeks.
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AdvancedAnalytics({ data }: { data: ScorecardSummary }) {
-  const [isOpen, toggle] = usePanelState('analytics', false);
-
-  return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-4 shadow-[0_18px_36px_var(--shadow-color)]">
-      <button
-        type="button"
-        aria-expanded={isOpen}
-        aria-controls="advanced-analytics-panel"
-        onClick={toggle}
-        className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
-      >
-        <div className="flex-1">
-          <span className="block text-[17px] font-semibold leading-6 text-text-primary">
-            🔬 Advanced Analytics
-          </span>
-          <span className="mt-1 block text-sm leading-6 text-text-secondary">
-            Coverage context, setup quality, and move statistics
-          </span>
-        </div>
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
-          <ChevronDown
-            className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')}
-            aria-hidden="true"
-          />
-        </span>
-      </button>
-
-      {isOpen && (
-        <div id="advanced-analytics-panel" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
-              <div className="font-mono text-2xl font-semibold text-text-primary">
-                {formatCoverageRateValue(
-                  data.overview.eventsWithPriceOutcomes,
-                  data.overview.eventsWithTickers,
-                )}
-              </div>
-              <div className="mt-1 text-sm text-text-secondary">Coverage</div>
-            </div>
-            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
-              <div className="font-mono text-2xl font-semibold text-text-primary">
-                {formatRate(data.totals.setupWorkedRate)}
-              </div>
-              <div className="mt-1 text-sm text-text-secondary">Setup worked rate</div>
-            </div>
-            <div className="rounded-2xl border border-border-default bg-bg-surface/92 p-4">
-              <div className="font-mono text-2xl font-semibold text-text-primary">
-                {formatMove(data.totals.avgT20Move)}
-              </div>
-              <div className="mt-1 text-sm text-text-secondary">Avg T+20 move</div>
-            </div>
-          </div>
-          <p className="text-xs leading-5 text-text-secondary">
-            Coverage reflects only ticker-linked events. Macro prints and policy headlines stay in the event stream but do not receive single-name price tracking.
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function MetricLabel({ label, tooltip }: { label: string; tooltip: string }) {
-  return (
-    <div className="mt-1 flex items-center gap-1.5 text-sm text-text-secondary">
-      <span>{label}</span>
-      <TapTooltip
-        ariaLabel={`${label} explanation`}
-        className="inline-flex h-4 w-4 items-center justify-center text-text-tertiary"
-        panelClassName="w-64"
-        tooltip={tooltip}
-      >
-        <HelpCircle className="h-3.5 w-3.5" />
-      </TapTooltip>
-    </div>
-  );
-}
-
-function formatSeverityLabel(severity: string): string {
-  return severity.charAt(0) + severity.slice(1).toLowerCase();
-}
-
-function BucketSection({
-  title,
-  description,
-  group,
-  buckets,
-  defaultOpen = false,
-}: {
-  title: string;
-  description: string;
-  group: 'action' | 'confidence' | 'source' | 'eventType';
-  buckets: ScorecardBucketSummary[];
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, toggle] = usePanelState(group, defaultOpen);
-
-  return (
-    <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
-      <button
-        type="button"
-        aria-expanded={isOpen}
-        onClick={toggle}
-        className="flex w-full items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-accent-default"
-      >
-        <div className="flex-1">
-          <h2 className="text-[17px] font-semibold leading-6 text-text-primary">{title}</h2>
-          <p className="mt-1 text-sm leading-6 text-text-secondary">
-            {description}
-          </p>
-        </div>
-        <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
-          {buckets.length} tiers
-        </span>
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-overlay-medium bg-bg-elevated/70 text-text-secondary">
-          <ChevronDown
-            className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')}
-            aria-hidden="true"
-          />
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="mt-4 space-y-3">
-          {buckets.map((bucket) => (
-            <article
-              key={`${group}-${bucket.bucket}`}
-              className="rounded-2xl border border-overlay-medium bg-bg-elevated/52 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-text-primary">
-                    {formatScorecardBucketLabel(group, bucket.bucket)}
-                  </h3>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {bucket.alertsWithUsableVerdicts} events with T+5 price data
-                  </p>
-                </div>
-                <span className="rounded-full border border-overlay-medium bg-bg-primary/60 px-3 py-1 text-xs font-medium text-text-secondary">
-                  {bucket.totalAlerts} tracked events
-                </span>
-              </div>
-
-              <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {BUCKET_COLUMNS.map((column) => (
-                  <div
-                    key={column.key}
-                    className="rounded-2xl border border-overlay-medium bg-white/[0.03] px-3 py-3"
-                  >
-                    <dt className="text-xs uppercase tracking-[0.16em] text-text-secondary">
-                      {column.label}
-                    </dt>
-                    <dd className="mt-2 text-sm font-semibold text-text-primary">
-                      {formatBucketValue(bucket, column.key)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function formatBucketValue(
-  bucket: ScorecardBucketSummary,
-  key: (typeof BUCKET_COLUMNS)[number]['key'],
-): string {
-  if (key === 'totalAlerts') {
-    return String(bucket.totalAlerts);
-  }
-  if (key === 'alertsWithUsableVerdicts') {
-    return String(bucket.alertsWithUsableVerdicts);
-  }
-  if (key === 'setupWorkedRate') {
-    return formatRate(bucket.setupWorkedRate);
-  }
-
-  return formatMove(bucket.avgT20Move);
-}
-
-function formatCoverageRateValue(numerator: number, denominator: number): string {
-  if (denominator === 0) {
-    return '0.0%';
-  }
-
-  return `${((numerator / denominator) * 100).toFixed(1)}%`;
-}
-
-function formatRate(value: number | null): string {
-  if (value == null) {
-    return 'N/A';
-  }
-
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function formatMove(value: number | null): string {
-  if (value == null) {
-    return 'N/A';
-  }
-
-  const prefix = value > 0 ? '+' : '';
-  return `${prefix}${value.toFixed(1)}%`;
 }

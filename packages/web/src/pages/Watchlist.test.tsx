@@ -157,4 +157,65 @@ describe('Watchlist page', () => {
       '/settings?from=watchlist#push-alerts',
     );
   });
+
+  it('renders saved tickers as a flat list without section chrome', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/auth/me') {
+        return new Response(JSON.stringify({ id: 'user-1', email: 'test@example.com', displayName: 'Test User' }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.pathname === '/api/watchlist') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              id: 'watch-1',
+              ticker: 'NVDA',
+              addedAt: '2026-03-15T00:00:00.000Z',
+              notes: 'AI leader',
+              name: 'NVIDIA Corporation',
+              sectionId: 'growth',
+              sortOrder: 2,
+            },
+            {
+              id: 'watch-2',
+              ticker: 'AAPL',
+              addedAt: '2026-03-14T00:00:00.000Z',
+              notes: null,
+              name: 'Apple Inc.',
+              sectionId: 'quality',
+              sortOrder: 1,
+            },
+          ],
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.pathname === '/api/v1/feed/watchlist-summary') {
+        return new Response(JSON.stringify({ tickers: [] }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/watchlist', element: <Watchlist /> }],
+      ['/watchlist'],
+    );
+
+    expect(await screen.findByText('$AAPL')).toBeInTheDocument();
+    expect(screen.getByText('$NVDA')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new section/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /section menu/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /drag to reorder/i })).not.toBeInTheDocument();
+  });
 });

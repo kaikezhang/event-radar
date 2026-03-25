@@ -1,17 +1,4 @@
-import { formatPercent } from '../../lib/format.js';
 import type { EventDetailData, LlmEnrichment } from '../../types/index.js';
-
-export function formatTrustLabel(value: string | null | undefined, fallback = 'Not available') {
-  if (!value) return fallback;
-  return value
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-export function formatTrustMove(value: number | null) {
-  return value == null ? 'Pending' : formatPercent(value, 2);
-}
 
 export function formatSignedPercent(value: number | null): string {
   if (value == null) return 'N/A';

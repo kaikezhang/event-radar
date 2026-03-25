@@ -16,11 +16,6 @@ describe('EventDetail page', () => {
     await user.click(await screen.findByRole('button', { name: /evidence/i }));
   }
 
-  async function openTrustTab() {
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /trust/i }));
-  }
-
   // ── Zone 1: Verdict ──────────────────────────────────────────────────────
 
   it('renders the alert title and severity in the hero section', async () => {
@@ -177,47 +172,6 @@ describe('EventDetail page', () => {
     expect(screen.queryByText(/historical similar events/i)).not.toBeInTheDocument();
   });
 
-  // ── Zone 3: Trust ────────────────────────────────────────────────────────
-
-  it('renders the provenance timeline with pipeline steps', async () => {
-    renderDetail();
-    await openTrustTab();
-
-    await waitFor(() => {
-      expect(screen.getByText(/source journey/i)).toBeInTheDocument();
-    });
-    // Pipeline steps
-    expect(screen.getByText(/rule filter/i)).toBeInTheDocument();
-    expect(screen.getByText(/ai judge/i)).toBeInTheDocument();
-    expect(screen.getByText(/confidence: 0\.82/i)).toBeInTheDocument();
-    expect(screen.getByText(/enriched/i)).toBeInTheDocument();
-    expect(screen.getByText(/delivered/i)).toBeInTheDocument();
-  });
-
-  it('renders the trust block when scorecard data is available', async () => {
-    renderDetail();
-    await openTrustTab();
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/verification/i).length).toBeGreaterThan(0);
-    });
-    expect(screen.getAllByText(/fade the headline/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/^correct$/i)).toBeInTheDocument();
-    expect(screen.getByText(/^worked$/i)).toBeInTheDocument();
-    expect(screen.getByText(/-5\.05%/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/-10\.10%/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/used t\+20 as the primary verdict window/i)).toBeInTheDocument();
-  });
-
-  it('renders confirmation badges when multiple sources confirmed', async () => {
-    renderDetail();
-    await openTrustTab();
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/confirmed/i).length).toBeGreaterThan(0);
-    });
-  });
-
   it('renders the original source link', async () => {
     renderDetail();
 
@@ -226,33 +180,9 @@ describe('EventDetail page', () => {
     });
   });
 
-  // ── Feedback ─────────────────────────────────────────────────────────────
-
-  it('renders inline feedback buttons with three options', async () => {
-    renderDetail();
-    await openTrustTab();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^useful$/i })).toBeInTheDocument();
-    });
-    expect(screen.getByRole('button', { name: /not useful/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /bad data/i })).toBeInTheDocument();
-  });
-
-  it('feedback bar is not sticky/floating', async () => {
-    renderDetail();
-    await openTrustTab();
-
-    const feedbackText = await screen.findByText(/was this alert useful/i);
-    const feedbackSection = feedbackText.closest('section');
-    expect(feedbackSection).not.toBeNull();
-    // Should NOT have sticky/fixed positioning
-    expect(feedbackSection?.className).not.toMatch(/sticky|fixed/);
-  });
-
   // ── Anchor navigation ────────────────────────────────────────────────────
 
-  it('renders the anchor navigation with section links', async () => {
+  it('renders the anchor navigation with summary and evidence tabs only', async () => {
     renderDetail();
 
     await waitFor(() => {
@@ -260,7 +190,10 @@ describe('EventDetail page', () => {
     });
     expect(screen.getByRole('button', { name: /summary/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /evidence/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /trust/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /trust/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/source journey/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/verification/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/was this alert useful/i)).not.toBeInTheDocument();
   });
 
   // ── Direction context ────────────────────────────────────────────────────
@@ -321,22 +254,6 @@ describe('EventDetail page', () => {
     expect(await screen.findByText(/direction: awaiting market reaction/i)).toBeInTheDocument();
   });
 
-  // ── Disclaimer ───────────────────────────────────────────────────────────
-
-  it('keeps the disclaimer collapsed by default', async () => {
-    const user = userEvent.setup();
-    renderDetail();
-    await user.click(await screen.findByRole('button', { name: /trust/i }));
-
-    const disclaimerToggle = await screen.findByRole('button', { name: /disclaimer/i });
-    expect(disclaimerToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText(/consult a qualified financial advisor/i)).not.toBeInTheDocument();
-
-    await user.click(disclaimerToggle);
-    expect(disclaimerToggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(/consult a qualified financial advisor/i)).toBeInTheDocument();
-  });
-
   // ── Navigation ───────────────────────────────────────────────────────────
 
   it('sends direct notification landings back to the watchlist when there is no in-app history', async () => {
@@ -383,7 +300,7 @@ describe('EventDetail page', () => {
       ['/', '/event/evt-critical-nvda-1'],
     );
 
-    await user.click(await screen.findByRole('button', { name: /← back/i }));
+    await user.click(await screen.findByRole('button', { name: /^back$/i }));
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/');

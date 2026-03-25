@@ -9,18 +9,16 @@ import { EventEvidenceContent, EventSummaryContent, RegimeContextCard } from './
 import { EventHeader } from './EventHeader.js';
 import { EventHistory } from './EventHistory.js';
 import { EventMarketData } from './EventMarketData.js';
-import { EventVerdict } from './EventVerdict.js';
 import { SimilarPastEvents } from './SimilarPastEvents.js';
 import { WhatHappenedNext } from './WhatHappenedNext.js';
 import { getDirectionContextLine, getPrimaryConfidence, getPrimaryDirection } from './utils.js';
 
-type TabId = 'verdict' | 'evidence' | 'trust';
+type TabId = 'verdict' | 'evidence';
 
 function TabNav({ activeSection, onTabChange }: { activeSection: TabId; onTabChange: (tab: TabId) => void }) {
   const sections: { id: TabId; label: string }[] = [
     { id: 'verdict', label: 'Summary' },
     { id: 'evidence', label: 'Evidence' },
-    { id: 'trust', label: 'Trust' },
   ];
 
   return (
@@ -86,7 +84,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   const id = eventId ?? paramId;
   const isInline = Boolean(eventId);
   const { data, isLoading } = useEventDetail(id);
-  const [feedback, setFeedback] = useState<'up' | 'down' | 'bad' | null>(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const [activeSection, setActiveSection] = useState<TabId>('verdict');
 
@@ -102,14 +99,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
     if (shouldFallbackToWatchlist) return navigate('/watchlist');
     return navigate(-1);
   }, [navigate, onBack, shouldFallbackToWatchlist]);
-
-  const handleMobileBack = useCallback(() => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    handleBack();
-  }, [handleBack, navigate]);
 
   const handleShare = useCallback(() => {
     if (!data) return;
@@ -220,10 +209,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
                 onToggleShowAll={() => setShowAllSimilar((current) => !current)}
               />
             </>
-          )}
-
-          {activeSection === 'trust' && (
-            <EventVerdict data={data} feedback={feedback} onFeedbackChange={setFeedback} />
           )}
         </div>
 

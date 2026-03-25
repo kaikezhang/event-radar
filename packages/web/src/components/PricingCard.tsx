@@ -4,7 +4,7 @@ const DEFAULT_FEATURES = [
   'Full real-time feed (13 sources)',
   'AI analysis with bull/bear thesis',
   'Earnings calendar + historical outcomes',
-  'Audio alerts for CRITICAL events',
+  'Push alerts for critical watchlist events',
   'Watchlist with price tracking',
   'Scorecard with setup-worked metrics',
 ] as const;

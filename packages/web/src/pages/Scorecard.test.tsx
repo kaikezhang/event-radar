@@ -1,137 +1,16 @@
 import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithRouter } from '../test/render.js';
 import { Scorecard } from './Scorecard.js';
 
 describe('Scorecard page', () => {
-  it('loads the 90 day summary by default and renders top-level metrics', async () => {
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /scorecard/i })).toBeInTheDocument();
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=90',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/severity-breakdown?days=90',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-
-    expect(screen.getByText(/scorecard tracks how market events correlate with price movements/i)).toBeInTheDocument();
-    expect(screen.getByText('23,769')).toBeInTheDocument();
-    expect(screen.getByText('13')).toBeInTheDocument();
-    expect(screen.getByText('6,346')).toBeInTheDocument();
-    expect(screen.getByText(/6,346 events with price outcomes \/ 12,028 events with tickers \(52\.8%\)/i)).toBeInTheDocument();
-    expect(screen.getByText('Setup Worked Rate')).toBeInTheDocument();
-    expect(screen.getByText('+4.3%')).toBeInTheDocument();
-    expect(screen.getByText(/events without tickers/i)).toBeInTheDocument();
-    expect(screen.getByText(/rolling accuracy trend/i)).toBeInTheDocument();
-    expect(screen.getByText(/we're collecting enough data to show meaningful trends/i)).toBeInTheDocument();
-  });
-
-  it('renders all required bucket sections', async () => {
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Signal buckets')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Confidence buckets')).toBeInTheDocument();
-    expect(screen.getByText('Source buckets')).toBeInTheDocument();
-    expect(screen.getByText('Event type buckets')).toBeInTheDocument();
-
-    expect(screen.getByText('High-Quality Setup')).toBeInTheDocument();
-    expect(screen.getByText('high')).toBeInTheDocument();
-    expect(screen.getByText('SEC Filing')).toBeInTheDocument();
-    expect(screen.getByText('sec form 8k')).toBeInTheDocument();
-  });
-
-  it('lets the user switch the summary window without overbuilding filters', async () => {
-    const user = userEvent.setup();
-
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    const allButton = await screen.findByRole('button', { name: /all/i });
-    await user.click(allButton);
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary',
-        expect.objectContaining({ credentials: 'include' }),
-      );
-    });
-
-    expect(screen.getByText('Full-history scorecard')).toBeInTheDocument();
-  });
-
-  it('shows card skeletons while the scorecard query is still loading', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as typeof fetch);
-
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    expect(screen.getAllByTestId('scorecard-skeleton-card')).toHaveLength(4);
-  });
-
-  it('renders a more actionable error state when the summary request fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'boom' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })) as typeof fetch);
-
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    expect(await screen.findByText(/scorecard data is taking a beat/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
-  });
-
-  it('leads with setup and coverage context instead of directional hit rate', async () => {
-    const user = userEvent.setup();
-
-    renderWithRouter(
-      [{ path: '/scorecard', element: <Scorecard /> }],
-      ['/scorecard'],
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Critical')).toBeInTheDocument();
-    });
-
-    const moveHelps = screen.getAllByRole('button', { name: /t\+20 move explanation/i });
-    expect(moveHelps).toHaveLength(2);
-    await user.click(moveHelps[0]!);
-    expect(screen.getByText(/price change 20 trading days/i)).toBeInTheDocument();
-
-    const setupHelp = screen.getByRole('button', { name: /setup worked rate explanation/i });
-    await user.click(setupHelp);
-    expect(screen.getByText(/how often the event led to a tradeable move of 5%\+/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /directional hit rate explanation/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/coverage:/i)).toBeInTheDocument();
-    expect(screen.getByText('High')).toBeInTheDocument();
-  });
-
-  it('shows a clear empty state when no severity data is available yet', async () => {
+  it('renders only the five simplified scorecard metrics', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string'
         ? new URL(input, 'http://localhost')
         : new URL(input.toString(), 'http://localhost');
 
-      if (url.pathname === '/api/v1/scorecards/summary') {
+      if (url.pathname === '/api/v1/scorecards/summary' && url.searchParams.get('days') === '90') {
         return new Response(JSON.stringify({
           days: 90,
           overview: {
@@ -153,7 +32,30 @@ describe('Scorecard page', () => {
           },
           actionBuckets: [],
           confidenceBuckets: [],
-          sourceBuckets: [],
+          sourceBuckets: [
+            {
+              bucket: 'sec-edgar',
+              totalAlerts: 420,
+              alertsWithUsableVerdicts: 320,
+              directionalCorrectCount: 0,
+              directionalHitRate: 0,
+              setupWorkedCount: 208,
+              setupWorkedRate: 0.65,
+              avgT5Move: 2.4,
+              avgT20Move: 5.6,
+            },
+            {
+              bucket: 'breaking-news',
+              totalAlerts: 600,
+              alertsWithUsableVerdicts: 500,
+              directionalCorrectCount: 0,
+              directionalHitRate: 0,
+              setupWorkedCount: 240,
+              setupWorkedRate: 0.48,
+              avgT5Move: 1.4,
+              avgT20Move: 3.2,
+            },
+          ],
           eventTypeBuckets: [],
         }), {
           status: 200,
@@ -161,8 +63,31 @@ describe('Scorecard page', () => {
         });
       }
 
-      if (url.pathname === '/api/v1/scorecards/severity-breakdown') {
-        return new Response(JSON.stringify([]), {
+      if (url.pathname === '/api/v1/scorecards/summary' && url.searchParams.get('days') === '7') {
+        return new Response(JSON.stringify({
+          days: 7,
+          overview: {
+            totalEvents: 142,
+            sourcesMonitored: 13,
+            eventsWithTickers: 91,
+            eventsWithPriceOutcomes: 47,
+          },
+          totals: {
+            totalAlerts: 91,
+            alertsWithUsableVerdicts: 47,
+            directionalCorrectCount: 0,
+            directionalHitRate: 0,
+            setupWorkedCount: 19,
+            setupWorkedRate: 0.4042,
+            avgT5Move: 1.2,
+            avgT20Move: 2.1,
+            medianT20Move: 1.8,
+          },
+          actionBuckets: [],
+          confidenceBuckets: [],
+          sourceBuckets: [],
+          eventTypeBuckets: [],
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -179,6 +104,108 @@ describe('Scorecard page', () => {
       ['/scorecard'],
     );
 
-    expect(await screen.findByText(/no severity data available yet/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /scorecard/i })).toBeInTheDocument();
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=90',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/scorecards/summary?days=7',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/scorecards/severity-breakdown?days=90',
+      expect.anything(),
+    );
+
+    expect(screen.getByText('23,769')).toBeInTheDocument();
+    expect(screen.getByText('45.2%')).toBeInTheDocument();
+    expect(screen.getByText('+1.8% / +4.3%')).toBeInTheDocument();
+    expect(screen.getByText('SEC Filing')).toBeInTheDocument();
+    expect(screen.getByText('142')).toBeInTheDocument();
+    expect(screen.getByText(/events this week/i)).toBeInTheDocument();
+  });
+
+  it('removes the heavy analytics chrome and placeholder sections', async () => {
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /scorecard/i })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/rolling accuracy trend/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/advanced analytics/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/signal buckets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/confidence buckets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/source buckets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/event type buckets/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /30d/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /all/i })).not.toBeInTheDocument();
+  });
+
+  it('shows card skeletons while the scorecard queries are still loading', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(screen.getAllByTestId('scorecard-skeleton-card')).toHaveLength(5);
+  });
+
+  it('renders a more actionable error state when the summary request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'boom' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(await screen.findByText(/scorecard data is taking a beat/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /return to live feed/i })).toHaveAttribute('href', '/');
+  });
+
+  it('keeps the no-data empty state when alerts have not aged into verdict windows yet', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      days: 90,
+      overview: {
+        totalEvents: 500,
+        sourcesMonitored: 13,
+        eventsWithTickers: 200,
+        eventsWithPriceOutcomes: 0,
+      },
+      totals: {
+        totalAlerts: 200,
+        alertsWithUsableVerdicts: 0,
+        directionalCorrectCount: 0,
+        directionalHitRate: 0,
+        setupWorkedCount: 0,
+        setupWorkedRate: null,
+        avgT5Move: null,
+        avgT20Move: null,
+        medianT20Move: null,
+      },
+      actionBuckets: [],
+      confidenceBuckets: [],
+      sourceBuckets: [],
+      eventTypeBuckets: [],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof fetch);
+
+    renderWithRouter(
+      [{ path: '/scorecard', element: <Scorecard /> }],
+      ['/scorecard'],
+    );
+
+    expect(await screen.findByText(/scorecard is building/i)).toBeInTheDocument();
   });
 });

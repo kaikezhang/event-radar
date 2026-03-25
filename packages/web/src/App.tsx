@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { HelpCircle, Settings as SettingsIcon, Volume2, Zap } from 'lucide-react';
+import { HelpCircle, Settings as SettingsIcon, Zap } from 'lucide-react';
 import {
   Outlet,
   RouterProvider,
@@ -14,7 +14,6 @@ import { BottomNav } from './components/BottomNav.js';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
 import { TickerSearch } from './components/TickerSearch.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
-import { useAudioSquawk } from './hooks/useAudioSquawk.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
@@ -40,21 +39,6 @@ const PrivacyPage = lazy(async () => ({ default: (await import('./pages/Privacy.
 const TermsPage = lazy(async () => ({ default: (await import('./pages/Terms.js')).Terms }));
 
 export const APP_SHELL_BOTTOM_PADDING_CLASS = 'pb-[calc(7rem+env(safe-area-inset-bottom))]';
-
-function SquawkIndicator() {
-  const { preferences, isSpeaking } = useAudioSquawk();
-
-  if (!preferences.enabled) return null;
-
-  return (
-    <span
-      className={`flex h-5 w-5 items-center justify-center text-accent-default${isSpeaking ? ' animate-pulse' : ''}`}
-      title={isSpeaking ? 'Squawk: speaking' : 'Squawk: active'}
-    >
-      <Volume2 className="h-3.5 w-3.5" />
-    </span>
-  );
-}
 
 function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
   const { user, isLoading } = useAuth();
@@ -122,7 +106,6 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
       </Link>
 
       <div className="flex items-center gap-3">
-        <SquawkIndicator />
         {statusIndicator}
 
         <button

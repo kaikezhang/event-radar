@@ -13,7 +13,7 @@ describe('PricingCard', () => {
     expect(screen.getByRole('heading', { name: /trader/i })).toBeInTheDocument();
     expect(screen.getByText(/\$39\/month/i)).toBeInTheDocument();
     expect(screen.getByText(/full real-time feed \(13 sources\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/audio alerts for critical events/i)).toBeInTheDocument();
+    expect(screen.getByText(/push alerts for critical watchlist events/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /start 14-day free trial/i })).toHaveAttribute('href', '/login');
   });
 
