@@ -1,5 +1,5 @@
-import { Suspense, lazy, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { HelpCircle, Settings as SettingsIcon, Zap } from 'lucide-react';
+import { Suspense, lazy, useEffect, useCallback, useState, type ReactNode } from 'react';
+import { Settings as SettingsIcon, Zap } from 'lucide-react';
 import {
   Outlet,
   RouterProvider,
@@ -11,9 +11,7 @@ import {
 } from 'react-router-dom';
 import { cn } from './lib/utils.js';
 import { BottomNav } from './components/BottomNav.js';
-import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp.js';
 import { TickerSearch } from './components/TickerSearch.js';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
@@ -40,11 +38,11 @@ const TermsPage = lazy(async () => ({ default: (await import('./pages/Terms.js')
 
 export const APP_SHELL_BOTTOM_PADDING_CLASS = 'pb-[calc(7rem+env(safe-area-inset-bottom))]';
 
-function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
+function AppHeader() {
   const { user, isLoading } = useAuth();
   const connectionStatus = useConnectionStatus();
   const location = useLocation();
-  const isMarketingRoute = location.pathname === '/pricing' || (location.pathname === '/' && !user && !isLoading);
+  const isMarketingRoute = location.pathname === '/' && !user && !isLoading;
 
   const statusLabel = connectionStatus === 'connected'
     ? 'Connected'
@@ -80,12 +78,6 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
 
         <div className="flex items-center gap-2 text-sm">
           <Link
-            to="/pricing"
-            className="rounded-full border border-border-default px-3 py-1.5 text-text-secondary transition hover:text-text-primary"
-          >
-            Pricing
-          </Link>
-          <Link
             to="/login"
             className="rounded-full bg-accent-default px-3 py-1.5 font-medium text-white transition hover:bg-accent-strong"
           >
@@ -107,15 +99,6 @@ function AppHeader({ onShowHelp }: { onShowHelp: () => void }) {
 
       <div className="flex items-center gap-3">
         {statusIndicator}
-
-        <button
-          type="button"
-          onClick={onShowHelp}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-text-secondary hover:text-text-primary transition"
-          title="Keyboard shortcuts"
-        >
-          <HelpCircle className="h-4 w-4" />
-        </button>
 
         {user ? (
           <Link
@@ -175,21 +158,10 @@ function loadPage(page: ReactNode) {
 }
 
 export function AppShell() {
-  const [showHelp, setShowHelp] = useState(false);
-
-  const handleShowHelp = useCallback(() => setShowHelp(true), []);
-  const handleCloseHelp = useCallback(() => setShowHelp(false), []);
-
-  useKeyboardShortcuts({ onShowHelp: handleShowHelp });
-
   return (
     <AuthProvider>
       <ConnectionProvider>
-        <ShellFrame
-          showHelp={showHelp}
-          onShowHelp={handleShowHelp}
-          onCloseHelp={handleCloseHelp}
-        />
+        <ShellFrame />
       </ConnectionProvider>
     </AuthProvider>
   );
@@ -205,20 +177,11 @@ function HomeRoute() {
   return isAuthenticated ? loadPage(<FeedPage />) : <Landing />;
 }
 
-function ShellFrame({
-  showHelp,
-  onShowHelp,
-  onCloseHelp,
-}: {
-  showHelp: boolean;
-  onShowHelp: () => void;
-  onCloseHelp: () => void;
-}) {
+function ShellFrame() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
-  const isMarketingRoute = location.pathname === '/pricing'
-    || (location.pathname === '/' && !isAuthenticated && !isLoading);
+  const isMarketingRoute = location.pathname === '/' && !isAuthenticated && !isLoading;
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
@@ -236,7 +199,7 @@ function ShellFrame({
               !isMarketingRoute && APP_SHELL_BOTTOM_PADDING_CLASS,
             )}
           >
-            <AppHeader onShowHelp={onShowHelp} />
+            <AppHeader />
 
             <main className="flex-1">
               <ErrorBoundary>
@@ -248,7 +211,6 @@ function ShellFrame({
           {!isMarketingRoute && <BottomNav />}
           <ScrollRestoration />
           {!isMarketingRoute && <GlobalTickerSearch />}
-          {!isMarketingRoute && <KeyboardShortcutsHelp open={showHelp} onClose={onCloseHelp} />}
         </div>
       </div>
     </div>
@@ -274,7 +236,6 @@ export const appRoutes: RouteObject[] = [
       { path: 'auth/verify', element: loadPage(<AuthVerifyPage />) },
       { path: 'about', element: loadPage(<AboutPage />) },
       { path: 'api-docs', element: loadPage(<ApiDocsPage />) },
-      { path: 'pricing', element: <Landing /> },
       { path: 'privacy', element: loadPage(<PrivacyPage />) },
       { path: 'terms', element: loadPage(<TermsPage />) },
       { path: '*', element: loadPage(<NotFoundPage />) },

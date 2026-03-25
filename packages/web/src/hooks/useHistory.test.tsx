@@ -26,9 +26,11 @@ function createWrapper() {
 }
 
 describe('useHistory', () => {
+  const fetchMock = vi.fn();
+
   beforeEach(() => {
     localStorage.clear();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
 
       if (url.pathname === '/api/events') {
@@ -53,46 +55,74 @@ describe('useHistory', () => {
       }
 
       return jsonResponse({ error: 'Not found' }, 404);
-    }) as typeof fetch);
+    });
+
+    vi.stubGlobal('fetch', fetchMock as typeof fetch);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults to HIGH and CRITICAL severity on first load', async () => {
+  it('loads history without a saved severity preference', async () => {
     const { result } = renderHook(() => useHistory(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.filters.severity).toBe('HIGH,CRITICAL');
+      expect(result.current.alerts).toHaveLength(1);
     });
-    expect(result.current.isDefaultSeverity).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith('/api/events?limit=50&offset=0', expect.any(Object));
   });
 
-  it('restores a saved history severity preference from localStorage', async () => {
-    localStorage.setItem('er-history-severity', 'LOW');
-
+  it('starts with the first page and reports when more items are available', async () => {
     const { result } = renderHook(() => useHistory(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.filters.severity).toBe('LOW');
+      expect(result.current.total).toBe(1);
     });
-    expect(result.current.isDefaultSeverity).toBe(false);
+    expect(result.current.hasMore).toBe(false);
   });
 
-  it('persists explicit severity changes to localStorage', async () => {
+  it('requests the next page when loadMore is called', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events') {
+        const offset = url.searchParams.get('offset');
+        return jsonResponse({
+          data: [
+            {
+              id: offset === '50' ? 'evt-2' : 'evt-1',
+              severity: 'HIGH',
+              source: 'sec-edgar',
+              title: 'History alert',
+              summary: 'History summary',
+              receivedAt: '2026-03-12T20:05:00.000Z',
+              metadata: { ticker: 'NVDA', tickers: ['NVDA'] },
+            },
+          ],
+          total: 100,
+        });
+      }
+
+      if (url.pathname === '/api/events/sources') {
+        return jsonResponse({ sources: ['dummy', 'sec-edgar'] });
+      }
+
+      return jsonResponse({ error: 'Not found' }, 404);
+    });
+
     const { result } = renderHook(() => useHistory(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(result.current.filters.severity).toBe('HIGH,CRITICAL');
+      expect(result.current.hasMore).toBe(true);
     });
 
     act(() => {
-      result.current.setFilter('severity', '');
+      result.current.loadMore();
     });
 
     await waitFor(() => {
-      expect(localStorage.getItem('er-history-severity')).toBe('');
+      expect(result.current.alerts.map((alert) => alert.id)).toEqual(['evt-1', 'evt-2']);
     });
   });
 });

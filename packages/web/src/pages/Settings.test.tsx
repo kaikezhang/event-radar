@@ -14,7 +14,7 @@ const {
   getPreferences: vi.fn(async () => ({
     quietStart: null,
     quietEnd: null,
-    timezone: 'America/New_York',
+    timezone: 'UTC',
     dailyPushCap: 20,
     pushNonWatchlist: false,
   })),
@@ -72,6 +72,15 @@ vi.mock('../lib/api.js', () => ({
 
 describe('Settings page', () => {
   beforeEach(() => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+      locale: 'en-US',
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    } as Intl.ResolvedDateTimeFormatOptions);
     getPreferences.mockClear();
     updatePreferences.mockClear();
     getChannelSettings.mockClear();
@@ -80,6 +89,7 @@ describe('Settings page', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -94,9 +104,9 @@ describe('Settings page', () => {
     renderSettings();
 
     const pushHeading = await screen.findByRole('button', { name: /web push/i });
-    const soundHeading = screen.getByRole('button', { name: /sound alerts.*short tones/i });
+    const channelHeading = screen.getByRole('button', { name: /notification channels.*discord webhook/i });
 
-    expect(pushHeading.compareDocumentPosition(soundHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(pushHeading.compareDocumentPosition(channelHeading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('shows a watchlist-focused setup note when opened from onboarding', async () => {
@@ -114,7 +124,7 @@ describe('Settings page', () => {
     expect(screen.getByText(/return to your watchlist to keep alerts focused/i)).toBeInTheDocument();
   });
 
-  it('renders notification budget and quiet-hours controls', async () => {
+  it('renders notification budget controls without a timezone selector', async () => {
     const user = userEvent.setup();
     renderSettings();
 
@@ -125,7 +135,7 @@ describe('Settings page', () => {
     const quietHoursToggle = screen.getByLabelText(/enable quiet hours/i);
     expect(quietHoursToggle).toBeInTheDocument();
     await user.click(quietHoursToggle);
-    expect(await screen.findByLabelText(/timezone/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/timezone/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/daily push limit/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/alert me for tickers outside my watchlist/i)).toBeInTheDocument();
   });
@@ -143,7 +153,7 @@ describe('Settings page', () => {
       expect(updatePreferences).toHaveBeenCalledWith({
         quietStart: null,
         quietEnd: null,
-        timezone: 'America/New_York',
+        timezone: 'UTC',
         dailyPushCap: 20,
         pushNonWatchlist: true,
       });
@@ -156,11 +166,11 @@ describe('Settings page', () => {
     renderSettings();
 
     const pushToggle = await screen.findByRole('button', { name: /web push/i });
-    const soundToggle = screen.getByRole('button', { name: /sound alerts.*short tones/i });
+    const channelToggle = screen.getByRole('button', { name: /notification channels.*discord webhook/i });
     const budgetToggle = screen.getByRole('button', { name: /notification budget.*quiet hours/i });
 
     expect(pushToggle).toHaveAttribute('aria-expanded', 'true');
-    expect(soundToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(channelToggle).toHaveAttribute('aria-expanded', 'true');
     expect(budgetToggle).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -191,14 +201,15 @@ describe('Settings page', () => {
     expect(within(section).getByText(/if enabled/i)).toBeInTheDocument();
   });
 
-  it('does not render the removed audio squawk settings group', async () => {
+  it('does not render the removed sound, display, email, or briefing settings', async () => {
     renderSettings();
 
     await screen.findByRole('button', { name: /web push/i });
 
-    expect(screen.queryByRole('button', { name: /audio squawk/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/audio alerts for critical events/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/speak while this tab is hidden/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sound alerts/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /display/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show today's briefing/i })).not.toBeInTheDocument();
   });
 
   it('shows saved feedback on the notification channels save button for two seconds', async () => {
@@ -254,42 +265,13 @@ describe('Settings page', () => {
     }, { timeout: 2_500 });
   });
 
-  it('restores today\'s briefing when the settings action is used', async () => {
-    const user = userEvent.setup();
-    localStorage.setItem('lastBriefingDismissed', new Date().toLocaleDateString('en-CA'));
-
+  it('keeps the notification channels section focused on Discord configuration', async () => {
     renderSettings();
 
-    const budgetToggle = await screen.findByRole('button', { name: /notification budget.*quiet hours/i });
-    if (budgetToggle.getAttribute('aria-expanded') === 'false') {
-      await user.click(budgetToggle);
-    }
-    await user.click(await screen.findByRole('button', { name: /show today's briefing/i }));
+    const heading = await screen.findByRole('heading', { name: /notification channels/i });
+    const section = heading.closest('section') as HTMLElement;
 
-    expect(localStorage.getItem('lastBriefingDismissed')).toBeNull();
-    expect(await screen.findByText(/today's briefing will be shown again/i)).toBeInTheDocument();
-  });
-
-  it('loads and updates the local font size preference from the display section', async () => {
-    const user = userEvent.setup();
-    localStorage.setItem('er-font-size', 'large');
-
-    renderSettings();
-
-    const displayToggle = await screen.findByRole('button', {
-      name: /display.*font size/i,
-    });
-
-    if (displayToggle.getAttribute('aria-expanded') === 'false') {
-      await user.click(displayToggle);
-    }
-
-    expect(screen.getByRole('radio', { name: /large/i })).toBeChecked();
-    expect(document.documentElement.style.fontSize).toBe('18px');
-
-    await user.click(screen.getByRole('radio', { name: /small/i }));
-
-    expect(localStorage.getItem('er-font-size')).toBe('small');
-    expect(document.documentElement.style.fontSize).toBe('14px');
+    expect(within(section).getByLabelText(/discord webhook url/i)).toBeInTheDocument();
+    expect(within(section).queryByText(/email digest/i)).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
-import { useAlertSound } from '../hooks/useAlertSound.js';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -11,13 +10,6 @@ import {
   type NotificationPreferences,
   type NotificationChannelSettings,
 } from '../lib/api.js';
-import { restoreDailyBriefing } from '../lib/daily-briefing.js';
-import {
-  applyFontScale,
-  getStoredFontScale,
-  setStoredFontScale,
-  type FontScale,
-} from '../lib/font-scale.js';
 import {
   getWebPushDeviceState,
   getWebPushStatusDetails,
@@ -29,22 +21,17 @@ import {
   WebPushError,
 } from '../lib/web-push.js';
 
+function getBrowserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   quietStart: null,
   quietEnd: null,
-  timezone: 'America/New_York',
+  timezone: getBrowserTimeZone(),
   dailyPushCap: 20,
   pushNonWatchlist: false,
 };
-
-const US_TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'Pacific/Honolulu',
-];
 
 function serializeNotificationPreferences(preferences: NotificationPreferences): string {
   return JSON.stringify({
@@ -82,16 +69,6 @@ const SIGNAL_TIER_ROWS = [
     detail: 'Kept available in feed for lower-priority review.',
   },
 ] as const;
-
-const FONT_SCALE_OPTIONS: Array<{
-  value: FontScale;
-  label: string;
-  detail: string;
-}> = [
-  { value: 'small', label: 'Small', detail: '14px base text for denser layouts.' },
-  { value: 'medium', label: 'Medium', detail: '16px base text for the default reading size.' },
-  { value: 'large', label: 'Large', detail: '18px base text for easier scanning.' },
-];
 
 function getPlatformHint(): 'ios' | 'ios-pwa' | 'android-pwa' | 'pwa' | 'desktop' {
   const ua = navigator.userAgent;
@@ -173,7 +150,6 @@ type ToastTone = 'success' | 'error';
 
 export function Settings() {
   const location = useLocation();
-  const { preferences, setEnabled, setQuietHours, setVolume } = useAlertSound();
   const [pushState, setPushState] = useState<WebPushDeviceState>(() => ({
     ...getWebPushSupport(),
     subscribed: false,
@@ -186,16 +162,13 @@ export function Settings() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<ToastTone>('success');
-  const [briefingRestoreMessage, setBriefingRestoreMessage] = useState<string | null>(null);
   const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
   const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
   const [channelLoaded, setChannelLoaded] = useState(false);
   const [discordUrlDraft, setDiscordUrlDraft] = useState('');
-  const [emailDraft, setEmailDraft] = useState('');
   const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
   const [channelSaveState, setChannelSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [discordTestState, setDiscordTestState] = useState<'idle' | 'testing' | 'sent'>('idle');
-  const [fontScale, setFontScaleState] = useState<FontScale>(() => getStoredFontScale());
   const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
   const isChannelSaving = channelSaveState === 'saving';
   const isChannelSaved = channelSaveState === 'saved';
@@ -206,20 +179,6 @@ export function Settings() {
     setToastTone(tone);
     setToastMessage(message);
   }
-
-  function handleRestoreBriefing(): void {
-    restoreDailyBriefing();
-    setBriefingRestoreMessage("Today's briefing will be shown again.");
-  }
-
-  function handleFontScaleChange(nextScale: FontScale): void {
-    setFontScaleState(nextScale);
-    setStoredFontScale(nextScale);
-  }
-
-  useEffect(() => {
-    applyFontScale(fontScale);
-  }, [fontScale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,8 +225,12 @@ export function Settings() {
           return;
         }
 
-        baselinePreferencesRef.current = serializeNotificationPreferences(loaded);
-        setNotificationPreferences(loaded);
+        const nextPreferences = {
+          ...loaded,
+          timezone: getBrowserTimeZone(),
+        };
+        baselinePreferencesRef.current = serializeNotificationPreferences(nextPreferences);
+        setNotificationPreferences(nextPreferences);
       } catch {
         if (!cancelled) {
           setNotificationError('Could not load notification preferences.');
@@ -294,7 +257,6 @@ export function Settings() {
         setChannelSettings(loaded);
         setChannelLoaded(true);
         setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
-        setEmailDraft(loaded.emailAddress ?? '');
         setChannelMinSeverity(loaded.minSeverity);
       } catch {
         if (!cancelled) {
@@ -416,7 +378,7 @@ export function Settings() {
       setChannelSaveState('saving');
       const saved = await saveNotificationChannelSettings({
         discordWebhookUrl: discordUrlDraft.trim() || null,
-        emailAddress: emailDraft.trim() || null,
+        emailAddress: channelSettings?.emailAddress ?? null,
         minSeverity: channelMinSeverity,
       });
       setChannelSettings(saved);
@@ -509,55 +471,6 @@ export function Settings() {
           Keep your watchlist alerts understandable on the page and reachable when the app is backgrounded.
         </p>
       </div>
-
-      {/* Appearance/theme panel hidden — light mode is broken, dark only for now */}
-
-      <CollapsiblePanel
-        id="display"
-        title="Display"
-        eyebrow="Display"
-        description="Adjust font size and reading comfort across the app."
-      >
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-[22px] font-semibold text-text-primary">
-              Font size
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Stored locally on this device so the app stays comfortable to read every time you open it.
-            </p>
-          </div>
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium text-text-primary">Choose a text size</legend>
-            <div className="grid gap-3 md:grid-cols-3">
-              {FONT_SCALE_OPTIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className={`flex cursor-pointer flex-col gap-2 rounded-2xl border p-4 transition ${
-                    fontScale === option.value
-                      ? 'border-accent-default/40 bg-accent-default/10'
-                      : 'border-overlay-medium bg-bg-elevated/50 hover:bg-bg-elevated/70'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-text-primary">{option.label}</span>
-                    <input
-                      type="radio"
-                      name="font-scale"
-                      value={option.value}
-                      checked={fontScale === option.value}
-                      onChange={() => handleFontScaleChange(option.value)}
-                      className="h-4 w-4 border-overlay-medium text-accent-default focus:ring-accent-default"
-                    />
-                  </div>
-                  <p className="text-sm leading-6 text-text-secondary">{option.detail}</p>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-      </CollapsiblePanel>
 
       <CollapsiblePanel
         id="push-alerts"
@@ -700,7 +613,7 @@ export function Settings() {
         id="notification-channels"
         title="Notification channels"
         eyebrow="Channels"
-        description="Discord webhook and email fallback channels."
+        description="Discord webhook delivery for fallback notifications."
         defaultOpen
         className="scroll-mt-24"
       >
@@ -710,7 +623,7 @@ export function Settings() {
               Notification channels
             </h2>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Get event alerts delivered to Discord or email when push notifications are unavailable.
+              Keep a Discord webhook configured when you want alerts outside the browser.
             </p>
           </div>
 
@@ -727,7 +640,6 @@ export function Settings() {
                       setChannelSettings(loaded);
                       setChannelLoaded(true);
                       setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
-                      setEmailDraft(loaded.emailAddress ?? '');
                       setChannelMinSeverity(loaded.minSeverity);
                     } catch {
                       setChannelLoadError('Could not load notification channel settings.');
@@ -775,28 +687,6 @@ export function Settings() {
                 {isDiscordTesting ? 'Testing...' : isDiscordSent ? 'Sent ✓' : 'Test'}
               </button>
             </div>
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-            <div>
-              <p className="text-sm font-medium text-text-primary">Email Digest</p>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Coming soon — daily email digest of important events
-              </p>
-            </div>
-
-            <label className="block space-y-2" htmlFor="email-address">
-              <span className="block text-sm font-medium text-text-tertiary">Email address</span>
-              <input
-                id="email-address"
-                type="email"
-                value={emailDraft}
-                onChange={(e) => setEmailDraft(e.target.value)}
-                placeholder="user@example.com"
-                disabled
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-tertiary placeholder:text-text-tertiary outline-none opacity-50 cursor-not-allowed"
-              />
-            </label>
           </div>
 
           <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
@@ -916,7 +806,7 @@ export function Settings() {
                 </label>
 
                 {quietHoursEnabled ? (
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <label className="block space-y-2" htmlFor="quiet-hours-start">
                       <span className="block text-sm font-medium text-text-primary">Quiet hours start</span>
                       <input
@@ -943,25 +833,6 @@ export function Settings() {
                         }))}
                         className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
                       />
-                    </label>
-
-                    <label className="block space-y-2" htmlFor="notification-timezone">
-                      <span className="block text-sm font-medium text-text-primary">Timezone</span>
-                      <select
-                        id="notification-timezone"
-                        value={notificationPreferences.timezone}
-                        onChange={(event) => updatePreferencesState((current) => ({
-                          ...current,
-                          timezone: event.target.value,
-                        }))}
-                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-                      >
-                        {US_TIMEZONES.map((timezone) => (
-                          <option key={timezone} value={timezone}>
-                            {timezone}
-                          </option>
-                        ))}
-                      </select>
                     </label>
                   </div>
                 ) : null}
@@ -1021,101 +892,8 @@ export function Settings() {
                   />
                 </label>
               </div>
-
-              <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                <p className="text-sm font-medium text-text-primary">Daily Briefing</p>
-                <p className="mt-2 text-sm leading-6 text-text-secondary">
-                  If you dismissed the morning briefing, bring it back without waiting for tomorrow.
-                </p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <button
-                    type="button"
-                    onClick={handleRestoreBriefing}
-                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
-                  >
-                    Show today's briefing
-                  </button>
-                  {briefingRestoreMessage ? (
-                    <p className="text-sm leading-6 text-text-secondary">{briefingRestoreMessage}</p>
-                  ) : null}
-                </div>
-              </div>
             </>
           )}
-        </div>
-      </CollapsiblePanel>
-
-      <CollapsiblePanel
-        id="sound-alerts"
-        title="Sound alerts"
-        eyebrow="Sound"
-        description="Short tones for live high-priority events."
-      >
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-[22px] font-semibold text-text-primary">
-              Sound alerts
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Play a short tone for new HIGH and CRITICAL live events after you interact with the page.
-            </p>
-          </div>
-
-          <label className="flex items-center justify-between gap-4">
-            <span>
-              <span className="block text-sm font-medium text-text-primary">Enable sound alerts</span>
-              <span className="mt-1 block text-xs text-text-secondary">
-                Stores this preference locally on this device.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={preferences.enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-              className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-            />
-          </label>
-
-          <label className="block space-y-3">
-            <span className="block text-sm font-medium text-text-primary">
-              Volume: {Math.round(preferences.volume * 100)}%
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={preferences.volume}
-              onChange={(event) => setVolume(Number(event.target.value))}
-              className="w-full accent-accent-default"
-            />
-          </label>
-
-          <div className="grid grid-cols-2 gap-4">
-            <label className="block space-y-2">
-              <span className="block text-sm font-medium text-text-primary">Quiet hours start</span>
-              <input
-                type="number"
-                min="0"
-                max="23"
-                value={preferences.quietHoursStart}
-                onChange={(event) => setQuietHours(Number(event.target.value), preferences.quietHoursEnd)}
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="block text-sm font-medium text-text-primary">Quiet hours end</span>
-              <input
-                type="number"
-                min="0"
-                max="23"
-                value={preferences.quietHoursEnd}
-                onChange={(event) => setQuietHours(preferences.quietHoursStart, Number(event.target.value))}
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-              />
-            </label>
-          </div>
         </div>
       </CollapsiblePanel>
 

@@ -7,21 +7,21 @@ interface FeedFiltersProps {
   activeSeverities: string[];
   activeSources: string[];
   addFilterRef: RefObject<HTMLDivElement | null>;
-  allPresets: FilterPreset[];
-  builtinPresetNames: string[];
+  allPresets?: FilterPreset[];
+  builtinPresetNames?: string[];
   hasActiveFilters: boolean;
   pushOnly: boolean;
-  onApplyPreset: (preset: FilterPreset) => void;
+  onApplyPreset?: (preset: FilterPreset) => void;
   onCloseAddFilterDropdown?: () => void;
   onClearFilters: () => void;
-  onDeletePreset: (name: string) => void;
-  onPresetNameChange: (value: string) => void;
-  onSavePreset: () => void;
+  onDeletePreset?: (name: string) => void;
+  onPresetNameChange?: (value: string) => void;
+  onSavePreset?: () => void;
   onToggleAddFilterDropdown: () => void;
   onTogglePushOnly: () => void;
   onToggleSeverity: (severity: string) => void;
   onToggleSource: (source: string) => void;
-  presetName: string;
+  presetName?: string;
   severities: readonly string[];
   showAddFilterDropdown: boolean;
   showFilters: boolean;
@@ -32,21 +32,13 @@ export function FeedFilters({
   activeSeverities,
   activeSources,
   addFilterRef,
-  allPresets,
-  builtinPresetNames,
   hasActiveFilters,
   pushOnly,
-  onApplyPreset,
-  onCloseAddFilterDropdown,
   onClearFilters,
-  onDeletePreset,
-  onPresetNameChange,
-  onSavePreset,
   onToggleAddFilterDropdown,
   onTogglePushOnly,
   onToggleSeverity,
   onToggleSource,
-  presetName,
   severities,
   showAddFilterDropdown,
   showFilters,
@@ -173,25 +165,6 @@ export function FeedFilters({
                   Push alerts only
                 </button>
               </div>
-
-              <div>
-                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Presets</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {allPresets.map((preset) => (
-                    <button
-                      key={preset.name}
-                      type="button"
-                      onClick={() => {
-                        onApplyPreset(preset);
-                        onCloseAddFilterDropdown?.();
-                      }}
-                      className="rounded-lg border border-border-default px-2 py-1 text-xs font-medium text-text-secondary transition hover:text-text-primary"
-                    >
-                      {preset.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -209,54 +182,6 @@ export function FeedFilters({
 
       {showFilters && (
         <section className="space-y-4 rounded-2xl border border-border-default bg-bg-surface p-4">
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Presets</h3>
-            <div className="flex flex-wrap gap-2">
-              {allPresets.map((preset) => (
-                <div key={preset.name} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onApplyPreset(preset)}
-                    className="inline-flex items-center rounded-xl border border-border-default bg-bg-surface px-3 py-1.5 text-sm font-medium text-text-primary transition hover:border-border-bright"
-                  >
-                    {preset.name}
-                  </button>
-
-                  {!builtinPresetNames.includes(preset.name) && (
-                    <button
-                      type="button"
-                      onClick={() => onDeletePreset(preset.name)}
-                      className="rounded-full p-1 text-text-tertiary hover:text-red-400"
-                      aria-label={`Delete preset ${preset.name}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {hasActiveFilters && (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={presetName}
-                onChange={(event) => onPresetNameChange(event.target.value)}
-                placeholder="Preset name..."
-                className="flex-1 rounded-xl border border-border-default bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-interactive-default focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={onSavePreset}
-                disabled={!presetName.trim()}
-                className="inline-flex items-center rounded-xl bg-interactive-default px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Save
-              </button>
-            </div>
-          )}
-
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h3>
             <button

@@ -25,29 +25,25 @@ interface FeedHeaderProps {
 export function FeedHeader({
   activeFilterCount,
   activeTab,
-  highSignalCount,
-  hiddenLowCount,
   hasActiveFilters,
-  lowSignalCount,
-  mediumSignalCount,
-  onRevealLowSeverity,
+  highSignalCount: _highSignalCount,
+  hiddenLowCount: _hiddenLowCount,
+  lowSignalCount: _lowSignalCount,
+  mediumSignalCount: _mediumSignalCount,
+  onRevealLowSeverity: _onRevealLowSeverity,
   onSortModeChange,
   onTabChange,
   onToggleFilters,
   onToggleModeDropdown,
   showModeDropdown,
   sortMode,
-  totalCount,
+  totalCount: _totalCount,
 }: FeedHeaderProps) {
   const connectionStatus = useConnectionStatus();
   const connectionRetry = useConnectionRetry();
-  const importantLabel = `${highSignalCount} important event${highSignalCount === 1 ? '' : 's'} today`;
-  const highWidth = totalCount > 0 ? `${(highSignalCount / totalCount) * 100}%` : '0%';
-  const mediumWidth = totalCount > 0 ? `${(mediumSignalCount / totalCount) * 100}%` : '0%';
-  const lowWidth = totalCount > 0 ? `${(lowSignalCount / totalCount) * 100}%` : '0%';
 
   return (
-    <div className="space-y-2 py-1">
+    <div className="py-1">
       <div className="flex flex-wrap items-center gap-2">
         <FeedTabs
           activeTab={activeTab}
@@ -115,41 +111,7 @@ export function FeedHeader({
             </span>
           )}
         </button>
-
-        <span className="text-xs text-text-tertiary">
-          Press ? for keyboard shortcuts
-        </span>
       </div>
-
-      {totalCount > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border-default bg-bg-surface/70 px-3 py-2">
-          <div className="min-w-[170px]">
-            <p className="text-sm font-semibold text-text-primary">{importantLabel}</p>
-            <p className="text-xs text-text-tertiary">
-              {totalCount} events · {highSignalCount} HIGH+ · {lowSignalCount} LOW
-            </p>
-          </div>
-
-          <div className="flex min-w-[140px] flex-1 items-center gap-2">
-            <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-overlay-light">
-              <span className="bg-severity-high" style={{ width: highWidth }} />
-              <span className="bg-severity-medium" style={{ width: mediumWidth }} />
-              <span className="bg-severity-low/70" style={{ width: lowWidth }} />
-            </div>
-          </div>
-
-          {activeTab === 'smart' && hiddenLowCount > 0 ? (
-            <button
-              type="button"
-              onClick={onRevealLowSeverity}
-              className="rounded-full border border-severity-low/20 bg-severity-low/10 px-3 py-1 text-xs font-medium text-text-secondary transition hover:border-severity-low/35 hover:text-text-primary"
-              aria-label={`Showing HIGH+ events · ${hiddenLowCount} LOW ${hiddenLowCount === 1 ? 'event' : 'events'} hidden`}
-            >
-              Showing HIGH+ events · {hiddenLowCount} LOW {hiddenLowCount === 1 ? 'event' : 'events'} hidden
-            </button>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }
