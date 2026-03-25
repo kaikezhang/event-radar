@@ -43,36 +43,6 @@ describe('App shell spacing', () => {
         return new Response(null, { status: 401 });
       }
 
-      if (url.pathname === '/api/v1/scorecards/summary') {
-        return new Response(JSON.stringify({
-          days: null,
-          overview: {
-            totalEvents: 24001,
-            sourcesMonitored: 13,
-            eventsWithTickers: 12028,
-            eventsWithPriceOutcomes: 6346,
-          },
-          totals: {
-            totalAlerts: 12028,
-            alertsWithUsableVerdicts: 6346,
-            directionalCorrectCount: 0,
-            directionalHitRate: 0,
-            setupWorkedCount: 2870,
-            setupWorkedRate: 0.4523,
-            avgT5Move: 2.4,
-            avgT20Move: 5.1,
-            medianT20Move: 3.8,
-          },
-          actionBuckets: [],
-          confidenceBuckets: [],
-          sourceBuckets: [],
-          eventTypeBuckets: [],
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -81,14 +51,17 @@ describe('App shell spacing', () => {
 
     renderWithRouter(appRoutes, ['/']);
 
-    expect(await screen.findByRole('heading', { name: /know what moves markets/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /event radar/i })).toBeInTheDocument();
   });
 
-  it('routes to the API docs page', async () => {
-    renderWithRouter(appRoutes, ['/api-docs']);
+  it.each([
+    '/about',
+    '/api-docs',
+    '/scorecard',
+    '/history',
+  ])('does not expose removed route %s', async (path) => {
+    renderWithRouter(appRoutes, [path]);
 
-    expect(await screen.findByRole('heading', { name: /api docs/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /authentication/i })).toBeInTheDocument();
-    expect(screen.getByText('/api/health')).toBeInTheDocument();
+    expect(await screen.findByText(/page not found/i)).toBeInTheDocument();
   });
 });

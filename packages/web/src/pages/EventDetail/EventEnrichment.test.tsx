@@ -37,8 +37,9 @@ describe('EventSummaryContent', () => {
       />,
     );
 
-    expect(screen.getByText(/if the event lands better than feared/i)).toBeInTheDocument();
-    expect(screen.getByText(/if the event points to a deeper problem/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/analysis pending/i)).toHaveLength(2);
+    expect(screen.queryByText(/if the event lands better than feared/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/if the event points to a deeper problem/i)).not.toBeInTheDocument();
   });
 
   it('shows the retry message when enrichment previously failed', () => {

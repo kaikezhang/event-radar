@@ -2,7 +2,7 @@ import { cn } from '../../lib/utils.js';
 import type { LlmEnrichment } from '../../types/index.js';
 import { EventSourceCard } from './EventSourceCard.js';
 import { SectionHeading } from './shared.js';
-import { deriveBullBear, deriveFallbackBullBear } from './utils.js';
+import { deriveBullBear } from './utils.js';
 
 function AiDisclosureLabel() {
   return (
@@ -26,15 +26,10 @@ export function EventSummaryContent({
   direction: string;
   severity: string;
 }) {
-  const derivedPoints = deriveBullBear(enrichment, direction);
-  const shouldForceLayout = severity === 'HIGH' || severity === 'CRITICAL';
-  const shouldUseFallback = enrichment !== null;
-  const fallbackPoints = shouldUseFallback ? deriveFallbackBullBear(summary, severity) : { bullPoints: [], bearPoints: [] };
-  const bullPoints = derivedPoints.bullPoints.length > 0 ? derivedPoints.bullPoints : fallbackPoints.bullPoints;
-  const bearPoints = derivedPoints.bearPoints.length > 0 ? derivedPoints.bearPoints : fallbackPoints.bearPoints;
+  const { bullPoints, bearPoints } = deriveBullBear(enrichment, direction);
   const emptyStateMessage = enrichmentFailed
     ? 'Analysis is being processed. Check back shortly.'
-    : shouldForceLayout
+    : severity === 'HIGH' || severity === 'CRITICAL'
       ? 'Analysis pending'
       : 'Analysis not available';
 

@@ -23,15 +23,11 @@ const CalendarPage = lazy(async () => ({ default: (await import('./pages/Calenda
 const EventDetailPage = lazy(async () => ({ default: (await import('./pages/EventDetail.js')).EventDetail }));
 const FeedPage = lazy(async () => ({ default: (await import('./pages/Feed.js')).Feed }));
 const LoginPage = lazy(async () => ({ default: (await import('./pages/Login.js')).Login }));
-const ScorecardPage = lazy(async () => ({ default: (await import('./pages/Scorecard.js')).Scorecard }));
 const SearchPage = lazy(async () => ({ default: (await import('./pages/Search.js')).Search }));
 const SettingsPage = lazy(async () => ({ default: (await import('./pages/Settings.js')).Settings }));
 const TickerProfilePage = lazy(async () => ({ default: (await import('./pages/TickerProfile.js')).TickerProfile }));
 const OnboardingPage = lazy(async () => ({ default: (await import('./pages/Onboarding.js')).Onboarding }));
-const HistoryPage = lazy(async () => ({ default: (await import('./pages/History.js')).History }));
 const WatchlistPage = lazy(async () => ({ default: (await import('./pages/Watchlist.js')).Watchlist }));
-const AboutPage = lazy(async () => ({ default: (await import('./pages/About.js')).About }));
-const ApiDocsPage = lazy(async () => ({ default: (await import('./pages/ApiDocs.js')).ApiDocs }));
 const NotFoundPage = lazy(async () => ({ default: (await import('./pages/NotFound.js')).NotFound }));
 const PrivacyPage = lazy(async () => ({ default: (await import('./pages/Privacy.js')).Privacy }));
 const TermsPage = lazy(async () => ({ default: (await import('./pages/Terms.js')).Terms }));
@@ -50,7 +46,7 @@ function AppHeader() {
       ? 'Reconnecting'
       : connectionStatus === 'failed'
         ? 'Connection lost'
-      : 'Offline';
+        : 'Offline';
 
   const statusIndicator = (
     <span role="status" aria-label={statusLabel}>
@@ -125,7 +121,6 @@ function GlobalTickerSearch() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't trigger when typing in inputs/textareas
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return;
@@ -224,18 +219,14 @@ export const appRoutes: RouteObject[] = [
     children: [
       { index: true, element: <HomeRoute /> },
       { path: 'calendar', element: loadPage(<CalendarPage />) },
-      { path: 'scorecard', element: loadPage(<ScorecardPage />) },
       { path: 'event/:id', element: loadPage(<EventDetailPage />) },
       { path: 'ticker/:symbol', element: loadPage(<TickerProfilePage />) },
       { path: 'onboarding', element: loadPage(<OnboardingPage />) },
       { path: 'watchlist', element: loadPage(<WatchlistPage />) },
-      { path: 'history', element: loadPage(<HistoryPage />) },
       { path: 'search', element: loadPage(<SearchPage />) },
       { path: 'settings', element: loadPage(<SettingsPage />) },
       { path: 'login', element: loadPage(<LoginPage />) },
       { path: 'auth/verify', element: loadPage(<AuthVerifyPage />) },
-      { path: 'about', element: loadPage(<AboutPage />) },
-      { path: 'api-docs', element: loadPage(<ApiDocsPage />) },
       { path: 'privacy', element: loadPage(<PrivacyPage />) },
       { path: 'terms', element: loadPage(<TermsPage />) },
       { path: '*', element: loadPage(<NotFoundPage />) },
