@@ -15,7 +15,14 @@ import {
   boolean,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import type { BudgetConfig, Priority, RuleActionValue, RuleConditionNode } from '@event-radar/shared';
+import type { Priority, RuleActionValue, RuleConditionNode } from '@event-radar/shared';
+
+type BudgetPriorityShares = {
+  CRITICAL: number;
+  HIGH: number;
+  MEDIUM: number;
+  LOW: number;
+};
 
 /**
  * Pipeline audit trail — records every event's journey through the pipeline.
@@ -418,7 +425,7 @@ export const budgetConfig = pgTable(
     maxAlertsPerHour: integer('max_alerts_per_hour').notNull().default(50),
     priorityShares: jsonb('priority_shares')
       .notNull()
-      .$type<BudgetConfig['priorityShares']>(),
+      .$type<BudgetPriorityShares>(),
     windowMinutes: integer('window_minutes').notNull().default(60),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()

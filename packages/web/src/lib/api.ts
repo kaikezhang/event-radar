@@ -11,7 +11,6 @@ import type {
   LlmEnrichment,
   PriceBatchQuote,
   PriceChartData,
-  ScorecardSummary,
   SimilarEvent,
   SimilarEventOutcomeStats,
   TickerProfileData,
@@ -686,17 +685,6 @@ export async function getEventDetail(id: string): Promise<EventDetailData | null
   }
 }
 
-export async function getScorecardSummary(days?: number): Promise<ScorecardSummary | null> {
-  try {
-    const query = days == null ? '' : `?days=${days}`;
-    return await apiFetch(`/v1/scorecards/summary${query}`) as ScorecardSummary;
-  } catch {
-    return null;
-  }
-}
-
-
-
 export async function getEventScorecard(id: string): Promise<EventScorecard | null> {
   try {
     return await apiFetch(`/v1/scorecards/${id}`) as EventScorecard;
@@ -965,10 +953,6 @@ export async function getSuggestedTickers(): Promise<SuggestedTickersResponse> {
   return apiFetch('/v1/onboarding/suggested-tickers');
 }
 
-export async function bulkAddToWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
-  return apiFetch('/v1/onboarding/bulk-add', { method: 'POST', body: { tickers } });
-}
-
 export async function initializeWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
   return apiFetch('/v1/watchlist/initialize', { method: 'POST', body: { tickers } });
 }
@@ -1182,22 +1166,6 @@ export function mapSource(source: string): string {
     'dilution-monitor': 'Dilution Monitor',
   };
   return MAP[source] ?? source;
-}
-
-export function formatScorecardBucketLabel(group: 'action' | 'confidence' | 'source' | 'eventType', bucket: string): string {
-  if (group === 'source') {
-    return mapSource(bucket);
-  }
-
-  if (group === 'action') {
-    return bucket.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-  }
-
-  if (group === 'eventType') {
-    return bucket.replaceAll('_', ' ');
-  }
-
-  return bucket;
 }
 
 // ── Notification Channel Settings ──────────────────────────────────────────

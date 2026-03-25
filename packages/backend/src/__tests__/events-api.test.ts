@@ -235,6 +235,22 @@ describe('GET /api/events', () => {
     expect(response.json().data[0]).not.toHaveProperty('rawPayload');
   });
 
+  it('should omit unused dedup fields from list responses', async () => {
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data[0]).not.toHaveProperty('sourceEventId');
+    expect(response.json().data[0]).not.toHaveProperty('mergedFrom');
+    expect(response.json().data[0]).not.toHaveProperty('isDuplicate');
+    expect(response.json().data[0]).toHaveProperty('classificationConfidence');
+  });
+
   it('should filter by source', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
@@ -319,6 +335,31 @@ describe('GET /api/events', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).not.toHaveProperty('rawPayload');
+  });
+
+  it('should omit unused dedup fields from event detail responses', async () => {
+    const listResponse = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+    const eventId = listResponse.json().data[0].id as string;
+
+    const response = await ctx.server.inject({
+      method: 'GET',
+      url: `/api/events/${eventId}`,
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).not.toHaveProperty('sourceEventId');
+    expect(response.json()).not.toHaveProperty('mergedFrom');
+    expect(response.json()).not.toHaveProperty('isDuplicate');
+    expect(response.json()).toHaveProperty('classificationConfidence');
   });
 
   it('should support limit and offset', async () => {

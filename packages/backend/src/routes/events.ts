@@ -321,7 +321,7 @@ function buildTickerFilterCondition(ticker: string) {
 const eventResponseSelect = {
   id: events.id,
   source: events.source,
-  sourceEventId: events.sourceEventId,
+  auditEventId: events.sourceEventId,
   ticker: events.ticker,
   classification: events.classification,
   classificationConfidence: events.classificationConfidence,
@@ -333,9 +333,7 @@ const eventResponseSelect = {
   severity: events.severity,
   receivedAt: events.receivedAt,
   createdAt: events.createdAt,
-  mergedFrom: events.mergedFrom,
   sourceUrls: events.sourceUrls,
-  isDuplicate: events.isDuplicate,
   confirmedSources: events.confirmedSources,
   confirmationCount: events.confirmationCount,
   priceAtEvent: eventOutcomes.eventPrice,
@@ -343,6 +341,7 @@ const eventResponseSelect = {
 
 function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, 'rawPayload'> {
   const safeEvent = { ...event } as T & {
+    auditEventId?: string | null;
     classificationConfidence?: number | null;
     sourceUrls?: string[] | null;
     title?: string;
@@ -365,6 +364,7 @@ function stripRawPayload<T extends Record<string, unknown>>(event: T): Omit<T, '
   };
   const rawPayload = asRecord(safeEvent.rawPayload);
   delete safeEvent.rawPayload;
+  delete safeEvent.auditEventId;
   const metadata = asRecord(safeEvent.metadata);
   const enrichment = asRecord(metadata['llm_enrichment']);
   const judge = asRecord(metadata['llm_judge']);
@@ -741,7 +741,7 @@ export function registerEventRoutes(
         : [];
 
     // Fetch pipeline audit trail for this event (join on sourceEventId)
-    const auditRows = event.sourceEventId
+    const auditRows = event.auditEventId
       ? await db
           .select({
             outcome: pipelineAudit.outcome,
@@ -755,7 +755,7 @@ export function registerEventRoutes(
             createdAt: pipelineAudit.createdAt,
           })
           .from(pipelineAudit)
-          .where(eq(pipelineAudit.eventId, event.sourceEventId))
+          .where(eq(pipelineAudit.eventId, event.auditEventId))
           .orderBy(asc(pipelineAudit.createdAt))
           .limit(1)
       : [];

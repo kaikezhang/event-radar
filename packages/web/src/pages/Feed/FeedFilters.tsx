@@ -139,7 +139,7 @@ export function FeedFilters({
                 'inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-3 py-1.5 text-sm font-medium transition',
                 pushOnly
                   ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
-                  : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
+                  : 'border-border-default bg-bg-surface text-text-primary hover:border-border-default',
               )}
               aria-label="Push alerts only"
               aria-pressed={pushOnly}
@@ -161,7 +161,7 @@ export function FeedFilters({
                     'inline-flex items-center rounded-xl border px-3 py-1.5 text-sm font-medium transition',
                     activeSeverities.includes(severity)
                       ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
-                      : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
+                      : 'border-border-default bg-bg-surface text-text-primary hover:border-border-default',
                   )}
                 >
                   {severity}
