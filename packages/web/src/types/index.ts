@@ -268,15 +268,7 @@ export interface WatchlistItem {
   addedAt: string;
   notes?: string | null;
   name?: string | null;
-  sectionId?: string | null;
   sortOrder?: number;
-}
-
-export interface WatchlistSection {
-  id: string;
-  name: string;
-  color: string;
-  sortOrder: number;
 }
 
 export interface CalendarEventItem {
@@ -339,7 +331,4 @@ export interface ScorecardSummary {
   eventTypeBuckets: ScorecardBucketSummary[];
 }
 
-export interface ScorecardSeverityBreakdownItem {
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  count: number;
-}
+

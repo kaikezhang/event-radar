@@ -177,7 +177,7 @@ describe('Watchlist page', () => {
               addedAt: '2026-03-15T00:00:00.000Z',
               notes: 'AI leader',
               name: 'NVIDIA Corporation',
-              sectionId: 'growth',
+
               sortOrder: 2,
             },
             {
@@ -186,7 +186,7 @@ describe('Watchlist page', () => {
               addedAt: '2026-03-14T00:00:00.000Z',
               notes: null,
               name: 'Apple Inc.',
-              sectionId: 'quality',
+
               sortOrder: 1,
             },
           ],
