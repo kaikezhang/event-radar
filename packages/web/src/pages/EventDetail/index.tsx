@@ -9,7 +9,6 @@ import { EventEvidenceContent, EventSummaryContent, RegimeContextCard } from './
 import { EventHeader } from './EventHeader.js';
 import { EventHistory } from './EventHistory.js';
 import { EventMarketData } from './EventMarketData.js';
-import { SimilarPastEvents } from './SimilarPastEvents.js';
 import { WhatHappenedNext } from './WhatHappenedNext.js';
 import { getDirectionContextLine, getPrimaryConfidence, getPrimaryDirection } from './utils.js';
 
@@ -160,10 +159,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
               {data.outcome && (
                 <WhatHappenedNext outcome={data.outcome} direction={direction} />
               )}
-              <SimilarPastEvents
-                similarEvents={data.historicalPattern.similarEvents}
-                outcomeStats={data.historicalPattern.outcomeStats}
-              />
               <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 lg:hidden">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
                   Quick actions

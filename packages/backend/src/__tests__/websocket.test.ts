@@ -1,9 +1,37 @@
+import { createServer } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { safeCloseServer } from './helpers/test-db.js';
 import { connectionTimestamps } from '../plugins/websocket.js';
 
 const TEST_API_KEY = 'test-api-key-12345';
+
+async function canListenOnLoopback(): Promise<boolean> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once('error', (error) => {
+      server.close();
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+        resolve(true);
+      });
+    });
+  });
+}
+
+const supportsLoopbackListen = await canListenOnLoopback();
 
 function makeLiveEvent() {
   return {
@@ -62,7 +90,7 @@ async function nextMessage(socket: WebSocket): Promise<unknown> {
   });
 }
 
-describe('WebSocket /ws/events', () => {
+describe.skipIf(!supportsLoopbackListen)('WebSocket /ws/events', () => {
   let ctx: AppContext;
   let baseWsUrl: string;
   let address: string;

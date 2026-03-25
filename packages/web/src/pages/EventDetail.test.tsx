@@ -42,6 +42,15 @@ describe('EventDetail page', () => {
     expect(screen.getByText(/nvidia corporation flagged heightened export exposure/i)).toBeInTheDocument();
   });
 
+  it('keeps historical context out of the summary tab', async () => {
+    renderDetail();
+
+    await screen.findByRole('heading', { name: /what happened/i });
+
+    expect(screen.queryByText(/historical outcomes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prior nvda export disclosure/i)).not.toBeInTheDocument();
+  });
+
   it('shows AI-generated analysis disclosures in the summary and bull-bear sections', async () => {
     renderDetail();
 
@@ -244,8 +253,9 @@ describe('EventDetail page', () => {
 
     expect(within(section).getByText(/▲ bull/i)).toBeInTheDocument();
     expect(within(section).getByText(/▼ bear/i)).toBeInTheDocument();
-    expect(within(section).getByText(/if the event lands better than feared/i)).toBeInTheDocument();
-    expect(within(section).getByText(/if the event points to a deeper problem/i)).toBeInTheDocument();
+    expect(within(section).getAllByText(/analysis pending/i)).toHaveLength(2);
+    expect(within(section).queryByText(/if the event lands better than feared/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/if the event points to a deeper problem/i)).not.toBeInTheDocument();
   });
 
   it('falls back to awaiting market reaction when direction is mixed', async () => {

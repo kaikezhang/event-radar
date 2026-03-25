@@ -7,7 +7,7 @@ import type { HealthMonitorService } from './services/health-monitor.js';
 import type { MarketContextCache } from './services/market-context-cache.js';
 import type { MarketDataCache } from './services/market-data-cache.js';
 import { registerEventRoutes } from './routes/events.js';
-import { registerScannerRoutes } from './routes/scanners.js';
+import { registerFeedRoutes } from './routes/feed.js';
 import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerAlertScorecardRoutes } from './routes/alert-scorecard.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
@@ -15,10 +15,6 @@ import { registerTickerRoutes } from './routes/tickers.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
 import { registerPreferencesRoutes } from './routes/preferences.js';
-import { registerEventsHistoryRoutes } from './routes/events-history.js';
-import { registerEventImpactRoutes } from './routes/event-impact.js';
-import { registerDashboardRoutes } from './routes/dashboard.js';
-import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerPriceRoutes } from './routes/price.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
@@ -48,10 +44,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     db,
     apiKey,
     registry,
-    marketRegimeService,
     tickerMarketDataCache,
-    marketCache,
-    killSwitch,
     priceChartService,
     priceBatchService,
     startTime,
@@ -65,6 +58,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     marketDataCache: tickerMarketDataCache,
   });
   registerApiDocsRoutes(server);
+  registerFeedRoutes(server, db);
   registerHealthRoutes(server, {
     db,
     registry,
@@ -72,39 +66,22 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     startTime,
   });
 
-  // Register event query routes if db is available
-  if (db) {
-    registerEventRoutes(server, db, {
-      apiKey,
-      marketDataCache: tickerMarketDataCache,
-    });
-    registerEventsHistoryRoutes(server, db, { apiKey });
-    registerEventImpactRoutes(server, db, { apiKey });
-    registerAlertScorecardRoutes(server, db, { apiKey });
-    registerOutcomeRoutes(server, db);
-    registerWatchlistRoutes(server, db, { apiKey });
-    registerTickerRoutes(server, db);
-    registerOnboardingRoutes(server, db, { apiKey });
-    registerPushSubscriptionRoutes(server, db, { apiKey });
-    registerPreferencesRoutes(server, db, { apiKey });
-    registerNotificationSettingsRoutes(server, db, { apiKey });
-    registerCalendarRoutes(server, db, { apiKey });
-    registerAuthRoutes(server, db);
+  if (!db) {
+    return;
   }
 
-  // Register scanner health routes
-  registerScannerRoutes(server, registry, db);
-  registerDeliveryFeedRoutes(server, db);
-
-  // Register dashboard route
-  registerDashboardRoutes(server, {
+  registerEventRoutes(server, db, {
     apiKey,
-    db,
-    scannerRegistry: registry,
-    marketCache: marketCache ?? undefined,
-    marketRegimeService,
-    killSwitch,
-    startTime,
-    version,
+    marketDataCache: tickerMarketDataCache,
   });
+  registerAlertScorecardRoutes(server, db, { apiKey });
+  registerOutcomeRoutes(server, db);
+  registerWatchlistRoutes(server, db, { apiKey });
+  registerTickerRoutes(server, db);
+  registerOnboardingRoutes(server, db, { apiKey });
+  registerPushSubscriptionRoutes(server, db, { apiKey });
+  registerPreferencesRoutes(server, db, { apiKey });
+  registerNotificationSettingsRoutes(server, db, { apiKey });
+  registerCalendarRoutes(server, db, { apiKey });
+  registerAuthRoutes(server, db);
 }

@@ -63,31 +63,3 @@ export function deriveBullBear(enrichment: LlmEnrichment | null, direction: stri
   return { bullPoints, bearPoints };
 }
 
-export function deriveFallbackBullBear(summary: string, severity: string) {
-  if (severity !== 'HIGH' && severity !== 'CRITICAL') {
-    return { bullPoints: [], bearPoints: [] };
-  }
-
-  const normalizedSummary = summary.trim().toLowerCase();
-  const soundsLikeDeEscalation = /(ceasefire|deal|pause|ease|de-escalat|reduce|stabiliz|relief)/.test(normalizedSummary);
-
-  if (soundsLikeDeEscalation) {
-    return {
-      bullPoints: [
-        'If the event eases faster than expected, risk sentiment could improve and buyers may lean into a relief move.',
-      ],
-      bearPoints: [
-        'If the event proves temporary or incomplete, uncertainty can stay elevated and keep risk assets under pressure.',
-      ],
-    };
-  }
-
-  return {
-    bullPoints: [
-      'If the event lands better than feared, the market may treat the headline as manageable and reprice risk higher.',
-    ],
-    bearPoints: [
-      'If the event points to a deeper problem, estimates and positioning may reset lower until more clarity arrives.',
-    ],
-  };
-}
