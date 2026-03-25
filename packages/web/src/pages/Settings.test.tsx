@@ -124,27 +124,21 @@ describe('Settings page', () => {
     expect(screen.getByText(/return to your watchlist to keep alerts focused/i)).toBeInTheDocument();
   });
 
-  it('renders notification budget controls without a timezone selector', async () => {
-    const user = userEvent.setup();
+  it('keeps non-watchlist alerts inside the push alerts section', async () => {
     renderSettings();
 
-    const budgetToggle = await screen.findByRole('button', { name: /notification budget.*quiet hours/i });
-    await user.click(budgetToggle);
+    const pushHeading = await screen.findByRole('heading', { name: /push alerts on this device/i });
+    const section = pushHeading.closest('section') as HTMLElement;
 
-    expect(screen.getByRole('heading', { name: /notification timing/i })).toBeInTheDocument();
-    const quietHoursToggle = screen.getByLabelText(/enable quiet hours/i);
-    expect(quietHoursToggle).toBeInTheDocument();
-    await user.click(quietHoursToggle);
-    expect(screen.queryByLabelText(/timezone/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/daily push limit/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/alert me for tickers outside my watchlist/i)).toBeInTheDocument();
+    expect(within(section).getByLabelText(/alert me for tickers outside my watchlist/i)).toBeInTheDocument();
+    expect(within(section).queryByLabelText(/enable quiet hours/i)).not.toBeInTheDocument();
+    expect(within(section).queryByLabelText(/daily push limit/i)).not.toBeInTheDocument();
   });
 
   it('autosaves notification preference changes after a short debounce', async () => {
     const user = userEvent.setup();
 
     renderSettings();
-    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
     const nonWatchlistToggle = await screen.findByLabelText(/alert me for tickers outside my watchlist/i);
 
     await user.click(nonWatchlistToggle);
@@ -167,38 +161,20 @@ describe('Settings page', () => {
 
     const pushToggle = await screen.findByRole('button', { name: /web push/i });
     const channelToggle = screen.getByRole('button', { name: /notification channels.*discord webhook/i });
-    const budgetToggle = screen.getByRole('button', { name: /notification budget.*quiet hours/i });
 
     expect(pushToggle).toHaveAttribute('aria-expanded', 'true');
     expect(channelToggle).toHaveAttribute('aria-expanded', 'true');
-    expect(budgetToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /notification budget/i })).not.toBeInTheDocument();
   });
 
-  it('shows a signal-tier delivery explainer under notification preferences', async () => {
-    const user = userEvent.setup();
+  it('does not render quiet hours, daily push cap, or signal-tier explainer controls', async () => {
     renderSettings();
 
-    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
+    await screen.findByRole('heading', { name: /push alerts on this device/i });
 
-    const notificationTiming = screen.getByRole('heading', { name: /notification timing/i });
-    const section = notificationTiming.closest('section') as HTMLElement;
-
-    expect(within(section).getByText(/^Critical$/)).toBeInTheDocument();
-    expect(within(section).getAllByText(/push notification \+ feed/i).length).toBeGreaterThan(0);
-    expect(within(section).getAllByText(/feed only/i).length).toBeGreaterThan(0);
-  });
-
-  it('marks the high tier delivery row as conditional', async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole('button', { name: /notification budget.*quiet hours/i }));
-
-    const notificationTiming = screen.getByRole('heading', { name: /notification timing/i });
-    const section = notificationTiming.closest('section') as HTMLElement;
-
-    expect(within(section).getByText(/^High$/)).toBeInTheDocument();
-    expect(within(section).getByText(/if enabled/i)).toBeInTheDocument();
+    expect(screen.queryByText(/signal tier delivery/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/quiet hours/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/daily push limit/i)).not.toBeInTheDocument();
   });
 
   it('does not render the removed sound, display, email, or briefing settings', async () => {

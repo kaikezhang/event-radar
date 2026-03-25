@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { sql } from 'drizzle-orm';
 import type { RawEvent } from '@event-radar/shared';
-import { buildApp, type AppContext } from '../app.js';
 import type { Database } from '../db/connection.js';
 import { storeEvent } from '../db/event-store.js';
 import { WeeklyReportService } from '../services/weekly-report.js';
@@ -11,10 +10,7 @@ import {
   cleanTestDb,
   createTestDb,
   safeClose,
-  safeCloseServer,
 } from './helpers/test-db.js';
-
-const TEST_API_KEY = 'weekly-report-test-api-key';
 
 let sharedDb: Database;
 let sharedClient: PGlite;
@@ -118,31 +114,10 @@ async function seedWeeklyEvent(input: {
 
 describe('WeeklyReportService', () => {
   let service: WeeklyReportService;
-  let ctx: AppContext;
-  const previousAuthRequired = process.env.AUTH_REQUIRED;
-  const previousJwtSecret = process.env.JWT_SECRET;
 
   beforeEach(async () => {
     await cleanTestDb(sharedDb);
-    process.env.AUTH_REQUIRED = 'true';
-    process.env.JWT_SECRET = 'test-jwt-secret';
     service = new WeeklyReportService(sharedDb);
-    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
-    await ctx.server.ready();
-  });
-
-  afterEach(async () => {
-    await safeCloseServer(ctx.server);
-    if (previousAuthRequired == null) {
-      delete process.env.AUTH_REQUIRED;
-    } else {
-      process.env.AUTH_REQUIRED = previousAuthRequired;
-    }
-    if (previousJwtSecret == null) {
-      delete process.env.JWT_SECRET;
-    } else {
-      process.env.JWT_SECRET = previousJwtSecret;
-    }
   });
 
   it('builds weekly aggregates, top signals, worst signals, and source leaderboard', async () => {
@@ -329,56 +304,5 @@ describe('WeeklyReportService', () => {
     expect(report.worstSignals).toEqual([]);
     expect(report.sourceLeaderboard).toEqual([]);
     expect(report.insight).toContain('No reportable events');
-  });
-
-  it('requires authentication on the weekly report route', async () => {
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/reports/weekly?date=2026-03-23',
-    });
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('returns JSON by default from the weekly report route', async () => {
-    await seedWeeklyEvent({
-      title: 'Trading Halt on NVDA',
-      source: 'trading-halt',
-      ticker: 'NVDA',
-      severity: 'CRITICAL',
-      eventTime: '2026-03-23T15:00:00.000Z',
-      changeT5: 12.4,
-    });
-
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/reports/weekly?date=2026-03-23',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('application/json');
-    expect(response.json().summary.eventsDetected).toBe(1);
-  });
-
-  it('returns raw markdown when format=markdown is requested', async () => {
-    await seedWeeklyEvent({
-      title: 'Trading Halt on NVDA',
-      source: 'trading-halt',
-      ticker: 'NVDA',
-      severity: 'CRITICAL',
-      eventTime: '2026-03-23T15:00:00.000Z',
-      changeT5: 12.4,
-    });
-
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/reports/weekly?date=2026-03-23&format=markdown',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.headers['content-type']).toContain('text/markdown');
-    expect(response.body).toContain('# Event Radar Weekly Scorecard');
   });
 });

@@ -5,7 +5,6 @@ import {
   getTrustCue,
   groupAlertsByDate,
   loadCustomPresets,
-  loadFeedTab,
   loadFeedSort,
   sortFeedAlerts,
 } from './useFeedState.js';
@@ -25,14 +24,6 @@ describe('useFeedState helpers', () => {
     localStorage.setItem('event-radar-filter-presets', '{bad json');
 
     expect(loadCustomPresets()).toEqual([]);
-  });
-
-  it('only restores a valid saved feed tab', () => {
-    localStorage.setItem('event-radar-feed-tab', 'watchlist');
-    expect(loadFeedTab()).toBe('watchlist');
-
-    localStorage.setItem('event-radar-feed-tab', 'invalid');
-    expect(loadFeedTab()).toBeNull();
   });
 
   it('only restores a valid saved feed sort mode', () => {
@@ -169,9 +160,8 @@ describe('useFeedState helpers', () => {
     });
   });
 
-  it('defaults smart feed to hide LOW while all-events still includes it', () => {
-    expect(getDefaultSeverities('smart')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
-    expect(getDefaultSeverities('all')).toEqual(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+  it('defaults smart feed to hide LOW alerts', () => {
+    expect(getDefaultSeverities()).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
   });
 
   it('sorts smart-feed alerts by severity before recency so low alerts sink to the bottom', () => {

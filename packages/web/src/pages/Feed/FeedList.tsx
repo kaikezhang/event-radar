@@ -6,7 +6,6 @@ import { PillBanner } from '../../components/PillBanner.js';
 import { useConnectionStatus } from '../../contexts/ConnectionContext.js';
 import { useTickerBatchPrices } from '../../hooks/useTickerBatchPrices.js';
 import { cn } from '../../lib/utils.js';
-import { DailyBriefing } from '../../components/DailyBriefing.js';
 import type { AlertSummary } from '../../types/index.js';
 import { FeedCard } from './FeedCard.js';
 import { FeedFilters } from './FeedFilters.js';
@@ -16,7 +15,6 @@ import {
   PULL_THRESHOLD,
   SEVERITIES,
   type DateGroup,
-  type FeedTab,
   type SortMode,
 } from './useFeedState.js';
 
@@ -24,7 +22,6 @@ interface FeedListProps {
   activeFilterCount: number;
   activeSeverities: string[];
   activeSources: string[];
-  activeTab: FeedTab;
   addFilterRef: RefObject<HTMLDivElement | null>;
   addToWatchlist: (ticker: string) => void;
   applyPendingAlerts: () => void;
@@ -36,7 +33,6 @@ interface FeedListProps {
   handleCardClick: (event: MouseEvent, alertId: string) => void;
   handleDismiss: (alertId: string) => void;
   handleQuickWatchlist: (alert: AlertSummary) => void | Promise<void>;
-  handleTabChange: (tab: FeedTab) => void;
   hasActiveFilters: boolean;
   isDesktop: boolean;
   isEmpty: boolean;
@@ -45,7 +41,6 @@ interface FeedListProps {
   isOnWatchlist: (ticker: string) => boolean;
   isRefreshing: boolean;
   newAlertIds: Set<string>;
-  onToggleModeDropdown: () => void;
   onToggleWatchlist: (ticker: string) => void;
   pendingCount: number;
   pushOnly: boolean;
@@ -54,7 +49,6 @@ interface FeedListProps {
   sentinelRef: RefObject<HTMLDivElement | null>;
   showAddFilterDropdown: boolean;
   showFilters: boolean;
-  showModeDropdown: boolean;
   showUnauthBanner: boolean;
   showSmartFeedEmpty: boolean;
   showWatchlistOnboarding: boolean;
@@ -77,7 +71,6 @@ export function FeedList({
   activeFilterCount,
   activeSeverities,
   activeSources,
-  activeTab,
   addFilterRef,
   addToWatchlist,
   applyPendingAlerts,
@@ -89,7 +82,6 @@ export function FeedList({
   handleCardClick,
   handleDismiss,
   handleQuickWatchlist,
-  handleTabChange,
   hasActiveFilters,
   isDesktop,
   isEmpty,
@@ -98,7 +90,6 @@ export function FeedList({
   isOnWatchlist,
   isRefreshing,
   newAlertIds,
-  onToggleModeDropdown,
   onToggleWatchlist,
   pendingCount,
   pushOnly,
@@ -107,7 +98,6 @@ export function FeedList({
   sentinelRef,
   showAddFilterDropdown,
   showFilters,
-  showModeDropdown,
   showSmartFeedEmpty,
   showUnauthBanner,
   showWatchlistOnboarding,
@@ -121,7 +111,6 @@ export function FeedList({
   toggleSource,
   touchHandlers,
 }: FeedListProps) {
-  const isWatchlistMode = activeTab === 'watchlist';
   const priceQuotes = useTickerBatchPrices(filteredAlerts, {
     enabled: !isInitialLoading && !error,
   });
@@ -155,13 +144,9 @@ export function FeedList({
 
       <FeedHeader
         activeFilterCount={activeFilterCount}
-        activeTab={activeTab}
         hasActiveFilters={hasActiveFilters}
         onSortModeChange={toggleSortMode}
-        onTabChange={handleTabChange}
         onToggleFilters={toggleFilters}
-        onToggleModeDropdown={onToggleModeDropdown}
-        showModeDropdown={showModeDropdown}
         sortMode={sortMode}
       />
 
@@ -203,25 +188,12 @@ export function FeedList({
       </div>
 
       {pendingCount > 0 ? <PillBanner count={pendingCount} onApply={applyPendingAlerts} /> : null}
-
-      {!isInitialLoading && !error && filteredAlerts.length > 0 && (
-        <DailyBriefing />
-      )}
-
       {showSmartFeedEmpty ? (
         <EmptyState
           icon="\u{1F324}\uFE0F"
           title="Quiet day for your watchlist"
           description="No significant events detected in the last 24 hours for your tickers. We're monitoring 15+ sources."
-        >
-          <button
-            type="button"
-            onClick={() => handleTabChange('all')}
-            className="text-sm font-medium text-accent-default"
-          >
-            View all events &rarr;
-          </button>
-        </EmptyState>
+        />
       ) : null}
 
       {showWatchlistOnboarding ? (
@@ -246,15 +218,8 @@ export function FeedList({
               ))}
             </div>
           </div>
-          <Link
-            to="/"
-            onClick={(event) => {
-              event.preventDefault();
-              handleTabChange('all');
-            }}
-            className="text-sm font-medium text-accent-default"
-          >
-            Browse all events →
+          <Link to="/watchlist" className="text-sm font-medium text-accent-default">
+            Open watchlist →
           </Link>
         </EmptyState>
       ) : null}
@@ -292,12 +257,8 @@ export function FeedList({
           {!isInitialLoading && isEmpty ? (
             <EmptyState
               icon="📡"
-              title={isWatchlistMode ? 'No watchlist events yet' : 'Markets are quiet'}
-              description={
-                isWatchlistMode
-                  ? 'No events detected for your watchlist tickers recently. They will appear here when something happens.'
-                  : 'No new events match your criteria. Event Radar is scanning SEC filings, executive orders, breaking news, and more.'
-              }
+              title="Markets are quiet"
+              description="No new events match your criteria. Event Radar is scanning SEC filings, executive orders, breaking news, and more."
             >
               <p className="mb-4 inline-flex items-center gap-1.5 text-xs text-text-secondary">
                 <span

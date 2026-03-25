@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
-import { watchlist, watchlistSections, tickerReference } from '../db/schema.js';
+import { watchlist, tickerReference } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
-import { ensureUserExists, resolveRequestUserId } from './user-context.js';
+import { ensureUserExists, resolveRequestUserId } from '../utils/request-user.js';
 
 export interface WatchlistRouteOptions {
   apiKey?: string;
@@ -42,7 +42,6 @@ export function registerWatchlistRoutes(
         notes: watchlist.notes,
         addedAt: watchlist.addedAt,
         name: tickerReference.name,
-        sectionId: watchlist.sectionId,
         sortOrder: watchlist.sortOrder,
       })
       .from(watchlist)
@@ -150,7 +149,7 @@ export function registerWatchlistRoutes(
 
   /**
    * PATCH /api/watchlist/:ticker
-   * Update a watchlist item's notes or sectionId
+   * Update a watchlist item's notes
    */
   server.patch('/api/watchlist/:ticker', {
     preHandler: withAuth,
@@ -164,14 +163,13 @@ export function registerWatchlistRoutes(
         type: 'object',
         properties: {
           notes: { type: 'string' },
-          sectionId: { type: ['string', 'null'] },
         },
       },
     },
   }, async (request, reply) => {
     const { ticker } = request.params as { ticker: string };
     const upperTicker = ticker.toUpperCase();
-    const body = request.body as { notes?: string; sectionId?: string | null };
+    const body = request.body as { notes?: string };
     const userId = resolveRequestUserId(request);
 
     const [existing] = await db
@@ -184,21 +182,8 @@ export function registerWatchlistRoutes(
       return reply.status(404).send({ error: 'Ticker not found in watchlist' });
     }
 
-    if (body.sectionId !== undefined && body.sectionId !== null) {
-      const [section] = await db
-        .select({ id: watchlistSections.id })
-        .from(watchlistSections)
-        .where(and(eq(watchlistSections.id, body.sectionId), eq(watchlistSections.userId, userId)))
-        .limit(1);
-
-      if (!section) {
-        return reply.status(400).send({ error: 'Invalid section ID — not owned by current user' });
-      }
-    }
-
     const updates: Record<string, unknown> = {};
     if (body.notes !== undefined) updates.notes = body.notes;
-    if (body.sectionId !== undefined) updates.sectionId = body.sectionId;
 
     if (Object.keys(updates).length === 0) {
       return existing;
@@ -231,7 +216,6 @@ export function registerWatchlistRoutes(
               required: ['ticker'],
               properties: {
                 ticker: { type: 'string', pattern: '^[A-Za-z.]{1,10}$' },
-                sectionId: { type: 'string' },
                 notes: { type: 'string' },
               },
             },
@@ -241,7 +225,7 @@ export function registerWatchlistRoutes(
     },
   }, async (request, reply) => {
     const { tickers } = request.body as {
-      tickers: Array<{ ticker: string; sectionId?: string; notes?: string }>;
+      tickers: Array<{ ticker: string; notes?: string }>;
     };
     const userId = resolveRequestUserId(request);
 
@@ -249,19 +233,6 @@ export function registerWatchlistRoutes(
 
     if (tickers.length === 0) {
       return { added: 0, skipped: 0 };
-    }
-
-    const sectionIds = [...new Set(tickers.filter(t => t.sectionId).map(t => t.sectionId as string))];
-    if (sectionIds.length > 0) {
-      const ownedSections = await db
-        .select({ id: watchlistSections.id })
-        .from(watchlistSections)
-        .where(eq(watchlistSections.userId, userId));
-      const ownedIds = new Set(ownedSections.map(s => s.id));
-      const invalid = sectionIds.filter(id => !ownedIds.has(id));
-      if (invalid.length > 0) {
-        return reply.status(400).send({ error: 'Invalid section ID(s) — not owned by current user' });
-      }
     }
 
     let added = 0;
@@ -285,7 +256,6 @@ export function registerWatchlistRoutes(
         userId,
         ticker: upperTicker,
         notes: item.notes ?? null,
-        sectionId: item.sectionId ?? null,
         sortOrder: nextSortOrder,
       });
       added++;

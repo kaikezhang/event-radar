@@ -134,8 +134,7 @@ describe('Feed page', () => {
     expect(localStorage.getItem('er-feed-sort')).toBe('severity');
   });
 
-  it('hides LOW alerts in smart mode while all-events mode still shows them', async () => {
-    const user = userEvent.setup();
+  it('keeps the Smart Feed as the only feed mode and hides LOW alerts by default', async () => {
     const fetchMock = vi.mocked(fetch);
     const originalImplementation = fetchMock.getMockImplementation();
 
@@ -177,60 +176,9 @@ describe('Feed page', () => {
     renderWithRouter([{ path: '/', element: <Feed /> }], ['/?tab=all']);
 
     expect(await screen.findByRole('article', { name: /high-priority nvda filing/i })).toBeInTheDocument();
-    expect(screen.getByRole('article', { name: /low-priority tsla chatter/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /all events/i }));
-    await user.click(screen.getByRole('button', { name: /smart feed/i }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole('article', { name: /low-priority tsla chatter/i })).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows LOW alerts in all-events mode without the removed quality stats', async () => {
-    const fetchMock = vi.mocked(fetch);
-    const originalImplementation = fetchMock.getMockImplementation();
-
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
-
-      if (url.pathname === '/api/v1/feed') {
-        return jsonResponse({
-          events: [
-            {
-              id: 'evt-all-high',
-              severity: 'HIGH',
-              source: 'breaking-news',
-              title: 'High-priority macro catalyst',
-              summary: 'Important catalyst.',
-              pushed: true,
-              tickers: ['SPY'],
-              receivedAt: '2026-03-12T20:05:00.000Z',
-            },
-            {
-              id: 'evt-all-low',
-              severity: 'LOW',
-              source: 'stocktwits',
-              title: 'Low-priority meme chatter',
-              summary: 'Background social activity.',
-              pushed: false,
-              tickers: ['GME'],
-              receivedAt: '2026-03-12T19:05:00.000Z',
-            },
-          ],
-          cursor: null,
-          total: 2,
-        });
-      }
-
-      return originalImplementation?.(input, init) as Promise<Response>;
-    });
-
-    renderWithRouter([{ path: '/', element: <Feed /> }], ['/?tab=all']);
-
-    expect(await screen.findByRole('article', { name: /high-priority macro catalyst/i })).toBeInTheDocument();
-    expect(screen.getByRole('article', { name: /low-priority meme chatter/i })).toBeInTheDocument();
-    expect(screen.queryByText(/2 events · 1 high\+ · 1 low/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /low-priority tsla chatter/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/all events/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/my watchlist/i)).not.toBeInTheDocument();
   });
 
   it('collapses same-ticker duplicate reports into one card with related-source context', async () => {

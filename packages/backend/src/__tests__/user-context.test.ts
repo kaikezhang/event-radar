@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveRequestUserId, DEFAULT_USER_ID } from '../routes/user-context.js';
+import { resolveRequestUserId, DEFAULT_USER_ID } from '../utils/request-user.js';
 import type { FastifyRequest } from 'fastify';
 
 function fakeRequest(overrides: Partial<FastifyRequest> = {}): FastifyRequest {

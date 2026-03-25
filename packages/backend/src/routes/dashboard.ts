@@ -651,7 +651,7 @@ export function registerDashboardRoutes(
       const { sql: sqlTag } = await import('drizzle-orm');
       const { eq } = await import('drizzle-orm');
       const { watchlist } = await import('../db/schema.js');
-      const { resolveRequestUserId } = await import('./user-context.js');
+      const { resolveRequestUserId } = await import('../utils/request-user.js');
 
       const conds: ReturnType<typeof sqlTag>[] = [
         sqlTag`pa.outcome = 'delivered'`,
@@ -857,7 +857,7 @@ export function registerDashboardRoutes(
     try {
       const { eq } = await import('drizzle-orm');
       const { watchlist } = await import('../db/schema.js');
-      const { resolveRequestUserId } = await import('./user-context.js');
+      const { resolveRequestUserId } = await import('../utils/request-user.js');
 
       const userId = resolveRequestUserId(request);
       const watchlistRows = await deps.db

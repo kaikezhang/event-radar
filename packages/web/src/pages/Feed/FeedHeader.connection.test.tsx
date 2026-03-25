@@ -24,14 +24,10 @@ function renderHeaderWithConnection(
 
     return (
       <FeedHeader
-        activeTab="all"
         activeFilterCount={0}
         hasActiveFilters={false}
         onSortModeChange={vi.fn()}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />
     );

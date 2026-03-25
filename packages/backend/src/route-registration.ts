@@ -9,13 +9,7 @@ import type { MarketDataCache } from './services/market-data-cache.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerScannerRoutes } from './routes/scanners.js';
 import { registerOutcomeRoutes } from './routes/outcomes.js';
-import { registerWinRateRoutes } from './routes/win-rate.js';
-import { registerStoryGroupRoutes } from './routes/story-groups.js';
-import { registerAccuracyRoutes } from './routes/accuracy.js';
 import { registerAlertScorecardRoutes } from './routes/alert-scorecard.js';
-import { registerAdaptiveRoutes } from './routes/adaptive.js';
-import { registerFeedbackRoutes } from './routes/feedback.js';
-import { registerRulesRoutes } from './routes/rules.js';
 import { registerAlertBudgetRoutes } from './routes/alert-budget.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
 import { registerTickerRoutes } from './routes/tickers.js';
@@ -31,13 +25,9 @@ import { registerAiObservabilityRoutes } from './routes/ai-observability.js';
 import { registerDeliveryFeedRoutes } from './routes/delivery-feed.js';
 import { registerJudgeRoutes } from './routes/judge.js';
 import { registerPriceRoutes } from './routes/price.js';
-import { registerBriefingRoutes } from './routes/briefing.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
-import { registerRegimeRoutes } from './routes/regime.js';
-import { registerAdminDeliveryRoutes } from './routes/admin-delivery.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
-import { registerReportRoutes } from './routes/reports.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerApiDocsRoutes } from './routes/api-docs.js';
 import { createLLMProvider } from './services/llm-provider.js';
@@ -73,7 +63,6 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     tickerMarketDataCache,
     marketCache,
     killSwitch,
-    healthMonitor,
     priceChartService,
     priceBatchService,
     startTime,
@@ -94,10 +83,6 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     version,
     startTime,
   });
-  registerRegimeRoutes(server, {
-    apiKey,
-    marketRegimeService,
-  });
 
   // Register event query routes if db is available
   if (db) {
@@ -110,12 +95,6 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerHistoricalRoutes(server, db, { apiKey });
     registerAlertScorecardRoutes(server, db, { apiKey });
     registerOutcomeRoutes(server, db);
-    registerWinRateRoutes(server, db);
-    registerStoryGroupRoutes(server, db);
-    registerAccuracyRoutes(server, db, { apiKey });
-    registerAdaptiveRoutes(server, db, { apiKey });
-    registerFeedbackRoutes(server, db, { apiKey });
-    registerRulesRoutes(server, db, { apiKey });
     registerAlertBudgetRoutes(server, db, { apiKey, eventBus });
     registerWatchlistRoutes(server, db, { apiKey });
     registerTickerRoutes(server, db);
@@ -123,17 +102,8 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     registerPushSubscriptionRoutes(server, db, { apiKey });
     registerPreferencesRoutes(server, db, { apiKey });
     registerNotificationSettingsRoutes(server, db, { apiKey });
-    registerBriefingRoutes(server, db, { apiKey });
-    registerReportRoutes(server, db, { apiKey });
     registerCalendarRoutes(server, db, { apiKey });
     registerAuthRoutes(server, db);
-    if (killSwitch && healthMonitor) {
-      registerAdminDeliveryRoutes(server, {
-        apiKey,
-        killSwitch,
-        healthMonitor,
-      });
-    }
   }
 
   // Register classify debug route (works without DB)

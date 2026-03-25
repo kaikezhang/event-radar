@@ -1,7 +1,6 @@
 import type {
   AlertSummary,
   ChartRange,
-  DailyBriefingData,
   EnrichmentTicker,
   EventMarketData,
   EventOutcome,
@@ -864,34 +863,6 @@ export async function getTickerPricesBatch(tickers: string[]): Promise<Record<st
   }
 
   return quotes;
-}
-
-export async function getDailyBriefing(): Promise<DailyBriefingData> {
-  const data = await apiFetch('/v1/briefing/daily');
-  const bySeverity = (data.bySeverity ?? {}) as Record<string, unknown>;
-
-  return {
-    date: (data.date as string) ?? '',
-    totalEvents: Number(data.totalEvents ?? 0),
-    bySeverity: {
-      CRITICAL: Number(bySeverity.CRITICAL ?? 0),
-      HIGH: Number(bySeverity.HIGH ?? 0),
-      MEDIUM: Number(bySeverity.MEDIUM ?? 0),
-      LOW: Number(bySeverity.LOW ?? 0),
-    },
-    topEvents: ((data.topEvents as Record<string, unknown>[] | undefined) ?? []).map((event) => ({
-      title: (event.title as string) ?? '',
-      ticker: (event.ticker as string | null) ?? null,
-      severity: (event.severity as string) ?? 'LOW',
-    })),
-    bySource: Object.fromEntries(
-      Object.entries((data.bySource ?? {}) as Record<string, unknown>).map(([source, count]) => [
-        source,
-        Number(count ?? 0),
-      ]),
-    ),
-    watchlistEvents: Number(data.watchlistEvents ?? 0),
-  };
 }
 
 export async function getWatchlist(): Promise<WatchlistItem[]> {

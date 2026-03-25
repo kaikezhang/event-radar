@@ -25,7 +25,7 @@ export function Feed() {
     queryFn: getEventSources,
     staleTime: 60_000,
   });
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const {
     items: watchlistItems,
     isLoading: isWatchlistLoading,
@@ -38,12 +38,9 @@ export function Feed() {
   const state = useFeedState({
     addAsync,
     hasWatchlist: watchlistItems.length > 0,
-    isAuthenticated,
-    isAuthLoading,
     isDesktop,
     isOnWatchlist,
     isWatchlistLoading,
-    watchlistItems,
   });
 
   const feedList = (
@@ -51,7 +48,6 @@ export function Feed() {
       activeFilterCount={state.activeFilterCount}
       activeSeverities={state.activeSeverities}
       activeSources={state.activeSources}
-      activeTab={state.activeTab}
       addFilterRef={state.addFilterRef}
       addToWatchlist={add}
       applyPendingAlerts={state.applyPendingAlerts}
@@ -63,7 +59,6 @@ export function Feed() {
       handleCardClick={state.handleCardClick}
       handleDismiss={state.handleDismiss}
       handleQuickWatchlist={state.handleQuickWatchlist}
-      handleTabChange={state.handleTabChange}
       hasActiveFilters={state.hasActiveFilters}
       isDesktop={isDesktop}
       isEmpty={state.isEmpty}
@@ -72,7 +67,6 @@ export function Feed() {
       isOnWatchlist={isOnWatchlist}
       isRefreshing={state.isRefreshing}
       newAlertIds={state.newAlertIds}
-      onToggleModeDropdown={() => state.setShowModeDropdown((current) => !current)}
       onToggleWatchlist={add}
       pendingCount={state.pendingCount}
       pushOnly={state.pushOnly}
@@ -81,7 +75,6 @@ export function Feed() {
       sentinelRef={state.sentinelRef}
       showAddFilterDropdown={state.showAddFilterDropdown}
       showFilters={state.showFilters}
-      showModeDropdown={state.showModeDropdown}
       showSmartFeedEmpty={state.showSmartFeedEmpty}
       showUnauthBanner={!user && !state.bannerDismissed}
       showWatchlistOnboarding={state.showWatchlistOnboarding}

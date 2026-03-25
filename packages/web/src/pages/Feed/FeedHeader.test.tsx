@@ -6,32 +6,24 @@ describe('FeedHeader', () => {
   it('shows the active feed mode label', () => {
     render(
       <FeedHeader
-        activeTab="watchlist"
         activeFilterCount={0}
         hasActiveFilters={false}
         onSortModeChange={vi.fn()}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />,
     );
 
-    expect(screen.getByRole('button', { name: /my watchlist/i })).toBeInTheDocument();
+    expect(screen.getByText(/smart feed/i)).toBeInTheDocument();
   });
 
   it('shows the active filter count badge', () => {
     render(
       <FeedHeader
-        activeTab="all"
         activeFilterCount={3}
         hasActiveFilters
         onSortModeChange={vi.fn()}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />,
     );
@@ -45,14 +37,10 @@ describe('FeedHeader', () => {
 
     render(
       <FeedHeader
-        activeTab="all"
         activeFilterCount={0}
         hasActiveFilters={false}
         onSortModeChange={onSortModeChange}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />,
     );
@@ -67,25 +55,21 @@ describe('FeedHeader', () => {
 
     render(
       <FeedHeader
-        activeTab="smart"
         activeFilterCount={0}
         hasActiveFilters={false}
         onSortModeChange={vi.fn()}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />,
     );
 
-    expect(screen.queryByText(/smart feed shows events matching your watchlist tickers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/smart feed shows watchlist-matching events/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /what is smart feed\?/i }));
 
     expect(
       screen.getByText(
-        /smart feed shows events matching your watchlist tickers, plus all critical events and high-severity events from trusted sources like sec filings and breaking news\./i,
+        /smart feed shows watchlist-matching events plus top-priority market-moving alerts\./i,
       ),
     ).toBeInTheDocument();
 
@@ -93,7 +77,7 @@ describe('FeedHeader', () => {
 
     expect(
       screen.queryByText(
-        /smart feed shows events matching your watchlist tickers, plus all critical events and high-severity events from trusted sources like sec filings and breaking news\./i,
+        /smart feed shows watchlist-matching events plus top-priority market-moving alerts\./i,
       ),
     ).not.toBeInTheDocument();
   });
@@ -101,18 +85,16 @@ describe('FeedHeader', () => {
   it('does not render the removed signal summary bar or shortcut hint', () => {
     render(
       <FeedHeader
-        activeTab="all"
         activeFilterCount={0}
         hasActiveFilters={false}
         onSortModeChange={vi.fn()}
-        onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
-        onToggleModeDropdown={vi.fn()}
-        showModeDropdown={false}
         sortMode="latest"
       />,
     );
 
+    expect(screen.queryByText(/all events/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/my watchlist/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/press \? for keyboard shortcuts/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/important events today/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/events · 2 high\+ · 1 low/i)).not.toBeInTheDocument();

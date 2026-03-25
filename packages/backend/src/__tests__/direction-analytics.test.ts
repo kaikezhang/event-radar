@@ -1,21 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import type { RawEvent, ClassificationPrediction, ClassificationOutcome } from '@event-radar/shared';
 import { storeEvent } from '../db/event-store.js';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
 import { DirectionAnalyticsService } from '../services/direction-analytics.js';
-import { registerAccuracyRoutes } from '../routes/accuracy.js';
 import {
   createTestDb,
   cleanTestDb,
   safeClose,
-  safeCloseServer,
 } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { PGlite } from '@electric-sql/pglite';
-
-const TEST_API_KEY = 'direction-test-key';
 
 function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -283,76 +278,5 @@ describe('DirectionAnalyticsService', () => {
     const breakdown = await service.getDirectionBreakdown({ period: '30d' });
     expect(breakdown.period).toBe('30d');
     expect(breakdown.horizons['1d'].total).toBe(1); // only recent
-  });
-});
-
-describe('Direction analytics API', () => {
-  let db: Database;
-  let client: PGlite;
-  let apiServer: FastifyInstance;
-
-  beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-    apiServer = Fastify({ logger: false });
-    registerAccuracyRoutes(apiServer, db, { apiKey: TEST_API_KEY });
-    await apiServer.ready();
-  }, 20000);
-
-  afterAll(async () => {
-    await safeCloseServer(apiServer);
-    await safeClose(client);
-  }, 20000);
-
-  beforeEach(async () => {
-    await cleanTestDb(db);
-  });
-
-  it('requires API key for direction endpoint', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/direction',
-    });
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('returns direction breakdown from API', async () => {
-    const accuracy = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
-    await accuracy.recordPrediction(eventId, makePrediction({ predictedDirection: 'bullish' }));
-    await accuracy.recordOutcome(eventId, makeOutcome({ priceChangePercent1d: 5.0 }));
-
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/direction?period=30d',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.period).toBe('30d');
-    expect(body.horizons['1d'].tp).toBe(1);
-  });
-
-  it('returns calibration data from API', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/calibration',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body).toHaveLength(5);
-  });
-
-  it('returns mispredictions from API', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/mispredictions?limit=10',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([]);
   });
 });

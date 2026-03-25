@@ -1,21 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import type { RawEvent, ClassificationPrediction, ClassificationOutcome } from '@event-radar/shared';
 import { storeEvent } from '../db/event-store.js';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
 import { UserFeedbackService } from '../services/user-feedback.js';
-import { registerFeedbackRoutes } from '../routes/feedback.js';
 import {
   createTestDb,
   cleanTestDb,
   safeClose,
-  safeCloseServer,
 } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { PGlite } from '@electric-sql/pglite';
-
-const TEST_API_KEY = 'feedback-test-key';
 
 function makeRawEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -162,90 +157,5 @@ describe('UserFeedbackService', () => {
     const stats = await service.getFeedbackStats();
     expect(stats.total).toBe(2);
     expect(stats.agreementRate).toBe(0.5); // 1 agreement out of 2
-  });
-});
-
-describe('Feedback API', () => {
-  let db: Database;
-  let client: PGlite;
-  let apiServer: FastifyInstance;
-
-  beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-    apiServer = Fastify({ logger: false });
-    registerFeedbackRoutes(apiServer, db, { apiKey: TEST_API_KEY });
-    await apiServer.ready();
-  }, 20000);
-
-  afterAll(async () => {
-    await safeCloseServer(apiServer);
-    await safeClose(client);
-  }, 20000);
-
-  beforeEach(async () => {
-    await cleanTestDb(db);
-  });
-
-  it('requires API key for feedback submission', async () => {
-    const response = await apiServer.inject({
-      method: 'POST',
-      url: `/api/v1/feedback/${randomUUID()}`,
-      payload: { verdict: 'correct' },
-    });
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('submits feedback via API', async () => {
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
-
-    const response = await apiServer.inject({
-      method: 'POST',
-      url: `/api/v1/feedback/${eventId}`,
-      headers: { 'x-api-key': TEST_API_KEY },
-      payload: { verdict: 'correct', note: 'Good call' },
-    });
-
-    expect(response.statusCode).toBe(201);
-    expect(response.json().success).toBe(true);
-  });
-
-  it('retrieves feedback via API', async () => {
-    const eventId = await storeEvent(db, { event: makeRawEvent(), severity: 'HIGH' });
-    const service = new UserFeedbackService(db);
-    await service.submitFeedback(eventId, 'incorrect', 'Bad call');
-
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: `/api/v1/feedback/${eventId}`,
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.verdict).toBe('incorrect');
-    expect(body.note).toBe('Bad call');
-  });
-
-  it('returns 404 for non-existent feedback', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: `/api/v1/feedback/${randomUUID()}`,
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(404);
-  });
-
-  it('returns feedback stats via API', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/feedback/stats',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.total).toBe(0);
-    expect(body).toHaveProperty('agreementRate');
   });
 });

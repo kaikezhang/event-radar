@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
-import { ensureUserExists, resolveRequestUserId } from './user-context.js';
+import { ensureUserExists, resolveRequestUserId } from '../utils/request-user.js';
 import { createNotificationSettingsStore } from '../services/notification-settings-store.js';
 
 const DISCORD_WEBHOOK_RE = /^https:\/\/discord\.com\/api\/webhooks\//;
