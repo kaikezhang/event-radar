@@ -123,17 +123,6 @@ input {
   background: rgba(249, 115, 22, 0.3);
 }
 
-@keyframes confetti-fall {
-  0% {
-    opacity: 1;
-    transform: translateY(0) rotate(0deg) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(70vh) rotate(720deg) scale(0.5);
-  }
-}
-
 @keyframes highlight-entrance {
   0% {
     background-color: rgba(249, 115, 22, 0.12);

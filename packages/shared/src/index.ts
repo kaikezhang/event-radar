@@ -84,17 +84,6 @@ export {
   type AccuracyEventDetails,
 } from './schemas/accuracy-types.js';
 export {
-  WinRateBreakdownSchema,
-  DirectionAccuracySchema,
-  DirectionAccuracyBucketSchema,
-  SignalPerformanceSchema,
-  PerformanceTrendSchema,
-  type WinRateBreakdown,
-  type DirectionAccuracy,
-  type SignalPerformance,
-  type PerformanceTrend,
-} from './schemas/win-rate-types.js';
-export {
   SimilarityOptionsSchema,
   SimilarityScoreSchema,
   SimilarEventSchema,
@@ -114,18 +103,6 @@ export {
   type MergedEventData,
   type CrossSourceDedupOptions,
 } from './schemas/dedup-types.js';
-export {
-  StoryGroupStatusSchema,
-  StoryEventSchema,
-  StoryGroupSchema,
-  StoryGroupResultSchema,
-  StoryGroupOptionsSchema,
-  type StoryGroupStatus,
-  type StoryEvent,
-  type StoryGroup,
-  type StoryGroupResult,
-  type StoryGroupOptions,
-} from './schemas/story-group-types.js';
 export {
   ConfirmationResultSchema,
   ConfirmationConfigSchema,
@@ -202,18 +179,6 @@ export {
   type RuleInput,
   type RuleTestRequest,
 } from './schemas/rule-types.js';
-export {
-  BudgetConfigSchema,
-  BudgetUsageSchema,
-  BudgetDecisionSchema,
-  SeverityResultSchema,
-  SeverityChangeSchema,
-  type BudgetConfig,
-  type BudgetUsage,
-  type BudgetDecision,
-  type SeverityResult,
-  type SeverityChange,
-} from './schemas/alert-budget-types.js';
 export {
   HistoryEventSchema,
   HistoryPaginationSchema,

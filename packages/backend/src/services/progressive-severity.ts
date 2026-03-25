@@ -1,11 +1,8 @@
+import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
 import {
-  SeverityChangeSchema,
-  SeverityResultSchema,
   type EventBus,
   type Priority,
-  type SeverityChange,
-  type SeverityResult,
 } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import {
@@ -17,7 +14,28 @@ import {
 
 type DbTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
-const SEVERITY_ORDER: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const SEVERITY_ORDER = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const satisfies readonly Priority[];
+
+const SeverityResultSchema = z.object({
+  severity: z.enum(SEVERITY_ORDER),
+  reason: z.string(),
+  locked: z.boolean(),
+  sourceCount: z.number().int().min(0),
+});
+
+type SeverityResult = z.infer<typeof SeverityResultSchema>;
+
+const SeverityChangeSchema = z.object({
+  id: z.string().uuid(),
+  eventId: z.string().uuid(),
+  previousSeverity: z.enum(SEVERITY_ORDER),
+  newSeverity: z.enum(SEVERITY_ORDER),
+  reason: z.string(),
+  changedBy: z.enum(['system', 'user']),
+  createdAt: z.string(),
+});
+
+type SeverityChange = z.infer<typeof SeverityChangeSchema>;
 
 interface ProgressiveSeverityServiceOptions {
   eventBus?: EventBus;
