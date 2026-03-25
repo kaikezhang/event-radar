@@ -8,19 +8,13 @@ describe('FeedHeader', () => {
       <FeedHeader
         activeTab="watchlist"
         activeFilterCount={0}
-        highSignalCount={0}
-        hiddenLowCount={0}
         hasActiveFilters={false}
-        lowSignalCount={0}
-        mediumSignalCount={0}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={0}
       />,
     );
 
@@ -32,19 +26,13 @@ describe('FeedHeader', () => {
       <FeedHeader
         activeTab="all"
         activeFilterCount={3}
-        highSignalCount={0}
-        hiddenLowCount={0}
         hasActiveFilters
-        lowSignalCount={0}
-        mediumSignalCount={0}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={0}
       />,
     );
 
@@ -59,19 +47,13 @@ describe('FeedHeader', () => {
       <FeedHeader
         activeTab="all"
         activeFilterCount={0}
-        highSignalCount={0}
-        hiddenLowCount={0}
         hasActiveFilters={false}
-        lowSignalCount={0}
-        mediumSignalCount={0}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={onSortModeChange}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={0}
       />,
     );
 
@@ -87,19 +69,13 @@ describe('FeedHeader', () => {
       <FeedHeader
         activeTab="smart"
         activeFilterCount={0}
-        highSignalCount={2}
-        hiddenLowCount={0}
         hasActiveFilters={false}
-        lowSignalCount={0}
-        mediumSignalCount={1}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={4}
       />,
     );
 
@@ -127,19 +103,13 @@ describe('FeedHeader', () => {
       <FeedHeader
         activeTab="all"
         activeFilterCount={0}
-        highSignalCount={2}
-        hiddenLowCount={0}
         hasActiveFilters={false}
-        lowSignalCount={1}
-        mediumSignalCount={1}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={1}
       />,
     );
 

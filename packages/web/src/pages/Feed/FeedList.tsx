@@ -7,12 +7,11 @@ import { useConnectionStatus } from '../../contexts/ConnectionContext.js';
 import { useTickerBatchPrices } from '../../hooks/useTickerBatchPrices.js';
 import { cn } from '../../lib/utils.js';
 import { DailyBriefing } from '../../components/DailyBriefing.js';
-import type { AlertSummary, FilterPreset } from '../../types/index.js';
+import type { AlertSummary } from '../../types/index.js';
 import { FeedCard } from './FeedCard.js';
 import { FeedFilters } from './FeedFilters.js';
 import { FeedHeader } from './FeedHeader.js';
 import {
-  BUILT_IN_PRESETS,
   POPULAR_TICKERS,
   PULL_THRESHOLD,
   SEVERITIES,
@@ -23,21 +22,14 @@ import {
 
 interface FeedListProps {
   activeFilterCount: number;
-  highSignalCount: number;
-  hiddenLowCount: number;
-  lowSignalCount: number;
-  mediumSignalCount: number;
   activeSeverities: string[];
   activeSources: string[];
   activeTab: FeedTab;
   addFilterRef: RefObject<HTMLDivElement | null>;
   addToWatchlist: (ticker: string) => void;
-  allPresets: FilterPreset[];
-  applyPreset: (preset: FilterPreset) => void;
   applyPendingAlerts: () => void;
   clearFilters: () => void;
   dateGroups: DateGroup[];
-  deletePreset: (name: string) => void;
   dismissBanner: () => void;
   error: unknown;
   filteredAlerts: AlertSummary[];
@@ -53,16 +45,11 @@ interface FeedListProps {
   isOnWatchlist: (ticker: string) => boolean;
   isRefreshing: boolean;
   newAlertIds: Set<string>;
-  onPresetNameChange: (value: string) => void;
   onToggleModeDropdown: () => void;
   onToggleWatchlist: (ticker: string) => void;
   pendingCount: number;
-  presetName: string;
   pushOnly: boolean;
   pullDistance: number;
-  revealLowSeverity: () => void;
-  savePreset: () => void;
-  scopedAlertCount: number;
   selectedEventId: string | null;
   sentinelRef: RefObject<HTMLDivElement | null>;
   showAddFilterDropdown: boolean;
@@ -88,21 +75,14 @@ interface FeedListProps {
 
 export function FeedList({
   activeFilterCount,
-  highSignalCount,
-  hiddenLowCount,
-  lowSignalCount,
-  mediumSignalCount,
   activeSeverities,
   activeSources,
   activeTab,
   addFilterRef,
   addToWatchlist,
-  allPresets,
-  applyPreset,
   applyPendingAlerts,
   clearFilters,
   dateGroups,
-  deletePreset,
   dismissBanner,
   error,
   filteredAlerts,
@@ -118,16 +98,11 @@ export function FeedList({
   isOnWatchlist,
   isRefreshing,
   newAlertIds,
-  onPresetNameChange,
   onToggleModeDropdown,
   onToggleWatchlist,
   pendingCount,
-  presetName,
   pushOnly,
   pullDistance,
-  revealLowSeverity,
-  savePreset,
-  scopedAlertCount,
   selectedEventId,
   sentinelRef,
   showAddFilterDropdown,
@@ -181,40 +156,26 @@ export function FeedList({
       <FeedHeader
         activeFilterCount={activeFilterCount}
         activeTab={activeTab}
-        highSignalCount={highSignalCount}
-        hiddenLowCount={hiddenLowCount}
         hasActiveFilters={hasActiveFilters}
-        lowSignalCount={lowSignalCount}
-        mediumSignalCount={mediumSignalCount}
-        onRevealLowSeverity={revealLowSeverity}
         onSortModeChange={toggleSortMode}
         onTabChange={handleTabChange}
         onToggleFilters={toggleFilters}
         onToggleModeDropdown={onToggleModeDropdown}
         showModeDropdown={showModeDropdown}
         sortMode={sortMode}
-        totalCount={scopedAlertCount}
       />
 
       <FeedFilters
         activeSeverities={activeSeverities}
         activeSources={activeSources}
         addFilterRef={addFilterRef}
-        allPresets={allPresets}
-        builtinPresetNames={BUILT_IN_PRESETS.map((preset) => preset.name)}
         hasActiveFilters={hasActiveFilters}
         pushOnly={pushOnly}
-        onApplyPreset={applyPreset}
-        onCloseAddFilterDropdown={toggleAddFilterDropdown}
         onClearFilters={clearFilters}
-        onDeletePreset={deletePreset}
-        onPresetNameChange={onPresetNameChange}
-        onSavePreset={savePreset}
         onToggleAddFilterDropdown={toggleAddFilterDropdown}
         onTogglePushOnly={togglePushOnly}
         onToggleSeverity={toggleSeverity}
         onToggleSource={toggleSource}
-        presetName={presetName}
         severities={SEVERITIES}
         showAddFilterDropdown={showAddFilterDropdown}
         showFilters={showFilters}

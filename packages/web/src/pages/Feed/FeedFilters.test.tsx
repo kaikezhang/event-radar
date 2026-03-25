@@ -17,7 +17,6 @@ describe('FeedFilters', () => {
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown={false}
         showFilters={false}
@@ -42,7 +41,6 @@ describe('FeedFilters', () => {
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown
         showFilters={false}

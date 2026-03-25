@@ -49,21 +49,14 @@ export function Feed() {
   const feedList = (
     <FeedList
       activeFilterCount={state.activeFilterCount}
-      highSignalCount={state.highSignalCount}
-      hiddenLowCount={state.hiddenLowCount}
-      lowSignalCount={state.lowSignalCount}
-      mediumSignalCount={state.mediumSignalCount}
       activeSeverities={state.activeSeverities}
       activeSources={state.activeSources}
       activeTab={state.activeTab}
       addFilterRef={state.addFilterRef}
       addToWatchlist={add}
-      allPresets={state.allPresets}
-      applyPreset={state.applyPreset}
       applyPendingAlerts={state.applyPendingAlerts}
       clearFilters={state.clearFilters}
       dateGroups={state.dateGroups}
-      deletePreset={state.deletePreset}
       dismissBanner={state.dismissBanner}
       error={state.error}
       filteredAlerts={state.filteredAlerts}
@@ -79,16 +72,11 @@ export function Feed() {
       isOnWatchlist={isOnWatchlist}
       isRefreshing={state.isRefreshing}
       newAlertIds={state.newAlertIds}
-      onPresetNameChange={state.setPresetName}
       onToggleModeDropdown={() => state.setShowModeDropdown((current) => !current)}
       onToggleWatchlist={add}
       pendingCount={state.pendingCount}
-      presetName={state.presetName}
       pushOnly={state.pushOnly}
       pullDistance={state.pullDistance}
-      revealLowSeverity={state.revealLowSeverity}
-      savePreset={state.savePreset}
-      scopedAlertCount={state.scopedAlertCount}
       selectedEventId={state.selectedEventId}
       sentinelRef={state.sentinelRef}
       showAddFilterDropdown={state.showAddFilterDropdown}

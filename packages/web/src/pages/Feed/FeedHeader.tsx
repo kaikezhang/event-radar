@@ -7,37 +7,25 @@ import type { FeedTab, SortMode } from './useFeedState.js';
 interface FeedHeaderProps {
   activeFilterCount: number;
   activeTab: FeedTab;
-  highSignalCount: number;
-  hiddenLowCount: number;
   hasActiveFilters: boolean;
-  lowSignalCount: number;
-  mediumSignalCount: number;
-  onRevealLowSeverity: () => void;
   onSortModeChange: (mode: SortMode) => void;
   onTabChange: (tab: FeedTab) => void;
   onToggleFilters: () => void;
   onToggleModeDropdown: () => void;
   showModeDropdown: boolean;
   sortMode: SortMode;
-  totalCount: number;
 }
 
 export function FeedHeader({
   activeFilterCount,
   activeTab,
   hasActiveFilters,
-  highSignalCount: _highSignalCount,
-  hiddenLowCount: _hiddenLowCount,
-  lowSignalCount: _lowSignalCount,
-  mediumSignalCount: _mediumSignalCount,
-  onRevealLowSeverity: _onRevealLowSeverity,
   onSortModeChange,
   onTabChange,
   onToggleFilters,
   onToggleModeDropdown,
   showModeDropdown,
   sortMode,
-  totalCount: _totalCount,
 }: FeedHeaderProps) {
   const connectionStatus = useConnectionStatus();
   const connectionRetry = useConnectionRetry();

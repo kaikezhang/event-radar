@@ -1,27 +1,19 @@
 import type { RefObject } from 'react';
 import { BellRing, Plus, X } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
-import type { FilterPreset } from '../../types/index.js';
+
 
 interface FeedFiltersProps {
   activeSeverities: string[];
   activeSources: string[];
   addFilterRef: RefObject<HTMLDivElement | null>;
-  allPresets?: FilterPreset[];
-  builtinPresetNames?: string[];
   hasActiveFilters: boolean;
   pushOnly: boolean;
-  onApplyPreset?: (preset: FilterPreset) => void;
-  onCloseAddFilterDropdown?: () => void;
   onClearFilters: () => void;
-  onDeletePreset?: (name: string) => void;
-  onPresetNameChange?: (value: string) => void;
-  onSavePreset?: () => void;
   onToggleAddFilterDropdown: () => void;
   onTogglePushOnly: () => void;
   onToggleSeverity: (severity: string) => void;
   onToggleSource: (source: string) => void;
-  presetName?: string;
   severities: readonly string[];
   showAddFilterDropdown: boolean;
   showFilters: boolean;

@@ -26,19 +26,13 @@ function renderHeaderWithConnection(
       <FeedHeader
         activeTab="all"
         activeFilterCount={0}
-        highSignalCount={0}
-        hiddenLowCount={0}
         hasActiveFilters={false}
-        lowSignalCount={0}
-        mediumSignalCount={0}
-        onRevealLowSeverity={vi.fn()}
         onSortModeChange={vi.fn()}
         onTabChange={vi.fn()}
         onToggleFilters={vi.fn()}
         onToggleModeDropdown={vi.fn()}
         showModeDropdown={false}
         sortMode="latest"
-        totalCount={0}
       />
     );
   }
