@@ -444,11 +444,15 @@ export function registerEventRoutes(
 
     const conditions = [];
 
-    conditions.push(sql`EXISTS (
+    // Show events that are either:
+    // 1. Delivered through the pipeline (audit outcome = 'delivered')
+    // 2. Have no audit record at all (backfill/historical data)
+    // Exclude events that were explicitly filtered by the pipeline
+    conditions.push(sql`NOT EXISTS (
       SELECT 1
       FROM ${pipelineAudit}
       WHERE ${pipelineAudit.eventId} = ${events.sourceEventId}
-        AND ${pipelineAudit.outcome} = 'delivered'
+        AND ${pipelineAudit.outcome} IN ('filtered', 'duplicate', 'rejected')
     )`);
 
     // Filter by ticker (search in metadata->>'ticker')

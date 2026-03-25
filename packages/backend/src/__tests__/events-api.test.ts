@@ -521,7 +521,7 @@ describe('GET /api/events delivery filtering', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('returns only events that were delivered by the pipeline', async () => {
+  it('returns delivered events and events without audit records, but excludes filtered events', async () => {
     const response = await ctx.server.inject({
       method: 'GET',
       url: '/api/events',
@@ -531,16 +531,14 @@ describe('GET /api/events delivery filtering', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      total: 1,
-      data: [
-        expect.objectContaining({
-          title: 'Delivered market-moving event',
-          source: 'breaking-news',
-          severity: 'HIGH',
-        }),
-      ],
-    });
+    const body = response.json();
+    // Should include delivered (has audit=delivered) + pending (no audit record)
+    // Should exclude filtered (has audit=filtered)
+    expect(body.total).toBe(2);
+    const titles = body.data.map((e: { title: string }) => e.title);
+    expect(titles).toContain('Delivered market-moving event');
+    expect(titles).toContain('No audit yet');
+    expect(titles).not.toContain('Blocked low-quality event');
   });
 });
 
