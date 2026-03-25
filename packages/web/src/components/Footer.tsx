@@ -4,8 +4,6 @@ export function Footer() {
   return (
     <footer className="mt-8 border-t border-border-default pb-4 pt-4 text-center text-[12px] text-text-tertiary">
       <div className="flex items-center justify-center gap-3">
-        <Link to="/about" className="hover:text-text-secondary transition">About</Link>
-        <span>|</span>
         <Link to="/privacy" className="hover:text-text-secondary transition">Privacy Policy</Link>
         <span>|</span>
         <Link to="/terms" className="hover:text-text-secondary transition">Terms of Service</Link>

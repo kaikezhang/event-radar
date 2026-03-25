@@ -48,8 +48,8 @@ function mockFetch() {
   });
 }
 
-async function goToStep2(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: /get started/i }));
+async function goToStep2() {
+  await screen.findByRole('heading', { name: /add tickers to your watchlist/i });
 }
 
 describe('Onboarding page', () => {
@@ -58,7 +58,7 @@ describe('Onboarding page', () => {
     localStorage.clear();
   });
 
-  it('renders welcome step initially', () => {
+  it('starts directly on the watchlist step', async () => {
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -66,13 +66,11 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    expect(screen.getByText('Welcome to Event Radar')).toBeInTheDocument();
-    expect(screen.getByText(/track market-moving events/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /add tickers to your watchlist/i })).toBeInTheDocument();
+    expect(screen.queryByText(/welcome to event radar/i)).not.toBeInTheDocument();
   });
 
-  it('navigates to watchlist step on "Get started"', async () => {
-    const user = userEvent.setup();
+  it('shows a two-step progress indicator', async () => {
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -80,13 +78,11 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await user.click(screen.getByRole('button', { name: /get started/i }));
-
-    expect(screen.getByText(/add tickers to your watchlist/i)).toBeInTheDocument();
+    expect(await screen.findByRole('progressbar')).toHaveAttribute('aria-valuemax', '2');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1');
   });
 
   it('renders sector packs and trending tickers in step 2', async () => {
-    const user = userEvent.setup();
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -94,7 +90,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     // Sector packs
     await waitFor(() => {
@@ -117,7 +113,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByText('Tech Leaders')).toBeInTheDocument();
@@ -155,7 +151,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByText('Tech Leaders')).toBeInTheDocument();
@@ -177,7 +173,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByLabelText('Add custom ticker')).toBeInTheDocument();
@@ -191,7 +187,6 @@ describe('Onboarding page', () => {
   });
 
   it('renders sector packs as compact add buttons', async () => {
-    const user = userEvent.setup();
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -199,14 +194,13 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     expect(await screen.findByRole('button', { name: /add tech leaders pack/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add biotech pack/i })).toBeInTheDocument();
   });
 
   it('emphasizes trending names as quick-add chips', async () => {
-    const user = userEvent.setup();
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -214,7 +208,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     // Wait for trending section to appear
     const trendingHeading = await screen.findByText('Trending this week');
@@ -233,7 +227,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByText('Tech Leaders')).toBeInTheDocument();
@@ -250,16 +244,19 @@ describe('Onboarding page', () => {
     expect(screen.getByText('Trading halts, major SEC filings')).toBeInTheDocument();
   });
 
-  it('shows done step with scorecard explanation', async () => {
+  it('goes straight to the feed after the notifications step', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
-      [{ path: '/onboarding', element: <Onboarding /> }],
+      [
+        { path: '/onboarding', element: <Onboarding /> },
+        { path: '/', element: <div>Feed page</div> },
+      ],
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByText('Tech Leaders')).toBeInTheDocument();
@@ -272,15 +269,12 @@ describe('Onboarding page', () => {
       expect(screen.getByRole('heading', { name: /enable notifications/i })).toBeInTheDocument();
     });
 
-    // Skip notifications
     await user.click(screen.getByRole('button', { name: /maybe later/i }));
 
-    // Should show done step
     await waitFor(() => {
-      expect(screen.getByText(/you're all set/i)).toBeInTheDocument();
+      expect(screen.getByText('Feed page')).toBeInTheDocument();
     });
-    expect(screen.getByText(/scorecard & trust cues/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /go to feed/i })).toBeInTheDocument();
+    expect(screen.queryByText(/you're all set/i)).not.toBeInTheDocument();
   });
 
   it('sets localStorage on completion', async () => {
@@ -295,7 +289,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     await waitFor(() => {
       expect(screen.getByText('Tech Leaders')).toBeInTheDocument();
@@ -311,10 +305,8 @@ describe('Onboarding page', () => {
     await user.click(screen.getByRole('button', { name: /maybe later/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/you're all set/i)).toBeInTheDocument();
+      expect(screen.getByText('Feed page')).toBeInTheDocument();
     });
-
-    await user.click(screen.getByRole('button', { name: /go to feed/i }));
 
     expect(localStorage.getItem('onboardingComplete')).toBe('true');
   });
@@ -331,7 +323,6 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    // Skip from welcome step
     await user.click(screen.getAllByText(/skip setup/i)[0]!);
 
     expect(localStorage.getItem('onboardingComplete')).toBe('true');
@@ -341,7 +332,6 @@ describe('Onboarding page', () => {
   });
 
   it('shows popular ticker chips in step 2', async () => {
-    const user = userEvent.setup();
     vi.stubGlobal('fetch', mockFetch());
 
     renderWithRouter(
@@ -349,7 +339,7 @@ describe('Onboarding page', () => {
       ['/onboarding'],
     );
 
-    await goToStep2(user);
+    await goToStep2();
 
     // Popular tickers section should be shown
     const popularHeading = screen.getByText('Popular tickers');

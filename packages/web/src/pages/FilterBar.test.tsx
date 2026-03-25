@@ -34,7 +34,7 @@ describe('Feed page with filters', () => {
 
     expect(screen.getByText('Severity')).toBeInTheDocument();
     expect(screen.getByText('Source')).toBeInTheDocument();
-    expect(screen.getByText('Presets')).toBeInTheDocument();
+    expect(screen.queryByText('Presets')).not.toBeInTheDocument();
   });
 
   it('renders alert cards after the feed query resolves', async () => {

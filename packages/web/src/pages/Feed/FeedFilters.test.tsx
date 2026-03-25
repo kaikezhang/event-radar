@@ -1,13 +1,7 @@
 import { createRef } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { FilterPreset } from '../../types/index.js';
 import { FeedFilters } from './FeedFilters.js';
-
-const presets: FilterPreset[] = [
-  { name: 'Full Firehose', severities: [], sources: [] },
-  { name: 'High Conviction', severities: ['HIGH', 'CRITICAL'], sources: [] },
-];
 
 describe('FeedFilters', () => {
   it('renders active severity and source chips', () => {
@@ -16,15 +10,9 @@ describe('FeedFilters', () => {
         activeSeverities={['HIGH']}
         activeSources={['sec-edgar']}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
         pushOnly={false}
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={vi.fn()}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
@@ -47,15 +35,9 @@ describe('FeedFilters', () => {
         activeSeverities={[]}
         activeSources={[]}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters={false}
         pushOnly
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={vi.fn()}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
@@ -70,33 +52,23 @@ describe('FeedFilters', () => {
 
     expect(screen.getByText('Severity')).toBeInTheDocument();
     expect(screen.getByText('Source')).toBeInTheDocument();
-    expect(screen.getByText('Presets')).toBeInTheDocument();
+    expect(screen.queryByText('Presets')).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /push alerts only/i }).length).toBeGreaterThan(0);
   });
 
-  it('shows the save preset controls when the filter panel is expanded with active filters', async () => {
-    const user = userEvent.setup();
-    const onPresetNameChange = vi.fn();
-
+  it('shows only delivery, severity, and source controls when the filter panel is expanded', () => {
     render(
       <FeedFilters
         activeSeverities={['HIGH']}
         activeSources={[]}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
         pushOnly={false}
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={onPresetNameChange}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown={false}
         showFilters
@@ -104,10 +76,11 @@ describe('FeedFilters', () => {
       />,
     );
 
-    await user.type(screen.getByPlaceholderText(/preset name/i), 'Momentum');
-
-    expect(onPresetNameChange).toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    expect(screen.getByText('Delivery')).toBeInTheDocument();
+    expect(screen.getByText('Severity')).toBeInTheDocument();
+    expect(screen.getByText('Source')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/preset name/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
   });
 
   it('renders an active push-only chip and toggles it off when clicked', async () => {
@@ -119,20 +92,13 @@ describe('FeedFilters', () => {
         activeSeverities={[]}
         activeSources={[]}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
         pushOnly
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={vi.fn()}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={onTogglePushOnly}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown={false}
         showFilters={false}
@@ -151,20 +117,13 @@ describe('FeedFilters', () => {
         activeSeverities={[]}
         activeSources={[]}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters
         pushOnly
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={vi.fn()}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown={false}
         showFilters={false}
@@ -181,20 +140,13 @@ describe('FeedFilters', () => {
         activeSeverities={[]}
         activeSources={[]}
         addFilterRef={createRef<HTMLDivElement>()}
-        allPresets={presets}
-        builtinPresetNames={['Full Firehose', 'High Conviction']}
         hasActiveFilters={false}
         pushOnly={false}
-        onApplyPreset={vi.fn()}
         onClearFilters={vi.fn()}
-        onDeletePreset={vi.fn()}
-        onPresetNameChange={vi.fn()}
-        onSavePreset={vi.fn()}
         onToggleSeverity={vi.fn()}
         onToggleSource={vi.fn()}
         onTogglePushOnly={vi.fn()}
         onToggleAddFilterDropdown={vi.fn()}
-        presetName=""
         severities={['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']}
         showAddFilterDropdown
         showFilters={false}

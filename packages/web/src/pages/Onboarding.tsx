@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,19 +6,16 @@ import {
   BellOff,
   Check,
   ChevronRight,
-  PartyPopper,
   Plus,
-  Radar,
-  Shield,
   TrendingUp,
   X,
 } from 'lucide-react';
 import { getSuggestedTickers, initializeWatchlist } from '../lib/api.js';
 
 const ONBOARDING_KEY = 'onboardingComplete';
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 2;
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2;
 
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
@@ -49,70 +46,6 @@ function SkipLink({ onClick }: { onClick: () => void }) {
   );
 }
 
-/* ── Step 1: Welcome ─────────────────────────────────────────────────────── */
-function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-default/12">
-        <Radar className="h-8 w-8 text-accent-default" />
-      </div>
-
-      <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-        Welcome to Event Radar
-      </h1>
-
-      <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-text-secondary">
-        Track market-moving events before they hit the headlines.
-      </p>
-
-      <p className="mt-1 text-sm text-text-tertiary">
-        Let's set up your feed in 30 seconds.
-      </p>
-
-      {/* Sample alert preview */}
-      <div className="mt-6 w-full max-w-sm rounded-2xl border border-border-default bg-bg-surface/96 p-4 text-left">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase bg-severity-high/15 text-severity-high">
-            HIGH
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-red-400">BEARISH ▼</span>
-              <span className="text-xs font-semibold text-text-primary">AAL</span>
-            </div>
-            <p className="mt-1 text-sm font-medium text-text-primary">
-              American Airlines reports unexpected Q4 revenue miss
-            </p>
-            <div className="mt-1.5 flex items-center gap-2 text-xs text-text-secondary">
-              <span>$10.43 → $10.12</span>
-              <span className="text-red-400">−2.9%</span>
-              <span>·</span>
-              <span>Breaking News</span>
-            </div>
-          </div>
-        </div>
-        <p className="mt-3 text-center text-xs text-text-tertiary">
-          AI-powered event analysis with price tracking — here's what your alerts look like
-        </p>
-      </div>
-
-      <button
-        type="button"
-        onClick={onNext}
-        className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-accent-default px-6 py-3 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
-      >
-        Get started
-        <ChevronRight className="h-4 w-4" />
-      </button>
-
-      <div className="mt-4">
-        <SkipLink onClick={onSkip} />
-      </div>
-    </div>
-  );
-}
-
-/* ── Step 2: Watchlist ───────────────────────────────────────────────────── */
 interface WatchlistStepProps {
   selectedTickers: Set<string>;
   onToggleTicker: (ticker: string) => void;
@@ -147,8 +80,8 @@ function WatchlistStep({
   const totalSelected = selectedTickers.size;
   const canContinue = totalSelected >= 3;
 
-  const handleManualAdd = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleManualAdd = (event: React.FormEvent) => {
+    event.preventDefault();
     const ticker = manualInput.trim().toUpperCase();
     if (ticker && /^[A-Z]{1,5}$/.test(ticker)) {
       onManualAdd(ticker);
@@ -158,7 +91,6 @@ function WatchlistStep({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-text-primary">Add tickers to your watchlist</h1>
@@ -169,7 +101,6 @@ function WatchlistStep({
         <SkipLink onClick={onSkip} />
       </div>
 
-      {/* Popular quick-add chips */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <h2 className="text-[17px] font-semibold text-text-primary">Popular tickers</h2>
         <p className="mt-1 text-sm text-text-secondary">Quick-add the most followed names.</p>
@@ -196,14 +127,13 @@ function WatchlistStep({
         </div>
       </section>
 
-      {/* Sector packs */}
       {packs.length > 0 && (
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <h2 className="text-[17px] font-semibold text-text-primary">Sector packs</h2>
           <p className="mt-1 text-sm text-text-secondary">One tap to seed a whole theme.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {packs.map((pack) => {
-              const allSelected = pack.tickers.every((t) => selectedTickers.has(t));
+              const allSelected = pack.tickers.every((ticker) => selectedTickers.has(ticker));
               return (
                 <button
                   key={pack.name}
@@ -225,7 +155,6 @@ function WatchlistStep({
         </section>
       )}
 
-      {/* Trending tickers */}
       {trendingTickers.length > 0 && (
         <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
           <div className="flex items-center gap-2">
@@ -236,14 +165,14 @@ function WatchlistStep({
             Quick-add names with the most high-signal events in the last 7 days.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {trendingTickers.map((t) => {
-              const isSelected = selectedTickers.has(t.symbol);
+            {trendingTickers.map((ticker) => {
+              const isSelected = selectedTickers.has(ticker.symbol);
               return (
                 <button
-                  key={t.symbol}
+                  key={ticker.symbol}
                   type="button"
-                  onClick={() => onToggleTicker(t.symbol)}
-                  aria-label={`Quick add ${t.symbol}`}
+                  onClick={() => onToggleTicker(ticker.symbol)}
+                  aria-label={`Quick add ${ticker.symbol}`}
                   className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default ${
                     isSelected
                       ? 'border-accent-default/40 bg-accent-default/12 text-accent-default'
@@ -251,8 +180,8 @@ function WatchlistStep({
                   }`}
                 >
                   {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                  {t.symbol}
-                  <span className="text-xs text-text-secondary">{t.eventCount7d} events</span>
+                  {ticker.symbol}
+                  <span className="text-xs text-text-secondary">{ticker.eventCount7d} events</span>
                 </button>
               );
             })}
@@ -260,14 +189,13 @@ function WatchlistStep({
         </section>
       )}
 
-      {/* Manual input */}
       <section className="rounded-2xl border border-border-default bg-bg-surface/96 p-5">
         <h2 className="text-[17px] font-semibold text-text-primary">Add custom ticker</h2>
         <form onSubmit={handleManualAdd} className="mt-3 flex gap-2">
           <input
             type="text"
             value={manualInput}
-            onChange={(e) => setManualInput(e.target.value.toUpperCase())}
+            onChange={(event) => setManualInput(event.target.value.toUpperCase())}
             placeholder="Type ticker (e.g. AAPL)"
             maxLength={5}
             className="min-h-11 flex-1 rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-[15px] text-text-primary placeholder:text-text-secondary/60 focus:border-accent-default focus:outline-none focus:ring-2 focus:ring-accent-default"
@@ -284,12 +212,11 @@ function WatchlistStep({
         </form>
       </section>
 
-      {/* Counter + continue */}
       <section className="sticky bottom-20 rounded-2xl border border-border-default bg-bg-primary/95 p-5 shadow-[0_-8px_30px_var(--shadow-color)] backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[17px] font-semibold text-text-primary">
-              You're watching {totalSelected} ticker{totalSelected !== 1 ? 's' : ''}
+              You&apos;re watching {totalSelected} ticker{totalSelected !== 1 ? 's' : ''}
             </p>
             {!canContinue && (
               <p className="mt-1 text-sm text-amber-400">
@@ -312,7 +239,6 @@ function WatchlistStep({
   );
 }
 
-/* ── Step 3: Notifications ───────────────────────────────────────────────── */
 function NotificationsStep({ onNext, onSkip }: { onNext: (enabled: boolean) => void; onSkip: () => void }) {
   const severityLevels = [
     { level: 'CRITICAL', label: 'Critical', description: 'Trading halts, major SEC filings', color: 'bg-severity-critical', pushNote: 'Push + Feed' },
@@ -346,16 +272,16 @@ function NotificationsStep({ onNext, onSkip }: { onNext: (enabled: boolean) => v
           </div>
 
           <div className="space-y-3">
-            {severityLevels.map((s) => (
-              <div key={s.level} className="flex items-center justify-between rounded-xl border border-overlay-medium bg-overlay-subtle px-4 py-3">
+            {severityLevels.map((level) => (
+              <div key={level.level} className="flex items-center justify-between rounded-xl border border-overlay-medium bg-overlay-subtle px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <span className={`h-2.5 w-2.5 rounded-full ${s.color}`} />
+                  <span className={`h-2.5 w-2.5 rounded-full ${level.color}`} />
                   <div>
-                    <p className="text-sm font-medium text-text-primary">{s.label}</p>
-                    <p className="text-xs text-text-tertiary">{s.description}</p>
+                    <p className="text-sm font-medium text-text-primary">{level.label}</p>
+                    <p className="text-xs text-text-tertiary">{level.description}</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-text-secondary">{s.pushNote}</span>
+                <span className="text-xs font-medium text-text-secondary">{level.pushNote}</span>
               </div>
             ))}
           </div>
@@ -384,72 +310,6 @@ function NotificationsStep({ onNext, onSkip }: { onNext: (enabled: boolean) => v
   );
 }
 
-/* ── Step 4: Done ────────────────────────────────────────────────────────── */
-function DoneStep({ onGoToFeed }: { onGoToFeed: () => void }) {
-  const [showConfetti, setShowConfetti] = useState(false);
-
-  useEffect(() => {
-    // Trigger confetti animation after mount
-    const t = setTimeout(() => setShowConfetti(true), 100);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      {/* CSS confetti */}
-      {showConfetti && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-          {Array.from({ length: 24 }, (_, i) => (
-            <span
-              key={i}
-              className="absolute block h-2 w-2 rounded-full opacity-0"
-              style={{
-                left: `${10 + Math.random() * 80}%`,
-                top: '-5%',
-                backgroundColor: ['#f97316', '#fb923c', '#facc15', '#34d399', '#60a5fa', '#a78bfa'][i % 6],
-                animation: `confetti-fall ${1.5 + Math.random() * 1.5}s ease-out ${Math.random() * 0.5}s forwards`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/12">
-        <PartyPopper className="h-8 w-8 text-emerald-500" />
-      </div>
-
-      <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-        You're all set!
-      </h1>
-
-      <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-text-secondary">
-        Your watchlist is ready. Events will start streaming into your feed immediately.
-      </p>
-
-      {/* Scorecard trust cues */}
-      <div className="mt-6 w-full max-w-sm rounded-2xl border border-border-default bg-bg-surface/96 p-4">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-accent-default" />
-          <p className="text-sm font-semibold text-text-primary">Scorecard & trust cues</p>
-        </div>
-        <p className="mt-2 text-left text-xs leading-5 text-text-secondary">
-          Every alert includes a confidence score and historical pattern match. Check the Scorecard tab to see how our signals have performed over time — full transparency, no black boxes.
-        </p>
-      </div>
-
-      <button
-        type="button"
-        onClick={onGoToFeed}
-        className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-accent-default px-6 py-3 text-[15px] font-semibold text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent-default"
-      >
-        Go to Feed
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
-/* ── Main Onboarding Component ───────────────────────────────────────────── */
 export function Onboarding() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -473,8 +333,8 @@ export function Onboarding() {
   };
 
   const toggleTicker = (ticker: string) => {
-    setSelectedTickers((prev) => {
-      const next = new Set(prev);
+    setSelectedTickers((previous) => {
+      const next = new Set(previous);
       if (next.has(ticker)) {
         next.delete(ticker);
       } else {
@@ -485,21 +345,26 @@ export function Onboarding() {
   };
 
   const addPack = (tickers: string[]) => {
-    setSelectedTickers((prev) => {
-      const next = new Set(prev);
-      for (const t of tickers) next.add(t);
+    setSelectedTickers((previous) => {
+      const next = new Set(previous);
+      for (const ticker of tickers) {
+        next.add(ticker);
+      }
       return next;
     });
   };
 
   const handleManualAdd = (ticker: string) => {
-    setSelectedTickers((prev) => new Set(prev).add(ticker));
+    setSelectedTickers((previous) => new Set(previous).add(ticker));
   };
 
   const handleWatchlistContinue = async () => {
-    if (selectedTickers.size < 3) return;
+    if (selectedTickers.size < 3) {
+      return;
+    }
+
     await initMutation.mutateAsync([...selectedTickers]);
-    setStep(3);
+    setStep(2);
   };
 
   const handleNotificationsContinue = async (enabled: boolean) => {
@@ -507,20 +372,16 @@ export function Onboarding() {
       try {
         await Notification.requestPermission();
       } catch {
-        // Permission denied or unavailable — continue anyway
+        // Permission denied or unavailable, continue to the feed.
       }
     }
-    setStep(4);
-  };
 
-  const handleGoToFeed = () => {
     markComplete();
     navigate('/?tab=watchlist');
   };
 
   return (
     <div className="relative py-4">
-      {/* Step indicator + close */}
       <div className="mb-6 flex items-center justify-between">
         <StepIndicator current={step} total={TOTAL_STEPS} />
         <button
@@ -533,12 +394,7 @@ export function Onboarding() {
         </button>
       </div>
 
-      {/* Steps */}
-      {step === 1 && (
-        <WelcomeStep onNext={() => setStep(2)} onSkip={skipToFeed} />
-      )}
-
-      {step === 2 && (
+      {step === 1 ? (
         <WatchlistStep
           selectedTickers={selectedTickers}
           onToggleTicker={toggleTicker}
@@ -548,17 +404,11 @@ export function Onboarding() {
           onSkip={skipToFeed}
           isPending={initMutation.isPending}
         />
-      )}
-
-      {step === 3 && (
+      ) : (
         <NotificationsStep
           onNext={(enabled) => void handleNotificationsContinue(enabled)}
           onSkip={skipToFeed}
         />
-      )}
-
-      {step === 4 && (
-        <DoneStep onGoToFeed={handleGoToFeed} />
       )}
     </div>
   );

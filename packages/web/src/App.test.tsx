@@ -17,11 +17,10 @@ describe('App shell spacing', () => {
     expect(await screen.findByTestId('app-shell-content')).toHaveClass(APP_SHELL_BOTTOM_PADDING_CLASS);
   });
 
-  it('renders the landing page on the pricing route', async () => {
+  it('does not expose the removed pricing route', async () => {
     renderWithRouter(appRoutes, ['/pricing']);
 
-    expect(await screen.findByRole('heading', { name: /know what moves markets/i })).toBeInTheDocument();
-    expect(screen.getByText(/ai-powered event detection across 13 real-time sources/i)).toBeInTheDocument();
+    expect(await screen.findByText(/page not found/i)).toBeInTheDocument();
   });
 
   it('routes authenticated users to the feed on the home page', async () => {

@@ -134,7 +134,7 @@ describe('Feed page', () => {
     expect(localStorage.getItem('er-feed-sort')).toBe('severity');
   });
 
-  it('hides LOW alerts in smart mode until the reveal pill is clicked', async () => {
+  it('hides LOW alerts in smart mode while all-events mode still shows them', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(fetch);
     const originalImplementation = fetchMock.getMockImplementation();
@@ -174,7 +174,7 @@ describe('Feed page', () => {
       return originalImplementation?.(input, init) as Promise<Response>;
     });
 
-    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/?tab=all']);
 
     expect(await screen.findByRole('article', { name: /high-priority nvda filing/i })).toBeInTheDocument();
     expect(screen.getByRole('article', { name: /low-priority tsla chatter/i })).toBeInTheDocument();
@@ -185,16 +185,9 @@ describe('Feed page', () => {
     await waitFor(() => {
       expect(screen.queryByRole('article', { name: /low-priority tsla chatter/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /showing high\+ events · 1 low event hidden/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /showing high\+ events · 1 low event hidden/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('article', { name: /low-priority tsla chatter/i })).toBeInTheDocument();
-    });
   });
 
-  it('shows LOW alerts and quality stats in all-events mode', async () => {
+  it('shows LOW alerts in all-events mode without the removed quality stats', async () => {
     const fetchMock = vi.mocked(fetch);
     const originalImplementation = fetchMock.getMockImplementation();
 
@@ -237,7 +230,7 @@ describe('Feed page', () => {
 
     expect(await screen.findByRole('article', { name: /high-priority macro catalyst/i })).toBeInTheDocument();
     expect(screen.getByRole('article', { name: /low-priority meme chatter/i })).toBeInTheDocument();
-    expect(screen.getByText(/2 events · 1 high\+ · 1 low/i)).toBeInTheDocument();
+    expect(screen.queryByText(/2 events · 1 high\+ · 1 low/i)).not.toBeInTheDocument();
   });
 
   it('collapses same-ticker duplicate reports into one card with related-source context', async () => {

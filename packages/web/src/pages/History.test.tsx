@@ -17,75 +17,64 @@ describe('History page', () => {
     useHistoryMock.mockReset();
   });
 
-  it('shows the important-events banner and clears the default filter from the call to action', async () => {
+  it('renders a simple reverse-chronological list with load more', async () => {
     const user = userEvent.setup();
-    const clearFilters = vi.fn();
+    const loadMore = vi.fn();
 
     useHistoryMock.mockReturnValue({
-      filters: {
-        from: '2026-02-20',
-        to: '2026-03-23',
-        severity: 'HIGH,CRITICAL',
-        source: '',
-        ticker: '',
-      },
-      setFilter: vi.fn(),
-      resetFilters: vi.fn(),
-      clearFilters,
-      isDefaultSeverity: true,
-      alerts: [],
-      total: 0,
+      alerts: [
+        {
+          id: 'evt-2',
+          severity: 'HIGH',
+          source: 'sec-edgar',
+          title: 'Newest alert',
+          summary: 'Newest summary',
+          tickers: ['NVDA'],
+          time: '2026-03-23T12:00:00.000Z',
+        },
+        {
+          id: 'evt-1',
+          severity: 'MEDIUM',
+          source: 'breaking-news',
+          title: 'Older alert',
+          summary: 'Older summary',
+          tickers: ['AAPL'],
+          time: '2026-03-22T12:00:00.000Z',
+        },
+      ],
+      total: 2,
       isLoading: false,
       isFetching: false,
-      hasMore: false,
-      loadMore: vi.fn(),
-      sources: ['sec-edgar'],
-      severities: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
-      stats: {
-        total: 0,
-        bySeverity: {},
-        topTickers: [],
-      },
+      hasMore: true,
+      loadMore,
     });
 
     renderWithRouter([{ path: '/history', element: <History /> }], ['/history']);
 
-    expect(screen.getByText(/showing important events only/i)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /show all →/i }));
+    expect(screen.getByRole('heading', { name: /history/i })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: /newest alert/i })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: /older alert/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /filters/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/showing important events only/i)).not.toBeInTheDocument();
 
-    expect(clearFilters).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: /load more/i }));
+
+    expect(loadMore).toHaveBeenCalledTimes(1);
   });
 
-  it('hides the important-events banner after the user changes the severity filter', () => {
+  it('shows a simple empty state without filter reset actions', () => {
     useHistoryMock.mockReturnValue({
-      filters: {
-        from: '2026-02-20',
-        to: '2026-03-23',
-        severity: '',
-        source: '',
-        ticker: '',
-      },
-      setFilter: vi.fn(),
-      resetFilters: vi.fn(),
-      clearFilters: vi.fn(),
-      isDefaultSeverity: false,
       alerts: [],
       total: 0,
       isLoading: false,
       isFetching: false,
       hasMore: false,
       loadMore: vi.fn(),
-      sources: ['sec-edgar'],
-      severities: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
-      stats: {
-        total: 0,
-        bySeverity: {},
-        topTickers: [],
-      },
     });
 
     renderWithRouter([{ path: '/history', element: <History /> }], ['/history']);
 
-    expect(screen.queryByText(/showing important events only/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no historical events yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reset filters/i })).not.toBeInTheDocument();
   });
 });
