@@ -125,13 +125,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <button
-          type="button"
-          onClick={handleMobileBack}
-          className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-3 py-2 text-sm font-medium text-text-primary lg:hidden"
-        >
-          ← Back
-        </button>
         <DetailToolbar backLabel={backLabel} onBack={handleBack} />
         <SkeletonCard />
         <SkeletonCard />
@@ -156,13 +149,6 @@ export function EventDetail({ eventId, onBack }: { eventId?: string; onBack?: ()
 
   return (
     <div className="space-y-4">
-      <button
-        type="button"
-        onClick={handleMobileBack}
-        className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-overlay-medium bg-bg-elevated/70 px-3 py-2 text-sm font-medium text-text-primary lg:hidden"
-      >
-        ← Back
-      </button>
       <DetailToolbar backLabel={backLabel} onBack={handleBack} onShare={handleShare} />
       <TabNav activeSection={activeSection} onTabChange={setActiveSection} />
       <div className="lg:flex lg:gap-6">
