@@ -1012,14 +1012,6 @@ export async function getHistoricalEvents(params: HistoryParams): Promise<Histor
   };
 }
 
-const HIDDEN_SOURCES = new Set(['dummy', 'test', 'internal']);
-
-export async function getEventSources(): Promise<string[]> {
-  const data = await apiFetch('/events/sources');
-  const raw: string[] = data.sources ?? [];
-  return [...new Set(raw.filter((s) => !HIDDEN_SOURCES.has(s)).map(mapSource))].sort();
-}
-
 function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
   const source = (event.source as string) ?? 'unknown';
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;

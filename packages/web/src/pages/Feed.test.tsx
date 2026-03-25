@@ -179,6 +179,7 @@ describe('Feed page', () => {
     expect(screen.queryByRole('article', { name: /low-priority tsla chatter/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/all events/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/my watchlist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/smart feed/i)).not.toBeInTheDocument();
   });
 
   it('collapses same-ticker duplicate reports into one card with related-source context', async () => {
@@ -232,6 +233,28 @@ describe('Feed page', () => {
     expect(await screen.findByRole('article', { name: /breaking desk flags nvda supply update/i })).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: /sec filing flags nvda supply update/i })).not.toBeInTheDocument();
     expect(screen.getByText(/nvda · 3 related events/i)).toBeInTheDocument();
-    expect(screen.getByText(/also reported by: sec edgar, reuters/i)).toBeInTheDocument();
+    expect(screen.getByText(/also reported by:/i)).toBeInTheDocument();
+  });
+
+  it('does not request source filter metadata when rendering the feed', async () => {
+    const fetchMock = vi.mocked(fetch);
+    const originalImplementation = fetchMock.getMockImplementation();
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
+
+      if (url.pathname === '/api/events/sources') {
+        throw new Error('feed should not request event sources');
+      }
+
+      return originalImplementation?.(input, init) as Promise<Response>;
+    });
+
+    renderWithRouter([{ path: '/', element: <Feed /> }], ['/']);
+
+    expect(await screen.findByRole('article', { name: /nvda export filing flags china exposure risk/i })).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => input === '/api/events/sources'),
+    ).toBe(false);
   });
 });

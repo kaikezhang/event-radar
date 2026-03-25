@@ -5,7 +5,6 @@ import { cn } from '../../lib/utils.js';
 
 interface FeedFiltersProps {
   activeSeverities: string[];
-  activeSources: string[];
   addFilterRef: RefObject<HTMLDivElement | null>;
   hasActiveFilters: boolean;
   pushOnly: boolean;
@@ -13,16 +12,13 @@ interface FeedFiltersProps {
   onToggleAddFilterDropdown: () => void;
   onTogglePushOnly: () => void;
   onToggleSeverity: (severity: string) => void;
-  onToggleSource: (source: string) => void;
   severities: readonly string[];
   showAddFilterDropdown: boolean;
   showFilters: boolean;
-  sources: string[];
 }
 
 export function FeedFilters({
   activeSeverities,
-  activeSources,
   addFilterRef,
   hasActiveFilters,
   pushOnly,
@@ -30,14 +26,10 @@ export function FeedFilters({
   onToggleAddFilterDropdown,
   onTogglePushOnly,
   onToggleSeverity,
-  onToggleSource,
   severities,
   showAddFilterDropdown,
   showFilters,
-  sources,
 }: FeedFiltersProps) {
-  const visibleSources = sources.filter((source) => source.toLowerCase() !== 'dummy');
-
   return (
     <>
       <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Active filters">
@@ -50,19 +42,6 @@ export function FeedFilters({
             role="listitem"
           >
             {severity}
-            <X className="h-3 w-3" />
-          </button>
-        ))}
-
-        {activeSources.map((source) => (
-          <button
-            key={`src-${source}`}
-            type="button"
-            onClick={() => onToggleSource(source)}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-interactive-default/20 bg-interactive-default/10 px-2 py-1 text-xs font-medium text-interactive-default"
-            role="listitem"
-          >
-            {source}
             <X className="h-3 w-3" />
           </button>
         ))}
@@ -115,29 +94,6 @@ export function FeedFilters({
                   ))}
                 </div>
               </div>
-
-              {visibleSources.length > 0 && (
-                <div>
-                  <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Source</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {visibleSources.map((source) => (
-                      <button
-                        key={source}
-                        type="button"
-                        onClick={() => onToggleSource(source)}
-                        className={cn(
-                          'rounded-lg border px-2 py-1 text-xs font-medium transition',
-                          activeSources.includes(source)
-                            ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
-                            : 'border-border-default text-text-secondary hover:text-text-primary',
-                        )}
-                      >
-                        {source}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div>
                 <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Delivery</h4>
@@ -209,27 +165,6 @@ export function FeedFilters({
                   )}
                 >
                   {severity}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Source</h3>
-            <div className="flex flex-wrap gap-2">
-              {sources.map((source) => (
-                <button
-                  key={source}
-                  type="button"
-                  onClick={() => onToggleSource(source)}
-                  className={cn(
-                    'inline-flex items-center rounded-xl border px-3 py-1.5 text-sm font-medium transition',
-                    activeSources.includes(source)
-                      ? 'border-interactive-default bg-interactive-default/20 text-interactive-default'
-                      : 'border-border-default bg-bg-surface text-text-primary hover:border-border-bright',
-                  )}
-                >
-                  {source}
                 </button>
               ))}
             </div>

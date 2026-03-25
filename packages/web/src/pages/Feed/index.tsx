@@ -1,11 +1,9 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Toast } from '../../components/Toast.js';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { useWatchlist } from '../../hooks/useWatchlist.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
-import { getEventSources } from '../../lib/api.js';
 import { EventDetail } from '../EventDetail.js';
 import { FeedList } from './FeedList.js';
 import { useFeedState } from './useFeedState.js';
@@ -20,11 +18,6 @@ export function Feed() {
       navigate('/onboarding', { replace: true });
     }
   }, [navigate]);
-  const { data: sources = [] } = useQuery<string[]>({
-    queryKey: ['event-sources'],
-    queryFn: getEventSources,
-    staleTime: 60_000,
-  });
   const { user, isAuthenticated } = useAuth();
   const {
     items: watchlistItems,
@@ -47,7 +40,6 @@ export function Feed() {
     <FeedList
       activeFilterCount={state.activeFilterCount}
       activeSeverities={state.activeSeverities}
-      activeSources={state.activeSources}
       addFilterRef={state.addFilterRef}
       addToWatchlist={add}
       applyPendingAlerts={state.applyPendingAlerts}
@@ -79,13 +71,11 @@ export function Feed() {
       showUnauthBanner={!user && !state.bannerDismissed}
       showWatchlistOnboarding={state.showWatchlistOnboarding}
       sortMode={state.sortMode}
-      sources={sources}
       toggleAddFilterDropdown={() => state.setShowAddFilterDropdown((current) => !current)}
       toggleFilters={() => state.setShowFilters((current) => !current)}
       togglePushOnly={state.togglePushOnly}
       toggleSortMode={state.setSortMode}
       toggleSeverity={state.toggleSeverity}
-      toggleSource={state.toggleSource}
       touchHandlers={{
         onTouchEnd: state.handleTouchEnd,
         onTouchMove: state.handleTouchMove,

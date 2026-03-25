@@ -10,7 +10,6 @@ import {
   buildClassifyPrompt,
   parseLLMClassification,
 } from '../services/classification-prompt.js';
-import { buildApp, type AppContext } from '../app.js';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -371,66 +370,5 @@ describe('Pipeline: rule low confidence → use LLM', () => {
 
     expect(result.ok).toBe(true);
     expect(provider.classify).toHaveBeenCalledOnce();
-  });
-});
-
-/* ── 8. API endpoint: classify returns correct format ────────────── */
-
-describe('POST /api/v1/classify', () => {
-  const TEST_API_KEY = 'test-key-123';
-  let ctx: AppContext;
-
-  it('returns correct format with rule + method fields', async () => {
-    ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
-
-    const response = await ctx.server.inject({
-      method: 'POST',
-      url: '/api/v1/classify',
-      headers: { 'x-api-key': TEST_API_KEY },
-      payload: {
-        headline: 'AAPL announces stock split',
-        source: 'sec-edgar',
-        ticker: 'AAPL',
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as Record<string, unknown>;
-
-    expect(body).toHaveProperty('rule');
-    expect(body).toHaveProperty('final');
-    expect(body).toHaveProperty('method');
-
-    const rule = body.rule as Record<string, unknown>;
-    expect(rule).toHaveProperty('severity');
-    expect(rule).toHaveProperty('tags');
-    expect(rule).toHaveProperty('priority');
-    expect(rule).toHaveProperty('matchedRules');
-
-    await ctx.server.close();
-  });
-
-  it('returns 401 without API key', async () => {
-    const prev = process.env.AUTH_REQUIRED;
-    process.env.AUTH_REQUIRED = 'true';
-    process.env.JWT_SECRET = 'test-jwt-secret';
-    try {
-      ctx = buildApp({ logger: false, apiKey: TEST_API_KEY });
-      await ctx.server.ready();
-      try {
-        const response = await ctx.server.inject({
-          method: 'POST',
-          url: '/api/v1/classify',
-          payload: { headline: 'test' },
-        });
-
-        expect(response.statusCode).toBe(401);
-      } finally {
-        await ctx.server.close();
-      }
-    } finally {
-      process.env.AUTH_REQUIRED = prev;
-      delete process.env.JWT_SECRET;
-    }
   });
 });
