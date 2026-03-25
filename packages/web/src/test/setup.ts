@@ -786,30 +786,6 @@ beforeEach(() => {
       ])));
     }
 
-    if (url.pathname === '/api/v1/briefing/daily') {
-      return jsonResponse({
-        date: '2026-03-23',
-        totalEvents: 4,
-        bySeverity: {
-          CRITICAL: 1,
-          HIGH: 2,
-          MEDIUM: 1,
-          LOW: 0,
-        },
-        topEvents: [
-          { title: 'Nvidia issues urgent filing', ticker: 'NVDA', severity: 'CRITICAL' },
-          { title: 'Tesla trading halt', ticker: 'TSLA', severity: 'HIGH' },
-          { title: 'Apple guidance update', ticker: 'AAPL', severity: 'MEDIUM' },
-        ],
-        bySource: {
-          'sec-edgar': 2,
-          'breaking-news': 1,
-          'trading-halt': 1,
-        },
-        watchlistEvents: 2,
-      });
-    }
-
     // Ticker search endpoints
     if (url.pathname === '/api/tickers/search') {
       return jsonResponse({ data: [] });

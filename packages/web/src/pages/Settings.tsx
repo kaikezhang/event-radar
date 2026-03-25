@@ -43,33 +43,6 @@ function serializeNotificationPreferences(preferences: NotificationPreferences):
   });
 }
 
-const SIGNAL_TIER_ROWS = [
-  {
-    severity: 'Critical',
-    severityClassName: 'border-severity-critical/20 bg-severity-critical/10 text-severity-critical',
-    delivery: 'Push notification + Feed',
-    detail: 'Always treated as top-priority.',
-  },
-  {
-    severity: 'High',
-    severityClassName: 'border-severity-high/20 bg-severity-high/10 text-severity-high',
-    delivery: 'Push notification + Feed',
-    detail: 'If enabled for the names and volume you allow.',
-  },
-  {
-    severity: 'Medium',
-    severityClassName: 'border-severity-medium/20 bg-severity-medium/10 text-severity-medium',
-    delivery: 'Feed only',
-    detail: 'Visible in the live feed without sending a push.',
-  },
-  {
-    severity: 'Low',
-    severityClassName: 'border-severity-low/20 bg-severity-low/10 text-severity-low',
-    delivery: 'Feed only',
-    detail: 'Kept available in feed for lower-priority review.',
-  },
-] as const;
-
 function getPlatformHint(): 'ios' | 'ios-pwa' | 'android-pwa' | 'pwa' | 'desktop' {
   const ua = navigator.userAgent;
   const isStandalone =
@@ -355,24 +328,6 @@ export function Settings() {
     setSaveState('idle');
   }
 
-  function toggleQuietHours(enabled: boolean): void {
-    updatePreferencesState((current) => {
-      if (!enabled) {
-        return {
-          ...current,
-          quietStart: null,
-          quietEnd: null,
-        };
-      }
-
-      return {
-        ...current,
-        quietStart: current.quietStart ?? '23:00',
-        quietEnd: current.quietEnd ?? '08:00',
-      };
-    });
-  }
-
   async function saveChannelSettings(): Promise<void> {
     try {
       setChannelSaveState('saving');
@@ -455,8 +410,6 @@ export function Settings() {
     danger: 'border-rose-300/20 bg-rose-300/10 text-rose-800 dark:text-rose-100',
   }[pushDetails.tone];
   const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
-  const quietHoursEnabled =
-    notificationPreferences?.quietStart != null && notificationPreferences.quietEnd != null;
 
   return (
     <section className="space-y-4">
@@ -606,6 +559,51 @@ export function Settings() {
               Open live feed
             </Link>
           </div>
+
+          {notificationError ? (
+            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-800 dark:text-rose-100">
+              {notificationError}
+            </div>
+          ) : null}
+
+          {!notificationPreferences ? (
+            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/40 p-4 text-sm text-text-secondary">
+              Loading notification preferences…
+            </div>
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Non-watchlist alerts</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    Let high-confidence names outside your watchlist push through too.
+                  </p>
+                </div>
+                <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
+                  {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
+                </div>
+              </div>
+
+              <label
+                className="flex items-center justify-between gap-4"
+                htmlFor="push-non-watchlist-toggle"
+              >
+                <span className="text-sm font-medium text-text-primary">
+                  Alert me for tickers outside my watchlist
+                </span>
+                <input
+                  id="push-non-watchlist-toggle"
+                  type="checkbox"
+                  checked={notificationPreferences.pushNonWatchlist}
+                  onChange={(event) => updatePreferencesState((current) => ({
+                    ...current,
+                    pushNonWatchlist: event.target.checked,
+                  }))}
+                  className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
+                />
+              </label>
+            </div>
+          )}
         </div>
       </CollapsiblePanel>
 
@@ -720,180 +718,6 @@ export function Settings() {
           >
             {isChannelSaving ? 'Saving...' : isChannelSaved ? 'Saved ✓' : 'Save'}
           </button>
-        </div>
-      </CollapsiblePanel>
-
-      <CollapsiblePanel
-        id="notification-budget"
-        title="Notification budget"
-        eyebrow="Notification budget"
-        description="Quiet hours, daily cap, and non-watchlist volume."
-      >
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-[22px] font-semibold text-text-primary">
-                Notification timing
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Control when Event Radar can ping you and how much push volume you allow each day.
-              </p>
-            </div>
-            <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
-              {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
-            </div>
-          </div>
-
-          {notificationError ? (
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-800 dark:text-rose-100">
-              {notificationError}
-            </div>
-          ) : null}
-
-          {!notificationPreferences ? (
-            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/40 p-4 text-sm text-text-secondary">
-              Loading notification preferences…
-            </div>
-          ) : (
-            <>
-              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">Signal tier delivery</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    This is how Event Radar separates push-worthy alerts from feed-only activity.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {SIGNAL_TIER_ROWS.map((row) => (
-                    <div
-                      key={row.severity}
-                      className="flex flex-col gap-3 rounded-2xl border border-overlay-medium bg-bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${row.severityClassName}`}
-                        >
-                          {row.severity}
-                        </span>
-                        <p className="text-sm leading-6 text-text-secondary">{row.detail}</p>
-                      </div>
-                      <div className="inline-flex items-center rounded-full border border-overlay-medium bg-overlay-subtle px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-primary">
-                        {row.delivery}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">Quiet hours</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    During quiet hours, only top-priority setups push through.
-                  </p>
-                </div>
-
-                <label className="flex items-center justify-between gap-4" htmlFor="quiet-hours-toggle">
-                  <span className="text-sm font-medium text-text-primary">Enable quiet hours</span>
-                  <input
-                    id="quiet-hours-toggle"
-                    type="checkbox"
-                    checked={quietHoursEnabled}
-                    onChange={(event) => toggleQuietHours(event.target.checked)}
-                    className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-                  />
-                </label>
-
-                {quietHoursEnabled ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="block space-y-2" htmlFor="quiet-hours-start">
-                      <span className="block text-sm font-medium text-text-primary">Quiet hours start</span>
-                      <input
-                        id="quiet-hours-start"
-                        type="time"
-                        value={notificationPreferences.quietStart ?? '23:00'}
-                        onChange={(event) => updatePreferencesState((current) => ({
-                          ...current,
-                          quietStart: event.target.value,
-                        }))}
-                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-                      />
-                    </label>
-
-                    <label className="block space-y-2" htmlFor="quiet-hours-end">
-                      <span className="block text-sm font-medium text-text-primary">Quiet hours end</span>
-                      <input
-                        id="quiet-hours-end"
-                        type="time"
-                        value={notificationPreferences.quietEnd ?? '08:00'}
-                        onChange={(event) => updatePreferencesState((current) => ({
-                          ...current,
-                          quietEnd: event.target.value,
-                        }))}
-                        className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-primary" htmlFor="daily-push-limit">
-                    Daily push limit
-                  </label>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Top-priority setups still push even after the cap is hit.
-                  </p>
-                </div>
-
-                <select
-                  id="daily-push-limit"
-                  value={String(notificationPreferences.dailyPushCap)}
-                  onChange={(event) => updatePreferencesState((current) => ({
-                    ...current,
-                    dailyPushCap: Number(event.target.value),
-                  }))}
-                  className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-                >
-                  <option value="5">5 alerts</option>
-                  <option value="10">10 alerts</option>
-                  <option value="20">20 alerts</option>
-                  <option value="50">50 alerts</option>
-                  <option value="0">Unlimited</option>
-                </select>
-              </div>
-
-              <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">Non-watchlist alerts</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Let high-confidence names outside your watchlist push through too.
-                  </p>
-                </div>
-
-                <label
-                  className="flex items-center justify-between gap-4"
-                  htmlFor="push-non-watchlist-toggle"
-                >
-                  <span className="text-sm font-medium text-text-primary">
-                    Alert me for tickers outside my watchlist
-                  </span>
-                  <input
-                    id="push-non-watchlist-toggle"
-                    type="checkbox"
-                    checked={notificationPreferences.pushNonWatchlist}
-                    onChange={(event) => updatePreferencesState((current) => ({
-                      ...current,
-                      pushNonWatchlist: event.target.checked,
-                    }))}
-                    className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-                  />
-                </label>
-              </div>
-            </>
-          )}
         </div>
       </CollapsiblePanel>
 

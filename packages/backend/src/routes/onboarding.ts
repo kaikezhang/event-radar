@@ -3,7 +3,7 @@ import { and, eq, gte, sql, isNotNull, inArray } from 'drizzle-orm';
 import { events, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { requireApiKey } from './auth-middleware.js';
-import { ensureUserExists, resolveRequestUserId } from './user-context.js';
+import { ensureUserExists, resolveRequestUserId } from '../utils/request-user.js';
 
 export interface OnboardingRouteOptions {
   apiKey?: string;

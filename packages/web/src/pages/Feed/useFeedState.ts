@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { AlertSummary, FilterPreset, ScorecardSummary, WatchlistItem } from '../../types/index.js';
+import type { AlertSummary, FilterPreset, ScorecardSummary } from '../../types/index.js';
 import { useAlerts } from '../../hooks/useAlerts.js';
 
 export const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
@@ -18,11 +18,9 @@ const SOURCE_DISPLAY: Record<string, string> = {
 };
 
 const PRESETS_KEY = 'event-radar-filter-presets';
-const FEED_TAB_KEY = 'event-radar-feed-tab';
 const FEED_SORT_KEY = 'er-feed-sort';
 const UNAUTH_BANNER_KEY = 'event-radar-unauth-banner-dismissed';
 
-export type FeedTab = 'smart' | 'watchlist' | 'all';
 export type SortMode = 'latest' | 'severity';
 
 export interface DateGroup {
@@ -39,16 +37,8 @@ export const BUILT_IN_PRESETS: FilterPreset[] = [
 export const POPULAR_TICKERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN'];
 export const PULL_THRESHOLD = 80;
 
-export function getDefaultSeverities(tab: FeedTab): string[] {
-  switch (tab) {
-    case 'smart':
-      return ['CRITICAL', 'HIGH', 'MEDIUM'];
-    case 'all':
-      return [...SEVERITIES];
-    case 'watchlist':
-    default:
-      return ['HIGH', 'CRITICAL'];
-  }
+export function getDefaultSeverities(): string[] {
+  return ['CRITICAL', 'HIGH', 'MEDIUM'];
 }
 
 export function loadCustomPresets(): FilterPreset[] {
@@ -64,15 +54,6 @@ function saveCustomPresets(presets: FilterPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
 }
 
-export function loadFeedTab(): FeedTab | null {
-  try {
-    const raw = localStorage.getItem(FEED_TAB_KEY);
-    return raw === 'smart' || raw === 'watchlist' || raw === 'all' ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
 export function loadFeedSort(): SortMode | null {
   try {
     const raw = localStorage.getItem(FEED_SORT_KEY);
@@ -80,10 +61,6 @@ export function loadFeedSort(): SortMode | null {
   } catch {
     return null;
   }
-}
-
-function saveFeedTab(tab: FeedTab) {
-  localStorage.setItem(FEED_TAB_KEY, tab);
 }
 
 function saveFeedSort(mode: SortMode) {
@@ -243,28 +220,19 @@ export function groupAlertsByDate(alerts: AlertSummary[]): DateGroup[] {
 interface UseFeedStateOptions {
   addAsync: (ticker: string) => Promise<unknown>;
   hasWatchlist: boolean;
-  isAuthenticated: boolean;
-  isAuthLoading: boolean;
   isDesktop: boolean;
   isOnWatchlist: (ticker: string) => boolean;
   isWatchlistLoading: boolean;
-  watchlistItems: WatchlistItem[];
 }
 
 export function useFeedState({
   addAsync,
   hasWatchlist,
-  isAuthenticated,
-  isAuthLoading,
   isDesktop,
   isOnWatchlist,
   isWatchlistLoading,
-  watchlistItems,
 }: UseFeedStateOptions) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<FeedTab>('all');
-  const tabInitializedRef = useRef(false);
-  const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showAddFilterDropdown, setShowAddFilterDropdown] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>(() => loadFeedSort() ?? 'latest');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -291,59 +259,26 @@ export function useFeedState({
   const addFilterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isAuthLoading || isWatchlistLoading) {
-      return;
-    }
-    if (tabInitializedRef.current) {
+    if (!searchParams.has('tab')) {
       return;
     }
 
-    tabInitializedRef.current = true;
-
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'smart' || tabParam === 'watchlist' || tabParam === 'all') {
-      setActiveTab(tabParam);
-      if (isAuthenticated) {
-        saveFeedTab(tabParam);
-      }
-      const nextSearchParams = new URLSearchParams(searchParams);
-      nextSearchParams.delete('tab');
-      setSearchParams(nextSearchParams, { replace: true });
-      return;
-    }
-
-    if (isAuthenticated) {
-      const saved = loadFeedTab();
-      if (saved) {
-        setActiveTab(saved);
-      } else if (hasWatchlist) {
-        // Default to Smart Feed for users with a watchlist
-        setActiveTab('smart');
-      }
-    }
-  }, [
-    hasWatchlist,
-    isAuthenticated,
-    isAuthLoading,
-    isWatchlistLoading,
-    searchParams,
-    setSearchParams,
-  ]);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('tab');
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     saveFeedSort(sortMode);
   }, [sortMode]);
-
-  const isSmartMode = activeTab === 'smart';
-  const isWatchlistMode = activeTab === 'watchlist';
 
   const activeSeverities = useMemo(() => {
     const param = searchParams.get('severity');
     if (param !== null) {
       return param.length > 0 ? param.split(',') : [];
     }
-    return getDefaultSeverities(activeTab);
-  }, [activeTab, searchParams]);
+    return getDefaultSeverities();
+  }, [searchParams]);
 
   const activeSources = useMemo(() => {
     const param = searchParams.get('source');
@@ -369,9 +304,7 @@ export function useFeedState({
     refetch,
     loadMore,
   } = useAlerts(10, {
-    watchlist: isWatchlistMode,
-    watchlistTickers: isWatchlistMode ? watchlistItems.map((item) => item.ticker) : undefined,
-    mode: isSmartMode ? 'smart' : undefined,
+    mode: 'smart',
   });
 
   const updateFilters = useCallback(
@@ -509,8 +442,8 @@ export function useFeedState({
       result = result.filter((alert) => activeSeverities.includes(alert.severity));
     }
 
-    return sortFeedAlerts(result, sortMode, isSmartMode);
-  }, [activeSeverities, isSmartMode, scopedAlerts, sortMode]);
+    return sortFeedAlerts(result, sortMode, true);
+  }, [activeSeverities, scopedAlerts, sortMode]);
 
   const highSignalCount = useMemo(
     () => scopedAlerts.filter((alert) => alert.severity === 'CRITICAL' || alert.severity === 'HIGH').length,
@@ -528,8 +461,8 @@ export function useFeedState({
   );
 
   const hiddenLowCount = useMemo(
-    () => (isSmartMode && !activeSeverities.includes('LOW') ? lowSignalCount : 0),
-    [activeSeverities, isSmartMode, lowSignalCount],
+    () => (!activeSeverities.includes('LOW') ? lowSignalCount : 0),
+    [activeSeverities, lowSignalCount],
   );
 
   useEffect(() => {
@@ -539,8 +472,8 @@ export function useFeedState({
   }, [filteredAlerts, selectedEventId]);
 
   const dateGroups = useMemo(() => groupAlertsByDate(filteredAlerts), [filteredAlerts]);
-  const showWatchlistOnboarding = isWatchlistMode && !hasWatchlist && !isWatchlistLoading;
-  const showSmartFeedEmpty = isSmartMode && isEmpty && !isInitialLoading && !error;
+  const showWatchlistOnboarding = !hasWatchlist && !isWatchlistLoading && isEmpty && !isInitialLoading && !error;
+  const showSmartFeedEmpty = hasWatchlist && isEmpty && !isInitialLoading && !error;
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -591,23 +524,6 @@ export function useFeedState({
       // ignore
     }
   }, []);
-
-  const handleTabChange = useCallback((tab: FeedTab) => {
-    setActiveTab(tab);
-    setShowModeDropdown(false);
-    setSearchParams(new URLSearchParams(), { replace: true });
-    if (isAuthenticated) {
-      saveFeedTab(tab);
-    }
-  }, [isAuthenticated, setSearchParams]);
-
-  const revealLowSeverity = useCallback(() => {
-    if (activeSeverities.includes('LOW')) {
-      return;
-    }
-
-    updateFilters([...activeSeverities, 'LOW'], activeSources, pushOnly);
-  }, [activeSeverities, activeSources, pushOnly, updateFilters]);
 
   const handleCardClick = useCallback((event: React.MouseEvent, alertId: string) => {
     if (!isDesktop) {
@@ -691,7 +607,6 @@ export function useFeedState({
     activeFilterCount,
     activeSeverities,
     activeSources,
-    activeTab,
     addFilterRef,
     allPresets,
     bannerDismissed,
@@ -706,7 +621,6 @@ export function useFeedState({
     handleCardClick,
     handleDismiss,
     handleQuickWatchlist,
-    handleTabChange,
     handleTouchEnd,
     handleTouchMove,
     handleTouchStart,
@@ -715,8 +629,6 @@ export function useFeedState({
     isInitialLoading,
     isLoadingMore,
     isRefreshing,
-    isSmartMode,
-    isWatchlistMode,
     lowSignalCount,
     mediumSignalCount,
     newAlertIds,
@@ -732,18 +644,15 @@ export function useFeedState({
     setSelectedEventId,
     setShowAddFilterDropdown,
     setShowFilters,
-    setShowModeDropdown,
     setSortMode,
     setToastVisible,
     showAddFilterDropdown,
     showFilters,
-    showModeDropdown,
     showSmartFeedEmpty,
     showWatchlistOnboarding,
     sortMode,
     toastMessage,
     toastVisible,
-    revealLowSeverity,
     toggleSeverity,
     toggleSource,
     togglePushOnly,

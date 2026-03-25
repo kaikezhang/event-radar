@@ -377,7 +377,7 @@ export function Onboarding() {
     }
 
     markComplete();
-    navigate('/?tab=watchlist');
+    navigate('/');
   };
 
   return (

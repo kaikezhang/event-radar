@@ -33,7 +33,6 @@ export async function cleanTestDb(db: Database): Promise<void> {
   await db.execute(sql`DELETE FROM refresh_tokens`);
   await db.execute(sql`DELETE FROM magic_link_tokens`);
   await db.execute(sql`DELETE FROM watchlist`);
-  await db.execute(sql`DELETE FROM watchlist_sections`);
   await db.execute(sql`DELETE FROM ticker_reference`);
   await db.execute(sql`DELETE FROM users`);
   await db.execute(sql`DELETE FROM severity_changes`);
@@ -314,28 +313,12 @@ export async function createTestDb(): Promise<{
   `);
 
   await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS watchlist_sections (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name VARCHAR(100) NOT NULL,
-      color VARCHAR(20) DEFAULT 'gray',
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await db.execute(sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_ws_user_name ON watchlist_sections (user_id, name)
-  `);
-
-  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS watchlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR(100) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       ticker VARCHAR(10) NOT NULL,
       added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       notes TEXT,
-      section_id UUID REFERENCES watchlist_sections(id) ON DELETE SET NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       CONSTRAINT watchlist_user_ticker_unique UNIQUE (user_id, ticker)
     )

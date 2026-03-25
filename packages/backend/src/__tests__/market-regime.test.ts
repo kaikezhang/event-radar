@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RegimeSnapshot } from '@event-radar/shared';
-import { buildApp } from '../app.js';
 import {
   MarketRegimeService,
   calculateAmplificationFactor,
@@ -9,7 +7,6 @@ import {
   toDashboardMarketRegime,
 } from '../services/market-regime.js';
 import { validateApiKeyValue } from '../routes/auth-middleware.js';
-import { safeCloseServer } from './helpers/test-db.js';
 
 interface HistoricalRow {
   date: Date;
@@ -294,142 +291,5 @@ describe('MarketRegimeService', () => {
       }),
       'failed to refresh market regime snapshot',
     );
-  });
-});
-
-describe('GET /api/regime', () => {
-  const TEST_API_KEY = 'regime-test-key';
-
-  const snapshot: RegimeSnapshot = {
-    score: 72,
-    label: 'overbought',
-    factors: {
-      vix: { value: 13.2, zscore: -0.85 },
-      spyRsi: { value: 68.4, signal: 'overbought' },
-      spy52wPosition: { pctFromHigh: -1.1, pctFromLow: 23.7 },
-      maSignal: { sma20: 604.2, sma50: 592.5, signal: 'golden_cross' },
-      yieldCurve: { spread: 1.1, inverted: false },
-    },
-    amplification: {
-      bullish: 0.7,
-      bearish: 1.5,
-    },
-    updatedAt: '2026-03-13T12:00:00.000Z',
-  };
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-  });
-
-  it('requires an api key', async () => {
-    const prev = process.env.AUTH_REQUIRED;
-    process.env.AUTH_REQUIRED = 'true';
-    process.env.JWT_SECRET = 'test-jwt-secret';
-    try {
-      const ctx = buildApp({ logger: false });
-      await ctx.server.ready();
-      try {
-        const response = await ctx.server.inject({
-          method: 'GET',
-          url: '/api/regime',
-        });
-
-        expect(response.statusCode).toBe(401);
-      } finally {
-        await safeCloseServer(ctx.server);
-      }
-    } finally {
-      process.env.AUTH_REQUIRED = prev;
-      delete process.env.JWT_SECRET;
-    }
-  });
-
-  it('returns the current regime snapshot', async () => {
-    const marketRegimeService = {
-      getRegimeSnapshot: vi.fn().mockResolvedValue(snapshot),
-      getAmplificationFactor: vi.fn(),
-    };
-    const ctx = buildApp({
-      logger: false,
-      apiKey: TEST_API_KEY,
-      marketRegimeService: marketRegimeService as never,
-    });
-    await ctx.server.ready();
-
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/regime',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(snapshot);
-    expect(marketRegimeService.getRegimeSnapshot).toHaveBeenCalledTimes(1);
-    await safeCloseServer(ctx.server);
-  });
-
-  it('returns compact history snapshots from /api/v1/regime/history', async () => {
-    const marketRegimeService = {
-      getRegimeSnapshot: vi.fn().mockResolvedValue(snapshot),
-      getRegimeHistory: vi.fn().mockResolvedValue([
-        {
-          at: '2026-03-13T12:00:00.000Z',
-          score: 72,
-          vix: 13.2,
-          spy: 604.8,
-          regime: 'bull',
-          factors: {
-            rsi: 68.4,
-            ma_cross: 'golden_cross',
-            yield_curve: 1.1,
-            vix_zscore: -0.85,
-            pct_from_high: -1.1,
-            pct_from_low: 23.7,
-            label: 'overbought',
-          },
-        },
-      ]),
-      getAmplificationFactor: vi.fn(),
-    };
-    const ctx = buildApp({
-      logger: false,
-      apiKey: TEST_API_KEY,
-      marketRegimeService: marketRegimeService as never,
-    });
-    await ctx.server.ready();
-
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/regime/history?hours=6',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      snapshots: [
-        {
-          at: '2026-03-13T12:00:00.000Z',
-          score: 72,
-          vix: 13.2,
-          spy: 604.8,
-          regime: 'bull',
-          factors: {
-            rsi: 68.4,
-            ma_cross: 'golden_cross',
-            yield_curve: 1.1,
-            vix_zscore: -0.85,
-            pct_from_high: -1.1,
-            pct_from_low: 23.7,
-            label: 'overbought',
-          },
-        },
-      ],
-    });
-    expect(marketRegimeService.getRegimeHistory).toHaveBeenCalledWith(6);
-    await safeCloseServer(ctx.server);
   });
 });

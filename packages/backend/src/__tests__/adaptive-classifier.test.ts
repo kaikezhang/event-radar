@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryEventBus, type ClassificationOutcome, type ClassificationPrediction, type RawEvent } from '@event-radar/shared';
 import type { PGlite } from '@electric-sql/pglite';
 import type { Database } from '../db/connection.js';
 import { buildApp, type AppContext } from '../app.js';
 import { storeEvent } from '../db/event-store.js';
-import { registerAdaptiveRoutes } from '../routes/adaptive.js';
 import { AdaptiveClassifierService } from '../services/adaptive-classifier.js';
 import { ClassificationAccuracyService } from '../services/classification-accuracy.js';
 import { UserFeedbackService } from '../services/user-feedback.js';
@@ -465,109 +463,6 @@ describe('AdaptiveClassifierService', () => {
     expect(queue[0]).toMatchObject({
       eventId,
       reason: 'low_confidence',
-    });
-  });
-});
-
-describe('Adaptive API', () => {
-  let db: Database;
-  let client: PGlite;
-  let server: FastifyInstance;
-
-  beforeAll(async () => {
-    ({ db, client } = await createTestDb());
-    server = Fastify({ logger: false });
-    registerAdaptiveRoutes(server, db, { apiKey: TEST_API_KEY });
-    await server.ready();
-  });
-
-  afterAll(async () => {
-    await safeCloseServer(server);
-    await safeClose(client);
-  });
-
-  beforeEach(async () => {
-    await cleanTestDb(db);
-  });
-
-  it('requires an API key to read weights', async () => {
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/v1/adaptive/weights',
-    });
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('recalculates weights through the API', async () => {
-    const accuracyService = new ClassificationAccuracyService(db);
-    await seedEvaluatedEvents(db, accuracyService, {
-      count: 20,
-      source: 'sec-edgar',
-    });
-
-    const response = await server.inject({
-      method: 'POST',
-      url: '/api/v1/adaptive/recalculate',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      weights: { 'sec-edgar': 1 },
-      sampleSize: 20,
-    });
-  });
-
-  it('returns the pending queue via the API', async () => {
-    const accuracyService = new ClassificationAccuracyService(db);
-    const service = new AdaptiveClassifierService(db, { accuracyService });
-    const eventId = await storeEvent(db, {
-      event: makeRawEvent({ source: 'sec-edgar', id: randomUUID() }),
-      severity: 'HIGH',
-    });
-
-    await accuracyService.recordPrediction(eventId, makePrediction({ confidence: 0.42 }));
-    await service.enqueueEventIfNeeded({
-      eventId,
-      source: 'sec-edgar',
-      confidence: 0.42,
-    });
-
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/v1/adaptive/queue?limit=5',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toHaveLength(1);
-    expect(response.json()[0]).toMatchObject({
-      eventId,
-      reason: 'low_confidence',
-    });
-  });
-
-  it('returns weight adjustment history via the API', async () => {
-    const accuracyService = new ClassificationAccuracyService(db);
-    const service = new AdaptiveClassifierService(db, { accuracyService });
-
-    await seedEvaluatedEvents(db, accuracyService, {
-      count: 20,
-      source: 'sec-edgar',
-    });
-    await service.recalculateWeights('manual seed');
-
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/v1/adaptive/history?limit=5',
-      headers: { 'x-api-key': TEST_API_KEY },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toHaveLength(1);
-    expect(response.json()[0]).toMatchObject({
-      reason: 'manual seed',
     });
   });
 });

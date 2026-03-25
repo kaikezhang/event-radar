@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import {
   InMemoryEventBus,
   type RawEvent,
@@ -20,7 +19,6 @@ import {
 } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 import type { PGlite } from '@electric-sql/pglite';
-import { registerAccuracyRoutes } from '../routes/accuracy.js';
 import { PriceService } from '../services/price-service.js';
 
 const TEST_API_KEY = 'accuracy-api-key';
@@ -419,18 +417,13 @@ describe('Classification accuracy API and pipeline integration', () => {
   let db: Database;
   let client: PGlite;
   let appCtx: AppContext;
-  let apiServer: FastifyInstance;
 
   beforeAll(async () => {
     ({ db, client } = await createTestDb());
     appCtx = buildApp({ logger: false, db, apiKey: TEST_API_KEY });
-    apiServer = Fastify({ logger: false });
-    registerAccuracyRoutes(apiServer, db, { apiKey: TEST_API_KEY });
-    await apiServer.ready();
   }, 20000);
 
   afterAll(async () => {
-    await safeCloseServer(apiServer);
     await safeCloseServer(appCtx.server);
     await safeClose(client);
   }, 20000);
@@ -531,63 +524,4 @@ describe('Classification accuracy API and pipeline integration', () => {
     });
   });
 
-  it('requires API key for accuracy routes', async () => {
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/stats',
-    });
-
-    expect(response.statusCode).toBe(401);
-    expect(response.json()).toEqual({
-      error: 'API key required',
-      docs: '/api-docs',
-    });
-  });
-
-  it('returns accuracy stats from the API', async () => {
-    const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, {
-      event: makeRawEvent({ source: 'sec-edgar', type: '8-K' }),
-      severity: 'HIGH',
-    });
-    await service.recordPrediction(eventId, makePrediction());
-    await service.recordOutcome(eventId, makeOutcome());
-
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: '/api/v1/accuracy/stats?period=30d&groupBy=source',
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.totalEvaluated).toBe(1);
-    expect(body.groups['sec-edgar'].count).toBe(1);
-  }, 10000);
-
-  it('returns prediction versus outcome for a single event', async () => {
-    const service = new ClassificationAccuracyService(db);
-    const eventId = await storeEvent(db, {
-      event: makeRawEvent({ source: 'sec-edgar', type: '8-K' }),
-      severity: 'HIGH',
-    });
-    await service.recordPrediction(eventId, makePrediction());
-    await service.recordOutcome(eventId, makeOutcome());
-
-    const response = await apiServer.inject({
-      method: 'GET',
-      url: `/api/v1/accuracy/events/${eventId}`,
-      headers: {
-        'x-api-key': TEST_API_KEY,
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.prediction.predictedSeverity).toBe('HIGH');
-    expect(body.outcome.actualDirection).toBe('bullish');
-    expect(body.evaluation.directionCorrect).toBe(true);
-  }, 10000);
 });

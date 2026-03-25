@@ -3,7 +3,7 @@ import { eq, ne, sql, and, count, gte, lte, asc, inArray } from 'drizzle-orm';
 import { eventOutcomes, events, pipelineAudit, watchlist } from '../db/schema.js';
 import type { Database } from '../db/connection.js';
 import { findSimilarEvents } from '../services/event-similarity.js';
-import { resolveRequestUserId } from './user-context.js';
+import { resolveRequestUserId } from '../utils/request-user.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
 import { requireApiKey } from './auth-middleware.js';
 

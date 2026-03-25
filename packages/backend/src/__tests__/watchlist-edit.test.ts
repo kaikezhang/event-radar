@@ -60,6 +60,7 @@ describe('watchlist edit & bulk routes', () => {
       const res = await ctx.server.inject({ method: 'PATCH', url: '/api/watchlist/AAPL', headers: AUTH_HEADERS, payload: { notes: 'Earnings play Q1' } });
       expect(res.statusCode).toBe(200);
       expect(res.json().notes).toBe('Earnings play Q1');
+      expect(res.json()).not.toHaveProperty('sectionId');
     });
 
     it('handles case-insensitive ticker in URL', async () => {
@@ -67,6 +68,26 @@ describe('watchlist edit & bulk routes', () => {
       const res = await ctx.server.inject({ method: 'PATCH', url: '/api/watchlist/msft', headers: AUTH_HEADERS, payload: { notes: 'lowercase test' } });
       expect(res.statusCode).toBe(200);
       expect(res.json().notes).toBe('lowercase test');
+    });
+
+    it('ignores legacy sectionId updates', async () => {
+      await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist',
+        headers: AUTH_HEADERS,
+        payload: { ticker: 'NVDA' },
+      });
+
+      const res = await ctx.server.inject({
+        method: 'PATCH',
+        url: '/api/watchlist/NVDA',
+        headers: AUTH_HEADERS,
+        payload: { notes: 'core name', sectionId: 'legacy-section-id' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().notes).toBe('core name');
+      expect(res.json()).not.toHaveProperty('sectionId');
     });
   });
 
@@ -82,6 +103,7 @@ describe('watchlist edit & bulk routes', () => {
       expect(res.json()).toEqual({ added: 3, skipped: 0 });
       const listRes = await ctx.server.inject({ method: 'GET', url: '/api/watchlist', headers: AUTH_HEADERS });
       expect(listRes.json().data).toHaveLength(3);
+      expect(listRes.json().data[0]).not.toHaveProperty('sectionId');
     });
 
     it('skips duplicates without error', async () => {
@@ -105,6 +127,28 @@ describe('watchlist edit & bulk routes', () => {
       const items = listRes.json().data;
       const aapl = items.find((i: Record<string, unknown>) => i.ticker === 'AAPL');
       expect(aapl.notes).toBe('earnings play');
+    });
+
+    it('ignores legacy sectionId values in bulk payloads', async () => {
+      const res = await ctx.server.inject({
+        method: 'POST',
+        url: '/api/watchlist/bulk',
+        headers: AUTH_HEADERS,
+        payload: {
+          tickers: [
+            { ticker: 'AAPL', sectionId: 'legacy-growth' },
+            { ticker: 'MSFT', sectionId: 'legacy-core', notes: 'quality' },
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toEqual({ added: 2, skipped: 0 });
+
+      const listRes = await ctx.server.inject({ method: 'GET', url: '/api/watchlist', headers: AUTH_HEADERS });
+      expect(listRes.json().data).toEqual(expect.arrayContaining([
+        expect.not.objectContaining({ sectionId: expect.anything() }),
+      ]));
     });
   });
 
