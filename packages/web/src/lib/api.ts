@@ -743,37 +743,11 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
 
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
-    // Query events filtered to HIGH + CRITICAL severity only.
-    // This shows important events (earnings, M&A, major news) regardless of whether
-    // they went through the live pipeline (delivered) or were backfilled historically.
-    // Filters out noise like StockTwits trending, routine filings, etc.
-    const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`);
-    const highEvents = data.data ?? data.events ?? [];
-
-    // Also get CRITICAL events separately (severity filter is exact match, not >=)
-    const critData = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=CRITICAL`);
-    const critEvents = critData.data ?? critData.events ?? [];
-
-    // Merge and deduplicate by id, sort by date descending
-    const seen = new Set<string>();
-    const allEvents: Record<string, unknown>[] = [];
-    for (const e of [...critEvents, ...highEvents]) {
-      const ev = e as Record<string, unknown>;
-      const id = ev.id as string;
-      if (id && !seen.has(id)) {
-        seen.add(id);
-        allEvents.push(ev);
-      }
-    }
-
-    // Sort newest first
-    allEvents.sort((a, b) => {
-      const ta = new Date(a.received_at as string ?? a.receivedAt as string ?? 0).getTime();
-      const tb = new Date(b.received_at as string ?? b.receivedAt as string ?? 0).getTime();
-      return tb - ta;
-    });
-
-    const events = allEvents.slice(0, 20);
+    // Query all events for this ticker (any severity), sorted by date descending.
+    // Previously filtered to HIGH+CRITICAL only, which caused "Ticker not found" for
+    // tickers that only had MEDIUM events (e.g., AAPL).
+    const data = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20`);
+    const events = (data.data ?? data.events ?? []) as Record<string, unknown>[];
 
     if (events.length === 0) return null;
 
