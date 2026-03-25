@@ -33,7 +33,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: ({ ticker, data }: { ticker: string; data: { notes?: string; sectionId?: string | null } }) =>
+    mutationFn: ({ ticker, data }: { ticker: string; data: { notes?: string } }) =>
       updateWatchlistItem(ticker, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
@@ -42,7 +42,7 @@ export function useWatchlist(options?: { enabled?: boolean }) {
   });
 
   const bulkAddMutation = useMutation({
-    mutationFn: (tickers: Array<{ ticker: string; sectionId?: string; notes?: string }>) =>
+    mutationFn: (tickers: Array<{ ticker: string; notes?: string }>) =>
       bulkAddWatchlist(tickers),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });

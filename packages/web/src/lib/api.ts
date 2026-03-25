@@ -12,7 +12,6 @@ import type {
   LlmEnrichment,
   PriceBatchQuote,
   PriceChartData,
-  ScorecardSeverityBreakdownItem,
   ScorecardSummary,
   SimilarEvent,
   SimilarEventOutcomeStats,
@@ -697,16 +696,7 @@ export async function getScorecardSummary(days?: number): Promise<ScorecardSumma
   }
 }
 
-export async function getScorecardSeverityBreakdown(
-  days?: number,
-): Promise<ScorecardSeverityBreakdownItem[] | null> {
-  try {
-    const query = days == null ? '' : `?days=${days}`;
-    return await apiFetch(`/v1/scorecards/severity-breakdown${query}`) as ScorecardSeverityBreakdownItem[];
-  } catch {
-    return null;
-  }
-}
+
 
 export async function getEventScorecard(id: string): Promise<EventScorecard | null> {
   try {
@@ -912,7 +902,6 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
     addedAt: (w.addedAt as string) ?? (w.added_at as string) ?? new Date().toISOString(),
     notes: (w.notes as string | null) ?? null,
     name: (w.name as string | null) ?? null,
-    sectionId: (w.sectionId as string | null) ?? (w.section_id as string | null) ?? null,
     sortOrder: typeof w.sortOrder === 'number' ? w.sortOrder : (typeof w.sort_order === 'number' ? w.sort_order : 0),
   }));
 }
@@ -944,13 +933,13 @@ export async function removeFromWatchlist(ticker: string): Promise<void> {
 
 export async function updateWatchlistItem(
   ticker: string,
-  data: { notes?: string; sectionId?: string | null },
+  data: { notes?: string },
 ): Promise<WatchlistItem> {
   return apiFetch(`/watchlist/${ticker.toUpperCase()}`, { method: 'PATCH', body: data });
 }
 
 export async function bulkAddWatchlist(
-  tickers: Array<{ ticker: string; sectionId?: string; notes?: string }>,
+  tickers: Array<{ ticker: string; notes?: string }>,
 ): Promise<{ added: number; skipped: number }> {
   return apiFetch('/watchlist/bulk', { method: 'POST', body: { tickers } });
 }
