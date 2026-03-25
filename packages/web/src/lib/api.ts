@@ -743,25 +743,33 @@ export async function getEventOutcome(eventId: string): Promise<EventOutcome | n
 
 export async function getTickerProfile(symbol: string): Promise<TickerProfileData | null> {
   try {
-    // Query MEDIUM+ events for this ticker. LOW events (StockTwits trending etc.) are
-    // excluded to reduce noise. Fetches CRITICAL, HIGH, and MEDIUM separately because
-    // the severity filter is an exact match, not >=.
-    const [critData, highData, medData] = await Promise.all([
+    // Show only HIGH + CRITICAL events. If none exist, fall back to MEDIUM
+    // so the ticker page isn't empty for tickers with only moderate events.
+    const [critData, highData] = await Promise.all([
       apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=CRITICAL`),
       apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=HIGH`),
-      apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=MEDIUM`),
     ]);
     const seen = new Set<string>();
     const allEvents: Record<string, unknown>[] = [];
     for (const e of [
       ...((critData.data ?? []) as Record<string, unknown>[]),
       ...((highData.data ?? []) as Record<string, unknown>[]),
-      ...((medData.data ?? []) as Record<string, unknown>[]),
     ]) {
       const id = e.id as string;
       if (id && !seen.has(id)) {
         seen.add(id);
         allEvents.push(e);
+      }
+    }
+    // Fallback to MEDIUM if no HIGH/CRITICAL events found
+    if (allEvents.length === 0) {
+      const medData = await apiFetch(`/events?ticker=${symbol.toUpperCase()}&limit=20&severity=MEDIUM`);
+      for (const e of ((medData.data ?? []) as Record<string, unknown>[])) {
+        const id = e.id as string;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          allEvents.push(e);
+        }
       }
     }
     allEvents.sort((a, b) => {
