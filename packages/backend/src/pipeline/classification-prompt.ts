@@ -20,8 +20,8 @@ Given an event from a financial data source, classify it by:
 7. **priority**: 0-100 — lower number = higher priority
 
 SEVERITY CALIBRATION:
-- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%. These events move prices 5%+ immediately.
-- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions. These events move prices 2-5%.
+- CRITICAL: Trading halts, FDA drug approvals/rejections, major M&A (>$1B), presidential executive orders affecting specific sectors, earnings surprises >20%, record-breaking buybacks (>$50B), bankruptcy filings of major companies. These events move prices 5%+ immediately.
+- HIGH: SEC insider trading (Form 4 large transactions >$1M), analyst upgrades/downgrades from major firms, earnings surprises 5-20%, significant regulatory actions, major stock buybacks (>$1B), significant dividend changes, stock splits, large acquisitions (<$1B), CEO/CFO departures at major companies. These events move prices 2-5%.
 - MEDIUM: Routine SEC filings (10-Q, 10-K), earnings in-line with estimates, industry reports, moderate news. Prices may move 0.5-2%.
 - LOW: Social media trending without news catalyst, routine corporate updates, conference presentations, minor regulatory filings. Minimal price impact expected.
 
