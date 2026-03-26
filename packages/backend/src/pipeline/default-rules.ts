@@ -1,7 +1,6 @@
 import type { Rule } from '@event-radar/shared';
 import { POLITICAL_RULES } from './political-rules.js';
 import { MACRO_RULES } from './macro-rules.js';
-import { getStockTwitsTrendingDefaultSeverity } from '../scanners/stocktwits-scanner.js';
 
 /**
  * Default classification rules for SEC filings (8-K items + Form 4 insider trading),
@@ -252,20 +251,6 @@ export const DEFAULT_RULES: Rule[] = [
     actions: [
       { type: 'setSeverity', value: 'LOW' },
       { type: 'addTags', values: ['8-K', 'exhibits'] },
-    ],
-    priority: 40,
-    enabled: true,
-  },
-  {
-    id: 'stocktwits-entered-trending',
-    name: 'StockTwits entered trending',
-    conditions: [
-      { type: 'sourceEquals', value: 'stocktwits' },
-      { type: 'titleContains', value: 'entered StockTwits trending' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: getStockTwitsTrendingDefaultSeverity() },
-      { type: 'addTags', values: ['stocktwits', 'trending'] },
     ],
     priority: 40,
     enabled: true,

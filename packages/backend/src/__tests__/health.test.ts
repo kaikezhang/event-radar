@@ -68,8 +68,8 @@ describe('GET /health', () => {
   it('returns a public /api/health payload with service status and scanner counts', async () => {
     vi.spyOn(ctx.registry, 'healthAll').mockReturnValue([
       { scanner: 'sec-edgar', status: 'healthy', errorCount: 0, lastScanAt: null },
-      { scanner: 'fedwatch', status: 'degraded', errorCount: 1, lastScanAt: null },
-      { scanner: 'dummy', status: 'down', errorCount: 3, lastScanAt: null },
+      { scanner: 'breaking-news', status: 'degraded', errorCount: 1, lastScanAt: null },
+      { scanner: 'truth-social', status: 'down', errorCount: 3, lastScanAt: null },
     ]);
 
     const response = await ctx.server.inject({

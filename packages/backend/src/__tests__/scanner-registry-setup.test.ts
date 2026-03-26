@@ -20,43 +20,51 @@ describe('scanner registry setup', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not register dead scanners even when their env flags are enabled', () => {
+  it('registers only the surviving scanners when enabled', () => {
+    process.env.TRUTH_SOCIAL_ENABLED = 'true';
+    process.env.BREAKING_NEWS_ENABLED = 'true';
+    process.env.FDA_ENABLED = 'true';
+    process.env.FEDERAL_REGISTER_ENABLED = 'true';
+    process.env.SEC_EDGAR_ENABLED = 'true';
+    process.env.HALT_SCANNER_ENABLED = 'true';
+
+    const registry = { register: vi.fn() };
+    registerScanners(registry as never, new InMemoryEventBus());
+
+    const registeredNames = registry.register.mock.calls.map(([scanner]) => scanner.name);
+    expect(registeredNames).toContain('truth-social');
+    expect(registeredNames).toContain('breaking-news');
+    expect(registeredNames).toContain('fda');
+    expect(registeredNames).toContain('federal-register');
+    expect(registeredNames).toContain('sec-edgar');
+    expect(registeredNames).toContain('trading-halt');
+  });
+
+  it('ignores removed scanner env flags', () => {
+    process.env.BREAKING_NEWS_ENABLED = 'false';
+    process.env.FDA_ENABLED = 'false';
+    process.env.FEDERAL_REGISTER_ENABLED = 'false';
+    process.env.DUMMY_SCANNER_ENABLED = 'true';
+    process.env.X_SCANNER_ENABLED = 'true';
+    process.env.REDDIT_ENABLED = 'true';
+    process.env.STOCKTWITS_ENABLED = 'true';
+    process.env.ECON_CALENDAR_ENABLED = 'true';
+    process.env.FEDWATCH_ENABLED = 'true';
+    process.env.WHITEHOUSE_ENABLED = 'true';
     process.env.CONGRESS_ENABLED = 'true';
     process.env.UNUSUAL_OPTIONS_ENABLED = 'true';
     process.env.SHORT_INTEREST_ENABLED = 'true';
     process.env.DOJ_ENABLED = 'true';
     process.env.ANALYST_ENABLED = 'true';
+    process.env.EARNINGS_ENABLED = 'true';
     process.env.NEWSWIRE_ENABLED = 'true';
-    process.env.SEC_EDGAR_ENABLED = 'true';
+    process.env.IR_MONITOR_ENABLED = 'true';
+    process.env.DILUTION_SCANNER_ENABLED = 'true';
 
     const registry = { register: vi.fn() };
     registerScanners(registry as never, new InMemoryEventBus());
 
     const registeredNames = registry.register.mock.calls.map(([scanner]) => scanner.name);
-    expect(registeredNames).toContain('newswire');
-    expect(registeredNames).toContain('sec-edgar');
-    expect(registeredNames).not.toContain('congress');
-    expect(registeredNames).not.toContain('unusual-options');
-    expect(registeredNames).not.toContain('short-interest');
-    expect(registeredNames).not.toContain('doj');
-    expect(registeredNames).not.toContain('analyst');
-  });
-
-  it('keeps active scanners registered by their existing env gates', () => {
-    process.env.REDDIT_ENABLED = 'true';
-    process.env.STOCKTWITS_ENABLED = 'true';
-    process.env.FDA_ENABLED = 'true';
-    process.env.WHITEHOUSE_ENABLED = 'true';
-    process.env.FEDERAL_REGISTER_ENABLED = 'true';
-
-    const registry = { register: vi.fn() };
-    registerScanners(registry as never, new InMemoryEventBus());
-
-    const registeredNames = registry.register.mock.calls.map(([scanner]) => scanner.name);
-    expect(registeredNames).toContain('reddit');
-    expect(registeredNames).toContain('stocktwits');
-    expect(registeredNames).toContain('fda');
-    expect(registeredNames).toContain('whitehouse');
-    expect(registeredNames).toContain('federal-register');
+    expect(registeredNames).toEqual([]);
   });
 });
