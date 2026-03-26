@@ -1,6 +1,5 @@
 import type { LLMProvider } from '../services/llm-provider.js';
 import type { RawEvent } from '@event-radar/shared';
-import { getMarketCloseTime, isNYSEHoliday } from './market-calendar.js';
 
 export interface GatekeeperResult {
   pass: boolean;
@@ -16,8 +15,8 @@ function toET(d: Date): Date {
 }
 
 /**
- * Return the ms timestamp of the next RTH open (Mon-Fri 09:30 ET, excluding holidays).
- * Used for session-aware staleness: events remain valid until the next trading session opens.
+ * Return the ms timestamp of the next RTH open (Mon-Fri 09:30 ET).
+ * Used for session-aware staleness: events remain valid until the next weekday session opens.
  */
 export function getNextSessionOpenMs(now: Date): number {
   const et = toET(now);
@@ -25,29 +24,24 @@ export function getNextSessionOpenMs(now: Date): number {
   const day = et.getDay(); // 0=Sun, 6=Sat
   const totalMinutes = et.getHours() * 60 + et.getMinutes();
 
-  // If it's a weekday, not a holiday, and before 09:30 ET → next open is today 09:30
-  if (day >= 1 && day <= 5 && totalMinutes < 570 && !isNYSEHoliday(now)) {
+  if (day >= 1 && day <= 5 && totalMinutes < 570) {
     const target = new Date(et);
     target.setHours(9, 30, 0, 0);
     return now.getTime() + (target.getTime() - et.getTime());
   }
 
-  // Otherwise, find the next weekday that isn't a holiday
   const candidate = new Date(et);
-  // Start from tomorrow
   candidate.setDate(candidate.getDate() + 1);
   candidate.setHours(9, 30, 0, 0);
 
-  // Walk forward until we find a non-weekend, non-holiday day (max 10 days to be safe)
   for (let i = 0; i < 10; i++) {
     const cDay = candidate.getDay();
-    if (cDay >= 1 && cDay <= 5 && !isNYSEHoliday(candidate)) {
+    if (cDay >= 1 && cDay <= 5) {
       return now.getTime() + (candidate.getTime() - et.getTime());
     }
     candidate.setDate(candidate.getDate() + 1);
   }
 
-  // Fallback: should never reach here, but 16h is a safe default
   return now.getTime() + 16 * 60 * 60_000;
 }
 
@@ -79,7 +73,7 @@ function getSourceReliabilityTier(source: string): string {
  * RTH:    Mon-Fri 09:30–16:00 ET
  * PRE:    Mon-Fri 04:00–09:30 ET
  * POST:   Mon-Fri 16:00–20:00 ET
- * CLOSED: weekends, holidays, overnight (20:00–04:00 ET)
+ * CLOSED: weekends and overnight (20:00–04:00 ET)
  */
 export function getMarketSession(now?: Date): MarketSession {
   const d = now ?? new Date();
@@ -88,23 +82,12 @@ export function getMarketSession(now?: Date): MarketSession {
   const day = et.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return 'CLOSED';
 
-  // NYSE holidays
-  if (isNYSEHoliday(d)) return 'CLOSED';
-
   const hours = et.getHours();
   const minutes = et.getMinutes();
   const totalMinutes = hours * 60 + minutes;
-  const closeEt = toET(getMarketCloseTime(d));
-  const closeMinutes = closeEt.getHours() * 60 + closeEt.getMinutes();
-
-  // PRE:  04:00 (240) – 09:30 (570)
-  // RTH:  09:30 (570) – market close
-  // POST: market close – 20:00 (1200)
-  // CLOSED: 00:00–04:00 and 20:00–24:00
-
-  if (totalMinutes >= 570 && totalMinutes < closeMinutes) return 'RTH';
+  if (totalMinutes >= 570 && totalMinutes < 960) return 'RTH';
   if (totalMinutes >= 240 && totalMinutes < 570) return 'PRE';
-  if (totalMinutes >= closeMinutes && totalMinutes < 1200) return 'POST';
+  if (totalMinutes >= 960 && totalMinutes < 1200) return 'POST';
   return 'CLOSED';
 }
 

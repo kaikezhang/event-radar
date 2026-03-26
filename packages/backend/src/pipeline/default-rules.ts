@@ -1,15 +1,414 @@
 import type { Rule } from '@event-radar/shared';
-import { POLITICAL_RULES } from './political-rules.js';
-import { MACRO_RULES } from './macro-rules.js';
+
+const POLITICAL_LLM_TAGS = ['political-market-impact', 'force-llm-classification'] as const;
+
+function createPoliticalTags(
+  actor: 'trump',
+  tags: readonly string[],
+): string[] {
+  return [actor, ...POLITICAL_LLM_TAGS, ...tags];
+}
+
+const TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS = [
+  {
+    id: 'trump-geopolitical-iran',
+    name: 'Trump — Iran Keywords',
+    keyword: 'iran',
+    tags: ['geopolitics', 'iran'],
+  },
+  {
+    id: 'trump-geopolitical-china',
+    name: 'Trump — China Keywords',
+    keyword: 'china',
+    tags: ['geopolitics', 'china'],
+  },
+  {
+    id: 'trump-policy-tariff',
+    name: 'Trump — Tariff Boost',
+    keyword: 'tariff',
+    tags: ['trade-policy', 'tariff'],
+  },
+  {
+    id: 'trump-geopolitical-military',
+    name: 'Trump — Military Keywords',
+    keyword: 'military',
+    tags: ['geopolitics', 'military'],
+  },
+  {
+    id: 'trump-policy-sanctions',
+    name: 'Trump — Sanctions Keywords',
+    keyword: 'sanctions',
+    tags: ['policy', 'sanctions'],
+  },
+  {
+    id: 'trump-geopolitical-strike',
+    name: 'Trump — Strike Keywords',
+    keyword: 'strike',
+    tags: ['geopolitics', 'strike'],
+  },
+  {
+    id: 'trump-geopolitical-war',
+    name: 'Trump — War Keywords',
+    keyword: 'war',
+    tags: ['geopolitics', 'war'],
+  },
+  {
+    id: 'trump-geopolitical-peace',
+    name: 'Trump — Peace Keywords',
+    keyword: 'peace',
+    tags: ['geopolitics', 'peace'],
+  },
+  {
+    id: 'trump-geopolitical-ceasefire',
+    name: 'Trump — Ceasefire Keywords',
+    keyword: 'ceasefire',
+    tags: ['geopolitics', 'ceasefire'],
+  },
+  {
+    id: 'trump-geopolitical-complete-total',
+    name: 'Trump — Complete And Total Keywords',
+    keyword: 'complete and total',
+    tags: ['geopolitics', 'ceasefire'],
+  },
+  {
+    id: 'trump-trade-deal',
+    name: 'Trump — Trade Deal Keywords',
+    keyword: 'trade deal',
+    tags: ['trade-policy', 'trade-deal'],
+  },
+  {
+    id: 'trump-policy-executive-order',
+    name: 'Trump — Executive Order Keywords',
+    keyword: 'executive order',
+    tags: ['policy', 'executive-order'],
+  },
+  {
+    id: 'trump-fed',
+    name: 'Trump — Fed Keywords',
+    keyword: 'fed',
+    tags: ['macro', 'fed'],
+  },
+  {
+    id: 'trump-interest-rate',
+    name: 'Trump — Interest Rate Keywords',
+    keyword: 'interest rate',
+    tags: ['macro', 'rates'],
+  },
+  {
+    id: 'trump-policy-ban',
+    name: 'Trump — Ban Keywords',
+    keyword: 'ban',
+    tags: ['policy', 'ban'],
+  },
+  {
+    id: 'trump-policy-postpone',
+    name: 'Trump — Postpone Keywords',
+    keyword: 'postpone',
+    tags: ['policy', 'postpone'],
+  },
+  {
+    id: 'trump-policy-halt',
+    name: 'Trump — Halt Keywords',
+    keyword: 'halt',
+    tags: ['policy', 'halt'],
+  },
+] as const;
+
+function createTruthSocialBoostRules(): Rule[] {
+  return TRUTH_SOCIAL_MARKET_IMPACT_KEYWORDS.map((rule) => ({
+    id: rule.id,
+    name: rule.name,
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: rule.keyword },
+    ],
+    actions: [
+      { type: 'addTags', values: createPoliticalTags('trump', rule.tags) },
+      { type: 'setPriority', value: 12 },
+    ],
+    priority: 12,
+    enabled: true,
+  }));
+}
 
 /**
- * Default classification rules for SEC filings (8-K items + Form 4 insider trading),
- * political post classification (Truth Social + X), and macro/geopolitical scanners.
+ * Default classification rules for SEC filings, Truth Social political posts,
+ * and surviving macro/geopolitical sources.
  * Lower priority number = applied first. Severity uses "highest wins" logic in RuleEngine.
  */
 export const DEFAULT_RULES: Rule[] = [
-  ...POLITICAL_RULES,
-  ...MACRO_RULES,
+  // ── Truth Social Political Rules ────────────────────────────────────
+  {
+    id: 'trump-tariff',
+    name: 'Trump — Tariff/Trade Keywords',
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: 'tariff' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'addTags', values: createPoliticalTags('trump', ['tariff', 'trade-policy']) },
+      { type: 'setPriority', value: 5 },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'trump-trade',
+    name: 'Trump — Trade Keywords',
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: 'trade' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'addTags', values: createPoliticalTags('trump', ['trade-policy']) },
+      { type: 'setPriority', value: 5 },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  ...createTruthSocialBoostRules(),
+  {
+    id: 'trump-company',
+    name: 'Trump — Company Name Mentions',
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: 'company' },
+    ],
+    actions: [
+      { type: 'addTags', values: createPoliticalTags('trump', ['company-mention']) },
+      { type: 'setPriority', value: 10 },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'trump-crypto',
+    name: 'Trump — Crypto Keywords',
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: 'crypto' },
+    ],
+    actions: [
+      { type: 'addTags', values: createPoliticalTags('trump', ['crypto']) },
+      { type: 'setPriority', value: 10 },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'trump-bitcoin',
+    name: 'Trump — Bitcoin Keywords',
+    conditions: [
+      { type: 'sourceEquals', value: 'truth-social' },
+      { type: 'titleContains', value: 'bitcoin' },
+    ],
+    actions: [
+      { type: 'addTags', values: createPoliticalTags('trump', ['crypto', 'bitcoin']) },
+      { type: 'setPriority', value: 10 },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+
+  // ── Macro Rules For Surviving Sources ───────────────────────────────
+  {
+    id: 'breaking-news-war',
+    name: 'Breaking News — War/Conflict',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'war' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'geopolitical', 'war'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-sanctions-imposed',
+    name: 'Breaking News — Sanctions Imposed',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'sanctions imposed' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'sanction', 'geopolitical'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-defaults-on',
+    name: 'Breaking News — Defaults On Debt',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'defaults on' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'CRITICAL' },
+      { type: 'setConfidence', value: 0.95 },
+      { type: 'addTags', values: ['breaking-news', 'default', 'credit'] },
+    ],
+    priority: 10,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-tariff',
+    name: 'Breaking News — Tariff',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'tariff' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'tariff', 'trade'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-sanction',
+    name: 'Breaking News — Sanction',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'sanction' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'sanction', 'geopolitical'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-embargo',
+    name: 'Breaking News — Embargo',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'embargo' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'embargo', 'trade'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-opec',
+    name: 'Breaking News — OPEC',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'opec' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'opec', 'energy'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-recession',
+    name: 'Breaking News — Recession',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'recession' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'recession', 'macro'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-bailout',
+    name: 'Breaking News — Bailout',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'bailout' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.85 },
+      { type: 'addTags', values: ['breaking-news', 'bailout', 'financial'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-default',
+    name: 'Breaking News — Default',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'default' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'HIGH' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['breaking-news', 'default', 'credit'] },
+    ],
+    priority: 15,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-fed',
+    name: 'Breaking News — Federal Reserve',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'fed' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['breaking-news', 'fed', 'monetary-policy'] },
+    ],
+    priority: 25,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-rate',
+    name: 'Breaking News — Interest Rate',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'rate' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.75 },
+      { type: 'addTags', values: ['breaking-news', 'rates'] },
+    ],
+    priority: 25,
+    enabled: true,
+  },
+  {
+    id: 'breaking-news-inflation',
+    name: 'Breaking News — Inflation',
+    conditions: [
+      { type: 'sourceEquals', value: 'breaking-news' },
+      { type: 'titleContains', value: 'inflation' },
+    ],
+    actions: [
+      { type: 'setSeverity', value: 'MEDIUM' },
+      { type: 'setConfidence', value: 0.8 },
+      { type: 'addTags', values: ['breaking-news', 'inflation', 'macro'] },
+    ],
+    priority: 25,
+    enabled: true,
+  },
+
   // ── CRITICAL ───────────────────────────────────────────────────────
   {
     id: '8k-1.02-bankruptcy',

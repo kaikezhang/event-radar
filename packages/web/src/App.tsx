@@ -14,7 +14,6 @@ import { TickerSearch } from './components/TickerSearch.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
-import { Footer } from './components/Footer.js';
 
 const AuthVerifyPage = lazy(async () => ({ default: (await import('./pages/AuthVerify.js')).AuthVerify }));
 const EventDetailPage = lazy(async () => ({ default: (await import('./pages/EventDetail.js')).EventDetail }));
@@ -156,7 +155,6 @@ function ShellFrame() {
                 <Outlet />
               </ErrorBoundary>
             </main>
-            <Footer />
           </div>
           <BottomNav />
           <ScrollRestoration />

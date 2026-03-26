@@ -19,7 +19,6 @@ import type { RuleEngine } from './pipeline/rule-engine.js';
 import type { IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
 import type { OutcomeTracker } from './services/outcome-tracker.js';
 import { storeEvent } from './db/event-store.js';
-import { createUserWebhookDelivery } from './services/user-webhook-delivery.js';
 import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
 import { resolvePoliticalClassificationResult } from './pipeline/political-llm-policy.js';
@@ -124,8 +123,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
     outcomeTracker,
     startTime,
   } = deps;
-
-  const userWebhookDelivery = db ? createUserWebhookDelivery(db) : undefined;
 
   const processPipelineEvent = async (
     event: RawEvent,
@@ -715,37 +712,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       }
 
       pipelineFunnelTotal.inc({ stage: 'delivered' });
-
-      // Deliver to users with Discord webhook configured for matching watchlist tickers
-      if (userWebhookDelivery && ticker) {
-        const webhookStart = Date.now();
-        try {
-          const webhookResult = await userWebhookDelivery.deliverToMatchingUsers({
-            title: event.title,
-            description: enrichment?.impact ?? event.title,
-            severity: classificationResult.severity,
-            ticker,
-            source: event.source,
-            timestamp: event.timestamp ?? new Date(),
-            url: typeof event.url === 'string' ? event.url : undefined,
-          });
-
-          const webhookMs = Date.now() - webhookStart;
-
-          if (webhookResult.sent > 0) {
-            deliveriesSentTotal.inc({ channel: 'user_discord_webhook', status: 'success' }, webhookResult.sent);
-            deliveriesByChannel.inc({ channel: 'user_discord_webhook' }, webhookResult.sent);
-            deliveryLatencySeconds.observe({ channel: 'user_discord_webhook' }, webhookMs / 1000);
-          }
-          if (webhookResult.errors > 0) {
-            deliveriesSentTotal.inc({ channel: 'user_discord_webhook', status: 'failure' }, webhookResult.errors);
-            deliveryErrorsTotal.inc({ channel: 'user_discord_webhook', error_type: 'webhook_delivery_failed' }, webhookResult.errors);
-          }
-        } catch (err) {
-          deliveryErrorsTotal.inc({ channel: 'user_discord_webhook', error_type: 'webhook_delivery_exception' });
-          server.log.warn({ err, ticker }, 'user webhook delivery failed');
-        }
-      }
 
       server.log.info({
         pipeline: true,

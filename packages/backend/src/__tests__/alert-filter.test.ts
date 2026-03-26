@@ -126,10 +126,7 @@ describe('AlertFilter', () => {
       expect(result.reason).toContain('stale');
     });
 
-    it('should handle holiday weekends with extended staleness', () => {
-      // Thursday 2026-04-02 20:00 ET, Good Friday is a holiday
-      // Next open = Monday 2026-04-06 09:30 ET (~85.5h away)
-      // Use a helper to build the ET date
+    it('should not extend staleness for holidays anymore', () => {
       const etStr = '2026-04-03T01:00:00.000Z'; // ~Thu 21:00 ET (EDT offset)
       const closedNow = new Date(etStr);
       const staleFilter = new AlertFilter({
@@ -137,12 +134,11 @@ describe('AlertFilter', () => {
         maxAgeMinutes: 120,
         nowFn: () => closedNow,
       });
-      // Event from 40h ago should pass (next open is ~85.5h from Thu 20:00)
       const event = makeEvent({
         timestamp: new Date(closedNow.getTime() - 40 * 60 * 60_000),
       });
       const result = staleFilter.check(event);
-      expect(result.pass).toBe(true);
+      expect(result.pass).toBe(false);
     });
   });
 

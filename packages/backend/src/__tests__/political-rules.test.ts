@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { RuleEngine } from '../pipeline/rule-engine.js';
-import { POLITICAL_RULES } from '../pipeline/political-rules.js';
+import { DEFAULT_RULES } from '../pipeline/default-rules.js';
 import type { RawEvent } from '@event-radar/shared';
 
 function makePoliticalEvent(overrides: Partial<RawEvent> = {}): RawEvent {
@@ -21,7 +21,7 @@ describe('Political Classification Rules', () => {
 
   beforeEach(() => {
     engine = new RuleEngine();
-    engine.loadRules(POLITICAL_RULES);
+    engine.loadRules(DEFAULT_RULES);
   });
 
   describe('Trump — Truth Social rules', () => {
@@ -134,21 +134,6 @@ describe('Political Classification Rules', () => {
       expect(result.tags).toContain('political-market-impact');
       expect(result.tags).toContain('force-llm-classification');
       expect(result.matchedRules).toContain('trump-tariff');
-    });
-  });
-
-  describe('removed X rules', () => {
-    it('should not match old X political rules after scanner removal', () => {
-      const event = makePoliticalEvent({
-        source: 'x',
-        title: 'DOGE has saved taxpayers $100 billion',
-        metadata: { author: 'elonmusk' },
-      });
-      const result = engine.classify(event);
-
-      expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toEqual([]);
-      expect(result.matchedRules).toEqual([]);
     });
   });
 
