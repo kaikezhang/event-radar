@@ -2,7 +2,7 @@ import type { Severity } from '@event-radar/shared';
 import { decideAlertRouting, type AlertRoutingDecision } from './push-policy.js';
 import type { AlertEvent, DeliveryService } from './types.js';
 
-export type ChannelName = 'bark' | 'discord' | 'telegram' | 'webhook' | 'webPush';
+export type ChannelName = 'discord' | 'webPush';
 
 export interface ChannelDeliveryResult {
   channel: string;
@@ -16,27 +16,21 @@ export interface AlertRouteResult {
 }
 
 export interface AlertRouterConfig {
-  bark?: DeliveryService;
   discord?: DeliveryService;
-  telegram?: DeliveryService;
-  webhook?: DeliveryService;
   webPush?: DeliveryService;
 }
 
 /**
- * Routes based on severity per DELIVERY.md:
- *   CRITICAL → Bark + Telegram + Discord + Webhook
- *   HIGH     → Bark + Telegram + Discord + Webhook
- *   MEDIUM   → Telegram + Discord + Webhook
- *   LOW      → Discord + Webhook
+ * Routes based on severity:
+ *   all severities → Discord
  *
  * Web Push is gated separately by the confidence-based push policy.
  */
 const ROUTING_TABLE: Record<Severity, ChannelName[]> = {
-  CRITICAL: ['bark', 'discord', 'telegram', 'webhook'],
-  HIGH: ['bark', 'discord', 'telegram', 'webhook'],
-  MEDIUM: ['discord', 'telegram', 'webhook'],
-  LOW: ['discord', 'webhook'],
+  CRITICAL: ['discord'],
+  HIGH: ['discord'],
+  MEDIUM: ['discord'],
+  LOW: ['discord'],
 };
 
 export class AlertRouter {
@@ -44,10 +38,7 @@ export class AlertRouter {
 
   constructor(config: AlertRouterConfig) {
     this.channels = new Map();
-    if (config.bark) this.channels.set('bark', config.bark);
     if (config.discord) this.channels.set('discord', config.discord);
-    if (config.telegram) this.channels.set('telegram', config.telegram);
-    if (config.webhook) this.channels.set('webhook', config.webhook);
     if (config.webPush) this.channels.set('webPush', config.webPush);
   }
 
@@ -68,17 +59,14 @@ export class AlertRouter {
     if (alert.deliveryTier) {
       switch (alert.deliveryTier) {
         case 'critical':
-          // Full push: Bark + Discord + Telegram + Webhook + optionally WebPush
-          targets = ['bark', 'discord', 'telegram', 'webhook'];
+          targets = ['discord'];
           if (decision.shouldPush) targets.push('webPush');
           break;
         case 'high':
-          // Feed channels only — no Bark/Telegram push
-          targets = ['discord', 'webhook'];
+          targets = decision.shouldPush ? ['discord', 'webPush'] : ['discord'];
           break;
         case 'feed':
-          // Feed channels only
-          targets = ['discord', 'webhook'];
+          targets = ['discord'];
           break;
         default:
           targets = ROUTING_TABLE[alert.severity];

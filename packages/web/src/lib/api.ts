@@ -19,7 +19,6 @@ import type {
 const API_BASE = '/api';
 const PUSH_DELIVERY_CHANNELS = new Set([
   'apns',
-  'bark',
   'ios-push',
   'push',
   'push-notification',

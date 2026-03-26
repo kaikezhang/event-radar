@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DiscordWebhook } from '../discord-webhook.js';
-import { BarkPusher } from '../bark-pusher.js';
-import { TelegramDelivery } from '../telegram.js';
-import { WebhookDelivery } from '../webhook.js';
 import type { AlertEvent } from '../types.js';
 import type { RegimeSnapshot } from '@event-radar/shared';
 
@@ -49,8 +46,6 @@ describe('Rich Delivery Format', () => {
     vi.stubGlobal('fetch', fetchSpy);
   });
 
-  // ---- Discord Tests (compact card format) ----
-
   describe('Discord — compact card: enrichment in description', () => {
     it('should include "Why it matters" in description instead of AI Analysis field', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
@@ -69,21 +64,18 @@ describe('Rich Delivery Format', () => {
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
-
-      // No AI Analysis field in compact card
       const aiField = embed.fields?.find(
-        (f: { name: string }) => f.name === '🤖 AI Analysis',
+        (field: { name: string }) => field.name === '🤖 AI Analysis',
       );
-      expect(aiField).toBeUndefined();
 
-      // Impact is in description (SEC filings use "What this means")
+      expect(aiField).toBeUndefined();
       expect(embed.description).toContain('**What this means:**');
       expect(embed.description).toContain('Leadership vacuum');
     });
   });
 
   describe('Discord — compact card: no Market Regime field', () => {
-    it('should NOT include Market Regime field (removed in compact card)', async () => {
+    it('should NOT include Market Regime field', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -106,7 +98,7 @@ describe('Rich Delivery Format', () => {
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
       const regimeField = embed.fields?.find(
-        (f: { name: string }) => f.name === '📈 Market Regime',
+        (field: { name: string }) => field.name === '📈 Market Regime',
       );
 
       expect(regimeField).toBeUndefined();
@@ -131,13 +123,13 @@ describe('Rich Delivery Format', () => {
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
       const disclaimer = embed.fields?.find(
-        (f: { name: string }) => f.name === '⚖️ Disclaimer',
+        (field: { name: string }) => field.name === '⚖️ Disclaimer',
       );
 
       expect(disclaimer).toBeUndefined();
     });
 
-    it('should NOT include disclaimer when no enrichment/regime/history', async () => {
+    it('should NOT include disclaimer when no enrichment, regime, or history exists', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(makeAlert());
@@ -145,7 +137,7 @@ describe('Rich Delivery Format', () => {
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const embed = JSON.parse(options.body as string).embeds[0];
       const disclaimer = embed.fields?.find(
-        (f: { name: string }) => f.name === '⚖️ Disclaimer',
+        (field: { name: string }) => field.name === '⚖️ Disclaimer',
       );
 
       expect(disclaimer).toBeUndefined();
@@ -172,135 +164,7 @@ describe('Rich Delivery Format', () => {
       const embed = JSON.parse(options.body as string).embeds[0];
 
       expect(embed.title).toBe('📉 NVDA — Bearish Setup');
-      // Description contains the event title as headline
       expect(embed.description).toContain('8-K: Apple Inc. (AAPL)');
-    });
-  });
-
-  // ---- Bark Tests ----
-
-  describe('Bark — regime label in body', () => {
-    it('should append regime label to body text', async () => {
-      const pusher = new BarkPusher({ key: 'k' });
-
-      await pusher.send(
-        makeAlert({
-          regimeSnapshot: makeRegimeSnapshot({
-            score: -55,
-            label: 'oversold',
-          }),
-        }),
-      );
-
-      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(options.body as string);
-
-      expect(body.body).toContain('Regime');
-      expect(body.body).toContain('🟢OS');
-      expect(body.body).toContain('-55');
-    });
-  });
-
-  // ---- Telegram Tests ----
-
-  describe('Telegram — AI Analysis and Regime sections', () => {
-    it('should include AI Analysis, regime, and disclaimer in message', async () => {
-      const telegram = new TelegramDelivery({
-        botToken: 'tok',
-        chatId: '123',
-        minSeverity: 'LOW',
-        enabled: true,
-        retryDelays: [0],
-      });
-
-      await telegram.send(
-        makeAlert({
-          enrichment: {
-            summary: '12 similar restructuring events: 67% positive at T+20',
-            impact: 'Cost-cutting viewed favorably',
-            action: '🟡 Monitor',
-            tickers: [{ symbol: 'AAPL', direction: 'bullish' }],
-          },
-          regimeSnapshot: makeRegimeSnapshot({ score: 10, label: 'neutral' }),
-        }),
-      );
-
-      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const payload = JSON.parse(options.body as string);
-
-      expect(payload.text).toContain('AI Analysis');
-      expect(payload.text).toContain('12 similar restructuring events');
-      expect(payload.text).toContain('Market Regime');
-      expect(payload.text).toContain('Neutral');
-      expect(payload.text).toContain('Not financial advice');
-    });
-  });
-
-  // ---- Webhook Tests ----
-
-  describe('Webhook — enrichment and regime in payload', () => {
-    const webhookConfig = {
-      url: 'https://example.com/webhook',
-      secret: 'test-secret',
-      minSeverity: 'LOW' as const,
-      enabled: true,
-      retryDelays: [0],
-    };
-
-    it('should include enrichment, historicalContext, and regimeSnapshot in JSON payload', async () => {
-      const webhook = new WebhookDelivery(webhookConfig);
-
-      await webhook.send(
-        makeAlert({
-          enrichment: {
-            summary: 'CEO departure',
-            impact: 'Leadership gap',
-            action: '🔴 High-Quality Setup',
-            tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
-            regimeContext: 'Neutral market context',
-          },
-          historicalContext: {
-            matchCount: 5,
-            confidence: 'medium',
-            avgAlphaT5: 0.02,
-            avgAlphaT20: 0.08,
-            winRateT20: 60,
-            medianAlphaT20: 0.07,
-            topMatches: [],
-            patternSummary: 'Leadership change pattern',
-          },
-          regimeSnapshot: makeRegimeSnapshot({ score: 0, label: 'neutral' }),
-        }),
-      );
-
-      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const payload = JSON.parse(options.body as string);
-
-      expect(payload.enrichment).toBeDefined();
-      expect(payload.enrichment.summary).toBe('CEO departure');
-      expect(payload.enrichment.regimeContext).toBe('Neutral market context');
-      expect(payload.historicalContext).toBeDefined();
-      expect(payload.historicalContext.matchCount).toBe(5);
-      expect(payload.historicalContext.winRateT20).toBe(60);
-      expect(payload.regimeSnapshot).toBeDefined();
-      expect(payload.regimeSnapshot.score).toBe(0);
-      expect(payload.regimeSnapshot.label).toBe('neutral');
-      expect(payload.regimeSnapshot.amplification).toEqual({ bullish: 1.0, bearish: 1.0 });
-    });
-
-    it('should omit enrichment/regime/history when not present', async () => {
-      const webhook = new WebhookDelivery(webhookConfig);
-
-      await webhook.send(makeAlert());
-
-      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const payload = JSON.parse(options.body as string);
-
-      expect(payload.enrichment).toBeUndefined();
-      expect(payload.historicalContext).toBeUndefined();
-      expect(payload.regimeSnapshot).toBeUndefined();
-      expect(payload.event).toBeDefined();
-      expect(payload.severity).toBe('HIGH');
     });
   });
 });
