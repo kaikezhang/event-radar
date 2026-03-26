@@ -7,6 +7,8 @@ import { cn } from '../lib/utils.js';
 
 interface AlertCardProps {
   alert: AlertSummary;
+  /** When true, internal Links become non-navigating spans (desktop split-pane mode) */
+  isDesktop?: boolean;
   showWatchlistButton?: boolean;
   isOnWatchlist?: boolean;
   onToggleWatchlist?: (ticker: string) => void;
@@ -51,6 +53,7 @@ function displaySource(source: string, sourceKey?: string): string {
 
 export function AlertCard({
   alert,
+  isDesktop = false,
   showWatchlistButton,
   isOnWatchlist,
   onToggleWatchlist,
@@ -117,17 +120,27 @@ export function AlertCard({
         </div>
 
         {/* Compressed title with inline direction */}
-        <Link
-          to={`/event/${alert.id}`}
-          aria-label={`Open alert ${alert.title}`}
-          className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
-        >
-          <h2 className="mt-1.5 line-clamp-1 text-[14px] font-medium leading-5 text-text-secondary">
-            {primaryTicker && <span className="font-semibold text-text-primary">{primaryTicker}</span>}
-            {primaryTicker && ' — '}
-            {alert.title}
-          </h2>
-        </Link>
+        {isDesktop ? (
+          <div className="block cursor-pointer rounded-lg">
+            <h2 className="mt-1.5 line-clamp-1 text-[14px] font-medium leading-5 text-text-secondary">
+              {primaryTicker && <span className="font-semibold text-text-primary">{primaryTicker}</span>}
+              {primaryTicker && ' — '}
+              {alert.title}
+            </h2>
+          </div>
+        ) : (
+          <Link
+            to={`/event/${alert.id}`}
+            aria-label={`Open alert ${alert.title}`}
+            className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            <h2 className="mt-1.5 line-clamp-1 text-[14px] font-medium leading-5 text-text-secondary">
+              {primaryTicker && <span className="font-semibold text-text-primary">{primaryTicker}</span>}
+              {primaryTicker && ' — '}
+              {alert.title}
+            </h2>
+          </Link>
+        )}
 
         {/* Single-line footer */}
         <div className="mt-1.5 flex items-center gap-1 text-xs">
@@ -198,17 +211,27 @@ export function AlertCard({
       </div>
 
       {/* Row 2: Headline */}
-      <Link
-        to={`/event/${alert.id}`}
-        aria-label={`Open alert ${alert.title}`}
-        className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
-      >
-        <h2 className="mt-2 line-clamp-2 text-[17px] font-semibold leading-6 text-text-primary">
-          {primaryTicker && <span className="font-bold">{primaryTicker}</span>}
-          {primaryTicker && ' — '}
-          {alert.title}
-        </h2>
-      </Link>
+      {isDesktop ? (
+        <div className="block cursor-pointer rounded-lg">
+          <h2 className="mt-2 line-clamp-2 text-[17px] font-semibold leading-6 text-text-primary">
+            {primaryTicker && <span className="font-bold">{primaryTicker}</span>}
+            {primaryTicker && ' — '}
+            {alert.title}
+          </h2>
+        </div>
+      ) : (
+        <Link
+          to={`/event/${alert.id}`}
+          aria-label={`Open alert ${alert.title}`}
+          className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
+        >
+          <h2 className="mt-2 line-clamp-2 text-[17px] font-semibold leading-6 text-text-primary">
+            {primaryTicker && <span className="font-bold">{primaryTicker}</span>}
+            {primaryTicker && ' — '}
+            {alert.title}
+          </h2>
+        </Link>
+      )}
 
       {/* Row 2.5: Thesis preview */}
       <ThesisPreview summary={alert.summary} direction={alert.direction} />
@@ -225,14 +248,22 @@ export function AlertCard({
             />
           </div>
         )}
-        <Link
-          to={`/event/${alert.id}`}
-          className="min-w-0 flex-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
-        >
-          <p className="line-clamp-2 text-[14px] leading-5 text-text-secondary">
-            {alert.summary}
-          </p>
-        </Link>
+        {isDesktop ? (
+          <div className="min-w-0 flex-1 cursor-pointer rounded-lg">
+            <p className="line-clamp-2 text-[14px] leading-5 text-text-secondary">
+              {alert.summary}
+            </p>
+          </div>
+        ) : (
+          <Link
+            to={`/event/${alert.id}`}
+            className="min-w-0 flex-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-default"
+          >
+            <p className="line-clamp-2 text-[14px] leading-5 text-text-secondary">
+              {alert.summary}
+            </p>
+          </Link>
+        )}
       </div>
 
       {/* Row 3.5: Price data + outcome badge */}

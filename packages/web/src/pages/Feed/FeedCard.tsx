@@ -43,6 +43,7 @@ export function FeedCard({
     >
       <AlertCard
         alert={alert}
+        isDesktop={isDesktop}
         showWatchlistButton
         isOnWatchlist={isOnWatchlist}
         onToggleWatchlist={onToggleWatchlist}

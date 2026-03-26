@@ -513,8 +513,14 @@ export function useFeedState({
     }
 
     const target = event.target as HTMLElement;
-    if (target.closest('a, button, [role="button"]')) {
+
+    // Allow buttons (watchlist star, etc.) and external links to work normally
+    if (target.closest('button, [role="button"]')) {
       return;
+    }
+    const anchor = target.closest('a');
+    if (anchor && anchor.getAttribute('target') === '_blank') {
+      return; // External link — let it open in new tab
     }
 
     event.preventDefault();
