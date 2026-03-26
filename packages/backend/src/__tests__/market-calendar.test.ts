@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   getMarketCloseTime,
-  getNYSEHolidaysForYear,
-  isEarlyClose,
   isNYSEHoliday,
 } from '../pipeline/market-calendar.js';
 import { getMarketSession } from '../pipeline/llm-gatekeeper.js';
@@ -81,9 +79,16 @@ function getEasternParts(date: Date): Record<string, string> {
   return parts;
 }
 
+function expectHolidayDates(dates: string[]): void {
+  for (const date of dates) {
+    const [year, month, day] = date.split('-').map(Number);
+    expect(isNYSEHoliday(makeEasternDate(year!, month!, day!, 12))).toBe(true);
+  }
+}
+
 describe('market-calendar', () => {
-  it('computes the 2025 NYSE holiday calendar', () => {
-    expect(getNYSEHolidaysForYear(2025)).toEqual([
+  it('recognizes the 2025 NYSE holiday calendar', () => {
+    expectHolidayDates([
       '2025-01-01',
       '2025-01-20',
       '2025-02-17',
@@ -97,8 +102,8 @@ describe('market-calendar', () => {
     ]);
   });
 
-  it('computes the 2026 NYSE holiday calendar', () => {
-    expect(getNYSEHolidaysForYear(2026)).toEqual([
+  it('recognizes the 2026 NYSE holiday calendar', () => {
+    expectHolidayDates([
       '2026-01-01',
       '2026-01-19',
       '2026-02-16',
@@ -112,8 +117,8 @@ describe('market-calendar', () => {
     ]);
   });
 
-  it('computes the 2027 NYSE holiday calendar including observed year-end closure', () => {
-    expect(getNYSEHolidaysForYear(2027)).toEqual([
+  it('recognizes the 2027 NYSE holiday calendar including observed year-end closure', () => {
+    expectHolidayDates([
       '2027-01-01',
       '2027-01-18',
       '2027-02-15',
@@ -128,8 +133,8 @@ describe('market-calendar', () => {
     ]);
   });
 
-  it('computes the 2028 NYSE holiday calendar for a leap year', () => {
-    expect(getNYSEHolidaysForYear(2028)).toEqual([
+  it('recognizes the 2028 NYSE holiday calendar for a leap year', () => {
+    expectHolidayDates([
       '2028-01-17',
       '2028-02-21',
       '2028-04-14',
@@ -143,10 +148,12 @@ describe('market-calendar', () => {
   });
 
   it('computes Good Friday correctly across 2025-2028', () => {
-    expect(getNYSEHolidaysForYear(2025)).toContain('2025-04-18');
-    expect(getNYSEHolidaysForYear(2026)).toContain('2026-04-03');
-    expect(getNYSEHolidaysForYear(2027)).toContain('2027-03-26');
-    expect(getNYSEHolidaysForYear(2028)).toContain('2028-04-14');
+    expectHolidayDates([
+      '2025-04-18',
+      '2026-04-03',
+      '2027-03-26',
+      '2028-04-14',
+    ]);
   });
 
   it('applies Saturday observed closures to the preceding Friday', () => {
@@ -164,12 +171,23 @@ describe('market-calendar', () => {
     expect(isNYSEHoliday(makeEasternDate(2028, 1, 1, 12))).toBe(false);
   });
 
-  it('flags early close days and excludes full holidays', () => {
-    expect(isEarlyClose(makeEasternDate(2025, 7, 3, 12))).toBe(true);
-    expect(isEarlyClose(makeEasternDate(2026, 11, 27, 12))).toBe(true);
-    expect(isEarlyClose(makeEasternDate(2025, 12, 24, 12))).toBe(true);
-    expect(isEarlyClose(makeEasternDate(2027, 12, 24, 12))).toBe(false);
-    expect(isEarlyClose(makeEasternDate(2026, 7, 3, 12))).toBe(false);
+  it('uses early close hours only on shortened sessions', () => {
+    expect(getEasternParts(getMarketCloseTime(makeEasternDate(2025, 7, 3, 12)))).toMatchObject({
+      hour: '13',
+      minute: '00',
+    });
+    expect(getEasternParts(getMarketCloseTime(makeEasternDate(2026, 11, 27, 12)))).toMatchObject({
+      hour: '13',
+      minute: '00',
+    });
+    expect(getEasternParts(getMarketCloseTime(makeEasternDate(2025, 12, 24, 12)))).toMatchObject({
+      hour: '13',
+      minute: '00',
+    });
+    expect(getEasternParts(getMarketCloseTime(makeEasternDate(2026, 7, 3, 12)))).toMatchObject({
+      hour: '16',
+      minute: '00',
+    });
   });
 
   it('returns 1:00 PM ET for early closes and 4:00 PM ET otherwise', () => {

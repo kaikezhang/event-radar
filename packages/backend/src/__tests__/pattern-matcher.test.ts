@@ -12,11 +12,9 @@ vi.mock('../services/outcome-similarity.js', () => ({
 
 import { findSimilarEvents } from '../services/similarity.js';
 import { findSimilarFromOutcomes } from '../services/outcome-similarity.js';
-import {
-  PatternMatcher,
-  type PatternMatchResult,
-} from '../services/pattern-matcher.js';
-import { resetSectorCacheForTests } from '../pipeline/event-type-mapper.js';
+import type { PatternMatchResult } from '../services/pattern-matcher.js';
+
+let PatternMatcher: typeof import('../services/pattern-matcher.js').PatternMatcher;
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -163,10 +161,11 @@ describe('PatternMatcher', () => {
   const similarityMock = vi.mocked(findSimilarEvents);
   const outcomeSimilarityMock = vi.mocked(findSimilarFromOutcomes);
 
-  beforeEach(() => {
+  beforeEach(async () => {
     similarityMock.mockReset();
     outcomeSimilarityMock.mockReset();
-    resetSectorCacheForTests();
+    vi.resetModules();
+    ({ PatternMatcher } = await import('../services/pattern-matcher.js'));
   });
 
   afterEach(() => {

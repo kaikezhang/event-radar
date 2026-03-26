@@ -180,7 +180,7 @@ function addHoliday(
   }
 }
 
-export function getNYSEHolidaysForYear(year: number): string[] {
+function getNYSEHolidaysForYear(year: number): string[] {
   const holidays = new Set<string>();
 
   addHoliday(holidays, observedHoliday({ year, month: 1, day: 1 }), year);
@@ -209,7 +209,7 @@ export function isNYSEHoliday(date: Date): boolean {
   return getNYSEHolidaysForYear(parts.year).includes(formatDateKey(parts));
 }
 
-export function isEarlyClose(date: Date): boolean {
+function isEarlyClose(date: Date): boolean {
   const parts = getEasternParts(date);
   if (!isWeekday(parts) || isNYSEHoliday(date)) {
     return false;

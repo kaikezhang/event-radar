@@ -162,7 +162,7 @@ export async function authMe(): Promise<{ id: string; email: string; displayName
 
 // ── Feed / Events ───────────────────────────────────────────────────────────
 
-export interface FeedResponse {
+interface FeedResponse {
   alerts: AlertSummary[];
   cursor: string | null;
   total: number;
@@ -933,18 +933,18 @@ export async function getTrendingTickers(limit = 8): Promise<TrendingTicker[]> {
 
 // ── Onboarding API ──────────────────────────────────────────────────────────
 
-export interface SuggestedTicker {
+interface SuggestedTicker {
   symbol: string;
   eventCount7d: number;
   latestSignal: string;
 }
 
-export interface SectorPack {
+interface SectorPack {
   name: string;
   tickers: string[];
 }
 
-export interface SuggestedTickersResponse {
+interface SuggestedTickersResponse {
   tickers: SuggestedTicker[];
   packs: SectorPack[];
 }
@@ -955,45 +955,6 @@ export async function getSuggestedTickers(): Promise<SuggestedTickersResponse> {
 
 export async function initializeWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
   return apiFetch('/v1/watchlist/initialize', { method: 'POST', body: { tickers } });
-}
-
-// ── History / Browse API ─────────────────────────────────────────────────────
-
-export interface HistoryParams {
-  from?: string;
-  to?: string;
-  type?: string;
-  severity?: string;
-  source?: string;
-  ticker?: string;
-  limit?: number;
-  offset?: number;
-}
-
-export interface HistoryResponse {
-  alerts: AlertSummary[];
-  total: number;
-}
-
-export async function getHistoricalEvents(params: HistoryParams): Promise<HistoryResponse> {
-  const qs = new URLSearchParams();
-  if (params.from) qs.set('from', params.from);
-  if (params.to) qs.set('to', params.to);
-  if (params.type) qs.set('type', params.type);
-  if (params.severity) qs.set('severity', params.severity);
-  if (params.source) qs.set('source', params.source);
-  if (params.ticker) qs.set('ticker', params.ticker);
-  qs.set('limit', String(params.limit ?? 50));
-  qs.set('offset', String(params.offset ?? 0));
-
-  const data = await apiFetch(`/events?${qs.toString()}`, { public: true });
-  const events: Record<string, unknown>[] = data.data ?? data.events ?? [];
-  const alerts = events.map(mapAlertSummary);
-
-  return {
-    alerts,
-    total: typeof data.total === 'number' ? data.total : alerts.length,
-  };
 }
 
 function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
@@ -1128,7 +1089,7 @@ function extractSourceMetadataClient(
   }
 }
 
-export function mapSource(source: string): string {
+function mapSource(source: string): string {
   const MAP: Record<string, string> = {
     'sec-edgar': 'SEC Filing',
     'whitehouse': 'White House',
