@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, useState } from 'react';
 import type { Severity } from '../types/index.js';
 
-export interface AlertSoundPreferences {
+interface AlertSoundPreferences {
   enabled: boolean;
   volume: number;
   quietHoursStart: number;

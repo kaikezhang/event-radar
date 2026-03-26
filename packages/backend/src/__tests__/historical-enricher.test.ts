@@ -14,14 +14,10 @@ vi.mock('../services/outcome-similarity.js', () => ({
 
 import { findSimilarEvents } from '../services/similarity.js';
 import { findSimilarFromOutcomes } from '../services/outcome-similarity.js';
-import {
-  HistoricalEnricher,
-  generatePatternSummary,
-} from '../pipeline/historical-enricher.js';
-import {
-  mapEventToSimilarityQuery,
-  resetSectorCacheForTests,
-} from '../pipeline/event-type-mapper.js';
+
+let HistoricalEnricher: typeof import('../pipeline/historical-enricher.js').HistoricalEnricher;
+let mapEventToSimilarityQuery: typeof import('../pipeline/event-type-mapper.js').mapEventToSimilarityQuery;
+let generatePatternSummary: typeof import('../services/pattern-matcher.js').generatePatternSummary;
 
 function makeEvent(overrides: Partial<RawEvent> = {}): RawEvent {
   return {
@@ -80,6 +76,11 @@ function makeMockDb(sector = 'Technology'): Database {
 }
 
 describe('mapEventToSimilarityQuery', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ mapEventToSimilarityQuery } = await import('../pipeline/event-type-mapper.js'));
+  });
+
   it('maps SEC EDGAR item 5.02 to sec_form_8k while preserving the filing item as subtype', () => {
     const mapped = mapEventToSimilarityQuery(makeEvent());
 
@@ -206,11 +207,13 @@ describe('HistoricalEnricher', () => {
     resistance: 188,
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     similarityMock.mockReset();
     outcomeSimilarityMock.mockReset();
     resetMetrics();
-    resetSectorCacheForTests();
+    vi.resetModules();
+    ({ HistoricalEnricher } = await import('../pipeline/historical-enricher.js'));
+    ({ generatePatternSummary } = await import('../services/pattern-matcher.js'));
   });
 
   afterEach(() => {
@@ -963,6 +966,11 @@ describe('HistoricalEnricher', () => {
 });
 
 describe('generatePatternSummary', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ generatePatternSummary } = await import('../services/pattern-matcher.js'));
+  });
+
   it('formats the one-line pattern summary with display percentages', () => {
     expect(
       generatePatternSummary({

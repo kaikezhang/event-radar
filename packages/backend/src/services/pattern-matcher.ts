@@ -1,9 +1,11 @@
+import { eq, sql } from 'drizzle-orm';
 import type { HistoricalContext } from '@event-radar/delivery';
 import type {
   LlmClassificationResult,
   RawEvent,
 } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
+import { companies, tickerHistory } from '../db/historical-schema.js';
 import type { MarketSnapshot } from './market-context-cache.js';
 import {
   findSimilarFromOutcomes,
@@ -17,7 +19,6 @@ import {
 } from './similarity.js';
 import {
   mapEventToSimilarityQuery,
-  resolveSectorForTicker,
 } from '../pipeline/event-type-mapper.js';
 import { extractTickers } from '../scanners/ticker-extractor.js';
 
@@ -66,6 +67,28 @@ const OUTCOME_TITLE_STOP_WORDS = new Set([
   'update',
   'updates',
 ]);
+
+async function lookupSectorForTicker(
+  db: Database,
+  ticker: string,
+): Promise<string | undefined> {
+  const normalizedTicker = ticker.toUpperCase();
+
+  try {
+    const rows = await db
+      .select({
+        ticker: tickerHistory.ticker,
+        sector: companies.sector,
+      })
+      .from(tickerHistory)
+      .innerJoin(companies, eq(companies.id, tickerHistory.companyId))
+      .where(eq(sql`upper(${tickerHistory.ticker})`, normalizedTicker));
+
+    return rows[0]?.sector ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type PatternConfidenceLabel =
   | 'insufficient'
@@ -305,7 +328,7 @@ export class PatternMatcher {
     const sector =
       mapped.sector ??
       (mapped.ticker
-        ? await resolveSectorForTicker(this.db, mapped.ticker)
+        ? await lookupSectorForTicker(this.db, mapped.ticker)
         : undefined);
 
     const baseQuery: SimilarityQuery = {

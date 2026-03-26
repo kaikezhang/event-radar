@@ -6,7 +6,6 @@ import type { MarketContextCache } from '../services/market-context-cache.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
 import {
   extractPrimaryTicker,
-  generatePatternSummary as generatePatternSummaryFromMatcher,
   PatternMatcher,
 } from '../services/pattern-matcher.js';
 
@@ -150,8 +149,6 @@ export class HistoricalEnricher {
     }
   }
 }
-
-export const generatePatternSummary = generatePatternSummaryFromMatcher;
 
 function parseConfidence(value?: string): ConfidenceLevel | undefined {
   if (

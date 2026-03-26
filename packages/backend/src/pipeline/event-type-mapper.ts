@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { LlmClassificationResult, RawEvent } from '@event-radar/shared';
 import type { Database } from '../db/connection.js';
 import { companies, tickerHistory } from '../db/historical-schema.js';
@@ -313,43 +313,8 @@ export async function warmSectorCacheWithTickers(db: Database): Promise<void> {
 
 export const prewarmSectorCache = warmSectorCacheWithTickers;
 
-export function lookupSector(ticker: string): string | undefined {
+function lookupSector(ticker: string): string | undefined {
   return sectorCache.get(ticker.toUpperCase());
-}
-
-export async function resolveSectorForTicker(
-  db: Database,
-  ticker: string,
-): Promise<string | undefined> {
-  const normalizedTicker = ticker.toUpperCase();
-  const cached = sectorCache.get(normalizedTicker);
-  if (cached) {
-    return cached;
-  }
-
-  try {
-    const rows = await db
-      .select({
-        ticker: tickerHistory.ticker,
-        sector: companies.sector,
-      })
-      .from(tickerHistory)
-      .innerJoin(companies, eq(companies.id, tickerHistory.companyId))
-      .where(eq(sql`upper(${tickerHistory.ticker})`, normalizedTicker));
-
-    const sector = rows[0]?.sector ?? undefined;
-    if (sector) {
-      sectorCache.set(normalizedTicker, sector);
-    }
-
-    return sector;
-  } catch {
-    return undefined;
-  }
-}
-
-export function resetSectorCacheForTests(): void {
-  sectorCache.clear();
 }
 
 export function mapEventToSimilarityQuery(
