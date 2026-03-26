@@ -198,7 +198,7 @@ describe('buildClassificationPrompt', () => {
     expect(prompt).toContain('"THE DEMOCRATS ARE DESTROYING THIS COUNTRY"');
   });
 
-  it('should add political post severity guidance for X posts', () => {
+  it('should not add political post guidance for removed X scanner events', () => {
     const prompt = buildClassificationPrompt(makeEvent({
       source: 'x',
       type: 'political-post',
@@ -206,9 +206,8 @@ describe('buildClassificationPrompt', () => {
       body: 'PEACE THROUGH STRENGTH!!!',
     }));
 
-    expect(prompt).toContain('POLITICAL POST CLASSIFICATION:');
-    expect(prompt).toContain('HIGH: Announces intent or threat of policy action that could affect markets.');
-    expect(prompt).toContain('Example: "PEACE THROUGH STRENGTH!!!" = LOW');
+    expect(prompt).not.toContain('POLITICAL POST CLASSIFICATION:');
+    expect(prompt).not.toContain('TRUTH SOCIAL / PRESIDENTIAL POST EXAMPLES:');
   });
 
   it('should distinguish concrete presidential actions from slogans in the Truth Social examples', () => {

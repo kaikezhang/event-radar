@@ -116,18 +116,23 @@ describe('event pipeline LLM gating', () => {
     expect(llmClassifier.classify).not.toHaveBeenCalled();
   });
 
-  it('skips the LLM classifier for stocktwits events even if severity is HIGH', async () => {
+  it('runs the LLM classifier for high-severity social events with engagement metadata', async () => {
     const event = makeEvent({
-      source: 'stocktwits',
-      type: 'post',
+      source: 'social-signal',
+      type: 'social-post',
       title: 'AI chatter',
       body: 'Bullish crowding',
+      metadata: {
+        ticker: 'AAPL',
+        upvotes: 1200,
+        comments: 140,
+      },
     });
     const { llmClassifier, publish } = makeDeps(event, makeRuleResult({ severity: 'HIGH' }));
 
     await publish();
 
-    expect(llmClassifier.classify).not.toHaveBeenCalled();
+    expect(llmClassifier.classify).toHaveBeenCalledOnce();
   });
 
   it('skips the LLM classifier for routine Form 4 events', async () => {

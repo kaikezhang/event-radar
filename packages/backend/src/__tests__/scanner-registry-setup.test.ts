@@ -22,9 +22,11 @@ describe('scanner registry setup', () => {
 
   it('registers only the surviving scanners when enabled', () => {
     process.env.TRUTH_SOCIAL_ENABLED = 'true';
+    process.env.ECON_CALENDAR_ENABLED = 'true';
     process.env.BREAKING_NEWS_ENABLED = 'true';
     process.env.FDA_ENABLED = 'true';
     process.env.FEDERAL_REGISTER_ENABLED = 'true';
+    process.env.NEWSWIRE_ENABLED = 'true';
     process.env.SEC_EDGAR_ENABLED = 'true';
     process.env.HALT_SCANNER_ENABLED = 'true';
 
@@ -33,9 +35,11 @@ describe('scanner registry setup', () => {
 
     const registeredNames = registry.register.mock.calls.map(([scanner]) => scanner.name);
     expect(registeredNames).toContain('truth-social');
+    expect(registeredNames).toContain('econ-calendar');
     expect(registeredNames).toContain('breaking-news');
     expect(registeredNames).toContain('fda');
     expect(registeredNames).toContain('federal-register');
+    expect(registeredNames).toContain('newswire');
     expect(registeredNames).toContain('sec-edgar');
     expect(registeredNames).toContain('trading-halt');
   });
@@ -48,7 +52,7 @@ describe('scanner registry setup', () => {
     process.env.X_SCANNER_ENABLED = 'true';
     process.env.REDDIT_ENABLED = 'true';
     process.env.STOCKTWITS_ENABLED = 'true';
-    process.env.ECON_CALENDAR_ENABLED = 'true';
+    process.env.ECON_CALENDAR_ENABLED = 'false';
     process.env.FEDWATCH_ENABLED = 'true';
     process.env.WHITEHOUSE_ENABLED = 'true';
     process.env.CONGRESS_ENABLED = 'true';
@@ -57,7 +61,6 @@ describe('scanner registry setup', () => {
     process.env.DOJ_ENABLED = 'true';
     process.env.ANALYST_ENABLED = 'true';
     process.env.EARNINGS_ENABLED = 'true';
-    process.env.NEWSWIRE_ENABLED = 'true';
     process.env.IR_MONITOR_ENABLED = 'true';
     process.env.DILUTION_SCANNER_ENABLED = 'true';
 

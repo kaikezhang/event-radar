@@ -77,10 +77,6 @@ function shouldRunLlmClassification(
   event: RawEvent,
   ruleResult: ClassificationResult,
 ): boolean {
-  if (event.source.toLowerCase() === 'stocktwits') {
-    return false;
-  }
-
   if (isRoutineSecForm4Event(event, ruleResult)) {
     return false;
   }

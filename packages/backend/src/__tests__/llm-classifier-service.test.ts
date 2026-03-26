@@ -281,6 +281,17 @@ describe('buildClassifyPrompt', () => {
 
     expect(contentLine).toBe(`Content: ${'x'.repeat(1500)}...`);
   });
+
+  it('omits removed dead-source guidance from the prompt', () => {
+    const prompt = buildClassifyPrompt({
+      headline: 'Truth Social market post',
+      source: 'truth-social',
+    });
+
+    expect(prompt).not.toContain('Source: x');
+    expect(prompt).not.toContain('## x (Twitter/X posts)');
+    expect(prompt).not.toContain('## whitehouse');
+  });
 });
 
 /* ── 5. parseLLMClassification ───────────────────────────────────── */

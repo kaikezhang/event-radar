@@ -85,7 +85,7 @@ TRUTH SOCIAL / PRESIDENTIAL POST EXAMPLES:
 - "THE DEMOCRATS ARE DESTROYING THIS COUNTRY" → LOW (political commentary)`;
 
 function isPoliticalPostSource(source: RawEvent['source']): boolean {
-  return source === 'truth-social' || source === 'x';
+  return source === 'truth-social';
 }
 
 export function buildClassificationPrompt(

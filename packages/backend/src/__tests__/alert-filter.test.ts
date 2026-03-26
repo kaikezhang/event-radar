@@ -38,25 +38,11 @@ describe('AlertFilter', () => {
   describe('disabled filter', () => {
     it('should pass all events when disabled', () => {
       const disabled = new AlertFilter({ enabled: false });
-      const event = makeEvent({ source: 'dummy', type: 'dummy' });
+      const event = makeEvent({ source: 'social-signal', type: 'social-post' });
       const result = disabled.check(event);
       expect(result.pass).toBe(true);
       expect(result.reason).toBe('filter disabled');
-    });
-  });
-
-  describe('Dummy events', () => {
-    it('should skip events from dummy source', () => {
-      const event = makeEvent({ source: 'dummy', type: 'heartbeat' });
-      const result = filter.check(event);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('dummy');
-    });
-
-    it('should skip events with dummy type', () => {
-      const event = makeEvent({ source: 'other', type: 'dummy' });
-      const result = filter.check(event);
-      expect(result.pass).toBe(false);
+      disabled.dispose();
     });
   });
 
@@ -173,7 +159,7 @@ describe('AlertFilter', () => {
 
     it('should block retrospective articles even from primary sources', () => {
       const event = makeEvent({
-        source: 'whitehouse',
+        source: 'truth-social',
         title: "Here's why the market dropped today",
       });
       const result = filter.check(event);
@@ -205,7 +191,7 @@ describe('AlertFilter', () => {
 
     it('should block "you need to know" patterns', () => {
       const event = makeEvent({
-        source: 'reddit',
+        source: 'social-signal',
         title: 'What you need to know about TSLA earnings',
         metadata: { upvotes: 2000, comments: 600 },
       });
@@ -215,24 +201,24 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Primary sources — no longer bypass filters', () => {
-    it('should pass congress trades through L1 (no bypass, but passes as default)', () => {
-      const event = makeEvent({ source: 'congress', type: 'congress-trade' });
+  describe('Live sources — no bypass, default pass-through remains', () => {
+    it('should pass truth social posts through L1 when no blocking rule matches', () => {
+      const event = makeEvent({ source: 'truth-social', type: 'post' });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
       expect(result.reason).toBe('L1 pass');
       expect(result.enrichWithLLM).toBe(true);
     });
 
-    it('should pass unusual options through L1', () => {
-      const event = makeEvent({ source: 'unusual-options', type: 'unusual-options' });
+    it('should pass federal register events through L1', () => {
+      const event = makeEvent({ source: 'federal-register', type: 'rule' });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
       expect(result.enrichWithLLM).toBe(true);
     });
 
-    it('should pass whitehouse events through L1', () => {
-      const event = makeEvent({ source: 'whitehouse', type: 'executive-order' });
+    it('should pass breaking news events through L1', () => {
+      const event = makeEvent({ source: 'breaking-news', type: 'breaking-news' });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
     });
@@ -325,21 +311,21 @@ describe('AlertFilter', () => {
     });
   });
 
-  describe('Social noise filter — updated thresholds', () => {
-    it('should pass high-engagement reddit posts (upvotes >= 1000)', () => {
+  describe('Social noise filter — metadata based thresholds', () => {
+    it('should pass high-engagement social posts (upvotes >= 1000)', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 1200, comments: 50 },
       });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
     });
 
-    it('should block reddit posts with old threshold (upvotes 600 < 1000)', () => {
+    it('should block social posts with old threshold (upvotes 600 < 1000)', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 600, comments: 50 },
       });
       const result = filter.check(event);
@@ -347,20 +333,20 @@ describe('AlertFilter', () => {
       expect(result.reason).toContain('social noise');
     });
 
-    it('should pass high-engagement reddit posts (comments >= 500)', () => {
+    it('should pass high-engagement social posts (comments >= 500)', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 100, comments: 600 },
       });
       const result = filter.check(event);
       expect(result.pass).toBe(true);
     });
 
-    it('should block reddit posts with old comment threshold (250 < 500)', () => {
+    it('should block social posts with old comment threshold (250 < 500)', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 100, comments: 250 },
       });
       const result = filter.check(event);
@@ -369,8 +355,8 @@ describe('AlertFilter', () => {
 
     it('should pass posts with high_engagement flag', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 10, comments: 5, high_engagement: true },
       });
       const result = filter.check(event);
@@ -379,8 +365,8 @@ describe('AlertFilter', () => {
 
     it('should pass watchlist ticker posts with >100 upvotes', () => {
       const event = makeEvent({
-        source: 'stocktwits',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { ticker: 'NVDA', upvotes: 150, comments: 20 },
       });
       const result = filter.check(event);
@@ -390,8 +376,8 @@ describe('AlertFilter', () => {
 
     it('should block low-engagement social posts', () => {
       const event = makeEvent({
-        source: 'reddit',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { upvotes: 50, comments: 30 },
       });
       const result = filter.check(event);
@@ -401,12 +387,23 @@ describe('AlertFilter', () => {
 
     it('should block non-watchlist ticker with low upvotes', () => {
       const event = makeEvent({
-        source: 'stocktwits',
-        type: 'post',
+        source: 'social-signal',
+        type: 'social-post',
         metadata: { ticker: 'UNKNOWN', upvotes: 150, comments: 20 },
       });
       const result = filter.check(event);
       expect(result.pass).toBe(false);
+    });
+
+    it('should detect social signals via score and commentCount metadata aliases', () => {
+      const event = makeEvent({
+        source: 'community-post',
+        type: 'social-post',
+        metadata: { score: 1200, commentCount: 25 },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('social engagement');
     });
   });
 
@@ -477,13 +474,13 @@ describe('AlertFilter', () => {
   describe('Ticker cooldown', () => {
     it('should apply per-ticker cooldown', () => {
       const event1 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA' },
       });
       const event2 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA' },
       });
 
@@ -497,13 +494,13 @@ describe('AlertFilter', () => {
 
     it('should allow different tickers', () => {
       const event1 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA' },
       });
       const event2 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'TSLA' },
       });
 
@@ -513,13 +510,13 @@ describe('AlertFilter', () => {
 
     it('should allow the same ticker across different event types', () => {
       const event1 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
       });
       const event2 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA', eventType: 'guidance_raise' },
       });
 
@@ -529,13 +526,13 @@ describe('AlertFilter', () => {
 
     it('should block the same ticker and llm event type combination', () => {
       const event1 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA' },
       });
       const event2 = makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA' },
       });
       const llmResult = makeLlmResult({ eventType: 'earnings_beat' });
@@ -561,8 +558,8 @@ describe('AlertFilter', () => {
 
       const result = legacyAwareFilter.check(
         makeEvent({
-          source: 'congress',
-          type: 'congress-trade',
+          source: 'truth-social',
+          type: 'post',
           metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
         }),
       );
@@ -583,8 +580,8 @@ describe('AlertFilter', () => {
       });
 
       pruningFilter.check(makeEvent({
-        source: 'congress',
-        type: 'congress-trade',
+        source: 'truth-social',
+        type: 'post',
         metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
       }));
 
@@ -620,8 +617,8 @@ describe('AlertFilter', () => {
     });
 
     it('should not apply cooldown to events without ticker', () => {
-      const event1 = makeEvent({ source: 'congress', type: 'congress-trade' });
-      const event2 = makeEvent({ source: 'congress', type: 'congress-trade' });
+      const event1 = makeEvent({ source: 'truth-social', type: 'post' });
+      const event2 = makeEvent({ source: 'truth-social', type: 'post' });
 
       expect(filter.check(event1).pass).toBe(true);
       expect(filter.check(event2).pass).toBe(true);
