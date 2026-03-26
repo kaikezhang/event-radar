@@ -10,8 +10,12 @@ import {
 } from '@event-radar/shared';
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 import { extractTickers } from './ticker-extractor.js';
-import type { FederalRegisterApiResponse, FederalRegisterDocument } from './whitehouse-scanner.js';
-import { isMarketRelevant, extractTopics } from './whitehouse-scanner.js';
+import {
+  extractTopics,
+  isMarketRelevant,
+  type FederalRegisterApiResponse,
+  type FederalRegisterDocument,
+} from '../utils/federal-register-documents.js';
 
 const POLL_INTERVAL_MS = 900_000; // 15 minutes
 
