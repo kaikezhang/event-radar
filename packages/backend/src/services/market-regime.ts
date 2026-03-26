@@ -160,7 +160,7 @@ export function calculateCompositeRegimeScore(factors: {
   return Math.round(clamp(rawScore, -1, 1) * 100);
 }
 
-export function getRegimeLabel(score: number): RegimeLabel {
+function getRegimeLabel(score: number): RegimeLabel {
   if (score <= -80) {
     return 'extreme_oversold';
   }
@@ -330,7 +330,7 @@ export function toDashboardMarketRegime(score: number): DashboardMarketRegime {
   return 'neutral';
 }
 
-export function toRegimeHistoryPoint(snapshot: RegimeSnapshotWithExtras): RegimeHistoryPoint {
+function toRegimeHistoryPoint(snapshot: RegimeSnapshotWithExtras): RegimeHistoryPoint {
   return {
     at: snapshot.updatedAt,
     score: snapshot.score,

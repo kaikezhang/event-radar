@@ -90,13 +90,13 @@ async function lookupSectorForTicker(
   }
 }
 
-export type PatternConfidenceLabel =
+type PatternConfidenceLabel =
   | 'insufficient'
   | 'low'
   | 'medium'
   | 'high';
 
-export interface PatternMatchExample {
+interface PatternMatchExample {
   eventId: string;
   ticker: string;
   headline: string;
@@ -110,7 +110,7 @@ export interface PatternMatchExample {
   move1m?: number | null;
 }
 
-export interface PatternMatchCase {
+interface PatternMatchCase {
   ticker: string;
   headline: string;
   source?: string;
@@ -148,7 +148,7 @@ export interface PatternMatchResult {
   legacyContext?: PatternLegacyContext;
 }
 
-export interface PatternMatcherOptions {
+interface PatternMatcherOptions {
   llmResult?: LlmClassificationResult;
   marketSnapshot?: MarketSnapshot | null;
   examplesLimit?: number;
@@ -363,7 +363,7 @@ export class PatternMatcher {
   }
 }
 
-export function toHistoricalContext(
+function toHistoricalContext(
   match: PatternMatchResult,
 ): HistoricalContext | null {
   if (match.suppressed || !match.legacyContext) {

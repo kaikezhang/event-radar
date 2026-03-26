@@ -10,7 +10,7 @@ import { type LLMProvider, LLMError } from './llm-provider.js';
 import { buildClassifyPrompt, parseLLMClassification } from './classification-prompt.js';
 import { shouldForcePoliticalLlmClassification } from '../pipeline/political-llm-policy.js';
 
-export interface ClassifyInput {
+interface ClassifyInput {
   headline: string;
   content?: string;
   source?: string;
@@ -18,7 +18,7 @@ export interface ClassifyInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface ClassifyResponse {
+interface ClassifyResponse {
   rule: ClassificationResult;
   llm?: LLMClassification;
   final: ClassificationResult & { direction?: string; eventType?: string; reasoning?: string };
@@ -57,7 +57,7 @@ class SlidingWindowRateLimiter {
   }
 }
 
-export interface LLMClassifierServiceOptions {
+interface LLMClassifierServiceOptions {
   provider: LLMProvider;
   maxRequestsPerMinute?: number;
   timeoutMs?: number;
@@ -77,7 +77,7 @@ export class LLMClassifierService {
     this.timeoutMs = options.timeoutMs ?? 15_000;
   }
 
-  shouldUseLLM(event: RawEvent, ruleResult: ClassificationResult): boolean {
+  shouldUseLLM(event: RawEvent, ruleResult: ClassifyResponse['rule']): boolean {
     if (shouldForcePoliticalLlmClassification(ruleResult)) {
       return true;
     }
@@ -111,7 +111,7 @@ export class LLMClassifierService {
 
   async classify(
     input: ClassifyInput,
-  ): Promise<Result<LLMClassification, LLMError>> {
+  ): Promise<Result<NonNullable<ClassifyResponse['llm']>, LLMError>> {
     // Check rate limit
     if (!this.rateLimiter.tryAcquire()) {
       return err(new LLMError('Rate limit exceeded (10 req/min)', 'rate_limit'));

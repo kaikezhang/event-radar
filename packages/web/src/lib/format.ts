@@ -22,17 +22,6 @@ export function formatPercent(value: number, fractionDigits = 1) {
   return `${value > 0 ? '+' : ''}${value.toFixed(fractionDigits)}%`;
 }
 
-export function formatNumber(value: number) {
-  return new Intl.NumberFormat('en-US').format(value);
-}
-
-export function formatMonthYear(timestamp: string) {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(timestamp));
-}
-
 export function formatPrice(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

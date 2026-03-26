@@ -5,7 +5,7 @@ import { getMarketSession, getNextSessionOpenMs } from './llm-gatekeeper.js';
 
 const require = createRequire(import.meta.url);
 
-export interface FilterResult {
+interface FilterResult {
   pass: boolean;
   reason: string;
   enrichWithLLM: boolean;
