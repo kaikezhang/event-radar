@@ -2,11 +2,32 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { StoredPushSubscription } from '@event-radar/delivery';
 import type { Database } from '../db/connection.js';
 import { pushSubscriptions, userPreferences, watchlist } from '../db/schema.js';
-import {
-  DEFAULT_NOTIFICATION_PREFERENCES,
-  normalizePreferenceTime,
-  type NotificationPreferences,
-} from './user-preferences-store.js';
+
+export interface NotificationPreferences {
+  quietStart: string | null;
+  quietEnd: string | null;
+  timezone: string;
+  dailyPushCap: number;
+  pushNonWatchlist: boolean;
+  updatedAt: Date | null;
+}
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  quietStart: null,
+  quietEnd: null,
+  timezone: 'America/New_York',
+  dailyPushCap: 20,
+  pushNonWatchlist: false,
+  updatedAt: null,
+};
+
+function normalizePreferenceTime(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.slice(0, 5);
+}
 
 export interface UpsertPushSubscriptionInput {
   userId: string;

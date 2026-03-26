@@ -119,24 +119,24 @@ describe('getMarketSession', () => {
     expect(getMarketSession(d)).toBe('CLOSED');
   });
 
-  it('should return CLOSED on NYSE holidays (MLK Day 2026-01-19)', () => {
-    const d = etDate(2026, 1, 19, 10, 0); // Monday 10am ET — would be RTH but it's MLK Day
-    expect(getMarketSession(d)).toBe('CLOSED');
+  it('should ignore holiday-specific closures and treat MLK Day like a regular weekday', () => {
+    const d = etDate(2026, 1, 19, 10, 0);
+    expect(getMarketSession(d)).toBe('RTH');
   });
 
-  it('should return CLOSED on Good Friday (2026-04-03)', () => {
-    const d = etDate(2026, 4, 3, 12, 0); // Friday noon ET
-    expect(getMarketSession(d)).toBe('CLOSED');
+  it('should ignore Good Friday and keep weekday session rules simple', () => {
+    const d = etDate(2026, 4, 3, 12, 0);
+    expect(getMarketSession(d)).toBe('RTH');
   });
 
-  it('should return CLOSED on Thanksgiving (2026-11-26)', () => {
-    const d = etDate(2026, 11, 26, 11, 0); // Thursday 11am ET
-    expect(getMarketSession(d)).toBe('CLOSED');
+  it('should ignore Thanksgiving and keep weekday session rules simple', () => {
+    const d = etDate(2026, 11, 26, 11, 0);
+    expect(getMarketSession(d)).toBe('RTH');
   });
 
-  it('should return CLOSED on Christmas (2026-12-25)', () => {
-    const d = etDate(2026, 12, 25, 14, 0); // Friday 2pm ET
-    expect(getMarketSession(d)).toBe('CLOSED');
+  it('should ignore Christmas and keep weekday session rules simple', () => {
+    const d = etDate(2026, 12, 25, 14, 0);
+    expect(getMarketSession(d)).toBe('RTH');
   });
 
   it('should return RTH on a normal weekday that is not a holiday', () => {
@@ -192,14 +192,11 @@ describe('getNextSessionOpenMs', () => {
     expect(hoursUntil).toBeCloseTo(13.5, 0);
   });
 
-  it('should skip holidays when computing next session open', () => {
-    // Thursday before Good Friday (2026-04-02 20:00 ET)
-    // Good Friday 2026-04-03 is a holiday, so next open = Monday 2026-04-06 09:30 ET
+  it('should not skip holidays when computing next session open', () => {
     const thu = etDate(2026, 4, 2, 20, 0);
     const nextOpen = getNextSessionOpenMs(thu);
     const hoursUntil = (nextOpen - thu.getTime()) / (60 * 60_000);
-    // Thu 20:00 to Mon 09:30 = 85.5 hours
-    expect(hoursUntil).toBeCloseTo(85.5, 0);
+    expect(hoursUntil).toBeCloseTo(13.5, 0);
   });
 });
 

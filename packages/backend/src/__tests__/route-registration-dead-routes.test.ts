@@ -10,6 +10,8 @@ describe('route registration dead routes', () => {
     '/api/v1/events/history/sources',
     '/api/v1/events/history/types',
     '/api/v1/events/impact?ticker=AAPL',
+    '/api/v1/preferences',
+    '/api/v1/scorecards/550e8400-e29b-41d4-a716-446655440000',
     '/api/scanners/status',
     '/api/v1/scanners/sec-edgar/events',
   ])('returns 404 for removed route %s', async (url) => {

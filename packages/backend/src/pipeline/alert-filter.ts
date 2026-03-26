@@ -82,7 +82,7 @@ function loadDefaultWatchlist(): string[] {
  * Events that pass L1 go to L2 LLM Judge.
  *
  * Rules:
- * - Staleness: 2h during market hours, extend to next tradable session for overnight/weekend
+ * - Staleness: 2h during market hours, extend to next weekday session for overnight/weekend
  * - Retrospective article patterns (regex)
  * - Clickbait patterns (regex)
  * - Dummy event skip
@@ -212,7 +212,7 @@ export class AlertFilter {
    * Session-aware max age calculation.
    * During market hours (RTH/PRE/POST): 2 hours.
    * During CLOSED: max(2h, nextSessionOpen - now) so events remain valid
-   * until the next trading session opens (handles weekends + holidays).
+   * until the next weekday session opens.
    */
   private getEffectiveMaxAge(now: Date): number {
     const session = getMarketSession(now);

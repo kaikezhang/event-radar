@@ -8,11 +8,9 @@ import type { MarketDataCache } from './services/market-data-cache.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerFeedRoutes } from './routes/feed.js';
 import { registerOutcomeRoutes } from './routes/outcomes.js';
-import { registerAlertScorecardRoutes } from './routes/alert-scorecard.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
 import { registerTickerRoutes } from './routes/tickers.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
-import { registerPreferencesRoutes } from './routes/preferences.js';
 import { registerPriceRoutes } from './routes/price.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -68,11 +66,9 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     apiKey,
     marketDataCache: tickerMarketDataCache,
   });
-  registerAlertScorecardRoutes(server, db, { apiKey });
   registerOutcomeRoutes(server, db);
   registerWatchlistRoutes(server, db, { apiKey });
   registerTickerRoutes(server, db);
   registerPushSubscriptionRoutes(server, db, { apiKey });
-  registerPreferencesRoutes(server, db, { apiKey });
   registerAuthRoutes(server, db);
 }
