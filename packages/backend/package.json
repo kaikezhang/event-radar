@@ -11,7 +11,6 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "lint": "eslint src/",
-    "golden-check": "tsx src/scripts/golden-drift-check.ts",
     "generate:vapid": "bash scripts/generate-vapid-keys.sh",
     "seed:tickers": "tsx src/scripts/seed-tickers.ts",
     "db:generate": "drizzle-kit generate",

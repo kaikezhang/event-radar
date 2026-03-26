@@ -58,30 +58,6 @@ export {
   type OutcomeStats,
 } from './schemas/price-types.js';
 export {
-  AccuracyDirectionSchema,
-  ClassificationMethodSchema,
-  AccuracyPeriodSchema,
-  AccuracyGroupBySchema,
-  ClassificationPredictionSchema,
-  ClassificationOutcomeSchema,
-  AccuracyResultSchema,
-  AccuracyGroupStatsEntrySchema,
-  AccuracyStatsSchema,
-  AccuracyStatsOptionsSchema,
-  AccuracyEventDetailsSchema,
-  type AccuracyDirection,
-  type ClassificationMethod,
-  type AccuracyPeriod,
-  type AccuracyGroupBy,
-  type ClassificationPrediction,
-  type ClassificationOutcome,
-  type AccuracyResult,
-  type AccuracyGroupStatsEntry,
-  type AccuracyStats,
-  type AccuracyStatsOptions,
-  type AccuracyEventDetails,
-} from './schemas/accuracy-types.js';
-export {
   SimilarityOptionsSchema,
   SimilarityScoreSchema,
   SimilarEventSchema,
@@ -89,36 +65,6 @@ export {
   type SimilarityScore,
   type SimilarEvent,
 } from './schemas/similarity-types.js';
-export {
-  DirectionMetricsSchema,
-  DirectionBreakdownSchema,
-  CalibrationDataSchema,
-  MispredictionSchema,
-  FeedbackVerdictSchema,
-  UserFeedbackSchema,
-  SubmitFeedbackInputSchema,
-  FeedbackStatsSchema,
-  type DirectionMetrics,
-  type DirectionBreakdown,
-  type CalibrationData,
-  type Misprediction,
-  type FeedbackVerdict,
-  type UserFeedback,
-  type SubmitFeedbackInput,
-  type FeedbackStats,
-} from './schemas/feedback-types.js';
-export {
-  SourceWeightsSchema,
-  ReclassificationReasonSchema,
-  ReclassificationItemSchema,
-  WeightAdjustmentSchema,
-  ReclassificationCandidateSchema,
-  type SourceWeights,
-  type ReclassificationReason,
-  type ReclassificationItem,
-  type WeightAdjustment,
-  type ReclassificationCandidate,
-} from './schemas/adaptive-types.js';
 export { BaseScanner, type BaseScannerOptions } from './base-scanner.js';
 export { scannerFetch, type ScannerFetchOptions } from './scanner-fetch.js';
 export { InMemoryEventBus } from './in-memory-event-bus.js';
@@ -159,18 +105,6 @@ export {
   type RuleInput,
   type RuleTestRequest,
 } from './schemas/rule-types.js';
-export {
-  HistoryEventSchema,
-  HistoryPaginationSchema,
-  HistoryResponseSchema,
-  SectorAggregateSchema,
-  SectorAggregateResponseSchema,
-  type HistoryEvent,
-  type HistoryPagination,
-  type HistoryResponse,
-  type SectorAggregate,
-  type SectorAggregateResponse,
-} from './schemas/history-types.js';
 export {
   LLMClassificationSchema,
   LLMClassificationMethodSchema,
