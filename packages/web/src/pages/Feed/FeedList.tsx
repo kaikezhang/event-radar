@@ -30,8 +30,6 @@ interface FeedListProps {
   error: unknown;
   filteredAlerts: AlertSummary[];
   handleCardClick: (event: MouseEvent, alertId: string) => void;
-  handleDismiss: (alertId: string) => void;
-  handleQuickWatchlist: (alert: AlertSummary) => void | Promise<void>;
   hasActiveFilters: boolean;
   isDesktop: boolean;
   isEmpty: boolean;
@@ -76,8 +74,6 @@ export function FeedList({
   error,
   filteredAlerts,
   handleCardClick,
-  handleDismiss,
-  handleQuickWatchlist,
   hasActiveFilters,
   isDesktop,
   isEmpty,
@@ -293,8 +289,6 @@ export function FeedList({
                         isOnWatchlist={alert.tickers[0] ? isOnWatchlist(alert.tickers[0]) : false}
                         isSelected={selectedEventId === alert.id}
                         onCardClick={handleCardClick}
-                        onDismiss={handleDismiss}
-                        onQuickWatchlist={handleQuickWatchlist}
                         onToggleWatchlist={onToggleWatchlist}
                         priceQuote={alert.tickers[0] ? priceQuotes[alert.tickers[0].toUpperCase()] : undefined}
                       />

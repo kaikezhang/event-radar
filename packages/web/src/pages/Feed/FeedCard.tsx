@@ -1,6 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { AlertCard } from '../../components/AlertCard.js';
-import { SwipeableCard } from '../../components/SwipeableCard.js';
 import { cn } from '../../lib/utils.js';
 import type { AlertSummary, PriceBatchQuote } from '../../types/index.js';
 
@@ -11,8 +10,6 @@ interface FeedCardProps {
   isOnWatchlist: boolean;
   isSelected: boolean;
   onCardClick: (event: ReactMouseEvent, alertId: string) => void;
-  onDismiss: (alertId: string) => void;
-  onQuickWatchlist: (alert: AlertSummary) => void | Promise<void>;
   onToggleWatchlist: (ticker: string) => void;
   priceQuote?: PriceBatchQuote;
 }
@@ -24,8 +21,6 @@ export function FeedCard({
   isOnWatchlist,
   isSelected,
   onCardClick,
-  onDismiss,
-  onQuickWatchlist,
   onToggleWatchlist,
   priceQuote,
 }: FeedCardProps) {
@@ -72,14 +67,7 @@ export function FeedCard({
     return card;
   }
 
-  return (
-    <SwipeableCard
-      onSwipeLeft={() => onDismiss(alert.id)}
-      onSwipeRight={() => onQuickWatchlist(alert)}
-    >
-      {card}
-    </SwipeableCard>
-  );
+  return card;
 }
 
 function handleKeyDown(

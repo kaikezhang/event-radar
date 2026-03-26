@@ -1,19 +1,17 @@
-import { CalendarDays, Eye, House, Search, Settings2 } from 'lucide-react';
+import { Eye, House, Search } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: House, end: true, badge: null },
-  { to: '/watchlist', label: 'Watchlist', icon: Eye, end: false, badge: null },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays, end: false, badge: null },
   { to: '/search', label: 'Search', icon: Search, end: false, badge: null },
-  { to: '/settings', label: 'Settings', icon: Settings2, end: false, badge: null },
+  { to: '/watchlist', label: 'Watchlist', icon: Eye, end: false, badge: null },
 ] as const;
 
 export function BottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border-default bg-bg-primary/95 backdrop-blur-xl">
-      <div className="mx-auto grid max-w-2xl grid-cols-5 pb-[env(safe-area-inset-bottom)] pt-1.5">
+      <div className="mx-auto grid max-w-2xl grid-cols-3 pb-[env(safe-area-inset-bottom)] pt-1.5">
         {navItems.map(({ to, label, icon: Icon, end, badge }) => (
           <NavLink
             key={to}

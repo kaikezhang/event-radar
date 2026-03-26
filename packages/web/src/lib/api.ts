@@ -7,7 +7,6 @@ import type {
   EventScorecard,
   EventDetailData,
   HistoricalContext,
-  UpcomingCalendarResponse,
   LlmEnrichment,
   PriceBatchQuote,
   PriceChartData,
@@ -199,40 +198,6 @@ export interface WatchlistTickerSummary {
 export async function getWatchlistSummary(): Promise<WatchlistTickerSummary[]> {
   const res = await apiFetch('/v1/feed/watchlist-summary');
   return (res.tickers ?? []) as WatchlistTickerSummary[];
-}
-
-export async function getUpcomingCalendar(window: {
-  from: string;
-  to: string;
-}): Promise<UpcomingCalendarResponse> {
-  const params = new URLSearchParams({
-    from: window.from,
-    to: window.to,
-  });
-
-  return apiFetch(`/v1/calendar/upcoming?${params.toString()}`);
-}
-
-export interface NotificationPreferences {
-  quietStart: string | null;
-  quietEnd: string | null;
-  timezone: string;
-  dailyPushCap: number;
-  pushNonWatchlist: boolean;
-  updatedAt?: string | null;
-}
-
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  return apiFetch('/v1/preferences');
-}
-
-export async function updateNotificationPreferences(
-  preferences: NotificationPreferences,
-): Promise<NotificationPreferences> {
-  return apiFetch('/v1/preferences', {
-    method: 'PUT',
-    body: preferences,
-  });
 }
 
 function normalizeDeliveryChannelName(channel: string): string {
@@ -931,32 +896,6 @@ export async function getTrendingTickers(limit = 8): Promise<TrendingTicker[]> {
   return data.data ?? [];
 }
 
-// ── Onboarding API ──────────────────────────────────────────────────────────
-
-interface SuggestedTicker {
-  symbol: string;
-  eventCount7d: number;
-  latestSignal: string;
-}
-
-interface SectorPack {
-  name: string;
-  tickers: string[];
-}
-
-interface SuggestedTickersResponse {
-  tickers: SuggestedTicker[];
-  packs: SectorPack[];
-}
-
-export async function getSuggestedTickers(): Promise<SuggestedTickersResponse> {
-  return apiFetch('/v1/onboarding/suggested-tickers');
-}
-
-export async function initializeWatchlist(tickers: string[]): Promise<{ added: number; total: number }> {
-  return apiFetch('/v1/watchlist/initialize', { method: 'POST', body: { tickers } });
-}
-
 function mapAlertSummary(event: Record<string, unknown>): AlertSummary {
   const source = (event.source as string) ?? 'unknown';
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
@@ -1127,35 +1066,4 @@ function mapSource(source: string): string {
     'dilution-monitor': 'Dilution Monitor',
   };
   return MAP[source] ?? source;
-}
-
-// ── Notification Channel Settings ──────────────────────────────────────────
-
-export interface NotificationChannelSettings {
-  discordWebhookUrl: string | null;
-  emailAddress: string | null;
-  minSeverity: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function getNotificationChannelSettings(): Promise<NotificationChannelSettings> {
-  return apiFetch('/v1/settings/notifications');
-}
-
-export async function saveNotificationChannelSettings(
-  settings: Partial<Pick<NotificationChannelSettings, 'discordWebhookUrl' | 'emailAddress' | 'minSeverity' | 'enabled'>>,
-): Promise<NotificationChannelSettings> {
-  return apiFetch('/v1/settings/notifications', {
-    method: 'POST',
-    body: settings,
-  });
-}
-
-export async function testDiscordWebhook(webhookUrl: string): Promise<{ success: boolean }> {
-  return apiFetch('/v1/settings/notifications/test-discord', {
-    method: 'POST',
-    body: { webhookUrl },
-  });
 }

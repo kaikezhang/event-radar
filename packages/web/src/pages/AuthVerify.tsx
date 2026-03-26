@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, XCircle } from 'lucide-react';
-import { verifyMagicLink, getWatchlist } from '../lib/api.js';
+import { verifyMagicLink } from '../lib/api.js';
 import { useAuth } from '../contexts/AuthContext.js';
 
 export function AuthVerify() {
@@ -37,15 +37,7 @@ export function AuthVerify() {
       try {
         const result = await verifyMagicLink(token!);
         setUser(result.user);
-        // Redirect to onboarding if watchlist is empty
-        let dest = '/';
-        try {
-          const wl = await getWatchlist();
-          if (wl.length === 0) dest = '/onboarding';
-        } catch {
-          // If watchlist fetch fails, default to home
-        }
-        navigate(dest, { replace: true });
+        navigate('/', { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Verification failed');
       }

@@ -5,17 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AlertSummary } from '../types/index.js';
 
 const getFeedMock = vi.fn();
-const playForSeverityMock = vi.fn();
 let latestOnEvent: ((event: AlertSummary) => void) | undefined;
 
 vi.mock('../lib/api.js', () => ({
   getFeed: (...args: unknown[]) => getFeedMock(...args),
-}));
-
-vi.mock('./useAlertSound.js', () => ({
-  useAlertSound: () => ({
-    playForSeverity: playForSeverityMock,
-  }),
 }));
 
 vi.mock('./useWebSocket.js', () => ({
@@ -66,7 +59,6 @@ describe('useAlerts', () => {
       cursor: null,
       total: 0,
     });
-    playForSeverityMock.mockReset();
     latestOnEvent = undefined;
   });
 
@@ -74,7 +66,7 @@ describe('useAlerts', () => {
     vi.clearAllMocks();
   });
 
-  it('plays a sound once for duplicate websocket events received before re-render', async () => {
+  it('deduplicates websocket events received before re-render', async () => {
     const { result } = renderHook(() => useAlerts(), {
       wrapper: createWrapper(),
     });
@@ -91,8 +83,6 @@ describe('useAlerts', () => {
       latestOnEvent?.(alert);
     });
 
-    expect(playForSeverityMock).toHaveBeenCalledTimes(1);
-    expect(playForSeverityMock).toHaveBeenCalledWith('HIGH');
     expect(result.current.alerts).toEqual([alert]);
   });
 });

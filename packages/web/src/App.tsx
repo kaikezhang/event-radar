@@ -6,7 +6,6 @@ import {
   ScrollRestoration,
   createBrowserRouter,
   Link,
-  useLocation,
   type RouteObject,
 } from 'react-router-dom';
 import { cn } from './lib/utils.js';
@@ -16,29 +15,22 @@ import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { ConnectionProvider, useConnectionStatus } from './contexts/ConnectionContext.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { Footer } from './components/Footer.js';
-import { Landing } from './pages/Landing.js';
 
 const AuthVerifyPage = lazy(async () => ({ default: (await import('./pages/AuthVerify.js')).AuthVerify }));
-const CalendarPage = lazy(async () => ({ default: (await import('./pages/Calendar.js')).Calendar }));
 const EventDetailPage = lazy(async () => ({ default: (await import('./pages/EventDetail.js')).EventDetail }));
 const FeedPage = lazy(async () => ({ default: (await import('./pages/Feed.js')).Feed }));
 const LoginPage = lazy(async () => ({ default: (await import('./pages/Login.js')).Login }));
 const SearchPage = lazy(async () => ({ default: (await import('./pages/Search.js')).Search }));
 const SettingsPage = lazy(async () => ({ default: (await import('./pages/Settings.js')).Settings }));
 const TickerProfilePage = lazy(async () => ({ default: (await import('./pages/TickerProfile.js')).TickerProfile }));
-const OnboardingPage = lazy(async () => ({ default: (await import('./pages/Onboarding.js')).Onboarding }));
 const WatchlistPage = lazy(async () => ({ default: (await import('./pages/Watchlist.js')).Watchlist }));
 const NotFoundPage = lazy(async () => ({ default: (await import('./pages/NotFound.js')).NotFound }));
-const PrivacyPage = lazy(async () => ({ default: (await import('./pages/Privacy.js')).Privacy }));
-const TermsPage = lazy(async () => ({ default: (await import('./pages/Terms.js')).Terms }));
 
 export const APP_SHELL_BOTTOM_PADDING_CLASS = 'pb-[calc(7rem+env(safe-area-inset-bottom))]';
 
 function AppHeader() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const connectionStatus = useConnectionStatus();
-  const location = useLocation();
-  const isMarketingRoute = location.pathname === '/' && !user && !isLoading;
 
   const statusLabel = connectionStatus === 'connected'
     ? 'Connected'
@@ -61,28 +53,6 @@ function AppHeader() {
       />
     </span>
   );
-
-  if (isMarketingRoute) {
-    return (
-      <header className="flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-accent-default" />
-          <span className="text-sm font-semibold tracking-tight text-text-primary">
-            Event Radar
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-2 text-sm">
-          <Link
-            to="/login"
-            className="rounded-full bg-accent-default px-3 py-1.5 font-medium text-white transition hover:bg-accent-strong"
-          >
-            Sign in
-          </Link>
-        </div>
-      </header>
-    );
-  }
 
   return (
     <header className="flex h-12 items-center justify-between">
@@ -162,22 +132,7 @@ export function AppShell() {
   );
 }
 
-function HomeRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <div className="min-h-[40vh]" aria-label="Loading home" />;
-  }
-
-  return isAuthenticated ? loadPage(<FeedPage />) : <Landing />;
-}
-
 function ShellFrame() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
-
-  const isMarketingRoute = location.pathname === '/' && !isAuthenticated && !isLoading;
-
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
       <div
@@ -190,8 +145,8 @@ function ShellFrame() {
             data-testid="app-shell-content"
             className={cn(
               'mx-auto flex min-h-screen w-full flex-col px-4 pt-[calc(env(safe-area-inset-top)+8px)]',
-              isMarketingRoute ? 'max-w-7xl' : 'max-w-3xl lg:max-w-7xl',
-              !isMarketingRoute && APP_SHELL_BOTTOM_PADDING_CLASS,
+              'max-w-3xl lg:max-w-7xl',
+              APP_SHELL_BOTTOM_PADDING_CLASS,
             )}
           >
             <AppHeader />
@@ -203,9 +158,9 @@ function ShellFrame() {
             </main>
             <Footer />
           </div>
-          {!isMarketingRoute && <BottomNav />}
+          <BottomNav />
           <ScrollRestoration />
-          {!isMarketingRoute && <GlobalTickerSearch />}
+          <GlobalTickerSearch />
         </div>
       </div>
     </div>
@@ -217,18 +172,14 @@ export const appRoutes: RouteObject[] = [
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <HomeRoute /> },
-      { path: 'calendar', element: loadPage(<CalendarPage />) },
+      { index: true, element: loadPage(<FeedPage />) },
       { path: 'event/:id', element: loadPage(<EventDetailPage />) },
       { path: 'ticker/:symbol', element: loadPage(<TickerProfilePage />) },
-      { path: 'onboarding', element: loadPage(<OnboardingPage />) },
       { path: 'watchlist', element: loadPage(<WatchlistPage />) },
       { path: 'search', element: loadPage(<SearchPage />) },
       { path: 'settings', element: loadPage(<SettingsPage />) },
       { path: 'login', element: loadPage(<LoginPage />) },
       { path: 'auth/verify', element: loadPage(<AuthVerifyPage />) },
-      { path: 'privacy', element: loadPage(<PrivacyPage />) },
-      { path: 'terms', element: loadPage(<TermsPage />) },
       { path: '*', element: loadPage(<NotFoundPage />) },
     ],
   },

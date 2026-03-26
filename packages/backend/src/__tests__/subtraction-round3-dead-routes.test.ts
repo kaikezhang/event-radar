@@ -56,11 +56,19 @@ describe('subtraction round 3 removed routes', () => {
     ['GET', '/api/admin/delivery/status'],
     ['GET', '/api/health/delivery-stats'],
     ['GET', '/api/v1/briefing/daily'],
+    ['GET', '/api/v1/calendar/earnings?from=2026-03-24&to=2026-03-28'],
+    ['GET', '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-28'],
+    ['GET', '/api/v1/onboarding/suggested-tickers'],
+    ['POST', '/api/v1/onboarding/bulk-add'],
+    ['GET', '/api/v1/settings/notifications'],
+    ['POST', '/api/v1/settings/notifications'],
+    ['POST', '/api/v1/settings/notifications/test-discord'],
   ])('does not expose %s %s', async (method, url) => {
     const res = await ctx.server.inject({
       method,
       url,
       headers: AUTH_HEADERS,
+      payload: method === 'POST' ? {} : undefined,
     });
 
     expect(res.statusCode).toBe(404);

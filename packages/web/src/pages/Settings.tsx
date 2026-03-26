@@ -1,15 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Bell, BellOff, Info, ShieldCheck } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { CollapsiblePanel } from '../components/CollapsiblePanel.js';
-import {
-  getNotificationPreferences,
-  updateNotificationPreferences,
-  getNotificationChannelSettings,
-  saveNotificationChannelSettings,
-  testDiscordWebhook,
-  type NotificationPreferences,
-  type NotificationChannelSettings,
-} from '../lib/api.js';
 import {
   getWebPushDeviceState,
   getWebPushStatusDetails,
@@ -21,105 +12,14 @@ import {
   WebPushError,
 } from '../lib/web-push.js';
 
-function getBrowserTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-}
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.0.0';
 
-const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
-  quietStart: null,
-  quietEnd: null,
-  timezone: getBrowserTimeZone(),
-  dailyPushCap: 20,
-  pushNonWatchlist: false,
-};
-
-function serializeNotificationPreferences(preferences: NotificationPreferences): string {
-  return JSON.stringify({
-    quietStart: preferences.quietStart,
-    quietEnd: preferences.quietEnd,
-    timezone: preferences.timezone,
-    dailyPushCap: preferences.dailyPushCap,
-    pushNonWatchlist: preferences.pushNonWatchlist,
-  });
-}
-
-function getPlatformHint(): 'ios' | 'ios-pwa' | 'android-pwa' | 'pwa' | 'desktop' {
-  const ua = navigator.userAgent;
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    ('standalone' in navigator && (navigator as unknown as { standalone: boolean }).standalone);
-
-  const isIOS = /iPad|iPhone|iPod/.test(ua);
-  // Detect installed iOS PWA before generic iOS Safari
-  if (isIOS && isStandalone) return 'ios-pwa';
-  if (isIOS) return 'ios';
-  if (isStandalone && /Android/i.test(ua)) return 'android-pwa';
-  if (isStandalone) return 'pwa';
-  return 'desktop';
-}
-
-function PushDeniedRecoverySteps() {
-  const platform = getPlatformHint();
-
-  const stepBadge = (n: number) => (
-    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-xs font-semibold text-amber-200">
-      {n}
-    </span>
-  );
-
-  if (platform === 'ios-pwa') {
-    return (
-      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings → Apps</strong></span></li>
-        <li className="flex gap-3">{stepBadge(2)}<span>Find this app in the list and tap <strong className="text-text-primary">Notifications</strong></span></li>
-        <li className="flex gap-3">{stepBadge(3)}<span>Toggle <strong className="text-text-primary">Allow Notifications</strong> on</span></li>
-        <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
-      </ol>
-    );
-  }
-
-  if (platform === 'ios') {
-    return (
-      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings</strong> app</span></li>
-        <li className="flex gap-3">{stepBadge(2)}<span>Go to <strong className="text-text-primary">Safari → Websites → Notifications</strong></span></li>
-        <li className="flex gap-3">{stepBadge(3)}<span>Find this site and set to <strong className="text-text-primary">Allow</strong></span></li>
-        <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
-      </ol>
-    );
-  }
-
-  if (platform === 'android-pwa') {
-    return (
-      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">Settings → Apps</strong></span></li>
-        <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Event Radar</strong> (or the browser hosting the app)</span></li>
-        <li className="flex gap-3">{stepBadge(3)}<span>Tap <strong className="text-text-primary">Notifications → Allow</strong></span></li>
-        <li className="flex gap-3">{stepBadge(4)}<span><strong className="text-text-primary">Return here</strong> and refresh the page</span></li>
-      </ol>
-    );
-  }
-
-  if (platform === 'pwa') {
-    return (
-      <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-        <li className="flex gap-3">{stepBadge(1)}<span>Open your device <strong className="text-text-primary">notification settings</strong></span></li>
-        <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Event Radar</strong> and allow notifications</span></li>
-        <li className="flex gap-3">{stepBadge(3)}<span>If that doesn&apos;t work, <strong className="text-text-primary">reinstall the app</strong> and grant permission when prompted</span></li>
-      </ol>
-    );
-  }
-
-  return (
-    <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-      <li className="flex gap-3">{stepBadge(1)}<span>Click the <strong className="text-text-primary">lock</strong> or <strong className="text-text-primary">info icon</strong> in the address bar</span></li>
-      <li className="flex gap-3">{stepBadge(2)}<span>Find <strong className="text-text-primary">Notifications</strong> → change to <strong className="text-text-primary">Allow</strong></span></li>
-      <li className="flex gap-3">{stepBadge(3)}<span><strong className="text-text-primary">Refresh the page</strong> and return here to enable push</span></li>
-    </ol>
-  );
-}
-
-type ToastTone = 'success' | 'error';
+const STATUS_STYLES = {
+  neutral: 'border-border-default bg-bg-surface text-text-secondary',
+  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+  danger: 'border-red-500/30 bg-red-500/10 text-red-200',
+} as const;
 
 export function Settings() {
   const location = useLocation();
@@ -130,33 +30,14 @@ export function Settings() {
   const [backendRegistrationFailed, setBackendRegistrationFailed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(() => getWebPushSupport().supported);
   const [isPushActionPending, setIsPushActionPending] = useState(false);
-  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
-  const [notificationError, setNotificationError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<ToastTone>('success');
-  const [channelSettings, setChannelSettings] = useState<NotificationChannelSettings | null>(null);
-  const [channelLoadError, setChannelLoadError] = useState<string | null>(null);
-  const [channelLoaded, setChannelLoaded] = useState(false);
-  const [discordUrlDraft, setDiscordUrlDraft] = useState('');
-  const [channelMinSeverity, setChannelMinSeverity] = useState('HIGH');
-  const [channelSaveState, setChannelSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [discordTestState, setDiscordTestState] = useState<'idle' | 'testing' | 'sent'>('idle');
-  const baselinePreferencesRef = useRef<string>(serializeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES));
-  const isChannelSaving = channelSaveState === 'saving';
-  const isChannelSaved = channelSaveState === 'saved';
-  const isDiscordTesting = discordTestState === 'testing';
-  const isDiscordSent = discordTestState === 'sent';
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function showToast(message: string, tone: ToastTone) {
-    setToastTone(tone);
-    setToastMessage(message);
-  }
+  const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
 
   useEffect(() => {
     let cancelled = false;
 
-    async function refreshInitialPushState(): Promise<void> {
+    async function loadPushState() {
       try {
         const nextState = await getWebPushDeviceState();
         if (!cancelled) {
@@ -164,10 +45,7 @@ export function Settings() {
         }
       } catch {
         if (!cancelled) {
-          setPushState((current) => ({
-            ...current,
-            ...getWebPushSupport(),
-          }));
+          setPushState((current) => ({ ...current, ...getWebPushSupport() }));
         }
       } finally {
         if (!cancelled) {
@@ -181,555 +59,144 @@ export function Settings() {
       return undefined;
     }
 
-    void refreshInitialPushState();
+    void loadPushState();
 
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadNotificationPreferences(): Promise<void> {
-      try {
-        const loaded = await getNotificationPreferences();
-        if (cancelled) {
-          return;
-        }
-
-        const nextPreferences = {
-          ...loaded,
-          timezone: getBrowserTimeZone(),
-        };
-        baselinePreferencesRef.current = serializeNotificationPreferences(nextPreferences);
-        setNotificationPreferences(nextPreferences);
-      } catch {
-        if (!cancelled) {
-          setNotificationError('Could not load notification preferences.');
-          setNotificationPreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES });
-        }
-      }
-    }
-
-    void loadNotificationPreferences();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadChannelSettings(): Promise<void> {
-      try {
-        setChannelLoadError(null);
-        const loaded = await getNotificationChannelSettings();
-        if (cancelled) return;
-        setChannelSettings(loaded);
-        setChannelLoaded(true);
-        setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
-        setChannelMinSeverity(loaded.minSeverity);
-      } catch {
-        if (!cancelled) {
-          setChannelLoadError('Could not load notification channel settings.');
-        }
-      }
-    }
-
-    void loadChannelSettings();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!toastMessage) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setToastMessage(null);
-    }, 2400);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [toastMessage]);
-
-  useEffect(() => {
-    if (channelSaveState !== 'saved') {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setChannelSaveState('idle');
-    }, 2_000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [channelSaveState]);
-
-  useEffect(() => {
-    if (discordTestState !== 'sent') {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setDiscordTestState('idle');
-    }, 2_000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [discordTestState]);
-
-  const notificationKey = notificationPreferences
-    ? serializeNotificationPreferences(notificationPreferences)
-    : null;
-
-  useEffect(() => {
-    if (!notificationPreferences || notificationKey == null) {
-      return undefined;
-    }
-
-    if (notificationKey === baselinePreferencesRef.current) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setSaveState('saving');
-      void updateNotificationPreferences(notificationPreferences)
-        .then((saved) => {
-          baselinePreferencesRef.current = serializeNotificationPreferences(saved);
-          setNotificationPreferences(saved);
-          setNotificationError(null);
-          setSaveState('saved');
-          showToast('Preferences saved', 'success');
-        })
-        .catch(() => {
-          setSaveState('error');
-          setNotificationError('Could not save notification preferences.');
-          showToast('Failed to save. Please try again.', 'error');
-        });
-    }, 500);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [notificationPreferences, notificationKey]);
-
-  function updatePreferencesState(
-    updater: (current: NotificationPreferences) => NotificationPreferences,
-  ): void {
-    setNotificationPreferences((current) => (
-      current ? updater(current) : current
-    ));
-    setSaveState('idle');
-  }
-
-  async function saveChannelSettings(): Promise<void> {
-    try {
-      setChannelSaveState('saving');
-      const saved = await saveNotificationChannelSettings({
-        discordWebhookUrl: discordUrlDraft.trim() || null,
-        emailAddress: channelSettings?.emailAddress ?? null,
-        minSeverity: channelMinSeverity,
-      });
-      setChannelSettings(saved);
-      setChannelSaveState('saved');
-      showToast('Notification settings saved', 'success');
-    } catch {
-      setChannelSaveState('idle');
-      showToast('Failed to save. Please try again.', 'error');
-    }
-  }
-
-  async function handleTestDiscord(): Promise<void> {
-    if (!discordUrlDraft.trim()) return;
-    try {
-      setDiscordTestState('testing');
-      await testDiscordWebhook(discordUrlDraft.trim());
-      setDiscordTestState('sent');
-      showToast('Test notification sent to Discord', 'success');
-    } catch {
-      setDiscordTestState('idle');
-      showToast('Discord webhook test failed', 'error');
-    }
-  }
-
-  async function enableWebPush(): Promise<void> {
-    try {
-      setIsPushActionPending(true);
-      setBackendRegistrationFailed(false);
-      const subscription = await subscribeBrowserToPush();
-      if (subscription.status === 'created' || backendRegistrationFailed) {
-        await sendPushSubscriptionToBackend(subscription);
-      }
-
-      setPushState(await getWebPushDeviceState());
-    } catch (error) {
-      if (error instanceof WebPushError && error.code === 'backend-registration-failed') {
-        setBackendRegistrationFailed(true);
-      }
-
-      setPushState(await getWebPushDeviceState().catch(() => ({
-        ...getWebPushSupport(),
-        subscribed: false,
-      })));
-    } finally {
-      setIsPushActionPending(false);
-    }
-  }
-
-  async function disableWebPush(): Promise<void> {
-    try {
-      setIsPushActionPending(true);
-      setBackendRegistrationFailed(false);
-      await unsubscribeBrowserFromPush();
-      setPushState(await getWebPushDeviceState());
-    } catch {
-      setPushState(await getWebPushDeviceState().catch(() => ({
-        ...getWebPushSupport(),
-        subscribed: false,
-      })));
-    } finally {
-      setIsPushActionPending(false);
-    }
-  }
+  }, [pushState.supported]);
 
   const pushDetails = getWebPushStatusDetails({
     ...pushState,
     isBusy: isPushLoading || isPushActionPending,
     backendRegistrationFailed,
   });
-  const pushToneClassName = {
-    neutral: 'border-overlay-medium bg-overlay-subtle text-text-primary',
-    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-800 dark:text-emerald-100',
-    warning: 'border-amber-300/20 bg-amber-300/10 text-amber-800 dark:text-amber-100',
-    danger: 'border-rose-300/20 bg-rose-300/10 text-rose-800 dark:text-rose-100',
-  }[pushDetails.tone];
-  const fromWatchlist = new URLSearchParams(location.search).get('from') === 'watchlist';
+
+  async function refreshPushState() {
+    setPushState(await getWebPushDeviceState());
+  }
+
+  async function handlePushAction() {
+    setErrorMessage(null);
+    setBackendRegistrationFailed(false);
+    setIsPushActionPending(true);
+
+    try {
+      if (pushDetails.canDisable) {
+        await unsubscribeBrowserFromPush();
+        await refreshPushState();
+        return;
+      }
+
+      if (pushDetails.canEnable) {
+        const subscription = await subscribeBrowserToPush();
+        await sendPushSubscriptionToBackend(subscription);
+        await refreshPushState();
+      }
+    } catch (error) {
+      if (error instanceof WebPushError) {
+        if (error.code === 'backend-registration-failed') {
+          setBackendRegistrationFailed(true);
+        }
+
+        if (error.code === 'permission-denied') {
+          setPushState((current) => ({ ...current, permission: 'denied' }));
+        }
+      }
+
+      setErrorMessage(error instanceof Error ? error.message : 'Could not update push alerts.');
+    } finally {
+      setIsPushActionPending(false);
+    }
+  }
+
+  const actionLabel = pushDetails.canDisable ? pushDetails.disableLabel : pushDetails.enableLabel;
 
   return (
-    <section className="space-y-4">
-      <div className="rounded-2xl border border-border-default bg-bg-surface/96 p-5 shadow-[0_18px_40px_var(--shadow-color)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-default">
-          Settings
+    <div className="mx-auto max-w-2xl space-y-6 py-6">
+      <section className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-tertiary">Settings</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-text-primary">Keep it simple</h1>
+        <p className="max-w-xl text-sm leading-6 text-text-secondary">
+          Dark mode is always on. This page only keeps browser push alerts available on this device and explains what Event Radar is for.
         </p>
-        <h1 className="mt-3 text-[22px] font-semibold text-text-primary">
-          Alerts and notifications
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-text-secondary">
-          Keep your watchlist alerts understandable on the page and reachable when the app is backgrounded.
-        </p>
-      </div>
+      </section>
 
-      <CollapsiblePanel
-        id="push-alerts"
-        title="Push alerts"
-        eyebrow="Web Push"
-        description="Enable this device and keep the setup steps in one place."
-        defaultOpen
-        className="scroll-mt-24"
-      >
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-[22px] font-semibold text-text-primary">
-            Push alerts on this device
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Enable push alerts so important Event Radar events can reach this device when the app is backgrounded.
-            </p>
+      {fromWatchlist ? (
+        <section className="rounded-3xl border border-accent-default/20 bg-accent-default/8 p-5">
+          <p className="text-sm font-medium text-text-primary">Enable push before you leave settings.</p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Watchlist alerts work best when this device is subscribed for browser notifications.
+          </p>
+          <Link to="/watchlist" className="mt-3 inline-flex text-sm font-medium text-accent-default hover:underline">
+            Back to watchlist
+          </Link>
+        </section>
+      ) : null}
+
+      <section className="rounded-3xl border border-border-default bg-bg-surface/95 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
+        <div className="flex items-start gap-3">
+          <div className="mt-1 rounded-2xl bg-bg-elevated p-3 text-text-secondary">
+            {pushDetails.canDisable ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
           </div>
-
-          {fromWatchlist ? (
-            <div className="rounded-2xl border border-accent-default/20 bg-accent-default/10 p-4">
-              <p className="text-sm font-semibold text-text-primary">Finish your watchlist setup</p>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Turn on push for this device, then return to your watchlist so the names you care about stay tight and readable.
-              </p>
-            </div>
-          ) : null}
-
-          <div className={`rounded-2xl border p-4 ${pushToneClassName}`}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-sm font-medium">
-                  {pushDetails.title}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-current/80">
-                  {pushDetails.description}
-                </p>
-              </div>
-              <div className="inline-flex w-fit items-center rounded-full border border-current/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-current/80">
-                {pushDetails.state.replaceAll('-', ' ')}
-              </div>
-            </div>
-            <p className="mt-4 text-xs uppercase tracking-[0.16em] text-current/70">
-              Permission: {pushState.permission}
-            </p>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-text-primary">Notifications on this device</h2>
+            <p className="mt-1 text-sm text-text-secondary">{pushDetails.description}</p>
           </div>
-
-          {pushState.permission === 'denied' ? (
-            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 text-xl" aria-hidden="true">🔒</span>
-                <div>
-                  <p className="text-sm font-semibold text-text-primary">
-                    Browser notifications are blocked for this site
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    You previously denied notification permissions. To re-enable push alerts:
-                  </p>
-                  <PushDeniedRecoverySteps />
-                  <div className="mt-4 rounded-xl border border-overlay-medium bg-bg-surface/50 p-3">
-                    <a
-                      href="#notification-channels"
-                      className="text-xs text-accent-default hover:underline"
-                    >
-                      Set up Discord or email notifications instead &rarr;
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                Enable push in under a minute
-              </p>
-              <ol className="mt-3 space-y-3 text-sm leading-6 text-text-secondary">
-                <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
-                    1
-                  </span>
-                  <span>Tap {pushDetails.enableLabel}.</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
-                    2
-                  </span>
-                  <span>Allow browser notifications in the prompt.</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-overlay-medium text-xs font-semibold text-text-primary">
-                    3
-                  </span>
-                  <span>Return to your watchlist to keep alerts focused.</span>
-                </li>
-              </ol>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => {
-                void enableWebPush();
-              }}
-              disabled={!pushDetails.canEnable}
-              className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pushDetails.enableLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void disableWebPush();
-              }}
-              disabled={!pushDetails.canDisable}
-              className="inline-flex min-h-11 items-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pushDetails.disableLabel}
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              to="/watchlist"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-overlay-light px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-overlay-medium focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              Review watchlist
-            </Link>
-            <Link
-              to="/"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-overlay-medium bg-transparent px-4 py-2 text-sm font-medium text-text-secondary transition hover:bg-overlay-light focus:outline-none focus:ring-2 focus:ring-accent-default"
-            >
-              Open live feed
-            </Link>
-          </div>
-
-          {notificationError ? (
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-800 dark:text-rose-100">
-              {notificationError}
-            </div>
-          ) : null}
-
-          {!notificationPreferences ? (
-            <div className="rounded-2xl border border-overlay-medium bg-bg-elevated/40 p-4 text-sm text-text-secondary">
-              Loading notification preferences…
-            </div>
-          ) : (
-            <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">Non-watchlist alerts</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Let high-confidence names outside your watchlist push through too.
-                  </p>
-                </div>
-                <div className="inline-flex w-fit items-center rounded-full border border-overlay-medium bg-overlay-light px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">
-                  {saveState === 'saving' ? 'saving' : saveState === 'saved' ? 'saved' : 'autosave'}
-                </div>
-              </div>
-
-              <label
-                className="flex items-center justify-between gap-4"
-                htmlFor="push-non-watchlist-toggle"
-              >
-                <span className="text-sm font-medium text-text-primary">
-                  Alert me for tickers outside my watchlist
-                </span>
-                <input
-                  id="push-non-watchlist-toggle"
-                  type="checkbox"
-                  checked={notificationPreferences.pushNonWatchlist}
-                  onChange={(event) => updatePreferencesState((current) => ({
-                    ...current,
-                    pushNonWatchlist: event.target.checked,
-                  }))}
-                  className="h-5 w-5 rounded border-overlay-medium bg-transparent text-accent-default focus:ring-accent-default"
-                />
-              </label>
-            </div>
-          )}
         </div>
-      </CollapsiblePanel>
 
-      <CollapsiblePanel
-        id="notification-channels"
-        title="Notification channels"
-        eyebrow="Channels"
-        description="Discord webhook delivery for fallback notifications."
-        defaultOpen
-        className="scroll-mt-24"
-      >
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-[22px] font-semibold text-text-primary">
-              Notification channels
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Keep a Discord webhook configured when you want alerts outside the browser.
-            </p>
-          </div>
+        <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${STATUS_STYLES[pushDetails.tone]}`}>
+          <p className="font-medium">{pushDetails.title}</p>
+        </div>
 
-          {channelLoadError && (
-            <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
-              <span>{channelLoadError}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setChannelLoadError(null);
-                  void (async () => {
-                    try {
-                      const loaded = await getNotificationChannelSettings();
-                      setChannelSettings(loaded);
-                      setChannelLoaded(true);
-                      setDiscordUrlDraft(loaded.discordWebhookUrl ?? '');
-                      setChannelMinSeverity(loaded.minSeverity);
-                    } catch {
-                      setChannelLoadError('Could not load notification channel settings.');
-                    }
-                  })();
-                }}
-                className="shrink-0 rounded-full border border-red-500/30 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-500/20"
-              >
-                Retry
-              </button>
-            </div>
-          )}
+        {errorMessage ? (
+          <p className="mt-4 text-sm text-red-300">{errorMessage}</p>
+        ) : null}
 
-          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-            <div>
-              <p className="text-sm font-medium text-text-primary">Discord Webhook</p>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Get a webhook URL from Discord: Server Settings &rarr; Integrations &rarr; Webhooks &rarr; New Webhook
-              </p>
-            </div>
-
-            <label className="block space-y-2" htmlFor="discord-webhook-url">
-              <span className="block text-sm font-medium text-text-primary">Discord Webhook URL</span>
-              <input
-                id="discord-webhook-url"
-                type="url"
-                value={discordUrlDraft}
-                onChange={(e) => setDiscordUrlDraft(e.target.value)}
-                placeholder="https://discord.com/api/webhooks/..."
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-overlay-subtle px-4 text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-default"
-              />
-            </label>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => { void handleTestDiscord(); }}
-                disabled={!discordUrlDraft.trim() || isDiscordTesting}
-                className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50 ${
-                  isDiscordSent
-                    ? 'border-emerald-400/30 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/20'
-                    : 'border-overlay-medium bg-transparent text-text-secondary hover:bg-overlay-light'
-                }`}
-              >
-                {isDiscordTesting ? 'Testing...' : isDiscordSent ? 'Sent ✓' : 'Test'}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-overlay-medium bg-bg-elevated/50 p-4">
-            <label className="block space-y-2" htmlFor="channel-min-severity">
-              <span className="block text-sm font-medium text-text-primary">Minimum severity</span>
-              <p className="mt-1 text-sm leading-6 text-text-secondary">
-                Only deliver events at or above this severity level.
-              </p>
-              <select
-                id="channel-min-severity"
-                value={channelMinSeverity}
-                onChange={(e) => setChannelMinSeverity(e.target.value)}
-                className="min-h-11 w-full rounded-2xl border border-overlay-medium bg-bg-elevated px-4 text-text-primary outline-none focus:ring-2 focus:ring-accent-default"
-              >
-                <option value="CRITICAL">Critical</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-              </select>
-            </label>
-          </div>
-
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => { void saveChannelSettings(); }}
-            disabled={isChannelSaving || (!channelLoaded && !channelSettings)}
-            className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-accent-default disabled:cursor-not-allowed disabled:opacity-50 ${
-              isChannelSaved
-                ? 'border-emerald-400/30 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/20'
-                : 'border-overlay-medium bg-overlay-light text-text-primary hover:bg-overlay-medium'
-            }`}
+            onClick={() => {
+              void handlePushAction();
+            }}
+            disabled={!pushDetails.canEnable && !pushDetails.canDisable}
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-accent-default px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isChannelSaving ? 'Saving...' : isChannelSaved ? 'Saved ✓' : 'Save'}
+            {actionLabel}
           </button>
+          <p className="text-xs text-text-tertiary">
+            Browser permission + device subscription only. No quiet hours, caps, sounds, or webhook config.
+          </p>
         </div>
-      </CollapsiblePanel>
+      </section>
 
-      {toastMessage ? (
-        <div className={`fixed bottom-5 right-5 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_40px_var(--shadow-color)] ${
-          toastTone === 'error'
-            ? 'border-rose-400/20 bg-rose-50 text-rose-800 dark:bg-[#240d0d] dark:text-rose-100'
-            : 'border-emerald-400/20 bg-emerald-50 text-emerald-800 dark:bg-[#0d241d] dark:text-emerald-100'
-        }`}>
-          {toastMessage}
+      <section className="rounded-3xl border border-border-default bg-bg-surface/95 p-6 shadow-[0_18px_40px_var(--shadow-color)]">
+        <div className="flex items-start gap-3">
+          <div className="mt-1 rounded-2xl bg-bg-elevated p-3 text-text-secondary">
+            <Info className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">About Event Radar</h2>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Event Radar watches filings, policy moves, macro releases, and fast news sources, then pushes the highest-signal market events into a single feed.
+            </p>
+          </div>
         </div>
-      ) : null}
-    </section>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-border-default bg-bg-elevated/60 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+              <ShieldCheck className="h-4 w-4 text-accent-default" />
+              Visual mode
+            </div>
+            <p className="mt-2 text-sm text-text-secondary">Dark mode is enforced across the product.</p>
+          </div>
+          <div className="rounded-2xl border border-border-default bg-bg-elevated/60 p-4">
+            <p className="text-sm font-medium text-text-primary">App version</p>
+            <p className="mt-2 text-sm text-text-secondary">{APP_VERSION}</p>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
