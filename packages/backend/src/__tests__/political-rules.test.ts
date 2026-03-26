@@ -137,8 +137,8 @@ describe('Political Classification Rules', () => {
     });
   });
 
-  describe('Elon — X rules', () => {
-    it('should tag DOGE posts for LLM classification instead of setting HIGH severity', () => {
+  describe('removed X rules', () => {
+    it('should not match old X political rules after scanner removal', () => {
       const event = makePoliticalEvent({
         source: 'x',
         title: 'DOGE has saved taxpayers $100 billion',
@@ -147,64 +147,8 @@ describe('Political Classification Rules', () => {
       const result = engine.classify(event);
 
       expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toContain('elon');
-      expect(result.tags).toContain('doge');
-      expect(result.tags).toContain('political-market-impact');
-      expect(result.tags).toContain('force-llm-classification');
-      expect(result.matchedRules).toContain('elon-doge-govt');
-    });
-
-    it('should tag government posts for LLM classification instead of setting HIGH severity', () => {
-      const event = makePoliticalEvent({
-        source: 'x',
-        title: 'Government efficiency is the key to prosperity',
-        metadata: { author: 'elonmusk' },
-      });
-      const result = engine.classify(event);
-
-      expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toContain('government');
-      expect(result.tags).toContain('political-market-impact');
-      expect(result.tags).toContain('force-llm-classification');
-    });
-
-    it('should classify Tesla posts as MEDIUM', () => {
-      const event = makePoliticalEvent({
-        source: 'x',
-        title: 'Tesla Model Y is now the best-selling car!',
-        metadata: { author: 'elonmusk' },
-      });
-      const result = engine.classify(event);
-
-      expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toContain('tesla');
-      expect(result.matchedRules).toContain('elon-tesla');
-    });
-
-    it('should classify SpaceX posts as MEDIUM', () => {
-      const event = makePoliticalEvent({
-        source: 'x',
-        title: 'SpaceX Starship launch was incredible!',
-        metadata: { author: 'elonmusk' },
-      });
-      const result = engine.classify(event);
-
-      expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toContain('spacex');
-    });
-
-    it('should tag Elon crypto posts for LLM classification instead of setting HIGH severity', () => {
-      const event = makePoliticalEvent({
-        source: 'x',
-        title: 'Crypto adoption is accelerating',
-        metadata: { author: 'elonmusk' },
-      });
-      const result = engine.classify(event);
-
-      expect(result.severity).toBe('MEDIUM');
-      expect(result.tags).toContain('political-market-impact');
-      expect(result.tags).toContain('force-llm-classification');
-      expect(result.tags).toContain('crypto');
+      expect(result.tags).toEqual([]);
+      expect(result.matchedRules).toEqual([]);
     });
   });
 

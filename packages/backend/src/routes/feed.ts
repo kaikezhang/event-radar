@@ -159,10 +159,10 @@ function inferFeedCategory(source: string, metadata: Record<string, unknown>): F
   }
 
   const normalizedSource = source.toLowerCase();
-  if (['whitehouse', 'federal-register', 'congress', 'truth-social'].includes(normalizedSource)) {
+  if (['federal-register', 'truth-social'].includes(normalizedSource)) {
     return 'policy';
   }
-  if (['econ-calendar', 'fedwatch', 'fed', 'bls'].includes(normalizedSource)) {
+  if (['econ-calendar', 'fed', 'bls'].includes(normalizedSource)) {
     return 'macro';
   }
   if (['state-department', 'defense', 'geopolitics'].includes(normalizedSource)) {
@@ -170,14 +170,13 @@ function inferFeedCategory(source: string, metadata: Record<string, unknown>): F
   }
   if ([
     'sec-edgar',
-    'earnings',
-    'analyst',
     'fda',
-    'doj-antitrust',
-    'unusual-options',
-    'short-interest',
-    'warn',
+    'trading-halt',
     'breaking-news',
+    'newswire',
+    'pr-newswire',
+    'businesswire',
+    'globenewswire',
   ].includes(normalizedSource)) {
     return 'corporate';
   }
@@ -235,18 +234,6 @@ function extractSourceMetadata(
         scheduledTime: 'scheduled_time',
         frequency: 'frequency',
         tags: 'tags',
-      });
-    case 'stocktwits':
-      return pick(metadata, {
-        currentVolume: 'current_volume',
-        previousVolume: 'previous_volume',
-        ratio: 'ratio',
-      });
-    case 'reddit':
-      return pick(metadata, {
-        upvotes: 'upvotes',
-        comments: 'comments',
-        highEngagement: 'high_engagement',
       });
     default:
       return undefined;
@@ -416,7 +403,7 @@ export function registerFeedRoutes(server: FastifyInstance, db?: Database): void
         smartConditions.push(sqlTag`(UPPER(COALESCE(e.severity, '')) = 'HIGH' AND LOWER(e.source) IN ('breaking-news', 'sec-edgar', 'trading-halt', 'newswire'))`);
 
         conditions.push(sqlTag`(${smartConditions.reduce((left, right) => sqlTag`${left} OR ${right}`)})`);
-        conditions.push(sqlTag`LOWER(e.source) NOT IN ('stocktwits-trending', 'federal-register')`);
+        conditions.push(sqlTag`LOWER(e.source) NOT IN ('federal-register')`);
       } else if (watchlistFilter) {
         const userId = resolveRequestUserId(request);
         const watchlistRows = await db

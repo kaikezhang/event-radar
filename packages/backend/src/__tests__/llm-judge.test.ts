@@ -345,7 +345,7 @@ describe('LLMGatekeeper rate limiter', () => {
       rateLimitWindowMs: 60_000,
     });
 
-    const event = makeEvent({ source: 'reddit' });
+    const event = makeEvent({ source: 'truth-social' });
 
     // First 3 calls should succeed
     await gatekeeper.check(event);
@@ -367,16 +367,16 @@ describe('LLMGatekeeper rate limiter', () => {
       rateLimitWindowMs: 60_000,
     });
 
-    const redditEvent = makeEvent({ source: 'reddit' });
+    const truthSocialEvent = makeEvent({ source: 'truth-social' });
     const newsEvent = makeEvent({ source: 'breaking-news' });
 
-    // 2 reddit calls
-    await gatekeeper.check(redditEvent);
-    await gatekeeper.check(redditEvent);
+    // 2 truth-social calls
+    await gatekeeper.check(truthSocialEvent);
+    await gatekeeper.check(truthSocialEvent);
 
-    // Reddit should be rate limited now
-    const redditResult = await gatekeeper.check(redditEvent);
-    expect(redditResult.reason).toContain('rate limited');
+    // Truth Social should be rate limited now
+    const truthSocialResult = await gatekeeper.check(truthSocialEvent);
+    expect(truthSocialResult.reason).toContain('rate limited');
 
     // But breaking-news should still work
     const newsResult = await gatekeeper.check(newsEvent);

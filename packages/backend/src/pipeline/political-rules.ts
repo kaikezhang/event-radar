@@ -3,7 +3,7 @@ import type { Rule } from '@event-radar/shared';
 const POLITICAL_LLM_TAGS = ['political-market-impact', 'force-llm-classification'] as const;
 
 function createPoliticalTags(
-  actor: 'trump' | 'elon',
+  actor: 'trump',
   tags: readonly string[],
 ): string[] {
   return [actor, ...POLITICAL_LLM_TAGS, ...tags];
@@ -132,7 +132,7 @@ function createTruthSocialBoostRules(): Rule[] {
 }
 
 /**
- * Classification rules for political posts (Truth Social + X).
+ * Classification rules for Truth Social political posts.
  * Used alongside the existing SEC rules in default-rules.ts.
  */
 export const POLITICAL_RULES: Rule[] = [
@@ -210,94 +210,6 @@ export const POLITICAL_RULES: Rule[] = [
       { type: 'setPriority', value: 10 },
     ],
     priority: 15,
-    enabled: true,
-  },
-  {
-    id: 'elon-doge-govt',
-    name: 'Elon — DOGE/Government Keywords',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'doge' },
-    ],
-    actions: [
-      { type: 'addTags', values: createPoliticalTags('elon', ['doge', 'government']) },
-      { type: 'setPriority', value: 10 },
-    ],
-    priority: 15,
-    enabled: true,
-  },
-  {
-    id: 'elon-government',
-    name: 'Elon — Government Efficiency',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'government' },
-    ],
-    actions: [
-      { type: 'addTags', values: createPoliticalTags('elon', ['government']) },
-      { type: 'setPriority', value: 10 },
-    ],
-    priority: 15,
-    enabled: true,
-  },
-  {
-    id: 'elon-crypto',
-    name: 'Elon — Crypto Keywords',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'crypto' },
-    ],
-    actions: [
-      { type: 'addTags', values: createPoliticalTags('elon', ['crypto']) },
-      { type: 'setPriority', value: 10 },
-    ],
-    priority: 15,
-    enabled: true,
-  },
-  {
-    id: 'elon-bitcoin',
-    name: 'Elon — Bitcoin Keywords',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'bitcoin' },
-    ],
-    actions: [
-      { type: 'addTags', values: createPoliticalTags('elon', ['crypto', 'bitcoin']) },
-      { type: 'setPriority', value: 10 },
-    ],
-    priority: 15,
-    enabled: true,
-  },
-
-  // ── MEDIUM ───────────────────────────────────────────────────────────
-  {
-    id: 'elon-tesla',
-    name: 'Elon — Tesla Keywords',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'tesla' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: 'MEDIUM' },
-      { type: 'addTags', values: ['elon', 'tesla'] },
-      { type: 'setPriority', value: 25 },
-    ],
-    priority: 25,
-    enabled: true,
-  },
-  {
-    id: 'elon-spacex',
-    name: 'Elon — SpaceX Keywords',
-    conditions: [
-      { type: 'sourceEquals', value: 'x' },
-      { type: 'titleContains', value: 'spacex' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: 'MEDIUM' },
-      { type: 'addTags', values: ['elon', 'spacex'] },
-      { type: 'setPriority', value: 25 },
-    ],
-    priority: 25,
     enabled: true,
   },
 ];

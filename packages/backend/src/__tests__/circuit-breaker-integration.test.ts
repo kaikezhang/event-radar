@@ -4,6 +4,7 @@ import type { LLMProvider } from '../services/llm-provider.js';
 import { err } from '@event-radar/shared';
 import { LLMError } from '../services/llm-provider.js';
 import type { RawEvent } from '@event-radar/shared';
+import { PRIMARY_SOURCES_SET } from '../pipeline-helpers.js';
 
 /**
  * App-level integration test verifying circuit breaker fallback behavior.
@@ -15,14 +16,6 @@ import type { RawEvent } from '@event-radar/shared';
  * This mirrors the logic in app.ts lines 476-498 where the pipeline
  * checks `llmGatekeeper.isCircuitOpen` and routes based on source type.
  */
-
-/** Primary sources — same set used in app.ts */
-const PRIMARY_SOURCES = new Set([
-  'whitehouse', 'congress', 'sec-edgar', 'fda', 'doj-antitrust',
-  'unusual-options', 'truth-social', 'x-scanner', 'short-interest', 'warn',
-  'federal-register', 'sec-regulatory', 'ftc', 'fed', 'treasury',
-  'commerce', 'cfpb',
-]);
 
 function makeEvent(source: string): RawEvent {
   return {
@@ -52,7 +45,7 @@ function pipelineCircuitBreakerDecision(
   source: string,
 ): { pass: boolean; reason: string } {
   if (gatekeeper.isCircuitOpen) {
-    const isPrimary = PRIMARY_SOURCES.has(source.toLowerCase());
+    const isPrimary = PRIMARY_SOURCES_SET.has(source.toLowerCase());
     if (!isPrimary) {
       return { pass: false, reason: 'circuit breaker open — secondary source blocked' };
     }
@@ -78,8 +71,7 @@ describe('Circuit breaker integration — app-level fallback behavior', () => {
     expect(gatekeeper.isCircuitOpen).toBe(true);
 
     // Primary sources should pass
-    const primarySources = ['whitehouse', 'congress', 'sec-edgar', 'fda', 'unusual-options',
-      'truth-social', 'x-scanner', 'fed', 'treasury'];
+    const primarySources = ['sec-edgar', 'fda', 'truth-social', 'federal-register', 'trading-halt'];
     for (const source of primarySources) {
       const decision = pipelineCircuitBreakerDecision(gatekeeper, source);
       expect(decision.pass).toBe(true);
@@ -103,7 +95,7 @@ describe('Circuit breaker integration — app-level fallback behavior', () => {
     expect(gatekeeper.isCircuitOpen).toBe(true);
 
     // Secondary/aggregator sources should be blocked
-    const secondarySources = ['breaking-news', 'reddit', 'stocktwits', 'analyst', 'econ-calendar'];
+    const secondarySources = ['breaking-news', 'econ-calendar', 'newswire', 'social-signal'];
     for (const source of secondarySources) {
       const decision = pipelineCircuitBreakerDecision(gatekeeper, source);
       expect(decision.pass).toBe(false);
@@ -121,7 +113,7 @@ describe('Circuit breaker integration — app-level fallback behavior', () => {
     // Circuit is not open — no failures
     expect(gatekeeper.isCircuitOpen).toBe(false);
 
-    const allSources = ['whitehouse', 'breaking-news', 'reddit', 'sec-edgar'];
+    const allSources = ['truth-social', 'breaking-news', 'social-signal', 'sec-edgar'];
     for (const source of allSources) {
       const decision = pipelineCircuitBreakerDecision(gatekeeper, source);
       expect(decision.pass).toBe(true);
@@ -145,14 +137,14 @@ describe('Circuit breaker integration — app-level fallback behavior', () => {
     expect(gatekeeper.isCircuitOpen).toBe(true);
 
     // Secondary should be blocked
-    expect(pipelineCircuitBreakerDecision(gatekeeper, 'reddit').pass).toBe(false);
+    expect(pipelineCircuitBreakerDecision(gatekeeper, 'social-signal').pass).toBe(false);
 
     // Wait for circuit to reset
     await new Promise(resolve => setTimeout(resolve, 150));
 
     // Now circuit should be closed — all sources pass
     expect(gatekeeper.isCircuitOpen).toBe(false);
-    expect(pipelineCircuitBreakerDecision(gatekeeper, 'reddit').pass).toBe(true);
-    expect(pipelineCircuitBreakerDecision(gatekeeper, 'whitehouse').pass).toBe(true);
+    expect(pipelineCircuitBreakerDecision(gatekeeper, 'social-signal').pass).toBe(true);
+    expect(pipelineCircuitBreakerDecision(gatekeeper, 'truth-social').pass).toBe(true);
   });
 });

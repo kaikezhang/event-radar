@@ -53,17 +53,17 @@ export function getNextSessionOpenMs(now: Date): number {
 
 /** Source reliability tiers for LLM Judge context */
 const PRIMARY_GOVERNMENT_SOURCES = new Set([
-  'whitehouse', 'congress', 'sec-edgar', 'fda', 'doj-antitrust',
+  'sec-edgar', 'fda',
   'federal-register', 'sec-regulatory', 'ftc', 'fed', 'treasury',
-  'commerce', 'cfpb', 'warn',
+  'commerce', 'cfpb',
 ]);
 
 const PRIMARY_MARKET_SOURCES = new Set([
-  'unusual-options', 'short-interest',
+  'trading-halt',
 ]);
 
 const PRIMARY_SOCIAL_SOURCES = new Set([
-  'truth-social', 'x-scanner',
+  'truth-social',
 ]);
 
 function getSourceReliabilityTier(source: string): string {

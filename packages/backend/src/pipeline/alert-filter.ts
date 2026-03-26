@@ -158,17 +158,12 @@ export class AlertFilter {
       }
     }
 
-    // Rule 3: Skip dummy scanner events
-    if (source === 'dummy' || event.type === 'dummy') {
-      return { pass: false, reason: 'dummy event skipped', enrichWithLLM: false };
-    }
-
-    // Rule 4: Newswire noise filter — require US-listed ticker or HIGH+ keyword
+    // Rule 3: Newswire noise filter — require US-listed ticker or HIGH+ keyword
     if (source === 'pr-newswire' || source === 'businesswire' || source === 'globenewswire') {
       return this.checkNewswire(event, ticker);
     }
 
-    // Rule 5: Insider trade threshold and meaningless Form 4 suppression
+    // Rule 4: Insider trade threshold and meaningless Form 4 suppression
     if (source === 'sec-edgar' && isSecForm4Event(event)) {
       const value = numMeta(event, 'transactionValue')
         ?? numMeta(event, 'transaction_value')
@@ -182,12 +177,12 @@ export class AlertFilter {
       }
     }
 
-    // Rule 6: Social noise filter (Reddit / StockTwits)
-    if (source === 'reddit' || source === 'stocktwits') {
+    // Rule 5: Social noise filter — detect social chatter from engagement metadata
+    if (isSocialSignal(event)) {
       return this.checkSocial(event, ticker);
     }
 
-    // Rule 7: Calendar events — only if today or tomorrow
+    // Rule 6: Calendar events — only if today or tomorrow
     if (this.isCalendarEvent(event)) {
       return this.checkCalendarEvent(event);
     }
@@ -505,6 +500,16 @@ function isSecForm4Event(event: RawEvent): boolean {
     || formType === '4'
     || formType === 'Form 4'
   );
+}
+
+function isSocialSignal(event: RawEvent): boolean {
+  return [
+    'high_engagement',
+    'upvotes',
+    'score',
+    'comments',
+    'commentCount',
+  ].some((key) => event.metadata?.[key] != null);
 }
 
 function numMeta(event: RawEvent, key: string): number | undefined {

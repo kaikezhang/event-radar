@@ -101,7 +101,7 @@ export class LLMClassifierService {
     }
 
     // High-impact sources always go through LLM for accurate severity classification
-    const highImpactSources = ['truth-social', 'whitehouse'];
+    const highImpactSources = ['truth-social', 'trading-halt'];
     if (highImpactSources.includes(event.source)) {
       return true;
     }
