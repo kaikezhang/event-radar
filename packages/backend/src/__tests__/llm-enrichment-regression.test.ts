@@ -99,16 +99,6 @@ function makeDeps({
         return true;
       }),
     } as never,
-    marketRegimeService: {
-      getRegimeSnapshot: vi.fn().mockResolvedValue({
-        score: 0,
-        label: 'neutral',
-        factors: {},
-        amplification: { bullish: 1, bearish: 1 },
-        updatedAt: '2026-03-23T12:00:00.000Z',
-      }),
-      getAmplificationFactor: vi.fn().mockReturnValue(1),
-    } as never,
     startTime: 0,
   };
 

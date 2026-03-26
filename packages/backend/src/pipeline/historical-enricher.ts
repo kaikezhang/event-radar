@@ -4,10 +4,6 @@ import type { Database } from '../db/connection.js';
 import { historicalEnrichmentTimeoutsTotal } from '../metrics.js';
 import type { MarketContextCache } from '../services/market-context-cache.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
-import {
-  extractPrimaryTicker,
-  PatternMatcher,
-} from '../services/pattern-matcher.js';
 
 export type ConfidenceLevel = HistoricalContext['confidence'];
 
@@ -22,33 +18,17 @@ export interface HistoricalEnricherConfig {
   marketDataCache?: HistoricalTickerMarketDataSource;
 }
 
-const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
-  insufficient: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
 export class HistoricalEnricher {
   private readonly enabled: boolean;
-  private readonly minConfidence: ConfidenceLevel;
-  private readonly patternMatcher: PatternMatcher;
-  private readonly tickerMarketDataCache?: HistoricalTickerMarketDataSource;
   private readonly timeoutMs: number;
 
   constructor(
-    db: Database,
-    private readonly marketCache: MarketContextCache,
+    _db: Database,
+    _marketCache: MarketContextCache,
     config?: HistoricalEnricherConfig,
   ) {
     this.enabled =
       config?.enabled ?? process.env.HISTORICAL_ENRICHMENT_ENABLED !== 'false';
-    this.minConfidence =
-      config?.minConfidence ??
-      parseConfidence(process.env.HISTORICAL_MIN_CONFIDENCE) ??
-      'low';
-    this.patternMatcher = new PatternMatcher(db);
-    this.tickerMarketDataCache = config?.marketDataCache;
     this.timeoutMs =
       config?.timeoutMs ??
       parsePositiveInt(process.env.HISTORICAL_TIMEOUT_MS) ??
@@ -99,68 +79,10 @@ export class HistoricalEnricher {
     event: RawEvent,
     llmResult?: LlmClassificationResult,
   ): Promise<HistoricalContext | null> {
-    const context = await this.patternMatcher.findHistoricalContext(event, {
-      llmResult,
-      marketSnapshot: this.marketCache.get(),
-    });
-    if (!context) {
-      return null;
-    }
-
-    if (
-      CONFIDENCE_ORDER[context.confidence] <
-      CONFIDENCE_ORDER[this.minConfidence]
-    ) {
-      return null;
-    }
-
-    return this.attachTickerMarketContext(event, context);
+    void event;
+    void llmResult;
+    return null;
   }
-
-  private async attachTickerMarketContext(
-    event: RawEvent,
-    context: HistoricalContext,
-  ): Promise<HistoricalContext> {
-    if (!this.tickerMarketDataCache) {
-      return context;
-    }
-
-    const ticker = extractPrimaryTicker(event);
-    if (!ticker) {
-      return context;
-    }
-
-    try {
-      const marketContext = await this.tickerMarketDataCache.getOrFetch(ticker);
-      if (!marketContext) {
-        return context;
-      }
-
-      return {
-        ...context,
-        marketContext,
-      };
-    } catch (error) {
-      console.error(
-        '[historical-enricher] Failed to load per-ticker market context:',
-        error instanceof Error ? error.message : error,
-      );
-      return context;
-    }
-  }
-}
-
-function parseConfidence(value?: string): ConfidenceLevel | undefined {
-  if (
-    value === 'insufficient' ||
-    value === 'low' ||
-    value === 'medium' ||
-    value === 'high'
-  ) {
-    return value;
-  }
-
-  return undefined;
 }
 
 function parsePositiveInt(value?: string): number | undefined {

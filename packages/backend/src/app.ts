@@ -5,7 +5,6 @@ import {
   ScannerRegistry,
   RawEventSchema,
   type EventBus,
-  type IMarketRegimeService,
   type Rule,
 } from '@event-radar/shared';
 import { type AlertRouter as AlertRouterType } from '@event-radar/delivery';
@@ -14,7 +13,6 @@ import * as schema from './db/schema.js';
 import { sql } from 'drizzle-orm';
 import { registerAuthPlugin, generateApiKey } from './plugins/auth.js';
 import { registerWebsocketPlugin } from './plugins/websocket.js';
-import { MarketRegimeService } from './services/market-regime.js';
 import { DeliveryKillSwitch, type IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
 import { startAuditCleanupLoop, type AuditCleanupHandle } from './services/audit-cleanup.js';
 import { HealthMonitorService } from './services/health-monitor.js';
@@ -38,9 +36,6 @@ import { OutcomeTracker } from './services/outcome-tracker.js';
 import { MarketContextCache } from './services/market-context-cache.js';
 import { MarketDataCache } from './services/market-data-cache.js';
 import { createMarketDataProvider } from './services/create-market-data-provider.js';
-import { ClassificationAccuracyService } from './services/classification-accuracy.js';
-import { AdaptiveClassifierService } from './services/adaptive-classifier.js';
-import { PatternMatcher } from './services/pattern-matcher.js';
 import { validateJwtConfig } from './routes/auth.js';
 import type { PriceBatchService, PriceChartService } from './routes/price.js';
 
@@ -84,7 +79,6 @@ export function buildApp(options?: {
   historicalEnricher?: HistoricalEnricherLike;
   priceChartService?: PriceChartService;
   priceBatchService?: PriceBatchService;
-  marketRegimeService?: IMarketRegimeService;
   killSwitch?: IDeliveryKillSwitch;
   marketDataCache?: {
     getOrFetch(symbol: string): Promise<{
@@ -114,9 +108,6 @@ export function buildApp(options?: {
   const llmClassifier = options?.llmProvider
     ? new LlmClassifier({ provider: options.llmProvider })
     : undefined;
-  const marketRegimeService = options?.marketRegimeService ?? new MarketRegimeService({
-    logger: server.log,
-  });
   const dedupRedisEnabled = process.env.DEDUP_REDIS_ENABLED === 'true';
   const deduplicator = new EventDeduplicator({
     db,
@@ -135,15 +126,9 @@ export function buildApp(options?: {
       : undefined,
     enabled: process.env.LLM_GATEKEEPER_ENABLED === 'true',
   });
-  const accuracyService = db
-    ? new ClassificationAccuracyService(db, { eventBus })
-    : undefined;
-  const adaptiveService = db
-    ? new AdaptiveClassifierService(db, { accuracyService, eventBus })
-    : undefined;
   const outcomeTracker =
     db != null
-      ? new OutcomeTracker(db, undefined, accuracyService)
+      ? new OutcomeTracker(db)
       : undefined;
   const tickerMarketDataProvider = process.env.ALPHA_VANTAGE_API_KEY
     ? createMarketDataProvider({
@@ -161,12 +146,8 @@ export function buildApp(options?: {
         refreshIntervalMs: 300_000,
       })
       : undefined);
-  const patternMatcher = db ? new PatternMatcher(db) : undefined;
   const llmEnricher = new LLMEnricher(options?.llmEnricherConfig, {
-    regimeService: marketRegimeService,
     marketDataCache: tickerMarketDataCache,
-    patternMatcher,
-    marketSnapshotProvider: marketCache,
   });
   const historicalEnricher = options?.historicalEnricher
     ?? (db && marketCache
@@ -227,7 +208,6 @@ export function buildApp(options?: {
       '/api/events/:id/similar',
       '/api/tickers/search',
       '/api/tickers/trending',
-      '/api/v1/scorecard/summary',
       '/api/v1/sources',
       '/api-docs',
       '/api/health',
@@ -291,10 +271,7 @@ export function buildApp(options?: {
     auditLog,
     pipelineLimiter,
     killSwitch,
-    accuracyService,
-    adaptiveService,
     outcomeTracker,
-    marketRegimeService,
     startTime,
   });
 
@@ -384,9 +361,7 @@ export function buildApp(options?: {
     db,
     apiKey,
     registry,
-    marketRegimeService,
     tickerMarketDataCache,
-    marketCache: marketCache ?? undefined,
     killSwitch,
     healthMonitor,
     priceChartService: options?.priceChartService,

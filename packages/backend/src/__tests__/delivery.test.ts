@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { buildApp, type AppContext } from '../app.js';
 import { AlertRouter } from '@event-radar/delivery';
 import type { DeliveryService, AlertEvent } from '@event-radar/delivery';
-import type { RegimeSnapshot } from '@event-radar/shared';
 import { safeCloseServer } from './helpers/test-db.js';
 
 function mockService(name: string): DeliveryService & { send: ReturnType<typeof vi.fn> } {
@@ -14,10 +13,6 @@ describe('EventBus → delivery integration', () => {
   let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
   let historicalEnricher: { enrich: ReturnType<typeof vi.fn> };
-  let marketRegimeService: {
-    getRegimeSnapshot: ReturnType<typeof vi.fn>;
-    getAmplificationFactor: ReturnType<typeof vi.fn>;
-  };
 
   beforeAll(async () => {
     bark = mockService('bark');
@@ -39,31 +34,11 @@ describe('EventBus → delivery integration', () => {
           'Technology earnings beat in bull market: +8.0% avg alpha T+20, 63% win rate (12 cases)',
       }),
     };
-    marketRegimeService = {
-      getRegimeSnapshot: vi.fn().mockResolvedValue({
-        score: 0,
-        label: 'neutral',
-        factors: {
-          vix: { value: 18, zscore: 0 },
-          spyRsi: { value: 50, signal: 'neutral' },
-          spy52wPosition: { pctFromHigh: -2, pctFromLow: 18 },
-          maSignal: { sma20: 500, sma50: 498, signal: 'neutral' },
-          yieldCurve: { spread: 0.5, inverted: false },
-        },
-        amplification: {
-          bullish: 1,
-          bearish: 1,
-        },
-        updatedAt: '2026-03-13T12:00:00.000Z',
-      }),
-      getAmplificationFactor: vi.fn().mockReturnValue(1),
-    };
 
     ctx = buildApp({
       logger: false,
       alertRouter,
       historicalEnricher,
-      marketRegimeService: marketRegimeService as never,
     });
     await ctx.server.ready();
   });
@@ -188,76 +163,5 @@ describe('EventBus → delivery integration', () => {
 
     expect(response.statusCode).toBe(201);
     await safeCloseServer(noDeliveryCtx.server);
-  });
-});
-
-describe('EventBus → delivery regime wiring', () => {
-  let ctx: AppContext;
-  let discord: ReturnType<typeof mockService>;
-  let marketRegimeService: {
-    getRegimeSnapshot: ReturnType<typeof vi.fn>;
-    getAmplificationFactor: ReturnType<typeof vi.fn>;
-  };
-
-  const snapshot: RegimeSnapshot = {
-    score: 55,
-    label: 'overbought',
-    factors: {
-      vix: { value: 14.1, zscore: -0.74 },
-      spyRsi: { value: 66.4, signal: 'overbought' },
-      spy52wPosition: { pctFromHigh: -1.2, pctFromLow: 24.5 },
-      maSignal: { sma20: 508.4, sma50: 492.1, signal: 'golden_cross' },
-      yieldCurve: { spread: 0.92, inverted: false },
-    },
-    amplification: {
-      bullish: 0.7,
-      bearish: 1.5,
-    },
-    updatedAt: '2026-03-13T12:00:00.000Z',
-  };
-
-  beforeAll(async () => {
-    discord = mockService('discord');
-    marketRegimeService = {
-      getRegimeSnapshot: vi.fn().mockResolvedValue(snapshot),
-      getAmplificationFactor: vi.fn().mockReturnValue(1),
-    };
-
-    ctx = buildApp({
-      logger: false,
-      alertRouter: new AlertRouter({ discord }),
-      marketRegimeService: marketRegimeService as never,
-    });
-    await ctx.server.ready();
-  });
-
-  afterAll(async () => {
-    await safeCloseServer(ctx.server);
-  });
-
-  it('passes regimeSnapshot through to delivery alerts', async () => {
-    await ctx.server.inject({
-      method: 'POST',
-      url: '/api/events/ingest',
-      payload: {
-        id: '990e8400-e29b-41d4-a716-446655440009',
-        source: 'sec-edgar',
-        type: '8-K',
-        title: '8-K: ABC Corp — 2.02 (Earnings)',
-        body: 'ABC Corp reported Q4 earnings.',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          ticker: 'ABC',
-          item_types: ['2.02'],
-        },
-      },
-    });
-
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(discord.send).toHaveBeenCalledOnce();
-    const alert = discord.send.mock.calls[0][0] as AlertEvent;
-    expect(alert.regimeSnapshot).toEqual(snapshot);
-    expect(marketRegimeService.getRegimeSnapshot).toHaveBeenCalled();
   });
 });
