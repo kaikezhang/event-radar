@@ -162,6 +162,8 @@ const TICKER_BLOCKLIST = new Set([
 ]);
 
 const NAKED_TICKER_BLOCKLIST = new Set([
+  'DE',
+  'MD',
   'ICE',
   'MADE',
   'SAID',
@@ -176,6 +178,8 @@ const NAKED_TICKER_BLOCKLIST = new Set([
   'PLAN',
   'VOTE',
   'SAVE',
+  'NET',
+  'TGT',
 ]);
 
 export function isTickerBlocklisted(value: string): boolean {

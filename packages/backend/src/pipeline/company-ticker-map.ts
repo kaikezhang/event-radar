@@ -80,6 +80,8 @@ export const COMPANY_TICKER_MAP: Record<string, string> = {
   'chatgpt': 'MSFT',
   'anthropic': 'AMZN',
   'claude': 'AMZN',
+  'janus': 'JHG',
+  'janus henderson': 'JHG',
   'circle': 'CRCL',
   'doordash': 'DASH',
   'lyft': 'LYFT',

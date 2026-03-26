@@ -1,7 +1,7 @@
 import type { RawEvent } from '@event-radar/shared';
 import type { DedupResult } from '@event-radar/shared';
 import type { Redis } from 'ioredis';
-import { eq, gt, and } from 'drizzle-orm';
+import { eq, gt, and, asc } from 'drizzle-orm';
 import { findBestMatch } from './dedup-strategies.js';
 import { StoryTracker } from './story-tracker.js';
 import type { Database } from '../db/connection.js';
@@ -21,6 +21,13 @@ export interface DeduplicatorOptions {
 const DEFAULT_WINDOW_MS = 30 * 60 * 1000;
 const DB_LOOKUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REDIS_WINDOW_KEY = 'event-radar:dedup-window';
+
+function normalizeTruthSocialTitle(title: string): string {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
 
 export class EventDeduplicator {
   private readonly window: RawEvent[] = [];
@@ -73,6 +80,37 @@ export class EventDeduplicator {
           originalEventId: existing.id,
           storyId: undefined,
         };
+      }
+
+      if (event.source === 'truth-social') {
+        const normalizedTitle = normalizeTruthSocialTitle(event.title);
+        const matchingTruthSocialRows = await this.db
+          .select({
+            id: events.id,
+            title: events.title,
+          })
+          .from(events)
+          .where(
+            and(
+              eq(events.source, 'truth-social'),
+              gt(events.receivedAt, cutoff24h),
+            ),
+          )
+          .orderBy(asc(events.receivedAt), asc(events.id));
+
+        const titleMatch = matchingTruthSocialRows.find(
+          (row) => normalizeTruthSocialTitle(row.title) === normalizedTitle,
+        );
+
+        if (titleMatch) {
+          return {
+            isDuplicate: true,
+            matchType: 'db-lookup',
+            matchConfidence: 1.0,
+            originalEventId: titleMatch.id,
+            storyId: undefined,
+          };
+        }
       }
     }
 

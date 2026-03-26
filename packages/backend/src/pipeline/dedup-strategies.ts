@@ -8,6 +8,14 @@ export interface StrategyMatch {
 }
 
 const ID_FIELDS = ['filingId', 'postId', 'tweetId', 'articleId'] as const;
+const TRUTH_SOCIAL_TITLE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function normalizeDedupTitle(title: string): string {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
 
 /**
  * Exact ID match: same filingId, postId, tweetId, etc.
@@ -117,6 +125,24 @@ export function contentSimilarityMatch(
   existing: RawEvent,
   threshold: number = 0.8,
 ): StrategyMatch | null {
+  if (
+    incoming.source === 'truth-social' &&
+    existing.source === 'truth-social' &&
+    normalizeDedupTitle(incoming.title) === normalizeDedupTitle(existing.title)
+  ) {
+    const timeDiff = Math.abs(
+      incoming.timestamp.getTime() - existing.timestamp.getTime(),
+    );
+
+    if (timeDiff <= TRUTH_SOCIAL_TITLE_WINDOW_MS) {
+      return {
+        matchType: 'content-similarity',
+        confidence: 0.99,
+        matchedEventId: existing.id,
+      };
+    }
+  }
+
   const incomingTokens = tokenize(`${incoming.title} ${incoming.body}`);
   const existingTokens = tokenize(`${existing.title} ${existing.body}`);
 

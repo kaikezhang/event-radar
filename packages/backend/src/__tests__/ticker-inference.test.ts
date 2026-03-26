@@ -41,6 +41,11 @@ describe('ticker inference helpers', () => {
     expect(extractTickerCandidateFromText('CORP sees elevated options volume')).toBeNull();
   });
 
+  it('ignores SEC state suffixes like /DE and /MD that should not become tickers', () => {
+    expect(extractTickerCandidateFromText('Janus International Group, Inc./DE files 8-K')).toBeNull();
+    expect(extractTickerCandidateFromText('BioHealth Holdings, Inc./MD appoints new CFO')).toBeNull();
+  });
+
   it('ignores newly blocked political and financial acronyms', () => {
     expect(extractTickerCandidateFromText('ICE says sanctions review remains active')).toBeNull();
     expect(extractTickerCandidateFromText('NATO officials meet after weekend talks')).toBeNull();
@@ -55,6 +60,14 @@ describe('ticker inference helpers', () => {
     expect(extractTickerCandidateFromText('Shares of $PLAN rally after earnings')).toBe('PLAN');
   });
 
+  it('blocks naked NET when it is ordinary financial language instead of a ticker', () => {
+    expect(extractTickerCandidateFromText('Net income rises 12% year over year')).toBeNull();
+  });
+
+  it('still accepts explicit cashtags for otherwise blocked naked symbols', () => {
+    expect(extractTickerCandidateFromText('Cloud software momentum lifts $NET after earnings')).toBe('NET');
+  });
+
   it('extracts a mapped ticker from a company name case-insensitively', () => {
     expect(extractCompanyTickerFromText('Breaking: Apple unveils new devices')).toBe('AAPL');
     expect(extractCompanyTickerFromText('NVIDIA expands AI chip production')).toBe('NVDA');
@@ -62,6 +75,22 @@ describe('ticker inference helpers', () => {
 
   it('extracts the first mapped company mentioned when multiple companies appear', () => {
     expect(extractCompanyTickerFromText('Microsoft signs cloud deal with Apple')).toBe('MSFT');
+  });
+
+  it('maps Janus references to JHG', () => {
+    expect(extractCompanyTickerFromText('Janus launches a new fixed income fund')).toBe('JHG');
+  });
+
+  it('does not map generic target phrases to TGT', () => {
+    expect(extractCompanyTickerFromText('5 Million Target for annual cost savings')).toBeNull();
+  });
+
+  it('still maps Target when the text clearly refers to the retailer', () => {
+    expect(extractCompanyTickerFromText('Target shares rise after earnings beat')).toBe('TGT');
+  });
+
+  it('still maps unambiguous Cloudflare company mentions to NET', () => {
+    expect(extractCompanyTickerFromText('Cloudflare expands enterprise security offering')).toBe('NET');
   });
 
   it('preserves mapped company tickers that are valid at five characters', () => {
