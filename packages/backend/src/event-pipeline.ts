@@ -17,15 +17,11 @@ import type { AuditLog } from './pipeline/audit-log.js';
 import type { PipelineLimiter } from './pipeline/pipeline-limiter.js';
 import type { RuleEngine } from './pipeline/rule-engine.js';
 import type { IDeliveryKillSwitch } from './services/delivery-kill-switch.js';
-import type { ClassificationAccuracyService } from './services/classification-accuracy.js';
-import type { AdaptiveClassifierService } from './services/adaptive-classifier.js';
 import type { OutcomeTracker } from './services/outcome-tracker.js';
-import type { IMarketRegimeService } from '@event-radar/shared';
 import { storeEvent } from './db/event-store.js';
 import { createUserWebhookDelivery } from './services/user-webhook-delivery.js';
 import { sql } from 'drizzle-orm';
 import { toLiveFeedEvent } from './plugins/websocket.js';
-import { buildPredictionPayload } from './prediction-helpers.js';
 import { resolvePoliticalClassificationResult } from './pipeline/political-llm-policy.js';
 import { inferHighPriorityTicker, shouldInferTicker } from './pipeline/ticker-inference.js';
 import { categorizeFilterReason, logTitle, PRIMARY_SOURCES_SET } from './pipeline-helpers.js';
@@ -108,10 +104,7 @@ export interface EventPipelineDeps {
   auditLog: AuditLog;
   pipelineLimiter: PipelineLimiter;
   killSwitch?: IDeliveryKillSwitch;
-  accuracyService?: ClassificationAccuracyService;
-  adaptiveService?: AdaptiveClassifierService;
   outcomeTracker?: OutcomeTracker;
-  marketRegimeService: IMarketRegimeService;
   startTime: number;
 }
 
@@ -132,10 +125,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
     auditLog,
     pipelineLimiter,
     killSwitch,
-    accuracyService,
-    adaptiveService,
     outcomeTracker,
-    marketRegimeService,
     startTime,
   } = deps;
 
@@ -247,27 +237,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         ticker: typeof ticker === 'string' ? ticker : undefined,
         eventType: typeof classifiedEventType === 'string' ? classifiedEventType : undefined,
       });
-
-      if (accuracyService) {
-        const predictionPayload = await buildPredictionPayload(
-          event,
-          ruleResult,
-          llmResult,
-          adaptiveService,
-        );
-        await accuracyService.recordPrediction(
-          eventId,
-          predictionPayload,
-        );
-
-        if (adaptiveService) {
-          await adaptiveService.enqueueEventIfNeeded({
-            eventId,
-            source: event.source,
-            confidence: predictionPayload.confidence,
-          });
-        }
-      }
 
       if (outcomeTracker) {
         await outcomeTracker.scheduleOutcomeTrackingForEvent(eventId, event);
@@ -688,19 +657,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         }
       }
 
-      let regimeSnapshot: import('@event-radar/shared').RegimeSnapshot | undefined;
-      try {
-        regimeSnapshot = await marketRegimeService.getRegimeSnapshot();
-      } catch (error) {
-        server.log.warn({
-          pipeline: true,
-          stage: 'market_regime',
-          source: event.source,
-          title: logTitle(event.title),
-          error: error instanceof Error ? error.message : error,
-        }, 'failed to load regime snapshot for delivery');
-      }
-
       pipelineFunnelTotal.inc({ stage: 'enriched' });
 
       // Kill switch — skip delivery when active
@@ -741,7 +697,6 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
         confidenceBucket: classificationResult.confidenceLevel,
         enrichment,
         historicalContext,
-        regimeSnapshot,
         deliveryTier: gateMode === 'enforce' && gateResult.pass ? gateResult.tier as 'critical' | 'high' | 'feed' : undefined,
       });
       const deliveryMs = Date.now() - deliveryStart;
@@ -854,19 +809,4 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
     }
   });
 
-  if (adaptiveService && eventBus.subscribeTopic) {
-    eventBus.subscribeTopic('accuracy:updated', async (payload) => {
-      const totalEvaluated =
-        payload &&
-        typeof payload === 'object' &&
-        'totalEvaluated' in payload &&
-        typeof payload.totalEvaluated === 'number'
-          ? payload.totalEvaluated
-          : null;
-
-      if (totalEvaluated != null) {
-        await adaptiveService.recalculateWeightsIfNeeded(totalEvaluated);
-      }
-    });
-  }
 }

@@ -209,6 +209,3 @@ export {
   type RegimeSnapshot,
   type RegimeHistoryPoint,
 } from './types/regime.js';
-export {
-  type IMarketRegimeService,
-} from './types/regime-types.js';

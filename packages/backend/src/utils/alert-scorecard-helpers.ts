@@ -7,21 +7,15 @@ import {
   type LLMEnrichment,
 } from '@event-radar/shared';
 
-export type ScorecardDirectionVerdict = 'correct' | 'incorrect' | 'unclear';
-export type ScorecardSetupVerdict = 'worked' | 'failed' | 'insufficient-data';
-export type ScorecardVerdictWindowLabel = 'T+5' | 'T+20';
-
 export interface SelectedScorecardWindow {
-  label: ScorecardVerdictWindowLabel;
+  label: 'T+5' | 'T+20';
   movePercent: number;
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
-  return value != null && typeof value === 'object' ? value as Record<string, unknown> : null;
-}
-
-export function getString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  return value != null && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : null;
 }
 
 export function toNumber(value: string | number | null): number | null {
@@ -38,23 +32,12 @@ export function getEnrichment(value: unknown): LLMEnrichment | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function resolveProductEventType(input: {
-  metadata: Record<string, unknown> | null;
-  rawPayload: unknown;
-}): string | null {
-  const rawPayload = asRecord(input.rawPayload);
-
-  return getString(input.metadata?.['eventType'])
-    ?? getString(rawPayload?.['eventType']);
-}
-
-export function normalizeDirection(value: unknown): AccuracyDirection | null {
+function normalizeDirection(value: unknown): AccuracyDirection | null {
   if (typeof value !== 'string') {
     return null;
   }
 
-  const lowered = value.trim().toLowerCase();
-  const parsed = AccuracyDirectionSchema.safeParse(lowered);
+  const parsed = AccuracyDirectionSchema.safeParse(value.trim().toLowerCase());
   return parsed.success ? parsed.data : null;
 }
 
@@ -63,18 +46,18 @@ export function resolveScorecardDirection(input: {
   metadata: Record<string, unknown> | null;
   enrichment: LLMEnrichment | null;
 }): AccuracyDirection | null {
-  return (
-    normalizeDirection(input.predictedDirection)
+  return normalizeDirection(input.predictedDirection)
     ?? normalizeDirection(input.metadata?.['direction'])
-    ?? normalizeDirection(input.enrichment?.tickers[0]?.direction)
-  );
+    ?? normalizeDirection(input.enrichment?.tickers[0]?.direction);
 }
 
 export function resolveConfidenceBucket(
   confidence: string | number | null,
 ): ConfidenceLevel | null {
   const numericConfidence = toNumber(confidence);
-  return numericConfidence != null ? deriveConfidenceLevel(numericConfidence) : null;
+  return numericConfidence != null
+    ? deriveConfidenceLevel(numericConfidence)
+    : null;
 }
 
 export function selectVerdictWindow(
@@ -95,31 +78,27 @@ export function selectVerdictWindow(
 export function buildDirectionVerdict(
   direction: AccuracyDirection | null,
   movePercent: number | null,
-): ScorecardDirectionVerdict {
+): 'correct' | 'incorrect' | 'unclear' {
   if (direction == null || direction === 'neutral' || movePercent == null) {
     return 'unclear';
   }
 
-  if (direction === 'bullish') {
-    return movePercent > 0 ? 'correct' : 'incorrect';
-  }
-
-  return movePercent < 0 ? 'correct' : 'incorrect';
+  return direction === 'bullish'
+    ? (movePercent > 0 ? 'correct' : 'incorrect')
+    : (movePercent < 0 ? 'correct' : 'incorrect');
 }
 
 export function buildSetupVerdict(
   direction: AccuracyDirection | null,
   movePercent: number | null,
-): ScorecardSetupVerdict {
+): 'worked' | 'failed' | 'insufficient-data' {
   if (direction == null || direction === 'neutral' || movePercent == null) {
     return 'insufficient-data';
   }
 
-  if (direction === 'bullish') {
-    return movePercent > 0 ? 'worked' : 'failed';
-  }
-
-  return movePercent < 0 ? 'worked' : 'failed';
+  return direction === 'bullish'
+    ? (movePercent > 0 ? 'worked' : 'failed')
+    : (movePercent < 0 ? 'worked' : 'failed');
 }
 
 export function extractTicker(

@@ -4,17 +4,11 @@ import {
   LLMEnrichmentSchema,
   type LlmClassificationResult,
   type RawEvent,
-  type IMarketRegimeService,
   type LLMEnrichment,
-  type RegimeSnapshot,
 } from '@event-radar/shared';
 import { registry } from '../metrics.js';
-import type { MarketSnapshot } from '../services/market-context-cache.js';
 import type { MarketQuote } from '../services/market-data-provider.js';
-import {
-  extractPrimaryTicker,
-  type PatternMatchResult,
-} from '../services/pattern-matcher.js';
+import { extractTickerFromEvent } from '../utils/event-ticker.js';
 
 const enricherCircuitState = new Gauge({
   name: 'llm_enricher_circuit_state',
@@ -33,43 +27,24 @@ interface TickerMarketDataSource {
   getOrFetch(symbol: string): Promise<MarketQuote | undefined>;
 }
 
-interface PatternStatsSource {
-  findSimilar(
-    event: RawEvent,
-    options?: {
-      llmResult?: LlmClassificationResult;
-      marketSnapshot?: MarketSnapshot | null;
-    },
-  ): Promise<PatternMatchResult | null>;
-}
-
-interface MarketSnapshotProvider {
-  get(): MarketSnapshot | null;
-}
-
 interface LLMEnricherDependencies {
-  regimeService?: IMarketRegimeService;
   marketDataCache?: TickerMarketDataSource;
-  patternMatcher?: PatternStatsSource;
-  marketSnapshotProvider?: MarketSnapshotProvider;
 }
 
 interface LLMEnrichmentPromptContext {
-  regime?: RegimeSnapshot;
   marketContext?: MarketQuote;
-  patternMatch?: PatternMatchResult | null;
   classification?: Pick<LlmClassificationResult, 'severity' | 'eventType'>;
 }
 
 const SYSTEM_PROMPT = `You are a stock market event analyst. Produce concise, trader-usable intelligence in English and respond ONLY with valid JSON (no markdown, no code fences).
 
 Rules:
-- Reason from the event catalyst first, then current market setup, then historical analog stats.
+- Reason from the event catalyst first, then any explicit market setup that is provided.
 - Keep each field specific and compact. No generic AI filler.
 - Do not use BUY, SELL, HOLD, or any personal financial advice language.
 - Never state what a trader should do. State what the data shows and what historically followed.
 - Frame as intelligence, not recommendations.
-- If market setup or historical analog data is unavailable, omit that field or return an empty string.
+- If market setup is unavailable, omit that field or return an empty string.
 - For tickers: identify directly impacted US-listed tickers when they are explicit or strongly implied in the event. Do NOT guess proxies, ETFs, or loosely related names. Return tickers: [] if no clear directly impacted ticker exists.
 - For direction: prefer bullish or bearish. Use neutral only when the impact is genuinely ambiguous (this should be rare — most events lean one way).
 
@@ -84,30 +59,19 @@ Use this exact schema:
   "impact": "1-2 sentence English trader takeaway on why the event matters",
   "whyNow": "1 concise sentence on why the setup matters right now",
   "currentSetup": "1 concise sentence on the current per-ticker market setup (omit if unavailable)",
-  "historicalContext": "1 concise sentence on relevant historical pattern stats (omit if unavailable)",
+  "historicalContext": "1 concise sentence on relevant historical precedent or context when justified (omit if unavailable)",
   "risks": "1 concise sentence on the main invalidation or risk to this read",
   "action": "one of: 🔴 High-Quality Setup, 🟡 Monitor, 🟢 Background",
   "tickers": [{"symbol": "TICKER", "direction": "bullish|bearish|neutral"}],
-  "regimeContext": "1 sentence in English on how the current market regime amplifies or dampens this event's impact (omit if no market context provided)"
+  "regimeContext": "1 sentence in English on how the broader tape or current setup changes the event's impact (omit if no setup is provided)"
 }`;
-
-const REGIME_EXPLANATIONS: Record<string, string> = {
-  extreme_overbought: 'Markets are extremely overbought — bad news has 2-3x amplified impact, good news may be muted.',
-  overbought: 'Markets are running hot — negative catalysts hit harder (1.5x), positive catalysts discounted (0.7x).',
-  neutral: 'Markets are in a neutral regime — events have standard impact.',
-  oversold: 'Markets are oversold — positive catalysts are amplified (1.5x), negative catalysts dampened (0.7x).',
-  extreme_oversold: 'Markets are extremely oversold — good news has 2-3x amplified impact as short covering accelerates.',
-};
 
 export class LLMEnricher {
   private readonly client: OpenAI | null;
   private readonly model: string;
   private readonly timeoutMs: number;
   readonly enabled: boolean;
-  private readonly regimeService?: IMarketRegimeService;
   private readonly marketDataCache?: TickerMarketDataSource;
-  private readonly patternMatcher?: PatternStatsSource;
-  private readonly marketSnapshotProvider?: MarketSnapshotProvider;
 
   // Circuit breaker state
   private consecutiveFailures = 0;
@@ -140,18 +104,14 @@ export class LLMEnricher {
 
   constructor(
     config?: LLMEnricherConfig,
-    dependencies?: IMarketRegimeService | LLMEnricherDependencies,
+    dependencies?: LLMEnricherDependencies,
   ) {
     const apiKey = config?.apiKey ?? process.env.LLM_GATEKEEPER_API_KEY ?? process.env.OPENAI_API_KEY;
     this.enabled = (config?.enabled ?? process.env.LLM_ENRICHMENT_ENABLED === 'true') && !!apiKey;
     this.model = config?.model ?? process.env.LLM_ENRICHMENT_MODEL ?? 'gpt-4o-mini';
     this.timeoutMs = config?.timeoutMs ?? numEnv('LLM_TIMEOUT_MS', 10_000);
     this.client = this.enabled && apiKey ? new OpenAI({ apiKey }) : null;
-    const resolvedDependencies = resolveDependencies(dependencies);
-    this.regimeService = resolvedDependencies.regimeService;
-    this.marketDataCache = resolvedDependencies.marketDataCache;
-    this.patternMatcher = resolvedDependencies.patternMatcher;
-    this.marketSnapshotProvider = resolvedDependencies.marketSnapshotProvider;
+    this.marketDataCache = dependencies?.marketDataCache;
   }
 
   async enrich(
@@ -165,11 +125,7 @@ export class LLMEnricher {
       return null;
     }
 
-    const [regimeSnapshot, marketContext, patternMatch] = await Promise.all([
-      this.loadRegimeSnapshot(),
-      this.loadTickerMarketContext(event),
-      this.loadPatternMatch(event, llmResult),
-    ]);
+    const marketContext = await this.loadTickerMarketContext(event);
 
     const userPrompt = buildPrompt(event, {
       classification: llmResult
@@ -178,9 +134,7 @@ export class LLMEnricher {
           eventType: llmResult.eventType,
         }
         : undefined,
-      regime: regimeSnapshot,
       marketContext: marketContext ?? undefined,
-      patternMatch,
     });
 
     try {
@@ -229,19 +183,6 @@ export class LLMEnricher {
     }
   }
 
-  private async loadRegimeSnapshot(): Promise<RegimeSnapshot | undefined> {
-    if (!this.regimeService) {
-      return undefined;
-    }
-
-    try {
-      return await this.regimeService.getRegimeSnapshot();
-    } catch (err) {
-      console.error('[llm-enricher] Failed to get regime snapshot:', err instanceof Error ? err.message : err);
-      return undefined;
-    }
-  }
-
   private async loadTickerMarketContext(
     event: RawEvent,
   ): Promise<MarketQuote | undefined> {
@@ -249,7 +190,7 @@ export class LLMEnricher {
       return undefined;
     }
 
-    const ticker = extractPrimaryTicker(event);
+    const ticker = extractTickerFromEvent(event);
     if (!ticker) {
       return undefined;
     }
@@ -265,39 +206,16 @@ export class LLMEnricher {
     }
   }
 
-  private async loadPatternMatch(
-    event: RawEvent,
-    llmResult?: LlmClassificationResult,
-  ): Promise<PatternMatchResult | null> {
-    if (!this.patternMatcher) {
-      return null;
-    }
-
-    try {
-      return await this.patternMatcher.findSimilar(event, {
-        llmResult,
-        marketSnapshot: this.marketSnapshotProvider?.get() ?? null,
-      });
-    } catch (err) {
-      console.error(
-        '[llm-enricher] Failed to get historical pattern stats:',
-        err instanceof Error ? err.message : err,
-      );
-      return null;
-    }
-  }
 }
 
 export function buildPrompt(
   event: RawEvent,
-  context?: RegimeSnapshot | LLMEnrichmentPromptContext,
+  context?: LLMEnrichmentPromptContext,
 ): string {
   const {
-    regime,
     marketContext,
-    patternMatch,
     classification,
-  } = normalizePromptContext(context);
+  } = context ?? {};
   const parts = [
     `Event: ${event.title}`,
     `Details: ${event.body}`,
@@ -311,20 +229,6 @@ export function buildPrompt(
 
   if (event.metadata && Object.keys(event.metadata).length > 0) {
     parts.push(`Metadata: ${JSON.stringify(event.metadata)}`);
-  }
-
-  if (regime) {
-    const spreadBp = Math.round(regime.factors.yieldCurve.spread * 100);
-    const invertedLabel = regime.factors.yieldCurve.inverted ? 'INVERTED' : 'normal';
-    const explanation = REGIME_EXPLANATIONS[regime.label] ?? REGIME_EXPLANATIONS.neutral;
-
-    parts.push('');
-    parts.push('## Market Context');
-    parts.push(`Current regime: ${regime.label} (score: ${regime.score})`);
-    parts.push(`VIX: ${regime.factors.vix.value.toFixed(1)}, SPY RSI: ${regime.factors.spyRsi.value.toFixed(1)}, Yield Curve: ${spreadBp}bp (${invertedLabel})`);
-    parts.push('');
-    parts.push(`Consider this market context when analyzing the event's potential impact.`);
-    parts.push(`A ${regime.label} market means ${explanation}`);
   }
 
   if (marketContext) {
@@ -344,40 +248,6 @@ export function buildPrompt(
     parts.push('Use this setup to explain whether the stock is extended, weak, or ready to confirm.');
   }
 
-  if (patternMatch && !patternMatch.suppressed) {
-    parts.push('');
-    parts.push('## Historical Pattern Stats');
-    parts.push(
-      `Matches: ${patternMatch.count} (confidence: ${patternMatch.confidenceLabel}, source: ${patternMatch.matchSource})`,
-    );
-
-    if (patternMatch.avgMoveT5 != null || patternMatch.avgMoveT20 != null) {
-      parts.push(
-        `Average move: 5-day ${formatPercent(patternMatch.avgMoveT5)}, 20-day ${formatPercent(patternMatch.avgMoveT20)}`,
-      );
-    }
-
-    if (patternMatch.winRateT20 != null) {
-      parts.push(`20-day win rate: ${Math.round(patternMatch.winRateT20 * 100)}%`);
-    }
-
-    if (patternMatch.bestCase) {
-      parts.push(
-        `Best case: ${patternMatch.bestCase.ticker} | ${patternMatch.bestCase.headline} | ${formatPercent(patternMatch.bestCase.moveT20)} over 20d`,
-      );
-    }
-
-    if (patternMatch.worstCase) {
-      parts.push(
-        `Worst case: ${patternMatch.worstCase.ticker} | ${patternMatch.worstCase.headline} | ${formatPercent(patternMatch.worstCase.moveT20)} over 20d`,
-      );
-    }
-
-    if (patternMatch.legacyContext?.patternSummary) {
-      parts.push(`Pattern summary: ${patternMatch.legacyContext.patternSummary}`);
-    }
-  }
-
   return parts.join('\n');
 }
 
@@ -390,51 +260,6 @@ function numEnv(key: string, fallback: number): number {
   if (v == null) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function resolveDependencies(
-  dependencies?: IMarketRegimeService | LLMEnricherDependencies,
-): LLMEnricherDependencies {
-  if (!dependencies) {
-    return {};
-  }
-
-  if (isRegimeService(dependencies)) {
-    return { regimeService: dependencies };
-  }
-
-  return dependencies;
-}
-
-function isRegimeService(
-  dependencies: IMarketRegimeService | LLMEnricherDependencies,
-): dependencies is IMarketRegimeService {
-  return typeof dependencies === 'object'
-    && dependencies !== null
-    && 'getRegimeSnapshot' in dependencies;
-}
-
-function normalizePromptContext(
-  context?: RegimeSnapshot | LLMEnrichmentPromptContext,
-): LLMEnrichmentPromptContext {
-  if (!context) {
-    return {};
-  }
-
-  if (isPromptContext(context)) {
-    return context;
-  }
-
-  return { regime: context };
-}
-
-function isPromptContext(
-  context: RegimeSnapshot | LLMEnrichmentPromptContext,
-): context is LLMEnrichmentPromptContext {
-  return 'regime' in context
-    || 'marketContext' in context
-    || 'patternMatch' in context
-    || 'classification' in context;
 }
 
 function formatPercent(value: number | null | undefined): string {

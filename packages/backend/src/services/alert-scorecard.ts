@@ -25,7 +25,7 @@ import {
   selectVerdictWindow,
   toNumber,
   type SelectedScorecardWindow,
-} from './scorecard-semantics.js';
+} from '../utils/alert-scorecard-helpers.js';
 
 const DirectionVerdictSchema = z.enum(['correct', 'incorrect', 'unclear']);
 const SetupVerdictSchema = z.enum(['worked', 'failed', 'insufficient-data']);
