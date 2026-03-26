@@ -101,40 +101,6 @@ export const MACRO_RULES: Rule[] = [
     enabled: true,
   },
 
-  // ── FedWatch — HIGH ───────────────────────────────────────────────────
-  {
-    id: 'fedwatch-probability-shift',
-    name: 'FedWatch — Rate Probability Shift',
-    conditions: [
-      { type: 'sourceEquals', value: 'fedwatch' },
-      { type: 'titleContains', value: 'probability shift' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: 'HIGH' },
-      { type: 'setConfidence', value: 0.85 },
-      { type: 'addTags', values: ['fedwatch', 'rates', 'fomc'] },
-    ],
-    priority: 15,
-    enabled: true,
-  },
-
-  // ── FedWatch — LOW (snapshot/informational) ───────────────────────────
-  {
-    id: 'fedwatch-snapshot',
-    name: 'FedWatch — Snapshot',
-    conditions: [
-      { type: 'sourceEquals', value: 'fedwatch' },
-      { type: 'titleContains', value: 'snapshot' },
-    ],
-    actions: [
-      { type: 'setSeverity', value: 'LOW' },
-      { type: 'setConfidence', value: 0.9 },
-      { type: 'addTags', values: ['fedwatch', 'rates', 'snapshot'] },
-    ],
-    priority: 40,
-    enabled: true,
-  },
-
   // ── Breaking News — CRITICAL ──────────────────────────────────────────
   {
     id: 'breaking-news-war',

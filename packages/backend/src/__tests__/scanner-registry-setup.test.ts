@@ -20,11 +20,13 @@ describe('scanner registry setup', () => {
     vi.restoreAllMocks();
   });
 
-  it('registers only the surviving scanners when enabled', () => {
+  it('registers the surviving live scanners with the correct env gates', () => {
     process.env.TRUTH_SOCIAL_ENABLED = 'true';
     process.env.BREAKING_NEWS_ENABLED = 'true';
     process.env.FDA_ENABLED = 'true';
+    process.env.ECON_CALENDAR_ENABLED = 'true';
     process.env.FEDERAL_REGISTER_ENABLED = 'true';
+    process.env.NEWSWIRE_ENABLED = 'true';
     process.env.SEC_EDGAR_ENABLED = 'true';
     process.env.HALT_SCANNER_ENABLED = 'true';
 
@@ -35,20 +37,23 @@ describe('scanner registry setup', () => {
     expect(registeredNames).toContain('truth-social');
     expect(registeredNames).toContain('breaking-news');
     expect(registeredNames).toContain('fda');
+    expect(registeredNames).toContain('econ-calendar');
     expect(registeredNames).toContain('federal-register');
+    expect(registeredNames).toContain('newswire');
     expect(registeredNames).toContain('sec-edgar');
     expect(registeredNames).toContain('trading-halt');
   });
 
   it('ignores removed scanner env flags', () => {
     process.env.BREAKING_NEWS_ENABLED = 'false';
+    process.env.ECON_CALENDAR_ENABLED = 'false';
     process.env.FDA_ENABLED = 'false';
     process.env.FEDERAL_REGISTER_ENABLED = 'false';
+    process.env.NEWSWIRE_ENABLED = 'false';
     process.env.DUMMY_SCANNER_ENABLED = 'true';
     process.env.X_SCANNER_ENABLED = 'true';
     process.env.REDDIT_ENABLED = 'true';
     process.env.STOCKTWITS_ENABLED = 'true';
-    process.env.ECON_CALENDAR_ENABLED = 'true';
     process.env.FEDWATCH_ENABLED = 'true';
     process.env.WHITEHOUSE_ENABLED = 'true';
     process.env.CONGRESS_ENABLED = 'true';
@@ -57,7 +62,6 @@ describe('scanner registry setup', () => {
     process.env.DOJ_ENABLED = 'true';
     process.env.ANALYST_ENABLED = 'true';
     process.env.EARNINGS_ENABLED = 'true';
-    process.env.NEWSWIRE_ENABLED = 'true';
     process.env.IR_MONITOR_ENABLED = 'true';
     process.env.DILUTION_SCANNER_ENABLED = 'true';
 

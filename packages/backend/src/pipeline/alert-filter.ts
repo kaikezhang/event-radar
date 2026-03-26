@@ -182,8 +182,8 @@ export class AlertFilter {
       }
     }
 
-    // Rule 6: Social noise filter (Reddit / StockTwits)
-    if (source === 'reddit' || source === 'stocktwits') {
+    // Rule 6: Social engagement noise filter
+    if (hasSocialEngagementSignals(event)) {
       return this.checkSocial(event, ticker);
     }
 
@@ -479,6 +479,16 @@ export class AlertFilter {
 
     return [...new Set(keys)];
   }
+}
+
+function hasSocialEngagementSignals(event: RawEvent): boolean {
+  return [
+    'commentCount',
+    'comments',
+    'high_engagement',
+    'score',
+    'upvotes',
+  ].some((key) => event.metadata?.[key] != null);
 }
 
 // --- Utility ---

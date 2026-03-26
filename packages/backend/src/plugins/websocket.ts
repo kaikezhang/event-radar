@@ -93,10 +93,10 @@ function inferFeedCategory(source: string, metadata: Record<string, unknown>): F
   }
 
   const normalizedSource = source.toLowerCase();
-  if (['whitehouse', 'federal-register', 'congress', 'truth-social'].includes(normalizedSource)) {
+  if (['federal-register', 'truth-social'].includes(normalizedSource)) {
     return 'policy';
   }
-  if (['econ-calendar', 'fedwatch', 'fed', 'bls'].includes(normalizedSource)) {
+  if (['econ-calendar', 'fed', 'bls'].includes(normalizedSource)) {
     return 'macro';
   }
   if (['state-department', 'defense', 'geopolitics'].includes(normalizedSource)) {
@@ -104,14 +104,11 @@ function inferFeedCategory(source: string, metadata: Record<string, unknown>): F
   }
   if ([
     'sec-edgar',
-    'earnings',
-    'analyst',
     'fda',
-    'doj-antitrust',
-    'unusual-options',
-    'short-interest',
-    'warn',
     'breaking-news',
+    'businesswire',
+    'globenewswire',
+    'pr-newswire',
   ].includes(normalizedSource)) {
     return 'corporate';
   }

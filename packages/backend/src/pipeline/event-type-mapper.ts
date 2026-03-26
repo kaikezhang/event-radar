@@ -49,7 +49,6 @@ const LEGACY_EVENT_TYPE_ALIASES: Record<string, string> = {
   insider: 'insider_large_trade',
   macro: 'fed_announcement',
   political: 'executive_order',
-  analyst: 'news_breaking',
   social: 'social_volume_spike',
   earnings_results: 'earnings_beat',
   leadership_change: 'sec_form_8k',
@@ -82,9 +81,7 @@ const SEC_ITEM_MAP: Record<string, { eventType: string; priority: number }> = {
 };
 
 const SKIPPED_SOURCES = new Set([
-  'stocktwits',
   'truth-social',
-  'analyst',
   'econ-calendar',
 ]);
 
@@ -148,32 +145,6 @@ function normalizeHistoricalType(eventType?: string): string | undefined {
   return KNOWN_EVENT_TYPES.has(aliased) ? aliased : undefined;
 }
 
-function resolveEarningsEventType(event: RawEvent): string | undefined {
-  const normalizedType = normalizeHistoricalType(event.type);
-  if (normalizedType) {
-    return normalizedType;
-  }
-
-  const surprise = typeof event.metadata?.['surprise_type'] === 'string'
-    ? event.metadata['surprise_type'].trim().toLowerCase()
-    : undefined;
-
-  if (surprise === 'beat') {
-    return 'earnings_beat';
-  }
-
-  if (surprise === 'miss') {
-    return 'earnings_miss';
-  }
-
-  const guidance = event.metadata?.['guidance'];
-  if (typeof guidance === 'string' && guidance.trim().length > 0) {
-    return 'earnings_guidance';
-  }
-
-  return undefined;
-}
-
 function resolveFdaEventType(
   event: RawEvent,
   llmResult?: LlmClassificationResult,
@@ -207,41 +178,25 @@ function resolveSourceFallbackType(
   event: RawEvent,
   llmResult?: LlmClassificationResult,
 ): string | undefined {
+  const normalizedType = normalizeHistoricalType(event.type);
+  if (normalizedType) {
+    return normalizedType;
+  }
+
   const llmType = normalizeHistoricalType(llmResult?.eventType);
-  if (llmType) {
+  if (llmType && llmType !== 'news_breaking') {
     return llmType;
   }
 
   switch (event.source.toLowerCase()) {
     case 'fda':
       return resolveFdaEventType(event, llmResult);
-    case 'congress':
-      return 'insider_large_trade';
-    case 'doj':
-    case 'doj-antitrust': {
-      const actionType = typeof event.metadata?.['action_type'] === 'string'
-        ? event.metadata['action_type'].trim().toLowerCase()
-        : '';
-      return actionType === 'settlement' ? 'doj_settlement' : 'ftc_antitrust';
-    }
-    case 'whitehouse':
-      return 'executive_order';
     case 'federal-register':
       return 'federal_register';
-    case 'fedwatch':
     case 'fed':
       return 'fed_announcement';
     case 'econ-calendar':
       return 'economic_data';
-    case 'unusual-options':
-      return 'unusual_options';
-    case 'short-interest':
-      return 'short_interest';
-    case 'reddit':
-      return 'reddit_trending';
-    case 'x':
-    case 'x-scanner':
-    case 'stocktwits':
     case 'truth-social':
       return 'social_volume_spike';
     case 'breaking-news':
@@ -249,7 +204,7 @@ function resolveSourceFallbackType(
     case 'businesswire':
     case 'pr-newswire':
     case 'globenewswire':
-      return 'news_breaking';
+      return llmType ?? 'news_breaking';
     default:
       return undefined;
   }
@@ -334,10 +289,6 @@ export function mapEventToSimilarityQuery(
     const secMapping = resolveSecEventType(event);
     eventType = secMapping.eventType;
     eventSubtype = secMapping.eventSubtype;
-  } else if (source === 'earnings') {
-    eventType = resolveEarningsEventType(event);
-  } else if (source === 'breaking-news') {
-    eventType = resolveSourceFallbackType(event, llmResult);
   } else {
     eventType = resolveSourceFallbackType(event, llmResult);
   }
