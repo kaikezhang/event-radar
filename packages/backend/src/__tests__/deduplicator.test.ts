@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { RawEvent } from '@event-radar/shared';
+import { sql } from 'drizzle-orm';
 import { EventDeduplicator } from '../pipeline/deduplicator.js';
 import {
   exactIdMatch,
@@ -7,6 +8,7 @@ import {
   contentSimilarityMatch,
   findBestMatch,
 } from '../pipeline/dedup-strategies.js';
+import { createTestDb, safeClose } from './helpers/test-db.js';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -174,9 +176,17 @@ describe('contentSimilarityMatch', () => {
 
 describe('EventDeduplicator', () => {
   let dedup: EventDeduplicator;
+  let testDbClient: Awaited<ReturnType<typeof createTestDb>>['client'] | null = null;
 
   beforeEach(() => {
     dedup = new EventDeduplicator({ windowMs: 30 * 60 * 1000 });
+  });
+
+  afterEach(async () => {
+    if (testDbClient) {
+      await safeClose(testDbClient);
+      testDbClient = null;
+    }
   });
 
   it('should pass through unique events (non-duplicate)', async () => {
@@ -235,6 +245,115 @@ describe('EventDeduplicator', () => {
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matchType).toBe('ticker-window');
+  });
+
+  it('should detect Truth Social duplicates when identical titles arrive with different post ids', async () => {
+    const e1 = makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'TRUTH: NEW TARIFFS ON CHINA WILL BEGIN IMMEDIATELY',
+      body: 'First feed payload.',
+      metadata: { postId: 'truth-social-guid-1001' },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'TRUTH: NEW TARIFFS ON CHINA WILL BEGIN IMMEDIATELY',
+      body: 'Second feed payload with a different GUID.',
+      metadata: { postId: 'truth-social-guid-1002' },
+      timestamp: new Date('2024-01-15T10:10:00Z'),
+    });
+
+    await dedup.check(e1, e1.timestamp);
+    const result = await dedup.check(e2, e2.timestamp);
+
+    expect(result.isDuplicate).toBe(true);
+    expect(result.matchType).toBe('content-similarity');
+    expect(result.originalEventId).toBe(e1.id);
+  });
+
+  it('should normalize Truth Social titles before matching duplicates', async () => {
+    const e1 = makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'Peace Deal With Iran Is Near',
+      body: 'Original feed title.',
+      metadata: { postId: 'truth-social-guid-2001' },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      source: 'truth-social',
+      type: 'political-post',
+      title: '  Peace   Deal With Iran Is Near  ',
+      body: 'Whitespace differs but the post is the same.',
+      metadata: { postId: 'truth-social-guid-2002' },
+      timestamp: new Date('2024-01-15T10:20:00Z'),
+    });
+
+    await dedup.check(e1, e1.timestamp);
+    const result = await dedup.check(e2, e2.timestamp);
+
+    expect(result.isDuplicate).toBe(true);
+    expect(result.matchType).toBe('content-similarity');
+    expect(result.originalEventId).toBe(e1.id);
+  });
+
+  it('should detect Truth Social duplicates from the database by identical title within 24 hours', async () => {
+    const { db, client } = await createTestDb();
+    testDbClient = client;
+    dedup = new EventDeduplicator({ db, windowMs: 30 * 60 * 1000 });
+
+    const original = makeEvent({
+      id: '550e8400-e29b-41d4-a716-446655440111',
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'America First Trade Deal Is Coming Soon',
+      body: 'Stored event body.',
+      metadata: { postId: 'truth-social-guid-db-1' },
+      timestamp: new Date('2024-01-15T08:00:00Z'),
+    });
+
+    await db.execute(sql`
+      INSERT INTO events (
+        id,
+        source,
+        source_event_id,
+        title,
+        summary,
+        metadata,
+        severity,
+        received_at,
+        created_at
+      )
+      VALUES (
+        ${original.id},
+        ${original.source},
+        ${String(original.metadata?.['postId'])},
+        ${original.title},
+        ${original.body},
+        ${JSON.stringify(original.metadata ?? {})}::jsonb,
+        'HIGH',
+        ${new Date('2024-01-15T08:00:00Z')},
+        ${new Date('2024-01-15T08:00:00Z')}
+      )
+    `);
+
+    const duplicate = makeEvent({
+      id: '550e8400-e29b-41d4-a716-446655440112',
+      source: 'truth-social',
+      type: 'political-post',
+      title: 'America First Trade Deal Is Coming Soon',
+      body: 'Fresh scan with a new RSS GUID.',
+      metadata: { postId: 'truth-social-guid-db-2' },
+      timestamp: new Date('2024-01-15T17:00:00Z'),
+    });
+
+    const result = await dedup.check(duplicate, duplicate.timestamp);
+
+    expect(result.isDuplicate).toBe(true);
+    expect(result.matchType).toBe('db-lookup');
+    expect(result.originalEventId).toBe(original.id);
   });
 
   it('should detect content similarity duplicate (similar headlines from newswires)', async () => {

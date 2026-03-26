@@ -6,6 +6,10 @@ import {
 } from './ticker-candidate.js';
 
 const HIGH_PRIORITY_SEVERITIES = new Set<Severity>(['HIGH', 'CRITICAL']);
+const AMBIGUOUS_SINGLE_WORD_COMPANIES = new Set([
+  'target',
+]);
+const AMBIGUOUS_COMPANY_CONTEXT_PATTERN = /\b(?:shares?|stock|earnings|revenue|guidance|retailer|company|corp|inc|stores?|sales|results|forecast|beat|miss|ticker|investors?|traders?|quarter|q[1-4]|sec|filing|outlook)\b/;
 
 export interface InferredTickerResult {
   ticker: string;
@@ -16,6 +20,22 @@ export interface InferredTickerResult {
 interface TickerMatchResult {
   ticker: string;
   strategy: 'regex' | 'company-map';
+}
+
+function requiresFinancialContext(company: string): boolean {
+  return AMBIGUOUS_SINGLE_WORD_COMPANIES.has(company);
+}
+
+function hasFinancialContextAroundMention(
+  normalizedText: string,
+  start: number,
+  length: number,
+): boolean {
+  const contextStart = Math.max(0, start - 32);
+  const contextEnd = Math.min(normalizedText.length, start + length + 32);
+  return AMBIGUOUS_COMPANY_CONTEXT_PATTERN.test(
+    normalizedText.slice(contextStart, contextEnd),
+  );
 }
 
 function normalizeExplicitTickerCandidate(value: string): string | null {
@@ -42,6 +62,8 @@ function resolveMappedTicker(value: string): string | null {
 }
 
 function extractTickerMatchFromText(text: string): TickerMatchResult | null {
+  const normalizedText = text.toLowerCase();
+
   for (const match of text.matchAll(/\$([A-Z]{1,10})\b/g)) {
     const rawValue = match[1] ?? '';
     const mappedTicker = resolveMappedTicker(rawValue);
@@ -63,8 +85,20 @@ function extractTickerMatchFromText(text: string): TickerMatchResult | null {
 
   for (const match of text.matchAll(/\b([A-Z]{2,10})\b/g)) {
     const rawValue = match[1] ?? '';
+    const companyKey = rawValue.trim().toLowerCase();
     const mappedTicker = resolveMappedTicker(rawValue);
     if (mappedTicker) {
+      if (
+        requiresFinancialContext(companyKey) &&
+        !hasFinancialContextAroundMention(
+          normalizedText,
+          match.index ?? 0,
+          rawValue.length,
+        )
+      ) {
+        continue;
+      }
+
       return {
         ticker: mappedTicker,
         strategy: 'company-map',
@@ -123,6 +157,13 @@ export function extractCompanyTickerFromText(text: string): string | null {
   for (const [company, ticker] of Object.entries(COMPANY_TICKER_MAP)) {
     const matchIndex = findCompanyMentionIndex(normalizedText, company);
     if (matchIndex === -1) {
+      continue;
+    }
+
+    if (
+      requiresFinancialContext(company) &&
+      !hasFinancialContextAroundMention(normalizedText, matchIndex, company.length)
+    ) {
       continue;
     }
 

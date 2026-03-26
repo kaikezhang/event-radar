@@ -44,4 +44,29 @@ describe('data quality migrations', () => {
     expect(migration).toContain("title ILIKE '%hormuz%'");
     expect(migration).toContain("title ILIKE '%middle east%'");
   });
+
+  it('includes a migration to clean up duplicate Truth Social titles and their delivery rows', async () => {
+    const migration = await readFile(resolve(MIGRATIONS_DIR, '014-fix-truth-social-data-quality.sql'), 'utf8');
+
+    expect(migration).toContain('WITH duplicate_truth_social_events AS');
+    expect(migration).toContain("source = 'truth-social'");
+    expect(migration).toContain('LOWER(BTRIM(title))');
+    expect(migration).toContain("INTERVAL '24 hours'");
+    expect(migration).toContain('DELETE FROM deliveries');
+    expect(migration).toContain('DELETE FROM events');
+  });
+
+  it('backfills null Truth Social classifications with bearish, bullish, and neutral rules', async () => {
+    const migration = await readFile(resolve(MIGRATIONS_DIR, '014-fix-truth-social-data-quality.sql'), 'utf8');
+
+    expect(migration).toContain("SET classification = CASE");
+    expect(migration).toContain("WHEN source = 'truth-social'");
+    expect(migration).toContain("classification IS NULL OR BTRIM(classification) = ''");
+    expect(migration).toContain("ILIKE '%military%'");
+    expect(migration).toContain("ILIKE '%war%'");
+    expect(migration).toContain("ILIKE '%deal%'");
+    expect(migration).toContain("ILIKE '%peace%'");
+    expect(migration).toContain("ILIKE '%biden%'");
+    expect(migration).toContain("ELSE 'NEUTRAL'");
+  });
 });

@@ -17,7 +17,7 @@ async function main() {
 
   console.log('[backfill-classification] Backfilling event classification fields from metadata.llm_judge...');
 
-  const result = await db.execute(sql`
+  const metadataBackfillResult = await db.execute(sql`
     UPDATE events
     SET
       classification = CASE
@@ -35,7 +35,46 @@ async function main() {
       AND UPPER(TRIM(metadata->'llm_judge'->>'direction')) IN ('BULLISH', 'BEARISH', 'NEUTRAL', 'MIXED')
   `);
 
-  console.log(`[backfill-classification] Updated ${result.rowCount ?? 0} events`);
+  const truthSocialResult = await db.execute(sql`
+    UPDATE events
+    SET
+      classification = CASE
+        WHEN (
+          title ILIKE '%military%'
+          OR summary ILIKE '%military%'
+          OR title ILIKE '%war%'
+          OR summary ILIKE '%war%'
+          OR title ILIKE '%threat%'
+          OR summary ILIKE '%threat%'
+          OR title ILIKE '%strike%'
+          OR summary ILIKE '%strike%'
+          OR title ILIKE '%attack%'
+          OR summary ILIKE '%attack%'
+        ) THEN 'BEARISH'
+        WHEN (
+          title ILIKE '%deal%'
+          OR summary ILIKE '%deal%'
+          OR title ILIKE '%peace%'
+          OR summary ILIKE '%peace%'
+          OR title ILIKE '%economy%'
+          OR summary ILIKE '%economy%'
+          OR title ILIKE '%jobs%'
+          OR summary ILIKE '%jobs%'
+          OR title ILIKE '%growth%'
+          OR summary ILIKE '%growth%'
+        ) THEN 'BULLISH'
+        ELSE 'NEUTRAL'
+      END,
+      classification_confidence = COALESCE(classification_confidence, '0.6500'::DECIMAL(5, 4))
+    WHERE
+      source = 'truth-social'
+      AND (classification IS NULL OR BTRIM(classification) = '')
+  `);
+
+  const updatedCount =
+    (metadataBackfillResult.rowCount ?? 0) + (truthSocialResult.rowCount ?? 0);
+
+  console.log(`[backfill-classification] Updated ${updatedCount} events`);
   await pool.end();
 }
 
