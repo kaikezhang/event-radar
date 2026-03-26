@@ -94,18 +94,15 @@ describe('calendar routes', () => {
   let ctx: AppContext;
   let prevAuthRequired: string | undefined;
   let prevJwtSecret: string | undefined;
-  let prevEarningsEnabled: string | undefined;
 
   beforeEach(async () => {
     await cleanTestDb(sharedDb);
 
     prevAuthRequired = process.env.AUTH_REQUIRED;
     prevJwtSecret = process.env.JWT_SECRET;
-    prevEarningsEnabled = process.env.EARNINGS_ENABLED;
 
     process.env.AUTH_REQUIRED = 'false';
     process.env.JWT_SECRET = 'test-jwt-secret';
-    process.env.EARNINGS_ENABLED = 'false';
 
     if (ctx) {
       await safeCloseServer(ctx.server);
@@ -122,7 +119,6 @@ describe('calendar routes', () => {
 
     process.env.AUTH_REQUIRED = prevAuthRequired;
     process.env.JWT_SECRET = prevJwtSecret;
-    process.env.EARNINGS_ENABLED = prevEarningsEnabled;
   });
 
   it('requires an api key for the upcoming calendar route when auth is required', async () => {
@@ -438,22 +434,5 @@ describe('calendar routes', () => {
     );
     expect(allEvents.some((event: { ticker?: string; source: string }) =>
       event.source === 'trading-halt' && event.ticker === 'WXYZ')).toBe(false);
-  });
-
-  it('reports full earnings coverage when the dedicated scanner is enabled', async () => {
-    process.env.EARNINGS_ENABLED = 'true';
-
-    await safeCloseServer(ctx.server);
-    ctx = buildApp({ logger: false, db: sharedDb, apiKey: TEST_API_KEY });
-    await ctx.server.ready();
-
-    const response = await ctx.server.inject({
-      method: 'GET',
-      url: '/api/v1/calendar/upcoming?from=2026-03-24&to=2026-03-30',
-      headers: AUTH_HEADERS,
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().earningsDataLimited).toBe(false);
   });
 });

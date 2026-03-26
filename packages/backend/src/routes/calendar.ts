@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import { eventOutcomes, events } from '../db/schema.js';
-import { getScheduledReleases, loadCalendarConfig } from '../scanners/econ-calendar-scanner.js';
+import { getScheduledReleases, loadCalendarConfig } from '../utils/econ-calendar.js';
 import { requireApiKey } from './auth-middleware.js';
 
 const CalendarQuerySchema = {
