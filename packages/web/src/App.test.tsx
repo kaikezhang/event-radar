@@ -4,8 +4,6 @@ import { renderWithRouter } from './test/render.js';
 
 describe('App shell spacing', () => {
   it('adds bottom padding to the main content wrapper so the bottom nav does not overlap content', async () => {
-    localStorage.setItem('onboardingComplete', 'true');
-
     renderWithRouter([
       {
         path: '/',
@@ -24,14 +22,12 @@ describe('App shell spacing', () => {
   });
 
   it('routes authenticated users to the feed on the home page', async () => {
-    localStorage.setItem('onboardingComplete', 'true');
-
     renderWithRouter(appRoutes, ['/']);
 
     expect(await screen.findByText(/nvda export filing flags china exposure risk/i)).toBeInTheDocument();
   });
 
-  it('routes signed-out users to the landing page on the home page', async () => {
+  it('routes signed-out users to the feed on the home page', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost');
 
@@ -51,14 +47,18 @@ describe('App shell spacing', () => {
 
     renderWithRouter(appRoutes, ['/']);
 
-    expect(await screen.findByRole('heading', { name: /event radar/i })).toBeInTheDocument();
+    expect(await screen.findByText(/viewing delayed public feed/i)).toBeInTheDocument();
   });
 
   it.each([
     '/about',
     '/api-docs',
+    '/calendar',
     '/scorecard',
     '/history',
+    '/onboarding',
+    '/privacy',
+    '/terms',
   ])('does not expose removed route %s', async (path) => {
     renderWithRouter(appRoutes, [path]);
 

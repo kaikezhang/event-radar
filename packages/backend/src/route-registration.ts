@@ -12,13 +12,10 @@ import { registerOutcomeRoutes } from './routes/outcomes.js';
 import { registerAlertScorecardRoutes } from './routes/alert-scorecard.js';
 import { registerWatchlistRoutes } from './routes/watchlist.js';
 import { registerTickerRoutes } from './routes/tickers.js';
-import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPushSubscriptionRoutes } from './routes/push-subscriptions.js';
 import { registerPreferencesRoutes } from './routes/preferences.js';
 import { registerPriceRoutes } from './routes/price.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerNotificationSettingsRoutes } from './routes/notification-settings.js';
-import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerApiDocsRoutes } from './routes/api-docs.js';
 
@@ -78,10 +75,7 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
   registerOutcomeRoutes(server, db);
   registerWatchlistRoutes(server, db, { apiKey });
   registerTickerRoutes(server, db);
-  registerOnboardingRoutes(server, db, { apiKey });
   registerPushSubscriptionRoutes(server, db, { apiKey });
   registerPreferencesRoutes(server, db, { apiKey });
-  registerNotificationSettingsRoutes(server, db, { apiKey });
-  registerCalendarRoutes(server, db, { apiKey });
   registerAuthRoutes(server, db);
 }

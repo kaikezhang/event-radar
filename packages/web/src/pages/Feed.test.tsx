@@ -15,7 +15,6 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe('Feed page', () => {
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem('onboardingComplete', 'true');
   });
 
   it('shows the loading state while the feed query resolves', () => {
