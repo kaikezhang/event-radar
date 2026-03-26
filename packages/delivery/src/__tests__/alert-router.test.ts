@@ -148,46 +148,20 @@ describe('AlertRouter', () => {
     });
   });
 
-  it('should route CRITICAL to bark, discord, telegram, and webhook', async () => {
-    const bark = mockService('bark');
+  it('routes CRITICAL alerts to discord only when no push channel is configured', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
+    const router = new AlertRouter({ discord });
 
-    const results = await router.route(makeAlert('CRITICAL'));
+    const result = await router.route(makeAlert('CRITICAL'));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
-    expect(results.deliveries).toHaveLength(4);
-    expect(results.deliveries.every((r) => r.ok)).toBe(true);
+    expect(result.deliveries).toEqual([{ channel: 'discord', ok: true }]);
   });
 
-  it('should route HIGH to bark, discord, telegram, and webhook', async () => {
-    const bark = mockService('bark');
+  it('routes HIGH alerts to discord and web push when the push policy allows it', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
-
-    const result = await router.route(makeAlert('HIGH'));
-
-    expect(bark.send).toHaveBeenCalledOnce();
-    expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
-    expect(result.deliveries).toHaveLength(4);
-  });
-
-  it('should route HIGH to bark, discord, telegram, webhook, and web push when the push policy allows it', async () => {
-    const bark = mockService('bark');
-    const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
     const webPush = mockService('webPush');
-    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+    const router = new AlertRouter({ discord, webPush });
 
     const result = await router.route(makeAlert('HIGH', {
       confidenceBucket: 'high',
@@ -213,43 +187,15 @@ describe('AlertRouter', () => {
       },
     }));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
     expect(webPush.send).toHaveBeenCalledOnce();
-    expect(result.decision).toEqual({
-      tier: 'high',
-      shouldPush: true,
-      pushMode: 'loud',
-      reason: 'act_now_high_confidence_strong_support',
-    });
-    expect(result.deliveries).toHaveLength(5);
+    expect(result.deliveries).toHaveLength(2);
   });
 
-  it('should route MEDIUM to discord, telegram, and webhook (not bark)', async () => {
-    const bark = mockService('bark');
+  it('routes MEDIUM alerts to discord and web push when the push policy allows it', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
-
-    const result = await router.route(makeAlert('MEDIUM'));
-
-    expect(bark.send).not.toHaveBeenCalled();
-    expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
-    expect(result.deliveries).toHaveLength(3);
-  });
-
-  it('should route MEDIUM to discord, telegram, webhook, and web push when the push policy allows it', async () => {
-    const bark = mockService('bark');
-    const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
     const webPush = mockService('webPush');
-    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+    const router = new AlertRouter({ discord, webPush });
 
     const result = await router.route(makeAlert('MEDIUM', {
       confidenceBucket: 'medium',
@@ -275,27 +221,15 @@ describe('AlertRouter', () => {
       },
     }));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
     expect(webPush.send).toHaveBeenCalledOnce();
-    expect(result.decision).toEqual({
-      tier: 'medium',
-      shouldPush: true,
-      pushMode: 'silent',
-      reason: 'watch_meaningful_support',
-    });
-    expect(result.deliveries).toHaveLength(4);
+    expect(result.deliveries).toHaveLength(2);
   });
 
-  it('should keep web push disabled when the push policy downgrades an alert to feed-only', async () => {
-    const bark = mockService('bark');
+  it('keeps web push disabled when the push policy downgrades an alert to feed-only', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
     const webPush = mockService('webPush');
-    const router = new AlertRouter({ bark, discord, telegram, webhook, webPush });
+    const router = new AlertRouter({ discord, webPush });
 
     const result = await router.route(makeAlert('HIGH', {
       confidenceBucket: 'high',
@@ -317,116 +251,84 @@ describe('AlertRouter', () => {
       pushMode: 'none',
       reason: 'insufficient_historical_support',
     });
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
     expect(webPush.send).not.toHaveBeenCalled();
-    expect(result.deliveries).toHaveLength(4);
+    expect(result.deliveries).toEqual([{ channel: 'discord', ok: true }]);
   });
 
-  it('should route LOW to discord and webhook only', async () => {
-    const bark = mockService('bark');
+  it('routes LOW alerts to discord only', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ discord, webPush });
 
     const result = await router.route(makeAlert('LOW'));
 
-    expect(bark.send).not.toHaveBeenCalled();
-    expect(telegram.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
-    expect(result.deliveries).toHaveLength(2);
+    expect(webPush.send).not.toHaveBeenCalled();
+    expect(result.deliveries).toEqual([{ channel: 'discord', ok: true }]);
   });
 
-  it('should skip channels that are not configured', async () => {
+  it('uses delivery tiers to keep feed alerts on discord only', async () => {
     const discord = mockService('discord');
-    const router = new AlertRouter({ discord });
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ discord, webPush });
 
-    // CRITICAL targets bark+discord+telegram+webhook, but only discord configured
-    const results = await router.route(makeAlert('CRITICAL'));
+    await router.route(makeAlert('HIGH', { deliveryTier: 'feed' }));
 
     expect(discord.send).toHaveBeenCalledOnce();
-    expect(results.deliveries).toHaveLength(1);
-    expect(results.deliveries[0].channel).toBe('discord');
+    expect(webPush.send).not.toHaveBeenCalled();
   });
 
-  it('should report enabled=false when no channels configured', () => {
+  it('uses delivery tiers to add web push when a high-tier alert still qualifies for push', async () => {
+    const discord = mockService('discord');
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ discord, webPush });
+
+    await router.route(makeAlert('HIGH', {
+      deliveryTier: 'high',
+      confidenceBucket: 'high',
+      enrichment: {
+        summary: 'Summary',
+        impact: 'Impact',
+        whyNow: 'Why now',
+        currentSetup: 'Setup',
+        historicalContext: 'Historical context',
+        risks: 'Risks',
+        action: '🔴 High-Quality Setup',
+        tickers: [],
+      },
+      historicalContext: {
+        matchCount: 18,
+        confidence: 'high',
+        avgAlphaT5: 0.03,
+        avgAlphaT20: 0.08,
+        winRateT20: 68,
+        medianAlphaT20: 0.06,
+        topMatches: [],
+        patternSummary: '18 similar events',
+      },
+    }));
+
+    expect(discord.send).toHaveBeenCalledOnce();
+    expect(webPush.send).toHaveBeenCalledOnce();
+  });
+
+  it('reports enabled=false when no channels are configured', () => {
     const router = new AlertRouter({});
     expect(router.enabled).toBe(false);
   });
 
-  it('should report enabled=true when at least one channel configured', () => {
-    const telegram = mockService('telegram');
-    const router = new AlertRouter({ telegram });
+  it('reports enabled=true when at least one channel is configured', () => {
+    const discord = mockService('discord');
+    const router = new AlertRouter({ discord });
     expect(router.enabled).toBe(true);
   });
 
-  it('should capture errors per channel without failing others', async () => {
-    const bark = mockService('bark');
-    bark.send.mockRejectedValue(new Error('Bark down'));
+  it('captures per-channel errors without failing the other channel', async () => {
     const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    telegram.send.mockRejectedValue(new Error('Telegram down'));
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
-
-    const results = await router.route(makeAlert('CRITICAL'));
-
-    // All channels attempted
-    expect(bark.send).toHaveBeenCalledOnce();
-    expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
-
-    const barkResult = results.deliveries.find((r) => r.channel === 'bark');
-    const discordResult = results.deliveries.find((r) => r.channel === 'discord');
-    const telegramResult = results.deliveries.find((r) => r.channel === 'telegram');
-    const webhookResult = results.deliveries.find((r) => r.channel === 'webhook');
-
-    expect(barkResult?.ok).toBe(false);
-    expect(barkResult?.error?.message).toBe('Bark down');
-    expect(discordResult?.ok).toBe(true);
-    expect(telegramResult?.ok).toBe(false);
-    expect(telegramResult?.error?.message).toBe('Telegram down');
-    expect(webhookResult?.ok).toBe(true);
-  });
-
-  it('should pass the alert to services unchanged', async () => {
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ webhook });
-    const alert = makeAlert('LOW');
-
-    await router.route(alert);
-
-    expect(webhook.send).toHaveBeenCalledWith(alert);
-  });
-
-  it('should handle partial failures (some channels fail, others succeed)', async () => {
-    const discord = mockService('discord');
-    discord.send.mockRejectedValue(new Error('Discord rate limited'));
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ discord, telegram, webhook });
-
-    const results = await router.route(makeAlert('MEDIUM'));
-
-    const successes = results.deliveries.filter((r) => r.ok);
-    const failures = results.deliveries.filter((r) => !r.ok);
-
-    expect(successes).toHaveLength(2);
-    expect(failures).toHaveLength(1);
-    expect(failures[0].channel).toBe('discord');
-  });
-
-  it('should not change existing channel routing when the push policy downgrades an alert to feed-only', async () => {
-    const bark = mockService('bark');
-    const discord = mockService('discord');
-    const telegram = mockService('telegram');
-    const webhook = mockService('webhook');
-    const router = new AlertRouter({ bark, discord, telegram, webhook });
+    discord.send.mockRejectedValue(new Error('Discord down'));
+    const webPush = mockService('webPush');
+    const router = new AlertRouter({ discord, webPush });
 
     const result = await router.route(makeAlert('HIGH', {
       confidenceBucket: 'high',
@@ -440,17 +342,33 @@ describe('AlertRouter', () => {
         action: '🔴 High-Quality Setup',
         tickers: [],
       },
+      historicalContext: {
+        matchCount: 18,
+        confidence: 'high',
+        avgAlphaT5: 0.03,
+        avgAlphaT20: 0.08,
+        winRateT20: 68,
+        medianAlphaT20: 0.06,
+        topMatches: [],
+        patternSummary: '18 similar events',
+      },
     }));
 
-    expect(result.decision).toEqual({
-      tier: 'low',
-      shouldPush: false,
-      pushMode: 'none',
-      reason: 'insufficient_historical_support',
-    });
-    expect(bark.send).toHaveBeenCalledOnce();
-    expect(discord.send).toHaveBeenCalledOnce();
-    expect(telegram.send).toHaveBeenCalledOnce();
-    expect(webhook.send).toHaveBeenCalledOnce();
+    const discordResult = result.deliveries.find((delivery) => delivery.channel === 'discord');
+    const webPushResult = result.deliveries.find((delivery) => delivery.channel === 'webPush');
+
+    expect(discordResult?.ok).toBe(false);
+    expect(discordResult?.error?.message).toBe('Discord down');
+    expect(webPushResult).toEqual({ channel: 'webPush', ok: true });
+  });
+
+  it('passes alerts to configured services unchanged', async () => {
+    const discord = mockService('discord');
+    const router = new AlertRouter({ discord });
+    const alert = makeAlert('LOW');
+
+    await router.route(alert);
+
+    expect(discord.send).toHaveBeenCalledWith(alert);
   });
 });

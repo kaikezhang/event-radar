@@ -63,21 +63,18 @@ function makeForm4Event(
 
 describe('Integration: 8-K scanner → classify → delivery', () => {
   let ctx: AppContext;
-  let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
 
   beforeAll(async () => {
-    bark = mockService('bark');
     discord = mockService('discord');
     ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
   });
 
   beforeEach(() => {
-    bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
@@ -88,7 +85,7 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('8-K 1.03 (Bankruptcy/CRITICAL) → bark + discord, severity CRITICAL', async () => {
+  it('8-K 1.03 (Bankruptcy/CRITICAL) → discord, severity CRITICAL', async () => {
     const event = make8KEvent('1.03');
 
     const res = await ctx.server.inject({
@@ -100,16 +97,15 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
     expect(res.statusCode).toBe(201);
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
 
-    const alert = bark.send.mock.calls[0][0] as AlertEvent;
+    const alert = discord.send.mock.calls[0][0] as AlertEvent;
     expect(alert.severity).toBe('CRITICAL');
     expect(alert.ticker).toBe('TEST');
     expect(alert.event.id).toBe(event.id);
   });
 
-  it('8-K 5.02 (Leadership change/HIGH) → bark + discord, severity HIGH', async () => {
+  it('8-K 5.02 (Leadership change/HIGH) → discord, severity HIGH', async () => {
     const event = make8KEvent('5.02');
 
     await ctx.server.inject({
@@ -120,10 +116,9 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
 
-    const alert = bark.send.mock.calls[0][0] as AlertEvent;
+    const alert = discord.send.mock.calls[0][0] as AlertEvent;
     expect(alert.severity).toBe('HIGH');
   });
 
@@ -138,7 +133,6 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
 
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
@@ -156,7 +150,6 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
 
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
@@ -168,21 +161,18 @@ describe('Integration: 8-K scanner → classify → delivery', () => {
 
 describe('Integration: Form 4 → classify → delivery', () => {
   let ctx: AppContext;
-  let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
 
   beforeAll(async () => {
-    bark = mockService('bark');
     discord = mockService('discord');
     ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
   });
 
   beforeEach(() => {
-    bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
@@ -193,7 +183,7 @@ describe('Integration: Form 4 → classify → delivery', () => {
     await safeCloseServer(ctx.server);
   });
 
-  it('Form 4 insider Purchase (HIGH) → bark + discord', async () => {
+  it('Form 4 insider Purchase (HIGH) → discord', async () => {
     const event = makeForm4Event('Purchase');
 
     await ctx.server.inject({
@@ -204,10 +194,9 @@ describe('Integration: Form 4 → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
 
-    const alert = bark.send.mock.calls[0][0] as AlertEvent;
+    const alert = discord.send.mock.calls[0][0] as AlertEvent;
     expect(alert.severity).toBe('HIGH');
   });
 
@@ -222,7 +211,6 @@ describe('Integration: Form 4 → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
 
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
@@ -242,7 +230,6 @@ describe('Integration: Form 4 → classify → delivery', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
 
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
@@ -254,21 +241,18 @@ describe('Integration: Form 4 → classify → delivery', () => {
 
 describe('Integration: metrics counters after pipeline', () => {
   let ctx: AppContext;
-  let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
 
   beforeAll(async () => {
-    bark = mockService('bark');
     discord = mockService('discord');
     ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
   });
 
   beforeEach(() => {
-    bark.send.mockClear();
     discord.send.mockClear();
     resetMetrics();
     ctx.deduplicator.reset();
@@ -314,15 +298,13 @@ describe('Integration: metrics counters after pipeline', () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
-      payload: make8KEvent('1.03'), // CRITICAL → bark + discord
+      payload: make8KEvent('1.03'),
     });
 
     await new Promise((r) => setTimeout(r, 50));
 
     const metricsRes = await ctx.server.inject({ method: 'GET', url: '/metrics' });
-    expect(metricsRes.body).toContain('deliveries_sent_total{channel="bark",status="success"} 1');
     expect(metricsRes.body).toContain('deliveries_sent_total{channel="discord",status="success"} 1');
-    expect(metricsRes.body).toContain('deliveries_by_channel{channel="bark"} 1');
     expect(metricsRes.body).toContain('deliveries_by_channel{channel="discord"} 1');
   });
 
@@ -342,13 +324,12 @@ describe('Integration: metrics counters after pipeline', () => {
 
 describe('Integration: error scenarios', () => {
   it('delivery failure → error metrics recorded, no crash', async () => {
-    const bark = mockService('bark');
-    bark.send.mockRejectedValue(new Error('Bark server down'));
     const discord = mockService('discord');
+    discord.send.mockRejectedValue(new Error('Discord down'));
 
     const ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
     resetMetrics();
@@ -356,30 +337,26 @@ describe('Integration: error scenarios', () => {
     const res = await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
-      payload: make8KEvent('1.03'), // CRITICAL → tries bark (fail) + discord (ok)
+      payload: make8KEvent('1.03'),
     });
 
     expect(res.statusCode).toBe(201);
     await new Promise((r) => setTimeout(r, 50));
 
-    // Discord still delivered
     expect(discord.send).toHaveBeenCalledOnce();
 
-    // Metrics should show bark failure and discord success
     const metricsRes = await ctx.server.inject({ method: 'GET', url: '/metrics' });
-    expect(metricsRes.body).toContain('deliveries_sent_total{channel="bark",status="failure"} 1');
-    expect(metricsRes.body).toContain('deliveries_sent_total{channel="discord",status="success"} 1');
+    expect(metricsRes.body).toContain('deliveries_sent_total{channel="discord",status="failure"} 1');
 
     await safeCloseServer(ctx.server);
   });
 
   it('invalid event data → rejected with 400, not published to bus', async () => {
-    const bark = mockService('bark');
     const discord = mockService('discord');
 
     const ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
     resetMetrics();
@@ -404,7 +381,6 @@ describe('Integration: error scenarios', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     // No delivery attempted
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).not.toHaveBeenCalled();
 
     // No event metrics incremented
@@ -487,17 +463,15 @@ describe('Integration: error scenarios', () => {
   });
 
   it('multiple events accumulate delivery metrics correctly', async () => {
-    const bark = mockService('bark');
     const discord = mockService('discord');
 
     const ctx = buildApp({
       logger: false,
-      alertRouter: new AlertRouter({ bark, discord }),
+      alertRouter: new AlertRouter({ discord }),
     });
     await ctx.server.ready();
     resetMetrics();
 
-    // CRITICAL → bark + discord (2 deliveries)
     await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
@@ -514,7 +488,6 @@ describe('Integration: error scenarios', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     const metricsRes = await ctx.server.inject({ method: 'GET', url: '/metrics' });
-    expect(metricsRes.body).toContain('deliveries_sent_total{channel="bark",status="success"} 1');
     expect(metricsRes.body).toContain('deliveries_sent_total{channel="discord",status="success"} 2');
     expect(metricsRes.body).toContain('events_processed_total{source="sec-edgar",event_type="8-K"} 2');
     expect(metricsRes.body).toContain('events_by_source{source="sec-edgar"} 2');

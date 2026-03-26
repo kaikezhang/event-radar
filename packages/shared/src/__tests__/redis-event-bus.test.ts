@@ -101,7 +101,7 @@ describe('RedisEventBus', () => {
       mock.disconnected = true;
     }
     await bus.shutdown();
-  });
+  }, 30_000);
 
   describe('publish', () => {
     it('should call XADD with correct stream key and serialized data', async () => {

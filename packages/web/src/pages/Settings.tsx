@@ -165,7 +165,7 @@ export function Settings() {
             {actionLabel}
           </button>
           <p className="text-xs text-text-tertiary">
-            Browser permission + device subscription only. No quiet hours, caps, sounds, or webhook config.
+            Browser permission + device subscription only. No quiet hours, caps, or extra channel setup.
           </p>
         </div>
       </section>
