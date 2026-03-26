@@ -7,7 +7,7 @@ import { StoryTracker } from './story-tracker.js';
 import type { Database } from '../db/connection.js';
 import { events } from '../db/schema.js';
 
-export interface DeduplicatorOptions {
+interface DeduplicatorOptions {
   /** Sliding window duration in ms. Default: 30 minutes. */
   windowMs?: number;
   /** Story expiry duration in ms. Default: 30 minutes. */

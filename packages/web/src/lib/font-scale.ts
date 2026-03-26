@@ -1,6 +1,6 @@
 export type FontScale = 'small' | 'medium' | 'large';
 
-export const FONT_SCALE_STORAGE_KEY = 'er-font-size';
+const FONT_SCALE_STORAGE_KEY = 'er-font-size';
 
 const FONT_SIZE_BY_SCALE: Record<FontScale, string> = {
   small: '14px',
@@ -12,7 +12,7 @@ function isFontScale(value: string | null): value is FontScale {
   return value === 'small' || value === 'medium' || value === 'large';
 }
 
-export function applyFontScale(scale: FontScale, root: HTMLElement = document.documentElement): void {
+function applyFontScale(scale: FontScale, root: HTMLElement = document.documentElement): void {
   root.style.fontSize = FONT_SIZE_BY_SCALE[scale];
 }
 

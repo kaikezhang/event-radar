@@ -3,12 +3,12 @@ import type { Database } from '../db/connection.js';
 import type { EventBus } from '@event-radar/shared';
 import type { IDeliveryKillSwitch } from './delivery-kill-switch.js';
 
-export interface DeliveryStats {
+interface DeliveryStats {
   last24h: { total: number; bySource: Record<string, number> };
   last7d: { total: number; bySource: Record<string, number> };
 }
 
-export interface HealthMonitorOptions {
+interface HealthMonitorOptions {
   /** Check interval in ms (default: 1 hour) */
   checkIntervalMs?: number;
   /** Function to get current time — injectable for testing */

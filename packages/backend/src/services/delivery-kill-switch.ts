@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 import * as schema from '../db/schema.js';
 
-export interface KillSwitchStatus {
+interface KillSwitchStatus {
   enabled: boolean;
   activatedAt: string | null;
   reason: string | null;

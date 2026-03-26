@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../db/connection.js';
 
-export interface AuditRecord {
+interface AuditRecord {
   eventId: string;
   source: string;
   title: string;

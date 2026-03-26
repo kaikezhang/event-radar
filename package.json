@@ -21,11 +21,5 @@
       "sharp",
       "unrs-resolver"
     ]
-  },
-  "dependencies": {
-    "@fastify/websocket": "^11.2.0",
-    "http-proxy": "^1.18.1",
-    "lightweight-charts": "^5.1.0",
-    "ws": "^8.19.0"
   }
 }

@@ -20,7 +20,7 @@ export interface DeliveryGateInput {
   classifierSeverity: Severity;
 }
 
-export interface DeliveryGateResult {
+interface DeliveryGateResult {
   pass: boolean;
   tier: 'critical' | 'high' | 'feed' | 'archive';
   reason: string;

@@ -47,14 +47,14 @@ interface MarketSnapshotProvider {
   get(): MarketSnapshot | null;
 }
 
-export interface LLMEnricherDependencies {
+interface LLMEnricherDependencies {
   regimeService?: IMarketRegimeService;
   marketDataCache?: TickerMarketDataSource;
   patternMatcher?: PatternStatsSource;
   marketSnapshotProvider?: MarketSnapshotProvider;
 }
 
-export interface LLMEnrichmentPromptContext {
+interface LLMEnrichmentPromptContext {
   regime?: RegimeSnapshot;
   marketContext?: MarketQuote;
   patternMatch?: PatternMatchResult | null;
