@@ -87,7 +87,7 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
-// Polyfill ResizeObserver for tests (used by recharts ResponsiveContainer)
+// Polyfill ResizeObserver for tests that mount resize-aware components
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class ResizeObserver {
     constructor(_cb: ResizeObserverCallback) {}
