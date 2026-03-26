@@ -2,7 +2,7 @@
 
 ## Architecture
 
-Event Radar has two separate web applications, both built with Vite + React 19:
+Event Radar ships a single user-facing web application built with Vite + React 19:
 
 ### User-Facing App (`packages/web`)
 Mobile-first PWA for traders and investors.
@@ -17,15 +17,6 @@ Mobile-first PWA for traders and investors.
 - **Settings** — Timezone, quiet hours, daily push cap
 - **Login/Onboarding** — Magic link auth + first-run setup
 
-### Admin Dashboard (`packages/dashboard`)
-Internal observability console for operators.
-
-**Pages:**
-- **Overview** — Pipeline health, event volume, scanner status
-- **Audit Trail** — Per-event pipeline trace with timing and stage details
-- **Historical** — Event trends, source distribution, delivery metrics
-- **AI Observability** — LLM latency, classification distribution, gatekeeper pass rate
-
 ## Tech Stack
 
 | Component | Library | Notes |
@@ -36,7 +27,7 @@ Internal observability console for operators.
 | Data Fetching | TanStack Query | Caching, refetch, mutations |
 | Styling | Tailwind CSS 4 | Utility-first |
 | Charts | lightweight-charts | Candlestick + event markers |
-| Analytics Charts | Recharts | Dashboard charts |
+| Analytics Charts | Recharts | Scorecards and visual summaries |
 | Real-time | Native WebSocket | Live event updates |
 | Notifications | Web Push API | Browser-native push |
 | Testing | Vitest + Testing Library | Component + integration tests |
@@ -56,10 +47,7 @@ Internal observability console for operators.
 # User app (port 5173, proxies /api → localhost:3001)
 pnpm --filter @event-radar/web dev
 
-# Dashboard (port 5174, proxies /api → localhost:3001)
-pnpm --filter @event-radar/dashboard dev
-
-# Build both
+# Build
 pnpm build
 
 # Test

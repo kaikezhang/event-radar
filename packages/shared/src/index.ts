@@ -34,13 +34,9 @@ export {
 export {
   DeliveryChannelSchema,
   DeliveryResultSchema,
-  TelegramConfigSchema,
-  WebhookConfigSchema,
   DeliveryConfigSchema,
   type DeliveryChannel,
   type DeliveryResult,
-  type TelegramConfig,
-  type WebhookConfig,
   type DeliveryConfig,
 } from './schemas/delivery.js';
 export {

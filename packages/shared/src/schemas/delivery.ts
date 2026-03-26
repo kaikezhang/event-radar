@@ -1,12 +1,6 @@
 import { z } from 'zod';
-import { SeveritySchema } from './severity.js';
 
-export const DeliveryChannelSchema = z.enum([
-  'bark',
-  'discord',
-  'telegram',
-  'webhook',
-]);
+export const DeliveryChannelSchema = z.enum(['discord']);
 export type DeliveryChannel = z.infer<typeof DeliveryChannelSchema>;
 
 export const DeliveryResultSchema = z.object({
@@ -19,25 +13,5 @@ export const DeliveryResultSchema = z.object({
 });
 export type DeliveryResult = z.infer<typeof DeliveryResultSchema>;
 
-export const TelegramConfigSchema = z.object({
-  botToken: z.string().min(1),
-  chatId: z.string().min(1),
-  minSeverity: SeveritySchema,
-  enabled: z.boolean(),
-});
-export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
-
-export const WebhookConfigSchema = z.object({
-  url: z.string().url(),
-  secret: z.string().min(1),
-  minSeverity: SeveritySchema,
-  enabled: z.boolean(),
-  headers: z.record(z.string()).optional(),
-});
-export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
-
-export const DeliveryConfigSchema = z.object({
-  telegram: TelegramConfigSchema.optional(),
-  webhook: WebhookConfigSchema.optional(),
-});
+export const DeliveryConfigSchema = z.object({});
 export type DeliveryConfig = z.infer<typeof DeliveryConfigSchema>;

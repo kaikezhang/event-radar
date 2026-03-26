@@ -1,7 +1,6 @@
 import type { EventBus, ScannerRegistry } from '@event-radar/shared';
 import { TruthSocialScanner } from './scanners/truth-social-scanner.js';
 import { BreakingNewsScanner } from './scanners/breaking-news-scanner.js';
-import { FdaScanner } from './scanners/fda-scanner.js';
 import { FederalRegisterScanner } from './scanners/federal-register-scanner.js';
 import { SecEdgarScanner } from './scanners/sec-edgar-scanner.js';
 import { HaltScanner } from './scanners/halt-scanner.js';
@@ -15,9 +14,6 @@ export function registerScanners(
   }
   if (process.env.BREAKING_NEWS_ENABLED !== 'false') {
     registry.register(new BreakingNewsScanner(eventBus));
-  }
-  if (process.env.FDA_ENABLED !== 'false') {
-    registry.register(new FdaScanner(eventBus));
   }
   if (process.env.FEDERAL_REGISTER_ENABLED !== 'false') {
     registry.register(new FederalRegisterScanner(eventBus));

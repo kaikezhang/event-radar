@@ -10,14 +10,12 @@ function mockService(name: string): DeliveryService & { send: ReturnType<typeof 
 
 describe('EventBus → delivery integration', () => {
   let ctx: AppContext;
-  let bark: ReturnType<typeof mockService>;
   let discord: ReturnType<typeof mockService>;
   let historicalEnricher: { enrich: ReturnType<typeof vi.fn> };
 
   beforeAll(async () => {
-    bark = mockService('bark');
     discord = mockService('discord');
-    const alertRouter = new AlertRouter({ bark, discord });
+    const alertRouter = new AlertRouter({ discord });
 
     historicalEnricher = {
       enrich: vi.fn().mockResolvedValue({
@@ -74,26 +72,23 @@ describe('EventBus → delivery integration', () => {
     },
   };
 
-  it('should route CRITICAL event to both bark and discord on ingest', async () => {
+  it('routes CRITICAL events to discord on ingest', async () => {
     await ctx.server.inject({
       method: 'POST',
       url: '/api/events/ingest',
       payload: criticalEvent,
     });
 
-    // Allow async subscriber to run
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(bark.send).toHaveBeenCalledOnce();
     expect(discord.send).toHaveBeenCalledOnce();
 
-    const alert = bark.send.mock.calls[0][0] as AlertEvent;
+    const alert = discord.send.mock.calls[0][0] as AlertEvent;
     expect(alert.severity).toBe('CRITICAL');
     expect(alert.ticker).toBe('XYZ');
   });
 
-  it('should route MEDIUM event to discord only', async () => {
-    bark.send.mockClear();
+  it('routes MEDIUM events to discord and enriches with history', async () => {
     discord.send.mockClear();
     historicalEnricher.enrich.mockClear();
 
@@ -103,9 +98,8 @@ describe('EventBus → delivery integration', () => {
       payload: mediumEvent,
     });
 
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(bark.send).not.toHaveBeenCalled();
     expect(discord.send).toHaveBeenCalledOnce();
 
     const alert = discord.send.mock.calls[0][0] as AlertEvent;
@@ -115,8 +109,7 @@ describe('EventBus → delivery integration', () => {
     expect(historicalEnricher.enrich).toHaveBeenCalledOnce();
   });
 
-  it('should not call the historical enricher when alert filter blocks delivery', async () => {
-    bark.send.mockClear();
+  it('does not call the historical enricher when alert filter blocks delivery', async () => {
     discord.send.mockClear();
     historicalEnricher.enrich.mockClear();
 
@@ -138,14 +131,13 @@ describe('EventBus → delivery integration', () => {
       },
     });
 
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(discord.send).not.toHaveBeenCalled();
-    expect(bark.send).not.toHaveBeenCalled();
     expect(historicalEnricher.enrich).not.toHaveBeenCalled();
   });
 
-  it('should still accept events when no delivery is configured', async () => {
+  it('still accepts events when no delivery is configured', async () => {
     const noDeliveryCtx = buildApp({
       logger: false,
       alertRouter: new AlertRouter({}),
