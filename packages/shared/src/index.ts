@@ -92,24 +92,6 @@ export {
   type SimilarEvent,
 } from './schemas/similarity-types.js';
 export {
-  CrossSourceMatchTypeSchema,
-  CrossSourceDedupResultSchema,
-  SourceUrlSchema,
-  MergedEventDataSchema,
-  CrossSourceDedupOptionsSchema,
-  type CrossSourceMatchType,
-  type CrossSourceDedupResult,
-  type SourceUrl,
-  type MergedEventData,
-  type CrossSourceDedupOptions,
-} from './schemas/dedup-types.js';
-export {
-  ConfirmationResultSchema,
-  ConfirmationConfigSchema,
-  type ConfirmationResult,
-  type ConfirmationConfig,
-} from './schemas/confirmation-types.js';
-export {
   DirectionMetricsSchema,
   DirectionBreakdownSchema,
   CalibrationDataSchema,
@@ -191,12 +173,6 @@ export {
   type SectorAggregate,
   type SectorAggregateResponse,
 } from './schemas/history-types.js';
-export {
-  ImpactEventSchema,
-  ImpactResponseSchema,
-  type ImpactEvent,
-  type ImpactResponse,
-} from './schemas/impact-types.js';
 export {
   LLMClassificationSchema,
   LLMClassificationMethodSchema,
