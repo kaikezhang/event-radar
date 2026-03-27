@@ -160,6 +160,7 @@ function buildFields(alert: AlertEvent): Array<{ name: string; value: string; in
   }
 
   fields.push({ name: 'Severity', value: alert.severity, inline: true });
+  fields.push({ name: 'Confidence', value: resolveConfidenceLabel(alert), inline: true });
   fields.push({ name: 'Source', value: sourceBadge, inline: true });
 
   if (enrichment?.summary) {
@@ -180,12 +181,11 @@ function buildFields(alert: AlertEvent): Array<{ name: string; value: string; in
 
   // Multiple tickers (when more than one)
   if (enrichment?.tickers && enrichment.tickers.length > 1) {
-    const eventPrice = alert.event.metadata?.['event_price'];
-    const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
-    const tickerDisplay = enrichment.tickers
-      .map((t) => `**${t.symbol}** ${t.direction === 'bullish' ? '📈' : t.direction === 'bearish' ? '📉' : '➡️'}`)
-      .join('  ');
-    fields.push({ name: 'Tickers', value: `${tickerDisplay}${priceStr}`, inline: false });
+    fields.push({
+      name: 'Tickers',
+      value: formatTickerField(alert),
+      inline: enrichment.tickers.length > 3,
+    });
   }
 
   // Confirmation (multi-source)
@@ -325,11 +325,8 @@ function buildBreakingNewsDescription(alert: AlertEvent, tier: DeliveryTier): st
     parts.push(`**Why it matters:** ${enrichment.impact}`);
   }
 
-  // Risk — critical/high tier
-  if ((tier === 'critical' || tier === 'high') && enrichment?.risks) {
-    parts.push('');
-    parts.push(`**Risk:** ${enrichment.risks}`);
-  }
+  appendRegimeContext(parts, enrichment?.regimeContext);
+  appendRisk(parts, enrichment?.risks);
 
   // Historical stats — critical/high tier
   appendHistoricalStats(parts, alert, tier);
@@ -382,6 +379,9 @@ function buildSecFilingDescription(alert: AlertEvent, tier: DeliveryTier): strin
     parts.push('');
     parts.push(`**What this means:** ${enrichment.impact}`);
   }
+
+  appendRegimeContext(parts, enrichment?.regimeContext);
+  appendRisk(parts, enrichment?.risks);
 
   // Historical stats — critical/high tier
   appendHistoricalStats(parts, alert, tier);
@@ -444,6 +444,9 @@ function buildTradingHaltDescription(alert: AlertEvent, tier: DeliveryTier): str
     parts.push(`**What typically happens:** ${enrichment.impact}`);
   }
 
+  appendRegimeContext(parts, enrichment?.regimeContext);
+  appendRisk(parts, enrichment?.risks);
+
   // Historical stats — critical/high tier
   appendHistoricalStats(parts, alert, tier);
 
@@ -491,6 +494,9 @@ function buildEconDataDescription(alert: AlertEvent, tier: DeliveryTier): string
     parts.push('');
     parts.push(`**Market impact:** ${enrichment.impact}`);
   }
+
+  appendRegimeContext(parts, enrichment?.regimeContext);
+  appendRisk(parts, enrichment?.risks);
 
   // Historical stats — critical/high tier
   appendHistoricalStats(parts, alert, tier);
@@ -550,13 +556,16 @@ function buildSocialDescription(alert: AlertEvent, tier: DeliveryTier): string {
 
   // Direction badge — always "Speculative" confidence for social
   parts.push('');
-  parts.push(directionBadge(alert, 'Speculative'));
+  parts.push(directionBadge(alert));
 
   // "Context" from enrichment (different framing for social)
   if (enrichment?.impact) {
     parts.push('');
     parts.push(`**Context:** ${enrichment.impact}`);
   }
+
+  appendRegimeContext(parts, enrichment?.regimeContext);
+  appendRisk(parts, enrichment?.risks);
 
   // Historical stats — critical/high tier
   appendHistoricalStats(parts, alert, tier);
@@ -589,21 +598,19 @@ function buildDefaultDescription(alert: AlertEvent, tier: DeliveryTier): string 
     parts.push(`**Why it matters:** ${enrichment.impact}`);
   }
 
+  appendRegimeContext(parts, enrichment?.regimeContext);
+
+  appendRisk(parts, enrichment?.risks);
+
   // Historical stats — critical & high only
   appendHistoricalStats(parts, alert, tier);
-
-  // Risk — critical only
-  if (tier === 'critical' && enrichment?.risks) {
-    parts.push('');
-    parts.push(`**Risk:** ${enrichment.risks}`);
-  }
 
   return truncate(parts.join('\n'), 2048);
 }
 
 // ── Shared helpers ────────────────────────────────────────────
 
-function directionBadge(alert: AlertEvent, confidenceOverride?: string): string {
+function directionBadge(alert: AlertEvent): string {
   const enrichment = alert.enrichment;
   if (!enrichment?.tickers?.length) return '';
 
@@ -612,12 +619,14 @@ function directionBadge(alert: AlertEvent, confidenceOverride?: string): string 
     : primary.direction === 'bearish' ? '▼'
     : '▸';
   const dirLabel = primary.direction.toUpperCase();
-  const confidence = confidenceOverride ?? confidenceLabel(alert);
 
-  return `${dirEmoji} ${dirLabel} · ${confidence}`;
+  return `${dirEmoji} ${dirLabel}`;
 }
 
-function confidenceLabel(alert: AlertEvent): string {
+function resolveConfidenceLabel(alert: AlertEvent): string {
+  if (alert.event.source === 'reddit' || alert.event.source === 'stocktwits') {
+    return 'Speculative';
+  }
   if (alert.confidenceBucket) {
     return capitalize(alert.confidenceBucket);
   }
@@ -632,6 +641,53 @@ function confidenceLabel(alert: AlertEvent): string {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1) + ' confidence';
+}
+
+function appendRegimeContext(parts: string[], regimeContext: string | undefined): void {
+  if (!regimeContext) {
+    return;
+  }
+
+  parts.push('');
+  parts.push(`**Regime:** ${regimeContext}`);
+}
+
+function appendRisk(parts: string[], risks: string | undefined): void {
+  if (!risks) {
+    return;
+  }
+
+  parts.push('');
+  parts.push(`**Risk:** ${risks}`);
+}
+
+function formatTickerField(alert: AlertEvent): string {
+  const tickers = alert.enrichment?.tickers ?? [];
+  if (tickers.length === 0) {
+    return '';
+  }
+
+  if (tickers.length > 3) {
+    const compact = tickers
+      .slice(0, 3)
+      .map((ticker: (typeof tickers)[number]) => `${ticker.symbol}${tickerDirectionEmoji(ticker.direction)}`)
+      .join(' · ');
+    const remaining = tickers.length - 3;
+    return remaining > 0 ? `${compact} +${remaining} more` : compact;
+  }
+
+  const eventPrice = alert.event.metadata?.['event_price'];
+  const priceStr = typeof eventPrice === 'number' ? ` @ $${eventPrice.toFixed(2)}` : '';
+  const tickerDisplay = tickers
+    .map((ticker: (typeof tickers)[number]) => `**${ticker.symbol}** ${tickerDirectionEmoji(ticker.direction)}`)
+    .join('  ');
+  return `${tickerDisplay}${priceStr}`;
+}
+
+function tickerDirectionEmoji(direction: string): string {
+  if (direction === 'bullish') return '📈';
+  if (direction === 'bearish') return '📉';
+  return '➡️';
 }
 
 function appendHistoricalStats(parts: string[], alert: AlertEvent, tier: DeliveryTier): void {

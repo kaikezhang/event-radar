@@ -25,6 +25,10 @@ function getEmbedFromLastCall(fetchSpy: ReturnType<typeof vi.fn>) {
   return JSON.parse(options.body as string).embeds[0];
 }
 
+function getField(embed: { fields?: Array<{ name: string; value: string; inline: boolean }> }, name: string) {
+  return embed.fields?.find((field) => field.name === name);
+}
+
 describe('DiscordWebhook', () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -124,18 +128,21 @@ describe('DiscordWebhook', () => {
     expect(linkField.value).toContain('https://www.sec.gov/filing/123');
   });
 
-  it('includes ticker, severity, and source fields in the embed', async () => {
+  it('includes ticker, severity, confidence, and source fields in the embed', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(makeAlert());
 
     const embed = getEmbedFromLastCall(fetchSpy);
-    const tickerField = embed.fields?.find((field: { name: string }) => field.name === 'Ticker');
-    const severityField = embed.fields?.find((field: { name: string }) => field.name === 'Severity');
-    const sourceField = embed.fields?.find((field: { name: string }) => field.name === 'Source');
+    const tickerField = getField(embed, 'Ticker');
+    const severityField = getField(embed, 'Severity');
+    const confidenceField = getField(embed, 'Confidence');
+    const sourceField = getField(embed, 'Source');
 
     expect(tickerField?.value).toBe('AAPL');
     expect(severityField?.value).toBe('HIGH');
+    expect(confidenceField?.value).toBe('Moderate confidence');
+    expect(confidenceField?.inline).toBe(true);
     expect(sourceField?.value).toContain('SEC Filing');
   });
 
@@ -360,7 +367,7 @@ describe('DiscordWebhook', () => {
     expect(embed.description).toContain('Contract execution delays');
   });
 
-  it('includes historical stats but NOT risk for high tier (default template)', async () => {
+  it('includes historical stats and risk for high tier (default template)', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(
@@ -405,10 +412,10 @@ describe('DiscordWebhook', () => {
 
     const embed = getEmbedFromLastCall(fetchSpy);
     expect(embed.description).toContain('Similar events');
-    expect(embed.description).not.toContain('**Risk:**');
+    expect(embed.description).toContain('**Risk:**');
   });
 
-  it('shows only headline + why it matters for feed tier (default template)', async () => {
+  it('shows headline, why it matters, and risk for feed tier (default template)', async () => {
     const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
     await webhook.send(
@@ -454,9 +461,9 @@ describe('DiscordWebhook', () => {
     const embed = getEmbedFromLastCall(fetchSpy);
     expect(embed.description).toContain('AAPL upgraded');
     expect(embed.description).toContain('**Why it matters:**');
-    // Feed tier: no historical stats, no risk
+    // Feed tier: no historical stats, but risk still renders
     expect(embed.description).not.toContain('Similar events');
-    expect(embed.description).not.toContain('**Risk:**');
+    expect(embed.description).toContain('**Risk:**');
   });
 
   it('hides historical stats when all values are zero', async () => {
@@ -562,14 +569,40 @@ describe('DiscordWebhook', () => {
     );
 
     const embed = getEmbedFromLastCall(fetchSpy);
-    const tickerField = embed.fields?.find(
-      (f: { name: string }) => f.name === 'Tickers',
-    );
+    const tickerField = getField(embed, 'Tickers');
 
     expect(tickerField).toBeDefined();
     expect(tickerField.value).toContain('AAPL');
     expect(tickerField.value).toContain('MSFT');
     expect(tickerField.value).toContain('📉');
+  });
+
+  it('uses a compact inline ticker field when more than 3 tickers are present', async () => {
+    const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+
+    await webhook.send(
+      makeAlert({
+        enrichment: {
+          summary: 'Broad market impact',
+          impact: 'Multiple sectors affected',
+          action: '🔴 High-Quality Setup',
+          tickers: [
+            { symbol: 'AAPL', direction: 'bearish' },
+            { symbol: 'MSFT', direction: 'bullish' },
+            { symbol: 'NVDA', direction: 'neutral' },
+            { symbol: 'AMD', direction: 'bullish' },
+            { symbol: 'QCOM', direction: 'bearish' },
+          ],
+        },
+      }),
+    );
+
+    const embed = getEmbedFromLastCall(fetchSpy);
+    const tickerField = getField(embed, 'Tickers');
+
+    expect(tickerField).toBeDefined();
+    expect(tickerField?.inline).toBe(true);
+    expect(tickerField?.value).toBe('AAPL📉 · MSFT📈 · NVDA➡️ +2 more');
   });
 
   // ── Footer tests ─────────────────────────────────────────────
@@ -766,6 +799,7 @@ describe('DiscordWebhook', () => {
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('▼ BEARISH');
+      expect(embed.description).not.toContain('High confidence');
     });
 
     it('includes "Why it matters" from enrichment', async () => {
@@ -775,6 +809,7 @@ describe('DiscordWebhook', () => {
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('**Why it matters:**');
       expect(embed.description).toContain('margin pressure from tariffs');
+      expect(getField(embed, 'Confidence')?.value).toBe('High confidence');
     });
 
     it('includes risk for critical tier', async () => {
@@ -794,12 +829,31 @@ describe('DiscordWebhook', () => {
       expect(embed.description).toContain('**Risk:**');
     });
 
-    it('omits risk for feed tier', async () => {
+    it('includes risk for feed tier', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
       await webhook.send(makeBreakingNewsAlert({ deliveryTier: 'feed' }));
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).not.toContain('**Risk:**');
+      expect(embed.description).toContain('**Risk:**');
+    });
+
+    it('renders regime context when present', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(
+        makeBreakingNewsAlert({
+          enrichment: {
+            summary: 'Weak guidance from tariff pressure',
+            impact: 'Weak forward guidance signals margin pressure from tariffs. Stock already down 15% YTD.',
+            risks: 'Better-than-expected tariff resolution could reverse the selloff.',
+            regimeContext: 'Consumer discretionary weakness can amplify downside reactions.',
+            action: '🔴 High-Quality Setup',
+            tickers: [{ symbol: 'LULU', direction: 'bearish' }],
+          },
+        }),
+      );
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('**Regime:** Consumer discretionary weakness can amplify downside reactions.');
     });
 
     it('includes historical stats for critical/high tier', async () => {
@@ -941,6 +995,7 @@ describe('DiscordWebhook', () => {
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('▲ BULLISH');
+      expect(embed.description).not.toContain('High confidence');
     });
 
     it('uses "What this means" instead of "Why it matters"', async () => {
@@ -981,6 +1036,26 @@ describe('DiscordWebhook', () => {
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('📋 SEC Filing · Form 4');
       expect(embed.description).toContain('Company: Apple Inc');
+    });
+
+    it('renders risk and regime context when present', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(
+        makeSecAlert({
+          enrichment: {
+            summary: 'Material agreement and officer change',
+            impact: 'New partnership agreement could expand revenue pipeline.',
+            risks: 'Execution delays could offset partnership upside.',
+            regimeContext: 'Biotech outperformance can increase follow-through on partnership filings.',
+            action: '🔴 High-Quality Setup',
+            tickers: [{ symbol: 'MRNA', direction: 'bullish' }],
+          },
+        }),
+      );
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('**Risk:** Execution delays could offset partnership upside.');
+      expect(embed.description).toContain('**Regime:** Biotech outperformance can increase follow-through on partnership filings.');
     });
   });
 
@@ -1106,6 +1181,7 @@ describe('DiscordWebhook', () => {
 
       const embed = getEmbedFromLastCall(fetchSpy);
       expect(embed.description).toContain('▼ BEARISH');
+      expect(embed.description).not.toContain('High confidence');
     });
 
     it('uses "What typically happens" for impact', async () => {
@@ -1261,6 +1337,26 @@ describe('DiscordWebhook', () => {
       expect(embed.description).not.toContain('🔄 Frequency');
       expect(embed.description).not.toContain('🏷️ Tags');
     });
+
+    it('renders risk and regime context when present', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(
+        makeEconAlert({
+          enrichment: {
+            summary: 'Stronger than expected jobs report',
+            impact: 'Stronger-than-expected jobs data supports Fed hawkish stance.',
+            risks: 'A softer revision could unwind the initial rate move.',
+            regimeContext: 'In a rate-sensitive tape, jobs surprises travel fastest through yields and mega-cap tech.',
+            action: '🔴 High-Quality Setup',
+            tickers: [{ symbol: 'SPY', direction: 'bullish' }],
+          },
+        }),
+      );
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(embed.description).toContain('**Risk:** A softer revision could unwind the initial rate move.');
+      expect(embed.description).toContain('**Regime:** In a rate-sensitive tape, jobs surprises travel fastest through yields and mega-cap tech.');
+    });
   });
 
   // ── Social template tests ─────────────────────────────────────
@@ -1374,12 +1470,21 @@ describe('DiscordWebhook', () => {
       expect(embed.description).toContain('🔥 High engagement');
     });
 
-    it('uses "Speculative" confidence label', async () => {
+    it('shows direction without confidence text in the description for social alerts', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
       await webhook.send(makeRedditAlert());
 
       const embed = getEmbedFromLastCall(fetchSpy);
-      expect(embed.description).toContain('▲ BULLISH · Speculative');
+      expect(embed.description).toContain('▲ BULLISH');
+      expect(embed.description).not.toContain('Speculative');
+    });
+
+    it('uses a dedicated Confidence field for social alerts', async () => {
+      const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
+      await webhook.send(makeRedditAlert());
+
+      const embed = getEmbedFromLastCall(fetchSpy);
+      expect(getField(embed, 'Confidence')?.value).toBe('Speculative');
     });
 
     it('uses "Context" instead of "Why it matters"', async () => {
