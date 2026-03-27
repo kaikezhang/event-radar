@@ -25,7 +25,6 @@ export const LLM_EVENT_TYPES = [
   'ftc_antitrust',
   'doj_settlement',
   'executive_order',
-  'congress_bill',
   'federal_register',
   'antitrust_action',
   'regulatory_enforcement',
@@ -38,16 +37,13 @@ export const LLM_EVENT_TYPES = [
   'fed_announcement',
   'macro_policy',
   // Trading activity
-  'unusual_options',
   'insider_large_trade',
-  'short_interest',
   'options_flow',
   'insider_purchase',
   'insider_sale',
   'trading_halt',
   // Social / sentiment
   'social_volume_spike',
-  'reddit_trending',
   'rumor',
   'opinion',
   // Corporate actions
