@@ -124,7 +124,11 @@ describe('LLM enrichment regression handling', () => {
     wireEventPipeline(deps);
     await publishAndFlush(deps.eventBus, event);
 
-    expect(llmEnricher.enrich).toHaveBeenCalledOnce();
+    expect(llmEnricher.enrich).toHaveBeenCalledWith(
+      event,
+      undefined,
+      { severity: 'HIGH' },
+    );
   });
 
   it('forces enrichment for CRITICAL events even when the filter does not request it', async () => {
@@ -134,7 +138,11 @@ describe('LLM enrichment regression handling', () => {
     wireEventPipeline(deps);
     await publishAndFlush(deps.eventBus, event);
 
-    expect(llmEnricher.enrich).toHaveBeenCalledOnce();
+    expect(llmEnricher.enrich).toHaveBeenCalledWith(
+      event,
+      undefined,
+      { severity: 'CRITICAL' },
+    );
   });
 
   it('does not force enrichment for MEDIUM events when the filter opts out', async () => {

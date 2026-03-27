@@ -77,7 +77,7 @@ describe('political LLM policy', () => {
     expect(result.confidenceLevel).toBe('high');
   });
 
-  it('keeps rule severity for tariff exceptions while still taking LLM confidence', () => {
+  it('keeps rule severity for tariff exceptions while preserving the stronger rule confidence', () => {
     const ruleResult = makeRuleResult({
       severity: 'CRITICAL',
       tags: ['political-market-impact', 'force-llm-classification', 'tariff'],
@@ -94,7 +94,28 @@ describe('political LLM policy', () => {
 
     expect(result.severity).toBe('CRITICAL');
     expect(result.priority).toBe(5);
-    expect(result.confidence).toBe(0.41);
-    expect(result.confidenceLevel).toBe('low');
+    expect(result.confidence).toBe(0.88);
+    expect(result.confidenceLevel).toBe('high');
+  });
+
+  it('preserves the stronger rule confidence when rule priority wins the aggregation', () => {
+    const ruleResult = makeRuleResult({
+      severity: 'HIGH',
+      tags: ['political-market-impact', 'force-llm-classification'],
+      priority: 8,
+      confidence: 0.91,
+    });
+    const llmResult = makeLlmResult({
+      severity: 'CRITICAL',
+      confidence: 0.52,
+      priority: 20,
+    });
+
+    const result = resolvePoliticalClassificationResult(ruleResult, llmResult);
+
+    expect(result.severity).toBe('CRITICAL');
+    expect(result.priority).toBe(8);
+    expect(result.confidence).toBe(0.91);
+    expect(result.confidenceLevel).toBe('high');
   });
 });

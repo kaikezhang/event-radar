@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { EventDeduplicator } from '../pipeline/deduplicator.js';
 import {
   exactIdMatch,
+  sameSourceTickerEventTypeMatch,
   tickerWindowMatch,
   contentSimilarityMatch,
   findBestMatch,
@@ -138,6 +139,65 @@ describe('tickerWindowMatch', () => {
   });
 });
 
+describe('sameSourceTickerEventTypeMatch', () => {
+  it('should fast-path same source + ticker + type within 15 minutes', () => {
+    const e1 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      title: 'Meta expands cloud partnership',
+      body: 'First wire copy.',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      title: 'Cloud deal update from Meta',
+      body: 'Second wire copy.',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:14:00Z'),
+    });
+
+    const result = sameSourceTickerEventTypeMatch(e2, e1);
+
+    expect(result).not.toBeNull();
+    expect(result?.matchType).toBe('ticker-window');
+    expect(result?.confidence).toBe(0.94);
+  });
+
+  it('should not fast-path same source events outside the 15-minute window', () => {
+    const e1 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:16:00Z'),
+    });
+
+    expect(sameSourceTickerEventTypeMatch(e2, e1)).toBeNull();
+  });
+
+  it('should keep same-ticker SEC filings distinct when item types differ', () => {
+    const e1 = makeEvent({
+      title: '8-K: TestCorp signs new agreement',
+      metadata: { ticker: 'TEST', item_types: ['1.01'] },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      title: '8-K: TestCorp files bankruptcy notice',
+      metadata: { ticker: 'TEST', item_types: ['1.03'] },
+      timestamp: new Date('2024-01-15T10:10:00Z'),
+    });
+
+    expect(sameSourceTickerEventTypeMatch(e2, e1)).toBeNull();
+  });
+});
+
 describe('contentSimilarityMatch', () => {
   it('should match nearly identical headlines from different sources', () => {
     const e1 = makeEvent({
@@ -169,6 +229,25 @@ describe('contentSimilarityMatch', () => {
     const result = contentSimilarityMatch(e2, e1);
 
     expect(result).toBeNull();
+  });
+
+  it('should use a looser threshold for same-source rewrites', () => {
+    const e1 = makeEvent({
+      source: 'newswire',
+      title: 'Meta expands Nebius cloud deal for AI workloads',
+      body: 'The updated cloud agreement broadens AI compute capacity for Meta.',
+    });
+    const e2 = makeEvent({
+      source: 'newswire',
+      title: 'Nebius cloud agreement with Meta broadens AI workloads',
+      body: 'Meta said the revised Nebius deal expands AI compute capacity.',
+    });
+
+    const result = contentSimilarityMatch(e2, e1);
+
+    expect(result).not.toBeNull();
+    expect(result?.matchType).toBe('content-similarity');
+    expect(result?.confidence).toBeLessThan(0.8);
   });
 });
 
@@ -270,6 +349,32 @@ describe('EventDeduplicator', () => {
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matchType).toBe('content-similarity');
+    expect(result.originalEventId).toBe(e1.id);
+  });
+
+  it('should deduplicate same-source ticker rewrites within 15 minutes', async () => {
+    const e1 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      title: 'Meta signs expanded cloud deal with Nebius',
+      body: 'First wire bulletin.',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+    });
+    const e2 = makeEvent({
+      source: 'newswire',
+      type: 'headline',
+      title: 'Nebius cloud partnership with Meta expands',
+      body: 'Follow-up wire bulletin with a rewritten title.',
+      metadata: { ticker: 'META' },
+      timestamp: new Date('2024-01-15T10:08:00Z'),
+    });
+
+    await dedup.check(e1, e1.timestamp);
+    const result = await dedup.check(e2, e2.timestamp);
+
+    expect(result.isDuplicate).toBe(true);
+    expect(result.matchType).toBe('ticker-window');
     expect(result.originalEventId).toBe(e1.id);
   });
 
