@@ -15,6 +15,7 @@ import { registerPriceRoutes } from './routes/price.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerApiDocsRoutes } from './routes/api-docs.js';
+import { registerAiObservabilityRoutes } from './routes/ai-observability.js';
 
 export interface RouteRegistrationOptions {
   server: FastifyInstance;
@@ -55,6 +56,13 @@ export function registerAllRoutes(options: RouteRegistrationOptions): void {
     db,
     registry,
     version,
+    startTime,
+  });
+
+  registerAiObservabilityRoutes(server, {
+    apiKey,
+    db,
+    scannerRegistry: registry,
     startTime,
   });
 
