@@ -459,6 +459,7 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
           const llmEnrichResult = await llmEnricher.enrich(
             event,
             llmResult?.ok ? llmResult.value : undefined,
+            { severity: classificationResult.severity },
           );
           const enrichDurationSec = (Date.now() - enrichStart) / 1000;
           llmEnrichmentDurationSeconds.observe(enrichDurationSec);

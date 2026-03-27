@@ -9,12 +9,90 @@ export interface StrategyMatch {
 
 const ID_FIELDS = ['filingId', 'postId', 'tweetId', 'articleId'] as const;
 const TRUTH_SOCIAL_TITLE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SAME_SOURCE_TICKER_EVENT_WINDOW_MS = 15 * 60 * 1000;
+const DEFAULT_CONTENT_SIMILARITY_THRESHOLD = 0.8;
+const SAME_SOURCE_CONTENT_SIMILARITY_THRESHOLD = 0.68;
 
 function normalizeDedupTitle(title: string): string {
   return title
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
+}
+
+function normalizeTicker(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  return value.trim().toUpperCase();
+}
+
+function readItemTypeFingerprint(event: RawEvent): string | null {
+  const rawItemTypes = event.metadata?.['item_types'];
+  if (!Array.isArray(rawItemTypes)) {
+    return null;
+  }
+
+  const itemTypes = rawItemTypes
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim())
+    .sort();
+
+  return itemTypes.length > 0 ? itemTypes.join('|') : null;
+}
+
+function readEventSubtypeFingerprint(event: RawEvent): string | null {
+  const itemTypeFingerprint = readItemTypeFingerprint(event);
+  if (itemTypeFingerprint) {
+    return `item_types:${itemTypeFingerprint}`;
+  }
+
+  const actionType = event.metadata?.['action_type'];
+  if (typeof actionType === 'string' && actionType.trim().length > 0) {
+    return `action_type:${actionType.trim().toLowerCase()}`;
+  }
+
+  return null;
+}
+
+/**
+ * Same source + ticker + event type within 15 minutes.
+ * Keep subtype fingerprints distinct so routine same-ticker SEC filings do not collapse.
+ */
+export function sameSourceTickerEventTypeMatch(
+  incoming: RawEvent,
+  existing: RawEvent,
+  windowMs: number = SAME_SOURCE_TICKER_EVENT_WINDOW_MS,
+): StrategyMatch | null {
+  if (incoming.source !== existing.source || incoming.type !== existing.type) {
+    return null;
+  }
+
+  const incomingTicker = normalizeTicker(incoming.metadata?.['ticker']);
+  const existingTicker = normalizeTicker(existing.metadata?.['ticker']);
+  if (!incomingTicker || !existingTicker || incomingTicker !== existingTicker) {
+    return null;
+  }
+
+  const incomingSubtype = readEventSubtypeFingerprint(incoming);
+  const existingSubtype = readEventSubtypeFingerprint(existing);
+  if (incomingSubtype !== null && existingSubtype !== null && incomingSubtype !== existingSubtype) {
+    return null;
+  }
+
+  const timeDiff = Math.abs(
+    incoming.timestamp.getTime() - existing.timestamp.getTime(),
+  );
+  if (timeDiff > windowMs) {
+    return null;
+  }
+
+  return {
+    matchType: 'ticker-window',
+    confidence: 0.94,
+    matchedEventId: existing.id,
+  };
 }
 
 /**
@@ -123,7 +201,9 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
 export function contentSimilarityMatch(
   incoming: RawEvent,
   existing: RawEvent,
-  threshold: number = 0.8,
+  threshold: number = incoming.source === existing.source
+    ? SAME_SOURCE_CONTENT_SIMILARITY_THRESHOLD
+    : DEFAULT_CONTENT_SIMILARITY_THRESHOLD,
 ): StrategyMatch | null {
   if (
     incoming.source === 'truth-social' &&
@@ -141,6 +221,17 @@ export function contentSimilarityMatch(
         matchedEventId: existing.id,
       };
     }
+  }
+
+  const incomingSubtype = readEventSubtypeFingerprint(incoming);
+  const existingSubtype = readEventSubtypeFingerprint(existing);
+  if (
+    incoming.source === existing.source
+    && incomingSubtype !== null
+    && existingSubtype !== null
+    && incomingSubtype !== existingSubtype
+  ) {
+    return null;
   }
 
   const incomingTokens = tokenize(`${incoming.title} ${incoming.body}`);
@@ -174,6 +265,7 @@ export function findBestMatch(
     // Try strategies in order of specificity
     const strategies = [
       () => exactIdMatch(incoming, existing),
+      () => sameSourceTickerEventTypeMatch(incoming, existing),
       () => tickerWindowMatch(incoming, existing),
       () => contentSimilarityMatch(incoming, existing),
     ];
