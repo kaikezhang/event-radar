@@ -140,6 +140,100 @@ describe('AlertFilter', () => {
       const result = staleFilter.check(event);
       expect(result.pass).toBe(false);
     });
+
+    it('should use a tighter RTH staleness window for breaking-news', () => {
+      const rthNow = new Date('2026-03-11T14:00:00Z');
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => rthNow,
+      });
+      const event = makeEvent({
+        source: 'breaking-news',
+        timestamp: new Date(rthNow.getTime() - 20 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('max 15min');
+    });
+
+    it('should allow fresher breaking-news inside the tighter RTH window', () => {
+      const rthNow = new Date('2026-03-11T14:00:00Z');
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => rthNow,
+      });
+      const event = makeEvent({
+        source: 'breaking-news',
+        timestamp: new Date(rthNow.getTime() - 10 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should allow official filings longer in pre-market', () => {
+      const preNow = new Date('2026-03-11T11:00:00Z'); // 07:00 ET
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => preNow,
+      });
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: '8-K',
+        metadata: { ticker: 'NVDA' },
+        timestamp: new Date(preNow.getTime() - 45 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still expire official filings if they exceed the pre-market window', () => {
+      const preNow = new Date('2026-03-11T11:00:00Z'); // 07:00 ET
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => preNow,
+      });
+      const event = makeEvent({
+        source: 'sec-edgar',
+        type: '8-K',
+        metadata: { ticker: 'NVDA' },
+        timestamp: new Date(preNow.getTime() - 2 * 60 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('max 90min');
+    });
+
+    it('should extend official policy sources to the next session on weekends', () => {
+      const closedNow = new Date('2026-03-14T17:00:00Z'); // Saturday noon ET
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => closedNow,
+      });
+      const event = makeEvent({
+        source: 'federal-register',
+        type: 'rule',
+        timestamp: new Date(closedNow.getTime() - 20 * 60 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(true);
+    });
+
+    it('should not extend social events to the next session when markets are closed', () => {
+      const closedNow = new Date('2026-03-14T17:00:00Z'); // Saturday noon ET
+      const staleFilter = new AlertFilter({
+        enabled: true,
+        nowFn: () => closedNow,
+      });
+      const event = makeEvent({
+        source: 'social-signal',
+        type: 'social-post',
+        metadata: { ticker: 'NVDA', high_engagement: true },
+        timestamp: new Date(closedNow.getTime() - 45 * 60_000),
+      });
+      const result = staleFilter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('max 30min');
+    });
   });
 
   describe('Retrospective patterns', () => {
@@ -172,6 +266,16 @@ describe('AlertFilter', () => {
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('retrospective');
     });
+
+    it('should block recap-style retrospective coverage', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: 'Live updates: what happened after the earnings call recap',
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('retrospective');
+    });
   });
 
   describe('Clickbait patterns', () => {
@@ -194,6 +298,64 @@ describe('AlertFilter', () => {
       const result = filter.check(event);
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('clickbait');
+    });
+
+    it('should block personal-finance retiree clickbait', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: 'They Learned the Average Retiree Gets Just $1,424 at 62',
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('clickbait');
+    });
+
+    it('should block social security advice content', () => {
+      const event = makeEvent({
+        source: 'breaking-news',
+        title: 'Social Security beneficiaries need to know this before they retire',
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('clickbait');
+    });
+  });
+
+  describe('Newswire negative patterns', () => {
+    it('should block routine conference participation press releases even with a ticker', () => {
+      const event = makeEvent({
+        source: 'businesswire',
+        type: 'press-release',
+        title: 'Acme Corp to Present at Investor Conference Next Week',
+        metadata: { ticker: 'ACME' },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('newswire noise');
+    });
+
+    it('should block university partnership press releases without stronger market-moving keywords', () => {
+      const event = makeEvent({
+        source: 'globenewswire',
+        type: 'press-release',
+        title: 'Acme Partners with State University on Research Program',
+        metadata: { ticker: 'ACME' },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('newswire noise');
+    });
+
+    it('should still allow genuinely material newswire events when a positive keyword overrides a negative pattern', () => {
+      const event = makeEvent({
+        source: 'businesswire',
+        type: 'press-release',
+        title: 'Acme to Present Details of Its Acquisition During Investor Day Webcast',
+        metadata: { ticker: 'ACME' },
+      });
+      const result = filter.check(event);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('keyword match');
     });
   });
 
@@ -539,6 +701,40 @@ describe('AlertFilter', () => {
       expect(second.reason).toContain('cooldown');
     });
 
+    it('should not let a lower-severity alert block a later higher-severity alert', () => {
+      const event1 = makeEvent({
+        source: 'truth-social',
+        type: 'post',
+        metadata: { ticker: 'NVDA' },
+      });
+      const event2 = makeEvent({
+        source: 'truth-social',
+        type: 'post',
+        metadata: { ticker: 'NVDA' },
+      });
+
+      expect(filter.check(event1, makeLlmResult({ eventType: 'news_breaking', severity: 'LOW' })).pass).toBe(true);
+      expect(filter.check(event2, makeLlmResult({ eventType: 'news_breaking', severity: 'CRITICAL' })).pass).toBe(true);
+    });
+
+    it('should let a higher-severity alert suppress a later lower-severity alert', () => {
+      const event1 = makeEvent({
+        source: 'truth-social',
+        type: 'post',
+        metadata: { ticker: 'NVDA' },
+      });
+      const event2 = makeEvent({
+        source: 'truth-social',
+        type: 'post',
+        metadata: { ticker: 'NVDA' },
+      });
+
+      expect(filter.check(event1, makeLlmResult({ eventType: 'news_breaking', severity: 'CRITICAL' })).pass).toBe(true);
+      const second = filter.check(event2, makeLlmResult({ eventType: 'news_breaking', severity: 'LOW' }));
+      expect(second.pass).toBe(false);
+      expect(second.reason).toContain('cooldown');
+    });
+
     it('should apply legacy ticker cooldowns across all event types after migration', () => {
       const now = Date.now();
       const legacyAwareFilter = new AlertFilter({
@@ -558,6 +754,34 @@ describe('AlertFilter', () => {
           type: 'post',
           metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
         }),
+      );
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('cooldown');
+
+      legacyAwareFilter.dispose();
+    });
+
+    it('should apply legacy ticker-eventType cooldowns across all severities after migration', () => {
+      const now = Date.now();
+      const legacyAwareFilter = new AlertFilter({
+        tickerCooldownMinutes: 60,
+        nowFn: () => new Date(now),
+      });
+
+      (legacyAwareFilter as {
+        loadCooldownEntries(entries: Record<string, number>): void;
+      }).loadCooldownEntries({
+        'NVDA:earnings_beat': now - 5_000,
+      });
+
+      const result = legacyAwareFilter.check(
+        makeEvent({
+          source: 'truth-social',
+          type: 'post',
+          metadata: { ticker: 'NVDA', eventType: 'earnings_beat' },
+        }),
+        makeLlmResult({ eventType: 'earnings_beat', severity: 'CRITICAL' }),
       );
 
       expect(result.pass).toBe(false);

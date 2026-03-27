@@ -40,6 +40,9 @@ const RETROSPECTIVE_PATTERNS = [
   /\bwhat happened\b/i,
   /\bcall transcript\b/i,
   /\bearnings call\b/i,
+  /\b(?:live updates?|live blog|as it happened)\b/i,
+  /\b(?:explainer|explained|recap|roundup|digest)\b/i,
+  /\b(?:after|following)\b.+\b(?:earnings|results|the call|the report)\b/i,
   /\banalyst (?:says?|thinks?|believes?)\b/i,
   /\b(?:could|may|might|should you)\b.+\b(?:soar|buy|sell|invest)\b/i,
   /\b(?:top|best|worst)\s+\d+\s+(?:stocks?|picks?|buys?)\b/i,
@@ -65,7 +68,60 @@ const CLICKBAIT_PATTERNS = [
   /\b(?:billionaire|millionaire|warren buffett|cathie wood)\b.+\b(?:buy|sell|load|dump)\b/i,
   /\b(?:right now|today)\b.*[.!]$/i,
   /\byour portfolio\b/i,
+  /\b(?:average retiree|retirees?|retirement savers?)\b.+\b(?:gets?|need(?:s)?|should|must|can|could)\b/i,
+  /\b(?:social security|401\(k\)|ira)\b.+\b(?:check|benefit|claim|withdraw|retire|income)\b/i,
+  /\b(?:passive income|millionaire maker|set for life)\b/i,
+  /\bturn \$?\d[\d,]*(?:\s+into|\s+to)\s+\$?\d[\d,]*/i,
+  /\b(?:should you buy|is it time to buy|is it a buy)\b/i,
+  /\b(?:buy|sell|hold)\b.+\b(?:now|today)\b/i,
 ];
+
+const NEWSWIRE_NEGATIVE_PATTERNS = [
+  /\b(?:will|to)\s+(?:present|participate|host|attend)\b.+\b(?:conference|summit|webcast|fireside chat|investor day|forum|expo)\b/i,
+  /\b(?:announces?|scheduled?|schedules?)\b.+\b(?:conference call|webcast|presentation|fireside chat|investor day)\b/i,
+  /\b(?:conference|webcast|fireside chat|investor day|forum|expo)\b/i,
+  /\b(?:rings?|ringing)\b.+\bopening bell\b/i,
+  /\b(?:publishes?|releases?)\b.+\b(?:sustainability|esg|csr)\s+report\b/i,
+  /\b(?:opens?|opening)\b.+\b(?:store|location|branch|office|showroom)\b/i,
+  /\b(?:launches?|unveils?)\b.+\b(?:website|brand campaign|marketing campaign|podcast|newsletter)\b/i,
+  /\b(?:partners?|collaborates?)\s+with\b.+\b(?:university|college|nonprofit|association)\b/i,
+];
+
+type CooldownSeverity = NonNullable<LlmClassificationResult['severity']>;
+
+const COOLDOWN_SEVERITIES: readonly CooldownSeverity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+const NEXT_SESSION_SOURCES = new Set([
+  'truth-social',
+  'whitehouse',
+  'federal-register',
+  'sec-regulatory',
+  'fed',
+  'treasury',
+  'commerce',
+  'cfpb',
+  'ftc',
+]);
+
+const OFFICIAL_FILING_SOURCES = new Set([
+  'sec-edgar',
+  'fda',
+  'trading-halt',
+  'pr-newswire',
+  'businesswire',
+  'globenewswire',
+  'company-ir',
+  'ir-monitor',
+]);
+
+const FAST_MOVING_SOURCES = new Set([
+  'breaking-news',
+  'yahoo-finance',
+  'reddit',
+  'stocktwits',
+  'social-signal',
+  'community-post',
+]);
 
 function loadDefaultWatchlist(): string[] {
   try {
@@ -135,10 +191,10 @@ export class AlertFilter {
       ? (event.metadata['ticker'] as string).toUpperCase()
       : undefined;
 
-    // Rule 0: Staleness — unified 2h during market hours, session-aware for off-hours
+    // Rule 0: Staleness — source-aware thresholds with next-session carry for official sources
     const now = this.nowFn();
     const eventAge = now.getTime() - event.timestamp.getTime();
-    const effectiveMaxAge = this.getEffectiveMaxAge(now);
+    const effectiveMaxAge = this.getEffectiveMaxAge(event, now);
     if (eventAge > effectiveMaxAge) {
       return { pass: false, reason: `stale event: ${Math.round(eventAge / 60_000)}min old (max ${Math.round(effectiveMaxAge / 60_000)}min)`, enrichWithLLM: false };
     }
@@ -209,19 +265,41 @@ export class AlertFilter {
   }
 
   /**
-   * Session-aware max age calculation.
-   * During market hours (RTH/PRE/POST): 2 hours.
-   * During CLOSED: max(2h, nextSessionOpen - now) so events remain valid
-   * until the next weekday session opens.
+   * Source-aware staleness calculation.
+   * Fast-moving secondary/social sources expire quickly during active sessions.
+   * Official filings / press releases get a wider window, and policy/official
+   * sources stay valid until the next liquid session when markets are closed.
    */
-  private getEffectiveMaxAge(now: Date): number {
+  private getEffectiveMaxAge(event: RawEvent, now: Date): number {
     const session = getMarketSession(now);
-    if (session === 'CLOSED') {
-      const nextOpenMs = getNextSessionOpenMs(now);
-      const msUntilOpen = nextOpenMs - now.getTime();
-      return Math.max(this.maxAgeMs, msUntilOpen);
+    const source = event.source.toLowerCase();
+
+    if (NEXT_SESSION_SOURCES.has(source)) {
+      return this.getNextSessionAwareMaxAge(now, this.maxAgeMs);
     }
-    return this.maxAgeMs; // 2h default
+
+    if (OFFICIAL_FILING_SOURCES.has(source)) {
+      if (session === 'RTH') return 30 * 60_000;
+      if (session === 'PRE' || session === 'POST') return 90 * 60_000;
+      return this.getNextSessionAwareMaxAge(now, 90 * 60_000);
+    }
+
+    if (FAST_MOVING_SOURCES.has(source)) {
+      if (session === 'RTH') return 15 * 60_000;
+      return 30 * 60_000;
+    }
+
+    return this.getNextSessionAwareMaxAge(now, this.maxAgeMs);
+  }
+
+  private getNextSessionAwareMaxAge(now: Date, fallbackMs: number): number {
+    if (getMarketSession(now) !== 'CLOSED') {
+      return fallbackMs;
+    }
+
+    const nextOpenMs = getNextSessionOpenMs(now);
+    const msUntilOpen = nextOpenMs - now.getTime();
+    return Math.max(fallbackMs, msUntilOpen);
   }
 
   private loadCooldowns(): void {
@@ -283,6 +361,7 @@ export class AlertFilter {
     ];
 
     const hasPassKeyword = NEWSWIRE_PASS_PATTERNS.some((kw) => titleAndBody.includes(kw));
+    const matchedNegativePattern = NEWSWIRE_NEGATIVE_PATTERNS.find((pattern) => pattern.test(titleAndBody));
 
     // If we have a recognized ticker on watchlist → pass
     if (ticker && this.watchlist.has(ticker)) {
@@ -305,6 +384,14 @@ export class AlertFilter {
     // No ticker but has a strong keyword → pass (LLM Judge will further filter)
     if (!ticker && hasPassKeyword) {
       return { pass: true, reason: 'newswire keyword match (no ticker)', enrichWithLLM: true };
+    }
+
+    if (matchedNegativePattern && !hasPassKeyword) {
+      return {
+        pass: false,
+        reason: `newswire noise: matched "${matchedNegativePattern.source}"`,
+        enrichWithLLM: false,
+      };
     }
 
     // Has ticker but no keyword → pass with LLM enrichment (let LLM Judge decide)
@@ -394,10 +481,11 @@ export class AlertFilter {
     if (!ticker || !result.pass) return result;
 
     const eventType = this.resolveEventType(event, llmResult);
+    const severity = this.resolveSeverity(event, llmResult);
     const now = this.nowFn().getTime();
     this.pruneExpired(now);
 
-    const lastAlert = this.getCooldownLookupKeys(ticker, eventType)
+    const lastAlert = this.getCooldownLookupKeys(ticker, eventType, severity)
       .map((key) => this.cooldownMap.get(key))
       .find((ts): ts is number => typeof ts === 'number');
 
@@ -409,7 +497,7 @@ export class AlertFilter {
       };
     }
 
-    const writeKey = eventType ? `${ticker}:${eventType}` : ticker;
+    const writeKey = this.getCooldownWriteKey(ticker, eventType, severity);
     this.cooldownMap.set(writeKey, now);
     if (this.cooldownMap.size > this.maxMapSize) {
       this.pruneExpired(now);
@@ -425,7 +513,7 @@ export class AlertFilter {
         continue;
       }
 
-      const normalizedKey = key.includes(':') ? key.toUpperCase() : `${key.toUpperCase()}:*`;
+      const normalizedKey = this.normalizeCooldownKey(key);
       this.cooldownMap.set(normalizedKey, ts);
     }
 
@@ -467,12 +555,72 @@ export class AlertFilter {
     return undefined;
   }
 
-  private getCooldownLookupKeys(ticker: string, eventType?: string): string[] {
-    const keys = eventType
-      ? [`${ticker}:${eventType}`, ticker, `${ticker}:*`]
-      : [ticker, `${ticker}:*`];
+  private resolveSeverity(
+    event: RawEvent,
+    llmResult?: LlmClassificationResult,
+  ): CooldownSeverity | undefined {
+    const metadataSeverity = event.metadata?.['severity'];
+    if (isCooldownSeverity(metadataSeverity)) {
+      return metadataSeverity;
+    }
+
+    if (isCooldownSeverity(llmResult?.severity)) {
+      return llmResult.severity;
+    }
+
+    return undefined;
+  }
+
+  private getCooldownLookupKeys(
+    ticker: string,
+    eventType?: string,
+    severity?: CooldownSeverity,
+  ): string[] {
+    const normalizedType = normalizeEventType(eventType);
+    const blockingSeverities = severity
+      ? [...COOLDOWN_SEVERITIES.slice(getSeverityIndex(severity)), '*']
+      : ['*'];
+    const typeKeys = normalizedType ? [normalizedType, '*'] : ['*'];
+    const keys: string[] = [];
+
+    for (const typeKey of typeKeys) {
+      for (const severityKey of blockingSeverities) {
+        keys.push(`${ticker}:${typeKey}:${severityKey}`);
+      }
+    }
+
+    if (normalizedType) {
+      keys.push(`${ticker}:${normalizedType}`);
+    }
+    keys.push(ticker);
 
     return [...new Set(keys)];
+  }
+
+  private getCooldownWriteKey(
+    ticker: string,
+    eventType?: string,
+    severity?: CooldownSeverity,
+  ): string {
+    return `${ticker}:${normalizeEventType(eventType) ?? '*'}:${severity ?? '*'}`;
+  }
+
+  private normalizeCooldownKey(key: string): string {
+    const parts = key.split(':');
+
+    if (parts.length === 1) {
+      return `${parts[0]!.toUpperCase()}:*:*`;
+    }
+
+    if (parts.length === 2) {
+      return `${parts[0]!.toUpperCase()}:${normalizeEventType(parts[1]) ?? '*'}:*`;
+    }
+
+    const ticker = parts[0]!.toUpperCase();
+    const severity = parts[parts.length - 1]!;
+    const eventTypeValue = parts.slice(1, -1).join(':');
+
+    return `${ticker}:${normalizeEventType(eventTypeValue) ?? '*'}:${isCooldownSeverity(severity) ? severity : '*'}`;
   }
 }
 
@@ -483,6 +631,19 @@ function num(envKey: string, fallback: number): number {
   if (v == null) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeEventType(eventType?: string): string | undefined {
+  const normalized = eventType?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function isCooldownSeverity(value: unknown): value is CooldownSeverity {
+  return typeof value === 'string' && COOLDOWN_SEVERITIES.includes(value as CooldownSeverity);
+}
+
+function getSeverityIndex(severity: CooldownSeverity): number {
+  return COOLDOWN_SEVERITIES.indexOf(severity);
 }
 
 function isSecForm4Event(event: RawEvent): boolean {
