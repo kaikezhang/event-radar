@@ -35,13 +35,20 @@ export function resolvePoliticalClassificationResult(
     return ruleResult;
   }
 
+  const keepRuleSeverity = shouldKeepPoliticalRuleSeverity(ruleResult);
+  const nextPriority = Math.min(ruleResult.priority, llmResult.priority);
+  const shouldPreserveRuleConfidence = keepRuleSeverity || nextPriority === ruleResult.priority;
+  const nextConfidence = shouldPreserveRuleConfidence
+    ? Math.max(ruleResult.confidence, llmResult.confidence)
+    : llmResult.confidence;
+
   return {
     ...ruleResult,
-    severity: shouldKeepPoliticalRuleSeverity(ruleResult)
+    severity: keepRuleSeverity
       ? ruleResult.severity
       : llmResult.severity,
-    priority: Math.min(ruleResult.priority, llmResult.priority),
-    confidence: llmResult.confidence,
-    confidenceLevel: deriveConfidenceLevel(llmResult.confidence),
+    priority: nextPriority,
+    confidence: nextConfidence,
+    confidenceLevel: deriveConfidenceLevel(nextConfidence),
   };
 }
