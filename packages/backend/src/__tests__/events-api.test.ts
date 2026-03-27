@@ -246,6 +246,18 @@ describe('GET /api/events', () => {
     expect(explicitStocktwits.statusCode).toBe(200);
     expect(explicitStocktwits.json().total).toBe(1);
     expect(explicitStocktwits.json().data[0]?.source).toBe('stocktwits');
+
+    const stocktwitsSearch = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=StockTwits',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(stocktwitsSearch.statusCode).toBe(200);
+    expect(stocktwitsSearch.json().total).toBe(1);
+    expect(stocktwitsSearch.json().data[0]?.source).toBe('stocktwits');
   });
 
   it('should accept apiKey query params on the list route', async () => {
