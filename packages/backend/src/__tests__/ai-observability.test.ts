@@ -5,7 +5,15 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { ScannerHealth } from '@event-radar/shared';
 import { buildApp } from '../app.js';
 import { resetMetrics } from '../metrics.js';
-import { registerAiObservabilityRoutes, isWithinSchedule } from '../routes/ai-observability.js';
+import {
+  registerAiObservabilityRoutes,
+  isWithinSchedule,
+  normalizeObservabilityScannerName,
+  getSourceNamesForScanner,
+} from '../routes/ai-observability.js';
+import {
+  getRuntimeScannerStatus,
+} from '../utils/scanner-runtime-status.js';
 import { createTestDb, safeClose, safeCloseServer } from './helpers/test-db.js';
 import type { Database } from '../db/connection.js';
 
@@ -76,15 +84,126 @@ describe('AI Observability — /api/v1/ai/pulse', () => {
   });
 });
 
-describe('Pulse response shape (with mock DB)', () => {
-  // These tests verify the response structure is correct
-  // by checking known shape constraints
+// ---- Helper unit tests ----
 
-  it('computeTrend returns correct direction', async () => {
-    // Import the module to test helper functions
-    // We test via the endpoint behavior since helpers aren't exported
-    // Just verify the endpoint exists and responds with known status codes
-    expect(true).toBe(true);
+describe('normalizeObservabilityScannerName', () => {
+  it('maps known aliases to canonical names', () => {
+    expect(normalizeObservabilityScannerName('pr-newswire')).toBe('newswire');
+    expect(normalizeObservabilityScannerName('businesswire')).toBe('newswire');
+    expect(normalizeObservabilityScannerName('globenewswire')).toBe('newswire');
+    expect(normalizeObservabilityScannerName('x')).toBe('x-elonmusk');
+    expect(normalizeObservabilityScannerName('twitter')).toBe('x-elonmusk');
+    expect(normalizeObservabilityScannerName('company-ir')).toBe('ir-monitor');
+    expect(normalizeObservabilityScannerName('doj')).toBe('doj-antitrust');
+  });
+
+  it('returns the name unchanged when there is no alias', () => {
+    expect(normalizeObservabilityScannerName('stocktwits')).toBe('stocktwits');
+    expect(normalizeObservabilityScannerName('trading-halt')).toBe('trading-halt');
+  });
+
+  it('trims and lowercases input', () => {
+    expect(normalizeObservabilityScannerName('  PR-Newswire  ')).toBe('newswire');
+    expect(normalizeObservabilityScannerName('X')).toBe('x-elonmusk');
+  });
+});
+
+describe('getSourceNamesForScanner', () => {
+  it('returns all aliases plus the canonical name for newswire', () => {
+    const sources = getSourceNamesForScanner('newswire');
+    expect(sources).toContain('newswire');
+    expect(sources).toContain('pr-newswire');
+    expect(sources).toContain('businesswire');
+    expect(sources).toContain('globenewswire');
+  });
+
+  it('returns aliases for x-elonmusk', () => {
+    const sources = getSourceNamesForScanner('x-elonmusk');
+    expect(sources).toContain('x-elonmusk');
+    expect(sources).toContain('x');
+    expect(sources).toContain('twitter');
+  });
+
+  it('returns just the name when no aliases exist', () => {
+    const sources = getSourceNamesForScanner('stocktwits');
+    expect(sources).toEqual(['stocktwits']);
+  });
+});
+
+describe('getRuntimeScannerStatus — schedule-aware', () => {
+  it('returns down when stale and within schedule', () => {
+    const nowMs = new Date('2026-03-16T14:00:00Z').getTime(); // Monday market hours
+    const status = getRuntimeScannerStatus(
+      {
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-13T20:00:00Z'), // Friday — very stale
+        errorCount: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+      },
+      nowMs,
+      { withinSchedule: true },
+    );
+    expect(status).toBe('down');
+  });
+
+  it('returns original status when stale but outside schedule', () => {
+    const nowMs = new Date('2026-03-15T18:00:00Z').getTime(); // Sunday
+    const status = getRuntimeScannerStatus(
+      {
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-13T20:00:00Z'), // Friday
+        errorCount: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+      },
+      nowMs,
+      { withinSchedule: false },
+    );
+    expect(status).toBe('healthy');
+  });
+
+  it('returns down when explicitly reported down regardless of schedule', () => {
+    const nowMs = new Date('2026-03-15T18:00:00Z').getTime();
+    const status = getRuntimeScannerStatus(
+      {
+        status: 'down',
+        lastScanAt: new Date('2026-03-15T17:58:00Z'), // recent, not stale
+        errorCount: 3,
+        currentIntervalMs: 5 * 60 * 1000,
+      },
+      nowMs,
+      { withinSchedule: false },
+    );
+    // Not stale, so returns health.status which is 'down'
+    expect(status).toBe('down');
+  });
+
+  it('returns down when no lastScanAt and errors > 0 even if outside schedule', () => {
+    const nowMs = Date.now();
+    const status = getRuntimeScannerStatus(
+      {
+        status: 'healthy',
+        lastScanAt: null,
+        errorCount: 1,
+        currentIntervalMs: 5 * 60 * 1000,
+      },
+      nowMs,
+      { withinSchedule: false },
+    );
+    expect(status).toBe('down');
+  });
+
+  it('defaults withinSchedule to true for backwards compat', () => {
+    const nowMs = new Date('2026-03-15T18:00:00Z').getTime();
+    const status = getRuntimeScannerStatus(
+      {
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-13T20:00:00Z'),
+        errorCount: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+      },
+      nowMs,
+    );
+    expect(status).toBe('down');
   });
 });
 
@@ -99,6 +218,7 @@ describe('AI Observability runtime and alias handling', () => {
   afterEach(async () => {
     resetMetrics();
     await db.execute(sql`DELETE FROM pipeline_audit`);
+    await db.execute(sql`DELETE FROM events`);
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -107,21 +227,38 @@ describe('AI Observability runtime and alias handling', () => {
     await safeClose(client);
   });
 
-  async function seedAuditRow(source: string, createdAt: string) {
+  async function seedAuditRow(
+    source: string,
+    createdAt: string,
+    overrides: Partial<{
+      outcome: string;
+      stopped_at: string;
+      severity: string;
+      ticker: string;
+      confidence: number;
+      reason: string;
+      reason_category: string;
+      historical_match: boolean;
+    }> = {},
+  ) {
+    const {
+      outcome = 'delivered',
+      stopped_at = 'delivery',
+      severity = null,
+      ticker = null,
+      confidence = null,
+      reason = null,
+      reason_category = null,
+      historical_match = null,
+    } = overrides;
     await db.execute(sql`
       INSERT INTO pipeline_audit (
-        event_id,
-        source,
-        title,
-        outcome,
-        stopped_at,
-        created_at
+        event_id, source, title, outcome, stopped_at, severity, ticker,
+        confidence, reason, reason_category, historical_match, created_at
       ) VALUES (
-        ${crypto.randomUUID()},
-        ${source},
-        ${`${source} event`},
-        'delivered',
-        'delivery',
+        ${crypto.randomUUID()}, ${source}, ${`${source} event`},
+        ${outcome}, ${stopped_at}, ${severity}, ${ticker},
+        ${confidence}, ${reason}, ${reason_category}, ${historical_match},
         ${createdAt}
       )
     `);
@@ -153,7 +290,7 @@ describe('AI Observability runtime and alias handling', () => {
     `);
   }
 
-  async function requestPulse(healthList: ScannerHealth[]) {
+  function buildServer(healthList: ScannerHealth[]) {
     const server = Fastify({ logger: false });
     registerAiObservabilityRoutes(server, {
       apiKey: TEST_API_KEY,
@@ -163,6 +300,11 @@ describe('AI Observability runtime and alias handling', () => {
       } as never,
       startTime: Date.now() - 12 * 3_600_000,
     });
+    return server;
+  }
+
+  async function requestPulse(healthList: ScannerHealth[]) {
+    const server = buildServer(healthList);
     await server.ready();
 
     try {
@@ -335,6 +477,375 @@ describe('AI Observability runtime and alias handling', () => {
     expect(body.health.alerts).not.toContainEqual(
       expect.objectContaining({ code: 'scanner_silent', scanner: 'federal-register' }),
     );
+  });
+
+  // ---- Schedule-aware runtime stale handling ----
+
+  it('does NOT mark off-schedule scanners as down due to staleness', async () => {
+    vi.useFakeTimers();
+    // Sunday March 15 2026 2pm ET = 18:00 UTC
+    vi.setSystemTime(new Date('2026-03-15T18:00:00.000Z'));
+
+    await seedAuditRow('stocktwits', '2026-03-15T17:50:00.000Z');
+
+    const body = await requestPulse([
+      {
+        scanner: 'stocktwits',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-15T17:59:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+      {
+        scanner: 'trading-halt',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-13T20:00:00.000Z'), // Friday close — very stale
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    const tradingHalt = body.scanners.find(
+      (s: { name: string }) => s.name === 'trading-halt',
+    );
+    // runtimeStatus should NOT be 'down' — it's outside schedule
+    expect(tradingHalt.runtimeStatus).toBe('healthy');
+    expect(tradingHalt.withinSchedule).toBe(false);
+    // status should not be forced to 'down'
+    expect(tradingHalt.status).not.toBe('down');
+
+    // No scanner_runtime_down alert for trading-halt
+    expect(body.health.alerts).not.toContainEqual(
+      expect.objectContaining({ code: 'scanner_runtime_down', scanner: 'trading-halt' }),
+    );
+    expect(body.anomalies).not.toContainEqual(
+      expect.objectContaining({ type: 'scanner_runtime_down', scanner: 'trading-halt' }),
+    );
+  });
+
+  it('marks stale in-schedule scanners as down normally', async () => {
+    vi.useFakeTimers();
+    // Monday March 16 2026, 10am ET = 14:00 UTC
+    vi.setSystemTime(new Date('2026-03-16T14:00:00.000Z'));
+
+    await seedAuditRow('stocktwits', '2026-03-16T13:50:00.000Z');
+
+    const body = await requestPulse([
+      {
+        scanner: 'stocktwits',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-16T13:59:00.000Z'),
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+      {
+        scanner: 'trading-halt',
+        status: 'healthy',
+        lastScanAt: new Date('2026-03-13T20:00:00.000Z'), // Friday — stale during Monday market hours
+        errorCount: 0,
+        consecutiveErrors: 0,
+        currentIntervalMs: 5 * 60 * 1000,
+        inBackoff: false,
+      },
+    ]);
+
+    const tradingHalt = body.scanners.find(
+      (s: { name: string }) => s.name === 'trading-halt',
+    );
+    expect(tradingHalt.runtimeStatus).toBe('down');
+    expect(tradingHalt.withinSchedule).toBe(true);
+
+    expect(body.anomalies).toContainEqual(
+      expect.objectContaining({ type: 'scanner_runtime_down', scanner: 'trading-halt' }),
+    );
+  });
+
+  // ---- /api/v1/ai/scanner/:name alias normalization ----
+
+  describe('/api/v1/ai/scanner/:name', () => {
+    it('returns 401 without API key', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/scanner/newswire',
+        });
+        expect(res.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('normalizes alias names so pr-newswire returns newswire data', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-16T14:00:00.000Z'));
+
+      await seedAuditRow('pr-newswire', '2026-03-16T13:00:00.000Z', { ticker: 'AAPL' });
+      await seedAuditRow('businesswire', '2026-03-16T13:30:00.000Z', { ticker: 'MSFT' });
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        // Query via alias 'pr-newswire' — should normalize to 'newswire'
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/scanner/pr-newswire?days=1',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.scanner).toBe('newswire');
+        expect(body.stats.totalEvents).toBe(2);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns same results when queried by canonical name', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-16T14:00:00.000Z'));
+
+      await seedAuditRow('pr-newswire', '2026-03-16T13:00:00.000Z');
+      await seedAuditRow('businesswire', '2026-03-16T13:30:00.000Z');
+      await seedAuditRow('globenewswire', '2026-03-16T13:45:00.000Z');
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/scanner/newswire?days=1',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.scanner).toBe('newswire');
+        expect(body.stats.totalEvents).toBe(3);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('normalizes x to x-elonmusk', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-16T14:00:00.000Z'));
+
+      await seedAuditRow('x', '2026-03-16T13:00:00.000Z');
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/scanner/x?days=1',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.scanner).toBe('x-elonmusk');
+        expect(body.stats.totalEvents).toBe(1);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns empty stats for a scanner with no data', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/scanner/stocktwits?days=1',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.scanner).toBe('stocktwits');
+        expect(body.stats.totalEvents).toBe(0);
+        expect(body.timeline).toEqual([]);
+        expect(body.topTickers).toEqual([]);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+  });
+
+  // ---- /api/v1/ai/daily-report ----
+
+  describe('/api/v1/ai/daily-report', () => {
+    it('returns 401 without API key', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/daily-report',
+        });
+        expect(res.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns 400 for invalid date format', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/daily-report?date=not-a-date',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error).toContain('Invalid date');
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns report structure for a valid date', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-16T20:00:00.000Z'));
+
+      await seedAuditRow('stocktwits', '2026-03-16T13:00:00.000Z', {
+        outcome: 'delivered',
+        severity: 'HIGH',
+        ticker: 'AAPL',
+      });
+      await seedAuditRow('stocktwits', '2026-03-16T14:00:00.000Z', {
+        outcome: 'filtered',
+        stopped_at: 'llm_judge',
+        severity: 'LOW',
+        confidence: 0.3,
+        reason: 'low relevance',
+        reason_category: 'low_relevance',
+      });
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/daily-report?date=2026-03-16',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.date).toBe('2026-03-16');
+        expect(body.summary).toBeDefined();
+        expect(body.summary.eventsTotal).toBe(2);
+        expect(body.summary.delivered).toBe(1);
+        expect(body.scannerBreakdown).toBeDefined();
+        expect(Array.isArray(body.scannerBreakdown)).toBe(true);
+        expect(body.judgeAnalysis).toBeDefined();
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('defaults to current date when no date param', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-16T15:00:00.000Z'));
+
+      await seedAuditRow('stocktwits', '2026-03-16T14:00:00.000Z');
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/daily-report',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.date).toBe('2026-03-16');
+        expect(body.summary.eventsTotal).toBeGreaterThanOrEqual(1);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+  });
+
+  // ---- /api/v1/ai/trace/:eventId ----
+
+  describe('/api/v1/ai/trace/:eventId', () => {
+    it('returns 401 without API key', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/trace/some-event-id',
+        });
+        expect(res.statusCode).toBe(401);
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns 404 for non-existent event', async () => {
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/v1/ai/trace/non-existent-event-id',
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(404);
+        expect(res.json().error).toContain('not found');
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
+
+    it('returns trace data for a known event', async () => {
+      const eventId = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO pipeline_audit (
+          event_id, source, title, outcome, stopped_at, severity, ticker,
+          confidence, created_at
+        ) VALUES (
+          ${eventId}, 'stocktwits', 'Test trace event',
+          'delivered', 'delivery', 'HIGH', 'TSLA',
+          ${0.95}, '2026-03-16T14:00:00.000Z'
+        )
+      `);
+
+      const server = buildServer([]);
+      await server.ready();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: `/api/v1/ai/trace/${eventId}`,
+          headers: { 'x-api-key': TEST_API_KEY },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.eventId).toBe(eventId);
+        expect(body.source).toBe('stocktwits');
+        expect(body.title).toBe('Test trace event');
+        expect(body.outcome).toBe('delivered');
+        expect(body.severity).toBe('HIGH');
+        expect(body.ticker).toBe('TSLA');
+        expect(body.timeline).toBeDefined();
+        expect(Array.isArray(body.timeline)).toBe(true);
+        // Should have at least the final outcome stage
+        expect(body.timeline).toContainEqual(
+          expect.objectContaining({ stage: 'delivered' }),
+        );
+      } finally {
+        await safeCloseServer(server);
+      }
+    });
   });
 });
 
@@ -514,6 +1025,24 @@ describe('Schedule-aware health scoring', () => {
         expect(alert.message).toContain('outside schedule');
       }
     }
+
+    // No scanner_runtime_down alerts for off-schedule scanners
+    expect(body.health.alerts).not.toContainEqual(
+      expect.objectContaining({ code: 'scanner_runtime_down', scanner: 'trading-halt' }),
+    );
+    expect(body.health.alerts).not.toContainEqual(
+      expect.objectContaining({ code: 'scanner_runtime_down', scanner: 'federal-register' }),
+    );
+
+    // runtimeStatus should be healthy, not down
+    const tradingHalt = body.scanners.find(
+      (s: { name: string }) => s.name === 'trading-halt',
+    );
+    expect(tradingHalt.runtimeStatus).toBe('healthy');
+    const fedReg = body.scanners.find(
+      (s: { name: string }) => s.name === 'federal-register',
+    );
+    expect(fedReg.runtimeStatus).toBe('healthy');
   });
 
   it('weekday market-hours health score penalizes silent market scanners', async () => {
@@ -554,12 +1083,6 @@ describe('Schedule-aware health scoring', () => {
     expect(tradingHalt.schedule).toBe('market-hours');
     expect(tradingHalt.withinSchedule).toBe(true);
 
-    // trading-halt has activity in window (seeded 2h ago audit row), so it's active.
-    // Let's check that the schedule fields are correct at least.
-    // The scanner_silent alert depends on no events within the 30m window — but
-    // our seeded event at 12:00 is within the 30m default window? No, 30m from 14:00 = 13:30,
-    // so 12:00 is outside. But it IS within the 30-day lastSeen window.
-    // With lastSeenAt at 12:00 and now at 14:00, silence = 2h → warning.
     expect(body.health.alerts).toContainEqual(
       expect.objectContaining({
         code: 'scanner_silent',

@@ -128,9 +128,23 @@ const OBSERVABILITY_SOURCE_ALIASES: Record<string, string> = {
   'doj': 'doj-antitrust',
 };
 
-function normalizeObservabilityScannerName(name: string): string {
+export function normalizeObservabilityScannerName(name: string): string {
   const normalized = name.trim().toLowerCase();
   return OBSERVABILITY_SOURCE_ALIASES[normalized] ?? normalized;
+}
+
+/**
+ * Given a canonical scanner name, return all DB source names that map to it.
+ * Includes the canonical name itself plus any aliases.
+ */
+export function getSourceNamesForScanner(canonicalName: string): string[] {
+  const sources = new Set<string>([canonicalName]);
+  for (const [alias, target] of Object.entries(OBSERVABILITY_SOURCE_ALIASES)) {
+    if (target === canonicalName) {
+      sources.add(alias);
+    }
+  }
+  return [...sources];
 }
 
 function toIsoString(value: unknown): string | null {
@@ -489,9 +503,10 @@ export function registerAiObservabilityRoutes(
     // Build scanner status array
     const runtimeHealth = scannerRegistry.healthAll().map((health) => {
       const name = normalizeObservabilityScannerName(health.scanner);
+      const withinSchedule = isWithinSchedule(name, now);
       return {
         name,
-        status: getRuntimeScannerStatus(health, now.getTime()),
+        status: getRuntimeScannerStatus(health, now.getTime(), { withinSchedule }),
         lastScanAt: toIsoString(health.lastScanAt),
         currentIntervalMs: health.currentIntervalMs ?? null,
         staleAfterMs: getScannerStaleThresholdMs(health),
@@ -1389,7 +1404,10 @@ export function registerAiObservabilityRoutes(
       return reply.status(503).send({ error: 'Database not available' });
     }
 
-    const { name } = request.params;
+    const rawName = request.params.name;
+    const canonicalName = normalizeObservabilityScannerName(rawName);
+    const sourceNames = getSourceNamesForScanner(canonicalName);
+    const sourceFilter = sql`source IN (${sql.join(sourceNames.map(s => sql`${s}`), sql`, `)})`;
     const days = Math.min(Math.max(Number(request.query.days) || 7, 1), 30);
     const periodStart = new Date(Date.now() - days * 86_400_000);
     const prevPeriodStart = new Date(periodStart.getTime() - days * 86_400_000);
@@ -1406,7 +1424,7 @@ export function registerAiObservabilityRoutes(
           WHEN severity = 'MEDIUM' THEN 2 WHEN severity = 'LOW' THEN 1 ELSE 0
         END), 2) as avg_severity_score
       FROM pipeline_audit
-      WHERE source = ${name} AND created_at >= ${periodStart}
+      WHERE ${sourceFilter} AND created_at >= ${periodStart}
     `);
     const stats = statsRows.rows[0] ?? {};
     const total = Number(stats.total ?? 0);
@@ -1418,7 +1436,7 @@ export function registerAiObservabilityRoutes(
     const prevStatsRows = await db.execute(sql`
       SELECT COUNT(*) as total
       FROM pipeline_audit
-      WHERE source = ${name}
+      WHERE ${sourceFilter}
         AND created_at >= ${prevPeriodStart}
         AND created_at < ${periodStart}
     `);
@@ -1430,7 +1448,7 @@ export function registerAiObservabilityRoutes(
              COUNT(*) as events,
              COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered
       FROM pipeline_audit
-      WHERE source = ${name} AND created_at >= ${periodStart}
+      WHERE ${sourceFilter} AND created_at >= ${periodStart}
       GROUP BY DATE(created_at)
       ORDER BY day
     `);
@@ -1440,7 +1458,7 @@ export function registerAiObservabilityRoutes(
       SELECT ticker, COUNT(*) as count,
              COUNT(*) FILTER (WHERE outcome = 'delivered') as delivered_count
       FROM pipeline_audit
-      WHERE source = ${name} AND created_at >= ${periodStart}
+      WHERE ${sourceFilter} AND created_at >= ${periodStart}
         AND ticker IS NOT NULL
       GROUP BY ticker
       ORDER BY count DESC
@@ -1448,7 +1466,7 @@ export function registerAiObservabilityRoutes(
     `);
 
     return reply.send({
-      scanner: name,
+      scanner: canonicalName,
       period: { start: periodStart.toISOString(), end: new Date().toISOString(), days },
       stats: {
         totalEvents: total,

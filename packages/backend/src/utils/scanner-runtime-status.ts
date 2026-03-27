@@ -20,16 +20,28 @@ export function getScannerStaleThresholdMs(
   );
 }
 
+export interface RuntimeStatusOptions {
+  /** When false, staleness alone does not downgrade to 'down'. */
+  withinSchedule?: boolean;
+}
+
 export function getRuntimeScannerStatus(
   health: Pick<ScannerHealth, 'status' | 'lastScanAt' | 'errorCount' | 'currentIntervalMs'>,
   nowMs = Date.now(),
+  options: RuntimeStatusOptions = {},
 ): ScannerHealth['status'] {
+  const { withinSchedule = true } = options;
+
   if (health.lastScanAt) {
     const lastScanMs = new Date(health.lastScanAt).getTime();
     if (
       Number.isFinite(lastScanMs)
       && nowMs - lastScanMs > getScannerStaleThresholdMs(health)
     ) {
+      // Off-schedule scanners are expected to be stale — don't mark down
+      if (!withinSchedule) {
+        return health.status;
+      }
       return 'down';
     }
   } else if (health.errorCount > 0) {
