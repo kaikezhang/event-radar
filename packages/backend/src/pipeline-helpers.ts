@@ -9,6 +9,7 @@ export const PRIMARY_SOURCES_SET = new Set([
 export function categorizeFilterReason(reason: string): string {
   if (reason.includes('stale')) return 'stale';
   if (reason.includes('retrospective')) return 'retrospective';
+  if (reason.includes('clickbait')) return 'clickbait';
   if (reason.includes('keyword')) return 'keyword';
   if (reason.includes('cooldown')) return 'cooldown';
   if (reason.includes('social')) return 'social_noise';
