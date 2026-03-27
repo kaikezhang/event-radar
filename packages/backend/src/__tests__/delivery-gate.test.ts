@@ -133,7 +133,7 @@ describe('DeliveryGate', () => {
 
   it('no ticker + not macro → archive', () => {
     const result = gate.evaluate(makeInput({
-      event: makeEvent({ source: 'reddit', type: 'social', metadata: {} }),
+      event: makeEvent({ source: 'newswire', type: 'social', metadata: {} }),
       enrichment: makeEnrichment({ tickers: [] }),
     }));
     expect(result.pass).toBe(false);

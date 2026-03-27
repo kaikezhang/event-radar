@@ -43,7 +43,6 @@ const MACRO_EVENT_TYPES = new Set([
   'economic_data',
   'fed_announcement',
   'executive_order',
-  'congress_bill',
   'federal_register',
 ]);
 

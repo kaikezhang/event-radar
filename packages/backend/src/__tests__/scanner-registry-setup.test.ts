@@ -44,25 +44,15 @@ describe('scanner registry setup', () => {
     expect(registeredNames).toContain('trading-halt');
   });
 
-  it('ignores removed scanner env flags', () => {
+  it('registers nothing when all live scanners are disabled', () => {
+    process.env.TRUTH_SOCIAL_ENABLED = 'false';
     process.env.BREAKING_NEWS_ENABLED = 'false';
     process.env.FDA_ENABLED = 'false';
     process.env.FEDERAL_REGISTER_ENABLED = 'false';
-    process.env.DUMMY_SCANNER_ENABLED = 'true';
-    process.env.X_SCANNER_ENABLED = 'true';
-    process.env.REDDIT_ENABLED = 'true';
-    process.env.STOCKTWITS_ENABLED = 'true';
     process.env.ECON_CALENDAR_ENABLED = 'false';
-    process.env.FEDWATCH_ENABLED = 'true';
-    process.env.WHITEHOUSE_ENABLED = 'true';
-    process.env.CONGRESS_ENABLED = 'true';
-    process.env.UNUSUAL_OPTIONS_ENABLED = 'true';
-    process.env.SHORT_INTEREST_ENABLED = 'true';
-    process.env.DOJ_ENABLED = 'true';
-    process.env.ANALYST_ENABLED = 'true';
-    process.env.EARNINGS_ENABLED = 'true';
-    process.env.IR_MONITOR_ENABLED = 'true';
-    process.env.DILUTION_SCANNER_ENABLED = 'true';
+    process.env.NEWSWIRE_ENABLED = 'false';
+    process.env.SEC_EDGAR_ENABLED = 'false';
+    process.env.HALT_SCANNER_ENABLED = 'false';
 
     const registry = { register: vi.fn() };
     registerScanners(registry as never, new InMemoryEventBus());

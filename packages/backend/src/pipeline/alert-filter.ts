@@ -85,7 +85,6 @@ function loadDefaultWatchlist(): string[] {
  * - Staleness: 2h during market hours, extend to next weekday session for overnight/weekend
  * - Retrospective article patterns (regex)
  * - Clickbait patterns (regex)
- * - Dummy event skip
  * - Insider trade $1M minimum
  * - Social engagement thresholds (upvotes >= 1000 or comments >= 500)
  * - Per-ticker cooldown (60 min)
