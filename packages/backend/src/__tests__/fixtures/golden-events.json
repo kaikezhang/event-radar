@@ -333,10 +333,10 @@
     "id": "golden-031",
     "title": "Short interest in Redstone Apparel rises to 14.8% of float",
     "body": "Exchange data show short interest in Redstone Apparel increased from 13.9% to 14.8% of free float over the latest reporting period.",
-    "source": "short-interest",
+    "source": "breaking-news",
     "expectedSeverity": "MEDIUM",
     "expectedDirection": "bearish",
-    "expectedEventType": "short_interest",
+    "expectedEventType": "news_breaking",
     "shouldDeliver": true,
     "reasoning": "A notable jump in short interest can matter but is not as immediate as first-party disclosures."
   },
