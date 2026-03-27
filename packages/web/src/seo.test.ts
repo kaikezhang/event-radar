@@ -9,12 +9,12 @@ describe('web index SEO metadata', () => {
   });
 
   it('defines the production description meta tag', () => {
-    expect(html).toContain('content="Real-time market event detection from 13 sources. AI-classified severity. Historical outcome tracking. $39/month."');
+    expect(html).toContain('content="Real-time market event detection from 7 sources. AI-classified severity. Historical outcome tracking. $39/month."');
   });
 
   it('defines open graph metadata for social sharing', () => {
     expect(html).toContain('property="og:title" content="Event Radar — Know What Moves Markets"');
-    expect(html).toMatch(/property="og:description"\s+content="AI-powered stock market event intelligence\. 13 real-time sources, outcome tracking, earnings calendar\."/);
+    expect(html).toMatch(/property="og:description"\s+content="AI-powered stock market event intelligence\. 7 real-time sources, outcome tracking, earnings calendar\."/);
     expect(html).toContain('property="og:type" content="website"');
     expect(html).toContain('property="og:url" content="https://eventradar.app"');
   });
