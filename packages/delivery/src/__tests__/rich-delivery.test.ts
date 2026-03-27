@@ -38,6 +38,10 @@ function makeAlert(overrides?: Partial<AlertEvent>): AlertEvent {
   };
 }
 
+function getField(embed: { fields?: Array<{ name: string; value: string; inline: boolean }> }, name: string) {
+  return embed.fields?.find((field) => field.name === name);
+}
+
 describe('Rich Delivery Format', () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
@@ -47,7 +51,7 @@ describe('Rich Delivery Format', () => {
   });
 
   describe('Discord — compact card: enrichment in description', () => {
-    it('should include "Why it matters" in description instead of AI Analysis field', async () => {
+    it('should include compact enrichment sections in description and confidence in fields', async () => {
       const webhook = new DiscordWebhook({ webhookUrl: 'https://example.com' });
 
       await webhook.send(
@@ -59,6 +63,7 @@ describe('Rich Delivery Format', () => {
             tickers: [{ symbol: 'AAPL', direction: 'bearish' }],
             regimeContext: 'In a neutral market, leadership changes have standard impact',
           },
+          classificationConfidence: 0.72,
         }),
       );
 
@@ -71,6 +76,8 @@ describe('Rich Delivery Format', () => {
       expect(aiField).toBeUndefined();
       expect(embed.description).toContain('**What this means:**');
       expect(embed.description).toContain('Leadership vacuum');
+      expect(embed.description).toContain('**Regime:** In a neutral market, leadership changes have standard impact');
+      expect(getField(embed, 'Confidence')?.value).toBe('High confidence');
     });
   });
 
