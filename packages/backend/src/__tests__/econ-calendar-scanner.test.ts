@@ -2,151 +2,163 @@ import { describe, it, expect } from 'vitest';
 import { InMemoryEventBus } from '@event-radar/shared';
 import {
   EconCalendarScanner,
-  getScheduledReleases,
+  parseFeedEvents,
   isPreAlertWindow,
   isPostRelease,
-  type EconCalendarConfig,
+  type FeedEvent,
 } from '../scanners/econ-calendar-scanner.js';
 
-const TEST_CONFIG: EconCalendarConfig = {
-  indicators: [
-    {
-      id: 'cpi',
-      name: 'Consumer Price Index (CPI)',
-      source: 'BLS',
-      frequency: 'monthly',
-      releaseTime: '08:30',
-      timezone: 'America/New_York',
-      tags: ['inflation', 'cpi'],
-      severity: 'HIGH',
-    },
-    {
-      id: 'nfp',
-      name: 'Non-Farm Payrolls (NFP)',
-      source: 'BLS',
-      frequency: 'monthly',
-      releaseTime: '08:30',
-      timezone: 'America/New_York',
-      tags: ['employment', 'nfp', 'jobs'],
-      severity: 'HIGH',
-    },
-    {
-      id: 'jobless-claims',
-      name: 'Initial Jobless Claims',
-      source: 'DOL',
-      frequency: 'weekly',
-      releaseTime: '08:30',
-      timezone: 'America/New_York',
-      tags: ['employment', 'jobless-claims'],
-      severity: 'MEDIUM',
-    },
-  ],
-  releases: [
-    { indicatorId: 'cpi', date: '2026-03-11' },
-    { indicatorId: 'nfp', date: '2026-03-06' },
-    { indicatorId: 'jobless-claims', date: '2026-03-12' },
-  ],
-};
+const TEST_FEED: FeedEvent[] = [
+  {
+    title: 'Consumer Price Index (CPI) m/m',
+    country: 'USD',
+    date: '2026-03-11T08:30:00-04:00',
+    impact: 'High',
+    forecast: '0.3%',
+    previous: '0.5%',
+  },
+  {
+    title: 'Non-Farm Employment Change',
+    country: 'USD',
+    date: '2026-03-06T08:30:00-05:00',
+    impact: 'High',
+    forecast: '150K',
+    previous: '143K',
+  },
+  {
+    title: 'Unemployment Claims',
+    country: 'USD',
+    date: '2026-03-12T08:30:00-04:00',
+    impact: 'Medium',
+    forecast: '215K',
+    previous: '210K',
+  },
+  {
+    title: 'BOJ Summary of Opinions',
+    country: 'JPY',
+    date: '2026-03-10T19:50:00-04:00',
+    impact: 'Low',
+    forecast: '',
+    previous: '',
+  },
+  {
+    title: 'CB Consumer Confidence',
+    country: 'USD',
+    date: '2026-03-11T10:00:00-04:00',
+    impact: 'Low',
+    forecast: '95.0',
+    previous: '98.3',
+  },
+];
+
+function makeScanner(feed: FeedEvent[]): EconCalendarScanner {
+  const eventBus = new InMemoryEventBus();
+  const scanner = new EconCalendarScanner(eventBus);
+  scanner.testFeedData = feed;
+  return scanner;
+}
 
 describe('EconCalendarScanner', () => {
-  describe('getScheduledReleases', () => {
-    it('should parse all releases from config', () => {
-      const releases = getScheduledReleases(TEST_CONFIG);
+  describe('parseFeedEvents', () => {
+    it('should filter to USD High/Medium events only', () => {
+      const releases = parseFeedEvents(TEST_FEED);
+      // CPI (High), NFP (High), Unemployment Claims (Medium) = 3
+      // Filters out: BOJ (JPY), CB Consumer Confidence (Low)
       expect(releases).toHaveLength(3);
     });
 
     it('should build correct release keys', () => {
-      const releases = getScheduledReleases(TEST_CONFIG);
-      expect(releases[0]!.releaseKey).toBe('cpi-2026-03-11');
-      expect(releases[1]!.releaseKey).toBe('nfp-2026-03-06');
+      const releases = parseFeedEvents(TEST_FEED);
+      const cpi = releases.find((r) => r.title.includes('Consumer Price'));
+      expect(cpi).toBeDefined();
+      expect(cpi!.releaseKey).toContain('consumer-price-index');
     });
 
-    it('should include indicator metadata in releases', () => {
-      const releases = getScheduledReleases(TEST_CONFIG);
-      expect(releases[0]!.indicator.name).toBe('Consumer Price Index (CPI)');
-      expect(releases[0]!.indicator.tags).toContain('cpi');
+    it('should preserve forecast and previous values', () => {
+      const releases = parseFeedEvents(TEST_FEED);
+      const cpi = releases.find((r) => r.title.includes('Consumer Price'));
+      expect(cpi!.forecast).toBe('0.3%');
+      expect(cpi!.previous).toBe('0.5%');
     });
 
-    it('should build correct scheduled times in UTC', () => {
-      const releases = getScheduledReleases(TEST_CONFIG);
-      // 08:30 ET = 13:30 UTC (EST = UTC-5)
-      const cpiRelease = releases[0]!;
-      expect(cpiRelease.scheduledTime.getUTCHours()).toBe(13);
-      expect(cpiRelease.scheduledTime.getUTCMinutes()).toBe(30);
+    it('should parse dates correctly into UTC', () => {
+      const releases = parseFeedEvents(TEST_FEED);
+      const cpi = releases.find((r) => r.title.includes('Consumer Price'));
+      // 08:30 ET (UTC-4) = 12:30 UTC
+      expect(cpi!.scheduledTime.getUTCHours()).toBe(12);
+      expect(cpi!.scheduledTime.getUTCMinutes()).toBe(30);
     });
 
-    it('should skip releases with unknown indicator IDs', () => {
-      const config: EconCalendarConfig = {
-        indicators: TEST_CONFIG.indicators,
-        releases: [
-          { indicatorId: 'cpi', date: '2026-03-11' },
-          { indicatorId: 'unknown', date: '2026-03-15' },
-        ],
-      };
-      const releases = getScheduledReleases(config);
-      expect(releases).toHaveLength(1);
+    it('should handle empty feed gracefully', () => {
+      expect(parseFeedEvents([])).toHaveLength(0);
+    });
+
+    it('should skip events with invalid dates', () => {
+      const bad: FeedEvent[] = [
+        { title: 'Bad', country: 'USD', date: 'not-a-date', impact: 'High', forecast: '', previous: '' },
+      ];
+      expect(parseFeedEvents(bad)).toHaveLength(0);
     });
   });
 
   describe('isPreAlertWindow', () => {
     it('should return true within 15 min before release', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:20:00Z'); // 10 min before
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:20:00Z'); // 10 min before
       expect(isPreAlertWindow(scheduled, now)).toBe(true);
     });
 
     it('should return true at exactly 15 min before', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:15:00Z'); // 15 min before
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:15:00Z');
       expect(isPreAlertWindow(scheduled, now)).toBe(true);
     });
 
     it('should return false more than 15 min before release', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:00:00Z'); // 30 min before
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:00:00Z');
       expect(isPreAlertWindow(scheduled, now)).toBe(false);
     });
 
     it('should return false after release time', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:35:00Z'); // 5 min after
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:35:00Z');
       expect(isPreAlertWindow(scheduled, now)).toBe(false);
     });
   });
 
   describe('isPostRelease', () => {
     it('should return true within 5 min after release', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:33:00Z'); // 3 min after
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:33:00Z');
       expect(isPostRelease(scheduled, now)).toBe(true);
     });
 
     it('should return true at exact release time', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:30:00Z');
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:30:00Z');
       expect(isPostRelease(scheduled, now)).toBe(true);
     });
 
     it('should return false before release', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:25:00Z');
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:25:00Z');
       expect(isPostRelease(scheduled, now)).toBe(false);
     });
 
     it('should return false more than 5 min after release', () => {
-      const scheduled = new Date('2026-03-11T13:30:00Z');
-      const now = new Date('2026-03-11T13:40:00Z'); // 10 min after
+      const scheduled = new Date('2026-03-11T12:30:00Z');
+      const now = new Date('2026-03-11T12:40:00Z');
       expect(isPostRelease(scheduled, now)).toBe(false);
     });
   });
 
   describe('scan — pre-event alerts', () => {
     it('should emit pre-event alert when within 15 min window', async () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new EconCalendarScanner(eventBus, TEST_CONFIG);
+      const scanner = makeScanner(TEST_FEED);
 
-      // 10 minutes before CPI release (08:30 ET = 13:30 UTC)
-      scanner.nowFn = () => new Date('2026-03-11T13:20:00Z');
+      // CPI is at 08:30 ET = 12:30 UTC. Set now to 12:20 UTC (10 min before)
+      scanner.nowFn = () => new Date('2026-03-11T12:20:00Z');
 
       const result = await scanner.scan();
       expect(result.ok).toBe(true);
@@ -160,16 +172,16 @@ describe('EconCalendarScanner', () => {
         );
         expect(cpiAlert).toBeDefined();
         expect(cpiAlert!.source).toBe('econ-calendar');
-        expect(cpiAlert!.metadata!['indicator']).toBe('cpi');
+        expect(cpiAlert!.metadata!['impact']).toBe('High');
+        expect(cpiAlert!.metadata!['forecast']).toBe('0.3%');
       }
     });
 
     it('should not emit pre-event alert outside window', async () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new EconCalendarScanner(eventBus, TEST_CONFIG);
+      const scanner = makeScanner(TEST_FEED);
 
       // 2 hours before CPI release
-      scanner.nowFn = () => new Date('2026-03-11T11:30:00Z');
+      scanner.nowFn = () => new Date('2026-03-11T10:30:00Z');
 
       const result = await scanner.scan();
       expect(result.ok).toBe(true);
@@ -184,11 +196,10 @@ describe('EconCalendarScanner', () => {
 
   describe('scan — post-release alerts', () => {
     it('should emit post-release alert after scheduled time', async () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new EconCalendarScanner(eventBus, TEST_CONFIG);
+      const scanner = makeScanner(TEST_FEED);
 
-      // 2 minutes after CPI release
-      scanner.nowFn = () => new Date('2026-03-11T13:32:00Z');
+      // 2 minutes after CPI release (12:30 UTC + 2min)
+      scanner.nowFn = () => new Date('2026-03-11T12:32:00Z');
 
       const result = await scanner.scan();
       expect(result.ok).toBe(true);
@@ -201,17 +212,16 @@ describe('EconCalendarScanner', () => {
           e.title.includes('Consumer Price Index'),
         );
         expect(cpiAlert).toBeDefined();
-        expect(cpiAlert!.metadata!['indicator']).toBe('cpi');
+        expect(cpiAlert!.metadata!['forecast']).toBe('0.3%');
       }
     });
   });
 
   describe('scan — deduplication', () => {
     it('should not emit the same alert twice', async () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new EconCalendarScanner(eventBus, TEST_CONFIG);
+      const scanner = makeScanner(TEST_FEED);
 
-      scanner.nowFn = () => new Date('2026-03-11T13:20:00Z');
+      scanner.nowFn = () => new Date('2026-03-11T12:20:00Z');
 
       const result1 = await scanner.scan();
       expect(result1.ok).toBe(true);
@@ -222,7 +232,6 @@ describe('EconCalendarScanner', () => {
       const result2 = await scanner.scan();
       expect(result2.ok).toBe(true);
       if (result2.ok) {
-        // Only new events that haven't been seen should appear
         const duplicatePreAlerts = result2.value.filter(
           (e) =>
             e.type === 'economic-release-upcoming' &&
@@ -233,10 +242,38 @@ describe('EconCalendarScanner', () => {
     });
   });
 
+  describe('scan — tags and metadata', () => {
+    it('should derive inflation tags for CPI', async () => {
+      const scanner = makeScanner(TEST_FEED);
+      scanner.nowFn = () => new Date('2026-03-11T12:20:00Z');
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const cpi = result.value.find((e) => e.title.includes('Consumer Price'));
+        expect(cpi).toBeDefined();
+        expect(cpi!.metadata!['tags']).toContain('inflation');
+      }
+    });
+
+    it('should derive employment tags for NFP', async () => {
+      const scanner = makeScanner(TEST_FEED);
+      // NFP is at 08:30 EST (UTC-5) = 13:30 UTC
+      scanner.nowFn = () => new Date('2026-03-06T13:20:00Z');
+
+      const result = await scanner.scan();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const nfp = result.value.find((e) => e.title.includes('Non-Farm'));
+        expect(nfp).toBeDefined();
+        expect(nfp!.metadata!['tags']).toContain('employment');
+      }
+    });
+  });
+
   describe('health', () => {
     it('should report healthy initially', () => {
-      const eventBus = new InMemoryEventBus();
-      const scanner = new EconCalendarScanner(eventBus, TEST_CONFIG);
+      const scanner = makeScanner(TEST_FEED);
       expect(scanner.health().status).toBe('healthy');
       expect(scanner.health().scanner).toBe('econ-calendar');
     });

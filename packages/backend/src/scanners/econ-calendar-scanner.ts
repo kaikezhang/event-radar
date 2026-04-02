@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   BaseScanner,
   ok,
@@ -12,87 +10,70 @@ import {
 import { SeenIdBuffer } from './scraping/scrape-utils.js';
 
 const POLL_INTERVAL_MS = 60_000;
+/** How often to refresh the remote feed (1 hour) */
+const FEED_REFRESH_MS = 60 * 60_000;
 /** Pre-event alert window in minutes */
 const PRE_ALERT_MINUTES = 15;
+/** Post-release window in minutes */
+const POST_RELEASE_MINUTES = 5;
 
-export interface EconIndicator {
-  id: string;
-  name: string;
-  source: string;
-  frequency: string;
-  releaseTime: string;
-  timezone: string;
-  tags: string[];
-  severity: string;
+const FEED_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+
+/** Minimum impact level to emit events for */
+const IMPACT_FILTER = new Set(['High', 'Medium']);
+/** Only USD events */
+const COUNTRY_FILTER = 'USD';
+
+export interface FeedEvent {
+  title: string;
+  country: string;
+  date: string; // ISO 8601 with offset, e.g. "2026-04-03T08:30:00-04:00"
+  impact: string; // "High" | "Medium" | "Low"
+  forecast: string;
+  previous: string;
 }
 
-export interface EconRelease {
-  indicatorId: string;
-  date: string; // YYYY-MM-DD
-}
-
-export interface EconCalendarConfig {
-  indicators: EconIndicator[];
-  releases: EconRelease[];
-}
-
-export interface ScheduledRelease {
-  indicator: EconIndicator;
+export interface ParsedRelease {
+  title: string;
   scheduledTime: Date;
   releaseKey: string;
+  impact: string;
+  forecast: string;
+  previous: string;
 }
 
 /**
- * Load and parse the static economic calendar config.
+ * Derive tags from event title for metadata.
  */
-export function loadCalendarConfig(configPath?: string): EconCalendarConfig {
-  const path =
-    configPath ??
-    join(
-      import.meta.dirname ?? __dirname,
-      '..',
-      'config',
-      'econ-calendar.json',
-    );
-  const raw = readFileSync(path, 'utf-8');
-  return JSON.parse(raw) as EconCalendarConfig;
+function deriveTags(title: string): string[] {
+  const tags: string[] = [];
+  const lower = title.toLowerCase();
+  if (lower.includes('cpi') || lower.includes('inflation')) tags.push('inflation');
+  if (lower.includes('nfp') || lower.includes('non-farm') || lower.includes('employment')) tags.push('employment');
+  if (lower.includes('ppi') || lower.includes('producer price')) tags.push('ppi');
+  if (lower.includes('gdp')) tags.push('gdp');
+  if (lower.includes('retail sales')) tags.push('retail');
+  if (lower.includes('jobless') || lower.includes('unemployment')) tags.push('employment');
+  if (lower.includes('fomc') || lower.includes('fed') || lower.includes('interest rate')) tags.push('fed', 'rates');
+  if (lower.includes('ism') || lower.includes('pmi')) tags.push('manufacturing');
+  if (lower.includes('housing') || lower.includes('home sales')) tags.push('housing');
+  if (lower.includes('consumer') && lower.includes('confidence')) tags.push('sentiment');
+  if (lower.includes('speaks') || lower.includes('testimony')) tags.push('speech');
+  if (lower.includes('trump') || lower.includes('president')) tags.push('political');
+  return [...new Set(tags)];
 }
 
 /**
- * Build a list of upcoming scheduled releases from the config,
- * including the full scheduled datetime.
+ * Map ForexFactory impact to our severity levels.
  */
-export function getScheduledReleases(
-  config: EconCalendarConfig,
-): ScheduledRelease[] {
-  const indicatorMap = new Map<string, EconIndicator>();
-  for (const ind of config.indicators) {
-    indicatorMap.set(ind.id, ind);
-  }
-
-  const releases: ScheduledRelease[] = [];
-
-  for (const rel of config.releases) {
-    const indicator = indicatorMap.get(rel.indicatorId);
-    if (!indicator) continue;
-
-    // Parse date + release time into a Date (assume ET → UTC offset manually)
-    // releaseTime is "HH:MM" in ET, ET is UTC-5 (EST) or UTC-4 (EDT)
-    // For simplicity, use UTC-5 (EST)
-    const [hours, minutes] = indicator.releaseTime.split(':').map(Number);
-    const date = new Date(`${rel.date}T00:00:00Z`);
-    date.setUTCHours((hours ?? 8) + 5, minutes ?? 30, 0, 0); // EST → UTC
-
-    const releaseKey = `${rel.indicatorId}-${rel.date}`;
-
-    releases.push({ indicator, scheduledTime: date, releaseKey });
-  }
-
-  return releases;
+function impactToSeverity(impact: string): string {
+  if (impact === 'High') return 'HIGH';
+  if (impact === 'Medium') return 'MEDIUM';
+  return 'LOW';
 }
 
 /**
- * Check if a release time is within the pre-alert window (15 min before).
+ * Check if a release time is within the pre-alert window.
  */
 export function isPreAlertWindow(
   scheduledTime: Date,
@@ -105,41 +86,109 @@ export function isPreAlertWindow(
 }
 
 /**
- * Check if the release has just occurred (within 5 minutes after scheduled time).
+ * Check if the release has just occurred (within post-release window).
  */
-export function isPostRelease(scheduledTime: Date, now: Date): boolean {
+export function isPostRelease(
+  scheduledTime: Date,
+  now: Date,
+  windowMinutes = POST_RELEASE_MINUTES,
+): boolean {
   const diff = now.getTime() - scheduledTime.getTime();
   const diffMinutes = diff / (1000 * 60);
-  return diffMinutes >= 0 && diffMinutes <= 5;
+  return diffMinutes >= 0 && diffMinutes <= windowMinutes;
+}
+
+/**
+ * Parse feed events into structured releases.
+ */
+export function parseFeedEvents(events: FeedEvent[]): ParsedRelease[] {
+  const releases: ParsedRelease[] = [];
+
+  for (const event of events) {
+    if (event.country !== COUNTRY_FILTER) continue;
+    if (!IMPACT_FILTER.has(event.impact)) continue;
+
+    const scheduledTime = new Date(event.date);
+    if (isNaN(scheduledTime.getTime())) continue;
+
+    // Build a unique key from title + date
+    const dateStr = scheduledTime.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+    const releaseKey = `${event.title.replace(/\s+/g, '-').toLowerCase()}-${dateStr}`;
+
+    releases.push({
+      title: event.title,
+      scheduledTime,
+      releaseKey,
+      impact: event.impact,
+      forecast: event.forecast,
+      previous: event.previous,
+    });
+  }
+
+  return releases;
 }
 
 export class EconCalendarScanner extends BaseScanner {
   private readonly seenIds = new SeenIdBuffer(500, 'econ-calendar');
-  private readonly config: EconCalendarConfig;
-  private readonly scheduledReleases: ScheduledRelease[];
+  private cachedReleases: ParsedRelease[] = [];
+  private lastFetchMs = 0;
   /** Allow injecting "now" for testing */
   public nowFn: () => Date = () => new Date();
+  /** Allow injecting fetch for testing */
+  public fetchFn: (url: string) => Promise<Response> = (url) => fetch(url);
+  /** Allow injecting feed data for testing */
+  public testFeedData: FeedEvent[] | null = null;
 
-  constructor(eventBus: EventBus, config?: EconCalendarConfig) {
+  constructor(eventBus: EventBus) {
     super({
       name: 'econ-calendar',
       source: 'econ-calendar',
       pollIntervalMs: POLL_INTERVAL_MS,
       eventBus,
     });
+  }
 
-    this.config = config ?? loadCalendarConfig();
-    this.scheduledReleases = getScheduledReleases(this.config);
+  /**
+   * Fetch the feed data, with caching.
+   */
+  private async refreshFeed(): Promise<ParsedRelease[]> {
+    // Use test data if provided
+    if (this.testFeedData) {
+      return parseFeedEvents(this.testFeedData);
+    }
+
+    const now = Date.now();
+    if (now - this.lastFetchMs < FEED_REFRESH_MS && this.cachedReleases.length > 0) {
+      return this.cachedReleases;
+    }
+
+    try {
+      const resp = await this.fetchFn(FEED_URL);
+      if (!resp.ok) {
+        console.warn(`[econ-calendar] Feed fetch failed: ${resp.status}`);
+        return this.cachedReleases; // Use stale cache on error
+      }
+      const data = (await resp.json()) as FeedEvent[];
+      this.cachedReleases = parseFeedEvents(data);
+      this.lastFetchMs = now;
+      console.log(
+        `[econ-calendar] Refreshed feed: ${this.cachedReleases.length} USD High/Medium events this week`,
+      );
+    } catch (e) {
+      console.warn(`[econ-calendar] Feed fetch error:`, e);
+      // Keep stale cache
+    }
+
+    return this.cachedReleases;
   }
 
   protected async poll(): Promise<Result<RawEvent[], Error>> {
     try {
+      const releases = await this.refreshFeed();
       const events: RawEvent[] = [];
       const now = this.nowFn();
 
-      console.log(`[econ-calendar] Checking ${this.scheduledReleases.length} releases at ${now.toISOString()}`);
-
-      for (const release of this.scheduledReleases) {
+      for (const release of releases) {
         const preKey = `pre-${release.releaseKey}`;
         const postKey = `post-${release.releaseKey}`;
 
@@ -151,20 +200,26 @@ export class EconCalendarScanner extends BaseScanner {
             (release.scheduledTime.getTime() - now.getTime()) / (1000 * 60),
           );
 
+          const body = release.forecast
+            ? `${release.title} releasing in ${minutesUntil} min. Forecast: ${release.forecast}, Previous: ${release.previous}.`
+            : `${release.title} scheduled in ${minutesUntil} min.`;
+
           events.push({
             id: randomUUID(),
             source: 'econ-calendar',
             type: 'economic-release-upcoming',
-            title: `${release.indicator.name} releasing in ${minutesUntil} min`,
-            body: `${release.indicator.name} is scheduled for release at ${release.indicator.releaseTime} ET. Source: ${release.indicator.source}.`,
+            title: `${release.title} releasing in ${minutesUntil} min`,
+            body,
             timestamp: now,
             metadata: {
-              indicator: release.indicator.id,
-              indicator_name: release.indicator.name,
+              event_name: release.title,
               scheduled_time: release.scheduledTime.toISOString(),
               minutes_until: minutesUntil,
-              frequency: release.indicator.frequency,
-              tags: release.indicator.tags,
+              impact: release.impact,
+              severity: impactToSeverity(release.impact),
+              forecast: release.forecast,
+              previous: release.previous,
+              tags: deriveTags(release.title),
             },
           });
         }
@@ -173,19 +228,25 @@ export class EconCalendarScanner extends BaseScanner {
         if (isPostRelease(release.scheduledTime, now) && !this.seenIds.has(postKey)) {
           this.seenIds.add(postKey);
 
+          const body = release.forecast
+            ? `${release.title} data released. Forecast was: ${release.forecast}, Previous: ${release.previous}. Check official source for actual values.`
+            : `${release.title} has occurred. Check official source for details.`;
+
           events.push({
             id: randomUUID(),
             source: 'econ-calendar',
             type: 'economic-release',
-            title: `${release.indicator.name} — Data Released`,
-            body: `${release.indicator.name} data has been released. Check official source for actual values.`,
+            title: `${release.title} — Data Released`,
+            body,
             timestamp: now,
             metadata: {
-              indicator: release.indicator.id,
-              indicator_name: release.indicator.name,
+              event_name: release.title,
               scheduled_time: release.scheduledTime.toISOString(),
-              frequency: release.indicator.frequency,
-              tags: release.indicator.tags,
+              impact: release.impact,
+              severity: impactToSeverity(release.impact),
+              forecast: release.forecast,
+              previous: release.previous,
+              tags: deriveTags(release.title),
             },
           });
         }
