@@ -212,6 +212,54 @@ describe('GET /api/events', () => {
     expect(body.total).toBe(5);
   });
 
+  it('should exclude legacy stocktwits noise from the default feed but allow explicit source filters', async () => {
+    await storeEvent(sharedDb, {
+      event: makeEvent({
+        source: 'stocktwits',
+        title: 'NVDA entered StockTwits trending',
+        body: 'Legacy social noise event',
+      }),
+      severity: 'LOW',
+    });
+
+    const defaultFeed = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(defaultFeed.statusCode).toBe(200);
+    expect(defaultFeed.json().data).toHaveLength(5);
+    expect(defaultFeed.json().total).toBe(5);
+    expect(defaultFeed.json().data.some((event: { source: string }) => event.source === 'stocktwits')).toBe(false);
+
+    const explicitStocktwits = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?source=stocktwits',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(explicitStocktwits.statusCode).toBe(200);
+    expect(explicitStocktwits.json().total).toBe(1);
+    expect(explicitStocktwits.json().data[0]?.source).toBe('stocktwits');
+
+    const stocktwitsSearch = await ctx.server.inject({
+      method: 'GET',
+      url: '/api/events?q=StockTwits',
+      headers: {
+        'x-api-key': TEST_API_KEY,
+      },
+    });
+
+    expect(stocktwitsSearch.statusCode).toBe(200);
+    expect(stocktwitsSearch.json().total).toBe(1);
+    expect(stocktwitsSearch.json().data[0]?.source).toBe('stocktwits');
+  });
+
   it('should accept apiKey query params on the list route', async () => {
     const response = await ctx.server.inject({
       method: 'GET',

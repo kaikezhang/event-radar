@@ -503,8 +503,13 @@ export function registerEventRoutes(
     if (query.source) {
       conditions.push(eq(events.source, query.source));
     } else {
-      // Exclude dummy/test sources by default
+      // Exclude dummy/test sources by default.
+      // Also hide legacy StockTwits noise from the default feed while still
+      // allowing explicit source filters and search queries to access it.
       conditions.push(ne(events.source, 'dummy'));
+      if (!q) {
+        conditions.push(ne(events.source, 'stocktwits'));
+      }
     }
 
     // Filter by dateFrom (receivedAt >= dateFrom)

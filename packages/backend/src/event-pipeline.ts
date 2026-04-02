@@ -699,6 +699,18 @@ export function wireEventPipeline(deps: EventPipelineDeps): void {
       const okCount = results.filter(r => r.ok).length;
       const failCount = results.filter(r => !r.ok).length;
 
+      if (routeResult.discordWatchlistFiltered) {
+        pipelineFunnelTotal.inc({ stage: 'discord_watchlist_filtered' });
+        server.log.info({
+          pipeline: true,
+          stage: 'discord_watchlist_filter',
+          source: event.source,
+          title: logTitle(event.title),
+          ticker,
+          reason: 'ticker not in Discord watchlist',
+        });
+      }
+
       for (const r of results) {
         const status = r.ok ? 'success' : 'failure';
         deliveriesSentTotal.inc({ channel: r.channel, status });

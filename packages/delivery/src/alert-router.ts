@@ -13,12 +13,39 @@ export interface ChannelDeliveryResult {
 export interface AlertRouteResult {
   decision: AlertRoutingDecision;
   deliveries: ChannelDeliveryResult[];
+  /** When true, Discord was skipped because the event didn't match the watchlist. */
+  discordWatchlistFiltered?: boolean;
 }
 
 export interface AlertRouterConfig {
   discord?: DeliveryService;
   webPush?: DeliveryService;
+  /**
+   * Optional watchlist filter for Discord notifications.
+   * When set, Discord alerts are only sent for events whose ticker
+   * appears in the watchlist OR that come from macro/market-wide sources
+   * (events without a specific ticker association).
+   */
+  discordWatchlist?: Set<string>;
 }
+
+/**
+ * Sources that produce market-wide / macro events (no specific ticker).
+ * These always pass the Discord watchlist filter.
+ */
+const MACRO_SOURCES = new Set([
+  'fed',
+  'treasury',
+  'whitehouse',
+  'econ-calendar',
+  'truth-social',
+  'federal-register',
+  'commerce',
+  'sec-regulatory',
+  'fedwatch',
+  'ftc',
+  'doj-antitrust',
+]);
 
 /**
  * Routes based on severity:
@@ -35,11 +62,13 @@ const ROUTING_TABLE: Record<Severity, ChannelName[]> = {
 
 export class AlertRouter {
   private readonly channels: Map<string, DeliveryService>;
+  private readonly discordWatchlist: Set<string> | null;
 
   constructor(config: AlertRouterConfig) {
     this.channels = new Map();
     if (config.discord) this.channels.set('discord', config.discord);
     if (config.webPush) this.channels.set('webPush', config.webPush);
+    this.discordWatchlist = config.discordWatchlist ?? null;
   }
 
   /** Returns true if at least one delivery channel is configured. */
@@ -78,6 +107,16 @@ export class AlertRouter {
         : ROUTING_TABLE[alert.severity];
     }
 
+    // Discord watchlist filter: only send to Discord if the event's ticker
+    // is in the watchlist OR the event is from a macro/market-wide source.
+    let discordWatchlistFiltered = false;
+    if (this.discordWatchlist && targets.includes('discord')) {
+      if (!this.passesDiscordWatchlist(alert)) {
+        targets = targets.filter((t) => t !== 'discord');
+        discordWatchlistFiltered = true;
+      }
+    }
+
     const results: ChannelDeliveryResult[] = [];
 
     const promises = targets.map(async (channelName) => {
@@ -100,6 +139,68 @@ export class AlertRouter {
     return {
       decision,
       deliveries: results,
+      discordWatchlistFiltered,
     };
+  }
+
+  /**
+   * Check if an alert passes the Discord watchlist filter.
+   * Returns true (send to Discord) when:
+   *  1. The event's primary ticker is in the watchlist, OR
+   *  2. Any enrichment ticker is in the watchlist, OR
+   *  3. The event source is a macro/market-wide source, OR
+   *  4. The event has no ticker at all (macro/broad event)
+   */
+  private passesDiscordWatchlist(alert: AlertEvent): boolean {
+    const watchlist = this.discordWatchlist!;
+    const source = alert.event.source.toLowerCase();
+
+    // Macro sources always pass
+    if (MACRO_SOURCES.has(source)) {
+      return true;
+    }
+
+    // Check primary ticker
+    if (alert.ticker) {
+      if (watchlist.has(alert.ticker.toUpperCase())) {
+        return true;
+      }
+    }
+
+    // Check enrichment tickers
+    if (alert.enrichment?.tickers?.length) {
+      for (const t of alert.enrichment.tickers) {
+        if (watchlist.has(t.symbol.toUpperCase())) {
+          return true;
+        }
+      }
+    }
+
+    // Check metadata ticker(s)
+    const metaTicker = alert.event.metadata?.['ticker'];
+    if (typeof metaTicker === 'string' && watchlist.has(metaTicker.toUpperCase())) {
+      return true;
+    }
+    const metaTickers = alert.event.metadata?.['tickers'];
+    if (Array.isArray(metaTickers)) {
+      for (const t of metaTickers) {
+        if (typeof t === 'string' && watchlist.has(t.toUpperCase())) {
+          return true;
+        }
+      }
+    }
+
+    // Events with no ticker association at all → treat as macro/broad
+    const hasTicker = alert.ticker
+      || (alert.enrichment?.tickers?.length ?? 0) > 0
+      || (typeof metaTicker === 'string' && metaTicker.length > 0)
+      || (Array.isArray(metaTickers) && metaTickers.length > 0);
+
+    if (!hasTicker) {
+      return true;
+    }
+
+    // Has ticker(s) but none in watchlist → filter out
+    return false;
   }
 }
