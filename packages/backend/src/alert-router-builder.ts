@@ -10,6 +10,26 @@ import {
   pushCapSuppressedTotal,
 } from './metrics.js';
 import { type Database } from './db/connection.js';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+function loadDiscordWatchlist(): Set<string> | undefined {
+  // Opt out of watchlist filtering entirely with env var
+  if (process.env.DISCORD_WATCHLIST_FILTER === 'off') {
+    return undefined;
+  }
+
+  try {
+    const tickers = require('../config/watchlist.json') as string[];
+    if (Array.isArray(tickers) && tickers.length > 0) {
+      return new Set(tickers.map((t) => t.toUpperCase()));
+    }
+  } catch {
+    // watchlist.json not found or invalid — no filtering
+  }
+  return undefined;
+}
 
 export function buildAlertRouter(db?: Database): AlertRouterType {
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -37,5 +57,6 @@ export function buildAlertRouter(db?: Database): AlertRouterType {
             },
           })
         : undefined,
+    discordWatchlist: loadDiscordWatchlist(),
   });
 }
