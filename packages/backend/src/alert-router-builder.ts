@@ -21,7 +21,7 @@ function loadDiscordWatchlist(): Set<string> | undefined {
   }
 
   try {
-    const tickers = require('../config/watchlist.json') as string[];
+    const tickers = require('./config/watchlist.json') as string[];
     if (Array.isArray(tickers) && tickers.length > 0) {
       return new Set(tickers.map((t) => t.toUpperCase()));
     }
